@@ -6,7 +6,7 @@
 Cargo.toml              workspace: crates/* and src-tauri
 crates/sevak-core       config, fuzzy matcher, search engine, usage stats, Plugin trait
 crates/sevak-platform   OS access: launching, icons, app scanning, clipboard, paths,
-                        hotkey strategy, GNOME shortcut setup (Windows and Linux backends)
+                        hotkey strategy, GNOME shortcut setup (Windows, macOS and Linux backends)
 crates/sevak-plugins    built-in plugins: apps, calculator, files, web search, uuid example
 src-tauri               the Tauri shell: window, hotkey, tray, CLI, IPC commands, bundling config
 ui                      Svelte 5 + Vite frontend (builds to ui/dist)
@@ -86,9 +86,11 @@ itself (GTK/WebKit) cannot be built that way; CI covers it.
 
 Bundle settings are the `bundle` object in `src-tauri/tauri.conf.json`:
 
-- `targets` lists `nsis`, `msi`, `deb`, `rpm` and `appimage`. Each can only be
-  built on its own OS, so always choose per OS with `--bundles`:
+- `targets` is `all`, meaning every format the current OS can build. To pick:
   - Windows: `npx tauri build --bundles nsis,msi`
+  - macOS: `npx tauri build --bundles app,dmg` (add
+    `--target universal-apple-darwin` for an Apple silicon + Intel build, after
+    `rustup target add aarch64-apple-darwin x86_64-apple-darwin`)
   - Linux: `npx tauri build --bundles deb,rpm,appimage`
 - Output goes to `target/release/bundle/<format>/`.
 - Windows: NSIS installs per user (no admin). The first build downloads the NSIS
@@ -98,27 +100,53 @@ Bundle settings are the `bundle` object in `src-tauri/tauri.conf.json`:
   (Categories, Keywords and a "Show or hide" action). Extra runtime dependencies
   (`libayatana-appindicator`, glib tools) are declared in `bundle.linux.deb.depends`
   and `bundle.linux.rpm.depends`.
+- macOS: the app runs as a menu-bar (accessory) app with no Dock icon. It is
+  ad-hoc signed (`bundle.macOS.signingIdentity: "-"`), not notarized.
+  `app.macOSPrivateApi` (and Tauri's `macos-private-api` feature) give the
+  launcher its transparent window.
 - Installers are not code-signed yet.
 
 ## CI
 
 `.github/workflows/ci.yml` runs on pushes and pull requests:
 
-1. `lint-test`: fmt, clippy, tests and the UI checks on `windows-latest` and `ubuntu-22.04`.
+1. `lint-test`: fmt, clippy, tests and the UI checks on `windows-latest`,
+   `macos-latest` and `ubuntu-22.04`.
 2. `fedora`: builds and tests in a `fedora` container to prove the Fedora
    toolchain and libraries work. Bump the image tag when the release goes EOL.
 3. `bundle` (after `lint-test`): builds the installers (Windows: nsis+msi;
-   ubuntu-22.04: deb+rpm+appimage) and uploads them as workflow artifacts.
+   macOS: app+dmg; ubuntu-22.04: deb+rpm+appimage) and uploads them as
+   workflow artifacts.
    Ubuntu 22.04 is the oldest supported base, so the `.deb` and AppImage run on 22.04+.
 
 ## Releasing
 
-1. Update the version in `Cargo.toml` (`[workspace.package]`),
-   `src-tauri/tauri.conf.json` and `package.json`; refresh `Cargo.lock`
-   (`cargo check`).
-2. Commit and merge to `main`.
-3. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`.
-4. `.github/workflows/release.yml` builds all bundles on Windows and Ubuntu 22.04
-   via `tauri-apps/tauri-action` and creates a **draft** GitHub Release (it
-   fails early if the tag does not match the version in `tauri.conf.json`).
-5. Check the draft's assets, edit the notes, then publish.
+Releases are automatic: every push to `main` that changes more than docs
+(in practice, every merged pull request) publishes a new version.
+`.github/workflows/release.yml`:
+
+1. **plan** computes the next version with `scripts/release-version.mjs next`
+   from the latest `vX.Y.Z` tag and the [Conventional Commit](https://www.conventionalcommits.org)
+   subjects since it, and opens a draft GitHub Release with generated notes:
+
+   | Commits since the last tag | Bump |
+   |---|---|
+   | any `feat!:` / `fix!:` or a `BREAKING CHANGE:` footer | major (minor while on 0.x) |
+   | any `feat:` / `feat(scope):` | minor |
+   | anything else | patch |
+
+2. **build** stamps that version into `Cargo.toml`, `tauri.conf.json`,
+   `package.json` and `package-lock.json` (`release-version.mjs set`, in the
+   runner only; nothing is committed), then builds and uploads the installers:
+   Windows (nsis, msi), macOS universal (app, dmg) and Linux (deb, rpm, AppImage).
+3. **publish** adds `SHA256SUMS.txt` and publishes the release, which creates
+   the `vX.Y.Z` tag on the released commit.
+
+If a build fails, nothing is tagged; the draft is replaced on the next run.
+The version in the repository files is only the floor for the first release
+and for forced bumps: to jump to a specific version (say `1.0.0`), set it in
+`src-tauri/tauri.conf.json` and `Cargo.toml` in a PR. To merge without
+releasing, put `[skip release]` in the merge commit message; pushes that only
+touch Markdown, `docs/` or `LICENSE` never release.
+
+Preview the next version locally with `node scripts/release-version.mjs next`.

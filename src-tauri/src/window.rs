@@ -41,6 +41,7 @@ pub fn show(app: &AppHandle) {
 
     position(app, &window);
 
+    unhide_app(app);
     if let Err(err) = window.show() {
         tracing::warn!("show: window.show failed: {err}");
     }
@@ -68,7 +69,36 @@ pub fn hide_silently(app: &AppHandle) {
     if let Err(err) = window.hide() {
         tracing::warn!("hide: window.hide failed: {err}");
     }
+    hide_app(app);
 }
+
+/// macOS: hiding the whole (accessory) app, not just its window, is what hands
+/// focus back to the app the user was in. Skipped while Settings is open.
+#[cfg(target_os = "macos")]
+fn hide_app(app: &AppHandle) {
+    let settings_open = app
+        .get_webview_window(SETTINGS_LABEL)
+        .is_some_and(|window| window.is_visible().unwrap_or(false));
+    if !settings_open {
+        if let Err(err) = app.hide() {
+            tracing::warn!("hide: app.hide failed: {err}");
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn hide_app(_app: &AppHandle) {}
+
+/// macOS: undoes [`hide_app`] so the window can be shown and focused.
+#[cfg(target_os = "macos")]
+pub fn unhide_app(app: &AppHandle) {
+    if let Err(err) = app.show() {
+        tracing::warn!("show: app.show failed: {err}");
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn unhide_app(_app: &AppHandle) {}
 
 /// Tells the UI the window is gone, so it clears its query for the next show.
 pub fn announce_hidden(app: &AppHandle) {
@@ -85,6 +115,7 @@ pub fn reveal(app: &AppHandle) {
     };
     tracing::info!("revealing window again");
     position(app, &window);
+    unhide_app(app);
     if let Err(err) = window.show() {
         tracing::warn!("reveal: window.show failed: {err}");
     }

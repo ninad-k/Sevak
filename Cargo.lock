@@ -3300,6 +3300,7 @@ version = "0.1.0"
 dependencies = [
  "arboard",
  "dirs 6.0.0",
+ "plist",
  "png 0.18.1",
  "sevak-core",
  "tempfile",

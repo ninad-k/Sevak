@@ -1,41 +1,119 @@
 name: Release
 
+# Every push to main (i.e. every merged pull request, since main is protected
+# and CI already passed on the PR) ships a new version:
+#   1. plan     work out the next version from the commits since the last tag
+#               (scripts/release-version.mjs) and open a draft GitHub release
+#   2. build    build the installers on Windows, macOS and Linux and attach them
+#   3. publish  add SHA256SUMS.txt and publish the release, which creates the tag
+# A failed build leaves only a draft (no tag), which the next run replaces.
+# Docs-only pushes don't release; nor does a head commit containing [skip release].
+
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/*.md"
+  workflow_dispatch:
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release
   cancel-in-progress: false
 
 permissions:
   contents: read
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  release:
-    name: Release (${{ matrix.os }})
+  plan:
+    name: Plan release
+    if: ${{ !contains(github.event.head_commit.message, '[skip release]') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      release_id: ${{ steps.draft.outputs.release_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # tags and history for the version bump
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Compute the next version
+        id: version
+        run: |
+          version=$(node scripts/release-version.mjs next)
+          if [ -z "$version" ]; then
+            echo "HEAD is already released; nothing to do."
+          else
+            echo "Next version: $version"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Create the draft release
+        id: draft
+        if: steps.version.outputs.version != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v${{ steps.version.outputs.version }}
+        run: |
+          # A draft for this tag left by an earlier failed run is replaced; a
+          # published one means the tag already exists, which plan never reuses.
+          gh api "repos/$GITHUB_REPOSITORY/releases" --paginate \
+            --jq ".[] | select(.tag_name == \"$TAG\") | [.id, .draft] | @tsv" |
+          while read -r id draft; do
+            if [ "$draft" = "true" ]; then
+              echo "Deleting stale draft $id for $TAG"
+              gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$id"
+            else
+              echo "::error::Release $TAG is already published"
+              exit 1
+            fi
+          done
+
+          id=$(gh api "repos/$GITHUB_REPOSITORY/releases" \
+            -f tag_name="$TAG" \
+            -f target_commitish="$GITHUB_SHA" \
+            -f name="Sevak $TAG" \
+            -f body="Downloads for Windows, macOS and Linux are below. Installation notes: [docs/install.md](https://github.com/$GITHUB_REPOSITORY/blob/$TAG/docs/install.md). Verify downloads against \`SHA256SUMS.txt\`." \
+            -F draft=true \
+            -F generate_release_notes=true \
+            --jq .id)
+          echo "release_id=$id" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build (${{ matrix.name }})
+    needs: plan
+    if: needs.plan.outputs.version != ''
     runs-on: ${{ matrix.os }}
     permissions:
-      contents: write # create the draft release and upload assets
+      contents: write # upload release assets
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         include:
-          - os: windows-latest
+          - name: Windows x64
+            os: windows-latest
             args: --bundles nsis,msi
-          - os: ubuntu-22.04
+          - name: macOS universal
+            os: macos-latest
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+            args: --target universal-apple-darwin --bundles app,dmg
+          - name: Linux x64
+            os: ubuntu-22.04 # oldest supported glibc, so the AppImage runs widely
             args: --bundles deb,rpm,appimage
     steps:
       - uses: actions/checkout@v4
-
-      - name: Check the tag matches the app version
-        shell: bash
-        run: |
-          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
-          if [ "v${version}" != "${GITHUB_REF_NAME}" ]; then
-            echo "::error::Tag ${GITHUB_REF_NAME} does not match version ${version} in src-tauri/tauri.conf.json"
-            exit 1
-          fi
 
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
@@ -47,6 +125,8 @@ jobs:
             libxdo-dev libssl-dev
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
 
       - uses: Swatinem/rust-cache@v2
 
@@ -57,13 +137,41 @@ jobs:
 
       - run: npm ci
 
+      - name: Stamp the version
+        run: node scripts/release-version.mjs set ${{ needs.plan.outputs.version }}
+
       - uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: Sevak ${{ github.ref_name }}
-          releaseBody: See the assets below to download Sevak for your platform. Installation notes are in docs/install.md.
-          releaseDraft: true
-          prerelease: false
+          releaseId: ${{ needs.plan.outputs.release_id }}
           args: ${{ matrix.args }}
+
+  publish:
+    name: Publish release
+    needs: [plan, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_ID: ${{ needs.plan.outputs.release_id }}
+    steps:
+      - name: Add SHA256SUMS.txt
+        run: |
+          mkdir assets && cd assets
+          gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets" --paginate \
+            --jq '.[] | [.id, .name] | @tsv' |
+          while IFS=$'\t' read -r id name; do
+            gh api -H "Accept: application/octet-stream" \
+              "repos/$GITHUB_REPOSITORY/releases/assets/$id" > "$name"
+          done
+          sha256sum -- * | tee ../SHA256SUMS.txt
+          gh api -X POST -H "Content-Type: text/plain" --input ../SHA256SUMS.txt \
+            "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=SHA256SUMS.txt" \
+            --jq .browser_download_url
+
+      - name: Publish
+        run: |
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+            -F draft=false -f make_latest=true --jq .html_url

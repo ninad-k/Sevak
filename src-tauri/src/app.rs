@@ -65,6 +65,10 @@ pub fn run(
         ])
         .on_window_event(window::on_window_event)
         .setup(move |app| {
+            // A launcher lives in the menu bar: no Dock icon or app menu.
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
             let handle = app.handle();
             tray::init(handle);
             hotkey::apply(handle);

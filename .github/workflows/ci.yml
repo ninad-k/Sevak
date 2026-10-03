@@ -27,7 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-22.04]
+        os: [windows-latest, macos-latest, ubuntu-22.04]
     steps:
       - uses: actions/checkout@v4
 
@@ -103,6 +103,9 @@ jobs:
           - os: windows-latest
             bundles: nsis,msi
             artifact: sevak-windows
+          - os: macos-latest
+            bundles: app,dmg
+            artifact: sevak-macos
           # Oldest supported Ubuntu, so the .deb and AppImage link against the
           # oldest glibc/WebKitGTK we promise to run on.
           - os: ubuntu-22.04
@@ -142,6 +145,7 @@ jobs:
           path: |
             target/release/bundle/nsis/*.exe
             target/release/bundle/msi/*.msi
+            target/release/bundle/dmg/*.dmg
             target/release/bundle/deb/*.deb
             target/release/bundle/rpm/*.rpm
             target/release/bundle/appimage/*.AppImage

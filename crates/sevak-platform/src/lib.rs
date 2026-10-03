@@ -19,8 +19,13 @@ pub mod session;
 
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "macos")]
+mod macos;
 #[cfg(windows)]
 mod windows;
+
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+compile_error!("Sevak supports Windows, macOS and Linux only");
 
 pub use error::{PlatformError, Result};
 pub use paths::AppPaths;
@@ -36,5 +41,9 @@ pub fn native_provider() -> Box<dyn PlatformProvider> {
     #[cfg(target_os = "linux")]
     {
         Box::new(linux::LinuxProvider::new())
+    }
+    #[cfg(target_os = "macos")]
+    {
+        Box::new(macos::MacProvider::new())
     }
 }
