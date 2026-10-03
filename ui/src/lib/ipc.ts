@@ -82,27 +82,36 @@ export function hasTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
+/** One search's results; `ticket` names this set when executing one of them. */
+export interface SearchResponse {
+  ticket: number;
+  results: ResultDto[];
+}
+
 /** Query the engine. Returns `null` on failure so callers can tell it from "no results". */
-export async function search(query: string): Promise<ResultDto[] | null> {
+export async function search(query: string): Promise<SearchResponse | null> {
   if (import.meta.env.DEV && !hasTauri()) {
     const { mockSearch } = await import("./mock");
-    return mockSearch(query);
+    return { ticket: 0, results: mockSearch(query) };
   }
   try {
-    return await invoke<ResultDto[]>("search", { query });
+    return await invoke<SearchResponse>("search", { query });
   } catch (err) {
     console.warn("[ipc] search failed:", err);
     return null;
   }
 }
 
-/** Run a result of the latest search. Resolves to an error message, or `null` on success. */
-export async function execute(id: string, query: string): Promise<string | null> {
+/**
+ * Run result `id` of search `ticket` (the results on screen). Resolves to an
+ * error message, or `null` on success.
+ */
+export async function execute(id: string, ticket: number): Promise<string | null> {
   if (import.meta.env.DEV && !hasTauri()) {
     return id === "m:broken" ? "Could not start “Broken icon app” (preview error)" : null;
   }
   try {
-    await invoke("execute", { id, query });
+    await invoke("execute", { id, ticket });
     return null;
   } catch (err) {
     console.warn("[ipc] execute failed:", err);

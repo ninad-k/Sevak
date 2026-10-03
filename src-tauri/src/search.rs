@@ -4,7 +4,7 @@
 //! Nothing here runs on the main thread except cheap state access; indexing,
 //! saving and reloading happen on dedicated threads.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
@@ -89,12 +89,46 @@ fn load_usage(path: &Path) -> UsageStore {
     }
 }
 
-/// Results of the most recent search, keyed by id, so `execute` needs only an id.
+/// How many recent result sets `execute` can still act on. The UI shows the
+/// newest set it has *received*, which can trail the newest one computed while
+/// the user types fast, so a few older sets are kept.
+const KEPT_RESULT_SETS: usize = 8;
+
+/// One search's results, keyed by id, plus the query that produced them.
+struct ResultSet {
+    ticket: u64,
+    query: String,
+    items: HashMap<String, ResultItem>,
+}
+
+/// The most recent result sets, oldest first (ascending tickets).
 #[derive(Default)]
 struct Latest {
-    /// Ticket of the search that produced `items`.
-    ticket: u64,
-    items: HashMap<String, ResultItem>,
+    sets: VecDeque<ResultSet>,
+}
+
+impl Latest {
+    /// Adds a set; searches run concurrently and may finish out of order.
+    fn store(&mut self, ticket: u64, query: String, items: Vec<ResultItem>) {
+        let set = ResultSet {
+            ticket,
+            query,
+            items: items
+                .into_iter()
+                .map(|item| (item.id.clone(), item))
+                .collect(),
+        };
+        let at = self.sets.partition_point(|s| s.ticket < ticket);
+        self.sets.insert(at, set);
+        while self.sets.len() > KEPT_RESULT_SETS {
+            self.sets.pop_front();
+        }
+    }
+
+    fn get(&self, ticket: u64, id: &str) -> Option<(ResultItem, String)> {
+        let set = self.sets.iter().find(|set| set.ticket == ticket)?;
+        Some((set.items.get(id)?.clone(), set.query.clone()))
+    }
 }
 
 /// Debounced, serialized persistence of the usage statistics.
@@ -196,26 +230,19 @@ impl Search {
         self.next_ticket.fetch_add(1, Ordering::SeqCst)
     }
 
-    /// Remembers `items` for `execute`, unless a newer search already did
-    /// (searches run concurrently and may finish out of order).
-    pub fn store_results(&self, ticket: u64, items: Vec<ResultItem>) {
-        let mut latest = lock(&self.latest);
-        if ticket < latest.ticket {
-            return;
-        }
-        latest.ticket = ticket;
-        latest.items = items
-            .into_iter()
-            .map(|item| (item.id.clone(), item))
-            .collect();
+    /// Remembers the results of search `ticket` for `execute`.
+    pub fn store_results(&self, ticket: u64, query: String, items: Vec<ResultItem>) {
+        lock(&self.latest).store(ticket, query, items);
     }
 
-    pub fn result(&self, id: &str) -> Option<ResultItem> {
-        lock(&self.latest).items.get(id).cloned()
+    /// The result `id` of search `ticket` (the set the UI is showing) and the
+    /// query that produced it, while that set is among the recent ones.
+    pub fn result(&self, ticket: u64, id: &str) -> Option<(ResultItem, String)> {
+        lock(&self.latest).get(ticket, id)
     }
 
-    /// Swaps in an engine over `plugins`, carrying over the usage recorded so
-    /// far. Returns false when a newer reload superseded this one.
+    /// Swaps in an engine over `plugins` that shares the current engine's usage
+    /// statistics. Returns false when a newer reload superseded this one.
     fn install(
         &self,
         generation: u64,
@@ -229,8 +256,7 @@ impl Search {
         if self.reload_generation.load(Ordering::SeqCst) != generation {
             return false;
         }
-        let usage = current.usage_snapshot();
-        *current = Arc::new(SearchEngine::new(plugins, usage, options));
+        *current = Arc::new(current.rebuild(plugins, options));
         true
     }
 }
@@ -363,4 +389,52 @@ pub fn reload(app: &AppHandle, config: &Config) {
             tracing::info!("reload superseded by a newer one; discarding");
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use sevak_core::Action;
+
+    use super::*;
+
+    fn item(key: &str, text: &str) -> ResultItem {
+        ResultItem::new(
+            "calc",
+            key,
+            text,
+            Action::CopyText {
+                text: text.to_owned(),
+            },
+        )
+    }
+
+    #[test]
+    fn executes_the_set_the_ui_shows_not_just_the_newest() {
+        let mut latest = Latest::default();
+        latest.store(1, "2+2".into(), vec![item("r", "4")]);
+        // The next search finished, but the UI still shows ticket 1.
+        latest.store(2, "2+23".into(), vec![item("r", "25")]);
+
+        let (shown, query) = latest.get(1, "calc:r").unwrap();
+        assert_eq!(shown.title, "4");
+        assert_eq!(query, "2+2");
+        assert_eq!(latest.get(2, "calc:r").unwrap().0.title, "25");
+        assert!(latest.get(2, "calc:missing").is_none());
+    }
+
+    #[test]
+    fn keeps_only_the_newest_sets_even_when_stored_out_of_order() {
+        let mut latest = Latest::default();
+        let total = KEPT_RESULT_SETS as u64 + 2;
+        for ticket in (1..=total).rev() {
+            latest.store(ticket, ticket.to_string(), vec![item("r", "x")]);
+        }
+        assert_eq!(latest.sets.len(), KEPT_RESULT_SETS);
+        assert!(latest.get(1, "calc:r").is_none());
+        assert!(latest.get(2, "calc:r").is_none());
+        assert!(latest.get(3, "calc:r").is_some());
+        assert!(latest.get(total, "calc:r").is_some());
+        let tickets: Vec<_> = latest.sets.iter().map(|s| s.ticket).collect();
+        assert!(tickets.windows(2).all(|w| w[0] < w[1]));
+    }
 }

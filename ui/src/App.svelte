@@ -18,6 +18,8 @@
 
   let query = $state("");
   let results = $state<ResultDto[]>([]);
+  /** The search that produced `results`, so Enter runs exactly what is shown. */
+  let resultsTicket = 0;
   let selected = $state(0);
   let error = $state<string | null>(null);
   let indexing = $state(false);
@@ -78,7 +80,8 @@
     }
     const found = await search(text);
     if (mine !== searchSeq || found === null) return;
-    results = found;
+    results = found.results;
+    resultsTicket = found.ticket;
     selected = 0;
     if (list) list.scrollTop = 0;
   }
@@ -93,7 +96,7 @@
     if (!item || executing) return;
     executing = true;
     try {
-      const message = await execute(item.id, query);
+      const message = await execute(item.id, resultsTicket);
       if (message !== null) error = message;
     } finally {
       executing = false;
