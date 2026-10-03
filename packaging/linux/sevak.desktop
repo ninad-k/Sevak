@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name={{name}}
+GenericName=Application Launcher
+Comment=Keyboard-first quick launcher
+Exec={{exec}}
+Icon={{icon}}
+Terminal=false
+Categories={{categories}}
+Keywords=launcher;search;run;apps;calculator;files;
+Actions=Toggle;
+
+[Desktop Action Toggle]
+Name=Show or hide Sevak
+Exec={{exec}} --toggle

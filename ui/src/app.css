@@ -1,0 +1,134 @@
+/*
+ * Theme variables.
+ *
+ * Light is the base. Dark applies when the OS prefers it, unless the user
+ * pinned light in settings (`data-theme="light"`), or whenever they pinned dark
+ * (`data-theme="dark"`). The dark block therefore appears twice; keep the two
+ * copies identical. `theme.ts` sets and clears `data-theme`.
+ */
+:root {
+  --bg: #fcfcfd;
+  --fg: #1c1b2e;
+  --muted: #6b6a80;
+  --border: rgba(28, 27, 46, 0.12);
+  --accent: #f59e0b;
+  --accent-strong: #d97706;
+  --on-accent: #1c1b2e;
+  --warn: #b45309;
+  --error: #b42318;
+  --ok: #15803d;
+  --selected: rgba(245, 158, 11, 0.17);
+  --tile: rgba(28, 27, 46, 0.06);
+  --kbd-bg: rgba(28, 27, 46, 0.06);
+  --kbd-border: rgba(28, 27, 46, 0.14);
+  --shadow: 0 8px 28px rgba(28, 27, 46, 0.22), 0 1px 3px rgba(28, 27, 46, 0.12);
+  --surface: rgba(28, 27, 46, 0.035);
+  --input-bg: #ffffff;
+  --input-border: rgba(28, 27, 46, 0.22);
+  --switch-off: rgba(28, 27, 46, 0.26);
+
+  color-scheme: light;
+  font-family: system-ui, -apple-system, "Segoe UI", Ubuntu, Cantarell, "Noto Sans", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #17152b;
+    --fg: #ece9fb;
+    --muted: #9a97b8;
+    --border: rgba(236, 233, 251, 0.12);
+    --accent: #fbbf24;
+    --accent-strong: #f59e0b;
+    --on-accent: #1c1b2e;
+    --warn: #fbbf24;
+    --error: #ff8a80;
+    --ok: #4ade80;
+    --selected: rgba(251, 191, 36, 0.16);
+    --tile: rgba(236, 233, 251, 0.08);
+    --kbd-bg: rgba(236, 233, 251, 0.08);
+    --kbd-border: rgba(236, 233, 251, 0.16);
+    --shadow: 0 8px 28px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.4);
+    --surface: rgba(236, 233, 251, 0.05);
+    --input-bg: rgba(236, 233, 251, 0.06);
+    --input-border: rgba(236, 233, 251, 0.24);
+    --switch-off: rgba(236, 233, 251, 0.28);
+
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #17152b;
+  --fg: #ece9fb;
+  --muted: #9a97b8;
+  --border: rgba(236, 233, 251, 0.12);
+  --accent: #fbbf24;
+  --accent-strong: #f59e0b;
+  --on-accent: #1c1b2e;
+  --warn: #fbbf24;
+  --error: #ff8a80;
+  --ok: #4ade80;
+  --selected: rgba(251, 191, 36, 0.16);
+  --tile: rgba(236, 233, 251, 0.08);
+  --kbd-bg: rgba(236, 233, 251, 0.08);
+  --kbd-border: rgba(236, 233, 251, 0.16);
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.4);
+  --surface: rgba(236, 233, 251, 0.05);
+  --input-bg: rgba(236, 233, 251, 0.06);
+  --input-border: rgba(236, 233, 251, 0.24);
+  --switch-off: rgba(236, 233, 251, 0.28);
+
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  background: transparent;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+::-webkit-scrollbar {
+  display: none;
+}
+
+input,
+textarea,
+select {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* The settings window is an ordinary opaque window (main.ts adds the class). */
+html.settings,
+html.settings body {
+  background: var(--bg);
+}
+
+html.settings ::-webkit-scrollbar {
+  display: block;
+  width: 10px;
+}
+
+html.settings ::-webkit-scrollbar-thumb {
+  background: var(--input-border);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 8px;
+}
+
+html.settings ::-webkit-scrollbar-thumb:hover {
+  background-clip: border-box;
+}

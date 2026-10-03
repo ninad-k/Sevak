@@ -1,0 +1,81 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Sevak",
+  "version": "0.1.0",
+  "identifier": "com.ninad.sevak",
+  "mainBinaryName": "sevak",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../ui/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Sevak",
+        "width": 720,
+        "height": 92,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "shadow": false,
+        "center": true,
+        "focus": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: http://sevak-icon.localhost sevak-icon:; connect-src ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi", "deb", "rpm", "appimage"],
+    "publisher": "Ninad Kulkarni",
+    "copyright": "Copyright © 2026 Ninad Kulkarni. Licensed under the Apache License 2.0.",
+    "category": "Utility",
+    "shortDescription": "Keyboard-first quick launcher",
+    "longDescription": "Sevak is a keyboard-first quick launcher. Press a hotkey, type, and launch apps, do quick math, search the web, or find files. Results are ranked by how often and how recently you use them, and built-in plugins are configured from a single TOML file.",
+    "homepage": "https://github.com/ninad-k/Sevak",
+    "license": "Apache-2.0",
+    "licenseFile": "../LICENSE",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "webviewInstallMode": { "type": "downloadBootstrapper" },
+      "nsis": {
+        "installMode": "currentUser",
+        "startMenuFolder": "Sevak"
+      },
+      "wix": {
+        "upgradeCode": "16b13fde-6fa0-4bf2-836a-9af38755bfec"
+      }
+    },
+    "linux": {
+      "appimage": {
+        "bundleMediaFramework": false
+      },
+      "deb": {
+        "section": "utils",
+        "priority": "optional",
+        "depends": ["libayatana-appindicator3-1", "libglib2.0-bin"],
+        "desktopTemplate": "../packaging/linux/sevak.desktop"
+      },
+      "rpm": {
+        "depends": ["libayatana-appindicator-gtk3", "glib2"],
+        "desktopTemplate": "../packaging/linux/sevak.desktop"
+      }
+    }
+  }
+}
