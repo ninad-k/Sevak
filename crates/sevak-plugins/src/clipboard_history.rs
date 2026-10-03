@@ -73,7 +73,7 @@ use sevak_core::{
     Action, ClipContent, FuzzyQuery, IconSource, Modifier, Plugin, PluginError, PluginResult,
     PreviewHint, ResultItem,
 };
-use sevak_platform::media::{self, files_hash, ClipboardImage};
+use sevak_platform::clip_media::{self, files_hash, ClipboardImage};
 use sevak_platform::{
     AppPaths, ClipboardMedia, ClipboardRead, MediaRequest, PasteSupport, PlatformProvider,
 };
@@ -1207,10 +1207,10 @@ impl ClipboardPlugin {
         let dir = self
             .save_dir
             .clone()
-            .or_else(media::save_directory)
+            .or_else(clip_media::save_directory)
             .ok_or_else(|| PluginError::Message("There is no folder to save into".to_owned()))?;
         let stamp = chrono::Local::now().format("%Y-%m-%d %H-%M-%S");
-        let target = media::unique_file_name(&dir, &format!("Clipboard image {stamp}"), "png");
+        let target = clip_media::unique_file_name(&dir, &format!("Clipboard image {stamp}"), "png");
         fs::copy(&source, &target).map_err(PluginError::other)?;
         tracing::info!("saved a clipboard image to {}", target.display());
         if let Err(err) = self.platform.reveal_path(&target) {

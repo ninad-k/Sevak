@@ -10,6 +10,8 @@
 //! | `files:content`  | [`OsFilesPlugin`] (inside files)        | `in`    | no     |
 //! | `bookmarks`      | [`BookmarksPlugin`]                     | config  | config |
 //! | `system`         | [`SystemPlugin`]                        | none    | yes    |
+//! | `tasks`          | [`TasksPlugin`] (automation tasks)      | `t`     | config |
+//! | `media`          | [`MediaPlugin`] (play/pause, now playing) | `play` | config |
 //! | `shell`          | [`ShellPlugin`]                         | `>`     | no     |
 //! | `clipboard`      | [`ClipboardPlugin`] (opt-in history)    | `cb`    | no     |
 //! | `snippets`       | [`SnippetsPlugin`]                      | `s`     | no     |
@@ -41,6 +43,8 @@ pub mod emoji;
 pub mod example_uuid;
 pub mod file_buffer;
 pub mod files;
+mod live;
+pub mod media;
 pub mod os_files;
 pub mod path_browse;
 pub mod registry;
@@ -49,6 +53,7 @@ pub mod selection;
 pub mod shell;
 pub mod snippets;
 pub mod system;
+pub mod tasks;
 pub mod units;
 pub mod web_search;
 
@@ -63,6 +68,7 @@ pub use clipboard_history::ClipboardPlugin;
 pub use emoji::EmojiPlugin;
 pub use example_uuid::UuidPlugin;
 pub use files::FilesPlugin;
+pub use media::MediaPlugin;
 pub use os_files::{files_family, OsFilesPlugin};
 pub use registry::{PluginDescriptor, PluginFactory, PluginInfo, PluginRegistry};
 pub use script::{ScriptPlugin, ScriptPluginHost};
@@ -70,11 +76,12 @@ pub use selection::SelectionPlugin;
 pub use shell::ShellPlugin;
 pub use snippets::SnippetsPlugin;
 pub use system::SystemPlugin;
+pub use tasks::TasksPlugin;
 pub use web_search::WebSearchPlugin;
 
 /// Instantiates every enabled built-in plugin (`apps`, `calculator`, one
 /// `web:<keyword>` per `[[web_search]]` engine, `files`, `bookmarks`, `system`,
-/// `shell`, `clipboard`, `snippets`, `selection`, `uuid`).
+/// `tasks`, `media`, `shell`, `clipboard`, `snippets`, `selection`, `uuid`).
 ///
 /// Shorthand for `PluginRegistry::builtin().instantiate(config, platform)`.
 ///
@@ -114,6 +121,8 @@ mod tests {
                 "files:content",
                 "bookmarks",
                 "system",
+                "tasks",
+                "media",
                 "shell",
                 "clipboard",
                 "snippets",
@@ -137,6 +146,8 @@ mod tests {
                 "web:gh",
                 "bookmarks",
                 "system",
+                "tasks",
+                "media",
                 "shell",
                 "clipboard",
                 "snippets",

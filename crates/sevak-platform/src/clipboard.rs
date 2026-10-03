@@ -10,8 +10,8 @@ use std::time::{Duration, Instant};
 use arboard::Clipboard;
 use sevak_core::ClipContent;
 
+use crate::clip_media::{files_hash, ClipboardImage};
 use crate::error::{PlatformError, Result};
-use crate::media::{files_hash, ClipboardImage};
 
 /// One clipboard handle for the life of the process. On X11 (and XWayland) the
 /// copying application must keep serving the selection until another app takes
@@ -211,7 +211,7 @@ fn image_data(image: &ClipboardImage) -> arboard::ImageData<'_> {
 }
 
 /// The image on the clipboard; `None` if it holds something else, or an image
-/// too large to hold (see [`crate::media::MAX_IMAGE_RAW_BYTES`]).
+/// too large to hold (see [`crate::clip_media::MAX_IMAGE_RAW_BYTES`]).
 pub fn get_image() -> Result<Option<ClipboardImage>> {
     let data = read_with(|clipboard| clipboard.get_image())?;
     Ok(data.and_then(|data| {

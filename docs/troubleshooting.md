@@ -95,6 +95,26 @@ where you need it.
 Sevak uses finite-precision arithmetic. Invalid expressions and operations
 such as division by zero do not produce a valid copyable answer.
 
+## An automation task or media control is missing
+
+Sevak lists only what can work on your machine. Type `t ` to see the tasks
+that are available. On Linux, tasks that need a helper program are hidden until
+it is installed: `wmctrl` (show desktop), `gnome-screenshot`, `spectacle` or
+`flameshot` (screenshot), `wpctl`, `pactl` or `amixer` (volume), `nmcli` or
+`rfkill` (Wi-Fi), `rfkill` or `bluetoothctl` (Bluetooth), `udisksctl` (eject),
+`systemd-inhibit` (keep awake) and `playerctl` (the media buttons and the
+playing track). On macOS, Bluetooth needs [blueutil](https://github.com/toy/blueutil),
+and dark mode, volume, quit and hide-others ask once for permission to control
+System Events (hide-others and show-desktop also need the Accessibility
+permission). On Windows, Wi-Fi and Bluetooth are listed only when the PC has
+the radio, and switching them needs *Settings → Privacy & security → Radios*
+to allow desktop apps. Flush DNS is not offered on Windows or macOS because it
+needs administrator rights. You can also hide tasks in
+[`[tasks]`](configuration.md#automation-tasks).
+
+The list after `quit`, `kill` or `eject` appears a moment after you type the
+command, because Sevak asks the system for it in the background.
+
 ## The launcher disappears
 
 This is expected with **Hide on blur** enabled: the launcher hides when

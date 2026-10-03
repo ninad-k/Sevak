@@ -420,7 +420,7 @@ mod tests {
 
     #[test]
     fn an_image_on_the_clipboard_is_put_back_after_the_capture() {
-        let image = crate::media::ClipboardImage::new(1, 1, vec![1, 2, 3, 255]).unwrap();
+        let image = crate::clip_media::ClipboardImage::new(1, 1, vec![1, 2, 3, 255]).unwrap();
         let fake = Fake::new(Some(Fake::text("hello")));
         *fake.clipboard.borrow_mut() = ClipboardSnapshot {
             image: Some(image.clone()),

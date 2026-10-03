@@ -80,8 +80,8 @@ custom_css = ""
 
 [plugins]
 # Ids of built-in plugins to turn off: "apps", "calculator", "files",
-# "bookmarks", "system", "shell", "clipboard", "snippets", "selection"
-# (Universal Actions), "web:<keyword>".
+# "bookmarks", "system", "tasks", "media", "shell", "clipboard", "snippets",
+# "emoji", "selection" (Universal Actions), "web:<keyword>".
 disabled = []
 
 [calculator]
@@ -130,6 +130,36 @@ confirm = true
 # "settings:<page>" such as "settings:bluetooth". To turn the whole plugin off,
 # add "system" to [plugins] disabled instead.
 disabled = []
+
+[tasks]
+# Automation tasks: toggle dark mode, show the desktop, mute and set the volume
+# ("vol 30"), take a screenshot, quit an app ("quit"), kill a process by name
+# ("kill chrome"), eject a drive ("eject"), keep the computer awake ("awake 30")
+# and more. What is offered depends on your system.
+# Ask before force quitting an app, ending a process and restarting Explorer or
+# Finder.
+confirm = true
+# Tasks to hide: "dark_mode", "show_desktop", "hide_others", "minimize_all",
+# "screenshot", "downloads", "recent_files", "flush_dns", "restart_shell",
+# "empty_clipboard", "mute", "unmute", "volume_up", "volume_down", "volume",
+# "wifi", "bluetooth", "keep_awake", "stop_keep_awake", "quit_app",
+# "force_quit_app", "kill", "eject". To turn the whole plugin off, add "tasks"
+# to [plugins] disabled instead.
+disabled = []
+# Type "<keyword> <task>" to search only tasks.
+keyword = "t"
+# Also show tasks for plain queries ("dark mode", "kill chrome").
+global = true
+
+[media]
+# Media controls: play/pause, next, previous, stop, and what is playing now.
+# Type "<keyword> <button>" to search only the controls.
+keyword = "play"
+# Also show the controls for plain queries ("pause", "next track").
+global = true
+# Show the track that is playing as a row (Enter plays or pauses it). It is read
+# from the system's media player on request; nothing is stored or sent anywhere.
+now_playing = true
 
 [shell]
 # Type "> <command>" (or ">command") to run a command in a terminal window. It
@@ -246,6 +276,8 @@ pub struct Config {
     pub files: FilesConfig,
     pub bookmarks: BookmarksConfig,
     pub system: SystemConfig,
+    pub tasks: TasksConfig,
+    pub media: MediaConfig,
     pub shell: ShellConfig,
     pub paste: PasteConfig,
     pub actions: ActionsConfig,
@@ -273,6 +305,8 @@ impl Default for Config {
             files: FilesConfig::default(),
             bookmarks: BookmarksConfig::default(),
             system: SystemConfig::default(),
+            tasks: TasksConfig::default(),
+            media: MediaConfig::default(),
             shell: ShellConfig::default(),
             paste: PasteConfig::default(),
             actions: ActionsConfig::default(),
@@ -702,6 +736,63 @@ impl SystemConfig {
         self.disabled
             .iter()
             .any(|entry| entry.trim().eq_ignore_ascii_case(key))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TasksConfig {
+    /// Ask before force quitting an app, ending a process and restarting
+    /// Explorer or Finder.
+    pub confirm: bool,
+    /// Tasks to hide, by key (`dark_mode`, `kill`, `wifi`, ...). Matched by the
+    /// tasks plugin.
+    pub disabled: Vec<String>,
+    /// Type "<keyword> <task>" to search only tasks.
+    pub keyword: String,
+    /// Also show tasks for plain queries (`dark mode`, `kill chrome`).
+    pub global: bool,
+}
+
+impl Default for TasksConfig {
+    fn default() -> Self {
+        Self {
+            confirm: true,
+            disabled: Vec::new(),
+            keyword: "t".to_owned(),
+            global: true,
+        }
+    }
+}
+
+impl TasksConfig {
+    /// Whether `key` is switched off in `disabled` (case-insensitive).
+    pub fn is_disabled(&self, key: &str) -> bool {
+        self.disabled
+            .iter()
+            .any(|entry| entry.trim().eq_ignore_ascii_case(key))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MediaConfig {
+    /// Type "<keyword> <button>" to search only the media controls.
+    pub keyword: String,
+    /// Also show the controls for plain queries (`pause`, `next`).
+    pub global: bool,
+    /// Show the playing track as a row. Reads it from the player the system
+    /// reports; nothing is stored or sent anywhere.
+    pub now_playing: bool,
+}
+
+impl Default for MediaConfig {
+    fn default() -> Self {
+        Self {
+            keyword: "play".to_owned(),
+            global: true,
+            now_playing: true,
+        }
     }
 }
 
@@ -1195,6 +1286,33 @@ url = "https://example.com"
         assert!(!config.files.use_os_index);
         assert_eq!(config.files.index_keyword, "all");
         assert_eq!(config.files.content_keyword, "");
+    }
+
+    #[test]
+    fn tasks_and_media_sections_have_defaults_and_parse() {
+        let config = Config::from_toml_str("").unwrap();
+        assert!(config.tasks.confirm && config.tasks.global);
+        assert_eq!(config.tasks.keyword, "t");
+        assert!(config.tasks.disabled.is_empty());
+        assert_eq!(config.media.keyword, "play");
+        assert!(config.media.global && config.media.now_playing);
+
+        let config = Config::from_toml_str(
+            "[tasks]
+confirm = false
+keyword = \"tk\"
+disabled = [\"Kill\"]
+[media]
+now_playing = false
+",
+        )
+        .unwrap();
+        assert!(!config.tasks.confirm);
+        assert_eq!(config.tasks.keyword, "tk");
+        assert!(config.tasks.is_disabled("kill"));
+        assert!(!config.tasks.is_disabled("wifi"));
+        assert!(!config.media.now_playing);
+        assert_eq!(config.media.keyword, "play");
     }
 
     #[test]

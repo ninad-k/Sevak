@@ -7,6 +7,7 @@
 
 pub mod browsers;
 pub mod capture;
+pub mod clip_media;
 pub mod clipboard;
 pub mod desktop_entry;
 pub mod error;
@@ -23,6 +24,7 @@ pub mod process;
 pub mod provider;
 pub mod session;
 pub mod system;
+pub mod tasks;
 pub mod terminal;
 pub mod trash;
 
@@ -38,15 +40,17 @@ compile_error!("Sevak supports Windows, macOS and Linux only");
 
 pub use browsers::{BrowserFamily, BrowserRoot};
 pub use capture::{CaptureOptions, SelectionCapture};
+pub use clip_media::ClipboardImage;
 pub use clipboard::{ClipboardMedia, MediaRequest};
 pub use error::{PlatformError, Result};
-pub use media::ClipboardImage;
+pub use media::{MediaCommand, NowPlaying};
 pub use os_search::{OsHit, OsSearchError, OsSearchKind, OsSearchRequest};
 pub use paste::{ClipboardRead, ForegroundApp, PasteOutcome, PasteSupport};
 pub use paths::AppPaths;
 pub use provider::PlatformProvider;
 pub use session::{DisplayServer, HotkeyStrategy};
 pub use system::{SettingsPage, SystemCommand};
+pub use tasks::{Drive, ProcessInfo, RunningApp, Task, TaskKind};
 
 /// The [`PlatformProvider`] for the operating system Sevak was built for.
 pub fn native_provider() -> Box<dyn PlatformProvider> {

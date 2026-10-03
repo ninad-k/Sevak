@@ -74,6 +74,10 @@ They show the workflow rather than measured search or launch times.
 | Act on selected text or files in any app | select, then `Ctrl+Alt+Space` | Searches, transforms, opens or copies it — you pick |
 | Collect files, then act on them all | `Alt+Down` on file results | Move, copy, zip, trash or open the whole [file buffer](docs/usage.md#file-buffer) |
 | Lock, sleep, restart… | `lock`, `restart`, `bluetooth` | Runs the system command (restart, shut down, log out and empty trash ask first) |
+| Dark mode, volume, screenshot… | `dark mode`, `vol 30`, `screenshot` | Runs the [automation task](docs/usage.md#automation-tasks) |
+| Quit or kill an app | `quit`, `kill chrome` | Lists running apps or processes (force quit and kill ask first) |
+| Eject a drive, stay awake | `eject`, `awake 45` | Ejects the drive; keeps the computer awake for 45 minutes |
+| Control music and video | `pause`, `next`, `play ` | Presses the media button; `play ` also shows what is playing |
 | Run a terminal command | `> git status` | Opens your terminal and runs it |
 | Paste earlier clipboard text, images or files | `cb invoice` | Pastes into the app you were using (opt-in) |
 | Paste a snippet | `s sig` | Pastes the snippet with `{date}` etc. filled in |

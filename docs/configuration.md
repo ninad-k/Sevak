@@ -149,6 +149,36 @@ disabled = []          # "lock", "sleep", "hibernate", "restart", "shutdown",
                        # "logout", "empty_trash", "settings", "settings:<page>"
 ```
 
+### Automation tasks
+
+```toml
+[tasks]
+confirm = true         # ask before force quit, kill and restarting Explorer/Finder
+disabled = []          # "dark_mode", "show_desktop", "hide_others", "minimize_all",
+                       # "screenshot", "downloads", "recent_files", "flush_dns",
+                       # "restart_shell", "empty_clipboard", "mute", "unmute",
+                       # "volume_up", "volume_down", "volume", "wifi", "bluetooth",
+                       # "keep_awake", "stop_keep_awake", "quit_app",
+                       # "force_quit_app", "kill", "eject"
+keyword = "t"          # "t " lists the tasks; "" removes the keyword
+global = true          # also match task names in ordinary searches
+```
+
+What each task does is in [Using Sevak](usage.md#automation-tasks). To turn the
+whole plugin off, add `"tasks"` to `[plugins] disabled`.
+
+### Media controls
+
+```toml
+[media]
+keyword = "play"       # "play " lists the buttons and the track; "" removes the keyword
+global = true          # also match "pause", "next track"... in ordinary searches
+now_playing = true     # show the playing track (title, artist, app) as a row
+```
+
+See [Using Sevak](usage.md#media-controls). To turn the plugin off, add
+`"media"` to `[plugins] disabled`.
+
 ### Terminal commands
 
 ```toml
@@ -286,10 +316,12 @@ disabled = ["uuid", "web:yt"]
 
 An instance ID such as `web:yt` disables that engine. A family ID such as
 `web` disables every engine in that family. Available built-in families are
-`apps`, `calculator`, `web`, `files`, `bookmarks`, `system`, `shell`,
-`clipboard`, `snippets`, `emoji` (the emoji picker; `emoji:word` and `emoji:colon`
-are its two keywords), `selection` (Universal Actions) and `uuid`. Script plugins use `script:<name>`, or
-`script` for all of them.
+`apps`, `calculator`, `web`, `files` (its instances `files:names` and
+`files:content` are the `ff` and `in` searches), `bookmarks`, `system`,
+`tasks` (automation tasks), `media` (media controls), `shell`, `clipboard`,
+`snippets`, `emoji` (the emoji picker; `emoji:word` and `emoji:colon` are its
+two keywords), `selection` (Universal Actions) and `uuid`. Script plugins use
+`script:<name>`, or `script` for all of them.
 [Plugin details](plugins.md#registry-and-enablingdisabling).
 
 ### Control startup and updates
@@ -324,6 +356,9 @@ available in the tray menu. Update installation requires your agreement.
 | `calculator.currency` | `false` | Currency conversion (downloads ECB rates) |
 | `bookmarks.browsers` / `keyword` / `global` | `[]` / `"b"` / `true` | `[]` reads every browser found |
 | `system.confirm` / `disabled` | `true` / `[]` | Confirmation for destructive commands |
+| `tasks.confirm` / `disabled` | `true` / `[]` | Confirmation for force quit, kill and restarting the shell |
+| `tasks.keyword` / `global` | `"t"` / `true` | Automation tasks |
+| `media.keyword` / `global` / `now_playing` | `"play"` / `true` / `true` | Media controls and the playing-track row |
 | `shell.terminal` / `shell` / `keep_open` | `""` / `""` / `true` | Empty auto-detects |
 | `clipboard.enabled` | `false` | Clipboard history is opt-in |
 | `clipboard.images` / `files` / `max_image_bytes` | `true` / `true` / `10485760` | What the history records besides text (when it is on) |

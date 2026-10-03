@@ -5,8 +5,9 @@ use std::sync::{Arc, Mutex};
 
 use sevak_core::{AppEntry, ClipContent, IconData, IconSource, LaunchTarget, ShellConfig};
 use sevak_platform::{
-    ClipboardMedia, ClipboardRead, ForegroundApp, MediaRequest, PasteOutcome, PasteSupport,
-    PlatformError, PlatformProvider, Result, SettingsPage, SystemCommand,
+    ClipboardMedia, ClipboardRead, Drive, ForegroundApp, MediaCommand, MediaRequest, NowPlaying,
+    PasteOutcome, PasteSupport, PlatformError, PlatformProvider, ProcessInfo, Result, RunningApp,
+    SettingsPage, SystemCommand, Task, TaskKind,
 };
 
 #[derive(Default)]
@@ -52,6 +53,22 @@ pub struct MockPlatform {
     pub trashed: Mutex<Vec<PathBuf>>,
     /// Paths `move_to_trash` fails for.
     pub trash_refuses: Mutex<Vec<PathBuf>>,
+    /// What `supported_tasks` reports, and every task `run_task` was given.
+    pub task_kinds: Mutex<Vec<TaskKind>>,
+    pub ran_tasks: Mutex<Vec<Task>>,
+    /// What the live listings return.
+    pub processes: Mutex<Vec<ProcessInfo>>,
+    pub running_apps: Mutex<Vec<RunningApp>>,
+    pub drives: Mutex<Vec<Drive>>,
+    /// How many times each listing was asked for (processes, apps, drives).
+    pub list_calls: Mutex<(usize, usize, usize)>,
+    /// What `supported_media_commands` reports, and every button pressed.
+    pub media_commands: Mutex<Vec<MediaCommand>>,
+    pub media_pressed: Mutex<Vec<MediaCommand>>,
+    /// What `now_playing` returns (and whether it can be asked at all).
+    pub playing: Mutex<Option<NowPlaying>>,
+    pub now_playing_supported: Mutex<bool>,
+    pub now_playing_calls: Mutex<usize>,
 }
 
 impl MockPlatform {
@@ -216,5 +233,47 @@ impl PlatformProvider for MockPlatform {
             .unwrap()
             .clone()
             .ok_or(PlatformError::Unsupported("a busy clipboard"))
+    }
+
+    fn supported_tasks(&self) -> Vec<TaskKind> {
+        self.task_kinds.lock().unwrap().clone()
+    }
+
+    fn run_task(&self, task: &Task) -> Result<()> {
+        self.ran_tasks.lock().unwrap().push(task.clone());
+        Ok(())
+    }
+
+    fn list_processes(&self) -> Result<Vec<ProcessInfo>> {
+        self.list_calls.lock().unwrap().0 += 1;
+        Ok(self.processes.lock().unwrap().clone())
+    }
+
+    fn list_running_apps(&self) -> Result<Vec<RunningApp>> {
+        self.list_calls.lock().unwrap().1 += 1;
+        Ok(self.running_apps.lock().unwrap().clone())
+    }
+
+    fn list_removable_drives(&self) -> Result<Vec<Drive>> {
+        self.list_calls.lock().unwrap().2 += 1;
+        Ok(self.drives.lock().unwrap().clone())
+    }
+
+    fn supported_media_commands(&self) -> Vec<MediaCommand> {
+        self.media_commands.lock().unwrap().clone()
+    }
+
+    fn media_control(&self, command: MediaCommand) -> Result<()> {
+        self.media_pressed.lock().unwrap().push(command);
+        Ok(())
+    }
+
+    fn now_playing_available(&self) -> bool {
+        *self.now_playing_supported.lock().unwrap()
+    }
+
+    fn now_playing(&self) -> Result<Option<NowPlaying>> {
+        *self.now_playing_calls.lock().unwrap() += 1;
+        Ok(self.playing.lock().unwrap().clone())
     }
 }

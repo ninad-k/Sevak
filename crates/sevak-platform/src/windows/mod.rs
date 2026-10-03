@@ -3,12 +3,14 @@
 mod capture;
 mod com;
 mod icons;
+pub(crate) mod media;
 pub(crate) mod os_search;
 mod packaged;
 mod paste;
 mod provider;
 mod shortcuts;
 pub(crate) mod system;
+pub(crate) mod tasks;
 pub(crate) mod trash;
 
 pub(crate) use provider::WindowsProvider;

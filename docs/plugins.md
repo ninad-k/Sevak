@@ -208,6 +208,8 @@ process, so plugins must never panic.
 | `files` | `files`, `files:names`, `files:content` | `files` also browses typed paths ([below](#path-browsing-in-the-files-plugin)); the other two search the whole disk (`ff`) and file contents (`in`) through the OS index ([below](#whole-disk-and-content-search-in-the-files-plugins)) |
 | `bookmarks` | `bookmarks` | see [Bookmarks](#bookmarks) |
 | `system` | `system` | lock, sleep, restart, settings pages; global |
+| `tasks` | `tasks` | automation tasks (dark mode, volume, quit, kill, eject, keep awake...); keyword `t`, also global; see [below](#automation-tasks-and-media-controls) |
+| `media` | `media` | play/pause, next, previous, stop and the playing track; keyword `play`, also global |
 | `shell` | `shell` | `> command` runs in a terminal; see below |
 | `clipboard` | `clipboard` | `cb`, clipboard history; opt-in through `[clipboard] enabled` (see below) |
 | `snippets` | `snippets` | `s`, `[[snippet]]` entries pasted with placeholders expanded |
@@ -348,6 +350,78 @@ appear (down-weighted like files) for plain queries.
   URLs from different browsers or profiles are merged into one result that lists
   the browsers.
 
+### Automation tasks and media controls
+
+The `tasks` and `media` plugins (`crates/sevak-plugins/src/tasks.rs`,
+`media.rs`) follow the `system` plugin's recipe: a closed vocabulary in the
+platform layer, an availability probe, two-phase activation and stable ids.
+
+- **A closed vocabulary.** `sevak_platform::Task` (`sevak-platform/src/tasks.rs`)
+  is an enum: parameterless variants (`ToggleDarkMode`, `Mute`, ...) and a few
+  that carry data (`SetVolume(u8)`, `KeepAwake(minutes)`, `QuitApp(name)`,
+  `ForceQuitApp(name)`, `KillProcess(name)`, `Eject(drive)`).
+  `PlatformProvider::run_task(&Task)` maps each to a fixed command line or Win32
+  call; no caller can make Sevak run an arbitrary program. `Task::to_key()` /
+  `Task::from_key()` give the stable spelling (`dark_mode`, `volume:30`,
+  `quit_app:Slack`) and validate the data again: a volume is 0 to 100, minutes
+  1 to 1440, names are plain text, a drive id is a letter (`E:`), a
+  `/Volumes/<name>` or a `/dev/<name>`. `media` has the same shape with
+  `MediaCommand` and `PlatformProvider::media_control`.
+- **Availability.** `PlatformProvider::supported_tasks()` probes the machine
+  (`PATH`, Windows radios) and `tasks::supported_kinds(Os, &TaskEnv)` decides
+  per OS; `Os` is a parameter so all three tables are tested on every OS.
+  Tasks that cannot work are not offered rather than failing: `FlushDns` needs
+  administrator rights on Windows and root on macOS, `MinimizeAll` and
+  `HideOthers` have no Linux equivalent, Wi-Fi and Bluetooth need a radio.
+- **Per-OS tables are pure.** `mac_task_command`, `linux_task_command`,
+  `linux_volume_command`, `windows_task_chord` (virtual-key codes for `Win+D`
+  and friends), `windows_eject_args`, and the parsers for tool output
+  (`parse_wifi_device`, `parse_airport_power`, `parse_nm_radio`,
+  `parse_lsblk`, `parse_playerctl`, ...) take plain values and return plain
+  values, so their tests run everywhere. The tasks that must read state before
+  acting (Linux dark mode, Wi-Fi, Bluetooth) read with a fixed command and
+  decide in Rust.
+- **Names travel as data.** macOS `QuitApp` runs `osascript` with the app name
+  as an *argument* of an `on run argv` handler, never inside the script text,
+  and names that could pass for an option are refused. Process names are
+  checked again when a process is ended, `PROTECTED_PROCESSES` (`csrss`,
+  `systemd`, `launchd`, ... and Sevak) are never listed or ended, and Sevak's
+  own pid is skipped.
+- **Typing never waits for the OS.** The running apps, the processes (with CPU
+  and memory, which needs two samples) and the removable drives are OS round
+  trips. `live::Cache<T>` keeps the last answer; `query` only reads it and, when
+  it is older than three seconds, starts one background refresh. When the
+  refresh finishes with a different answer it calls the notifier given to
+  `Plugin::attach_notifier`, and the shell re-runs the current query against
+  the fresh cache (the same mechanism script plugins use). `media` does the same
+  for the now-playing track, with a two second lifetime, and warms the cache in
+  `Plugin::refresh`. Plain name queries never touch the OS.
+- **Typed commands.** `quit`, `force quit`, `kill`, `eject`, `vol`, `awake` are
+  recognized by their whole first word (`parse_intent`) and answer with rows
+  scored at least `score::KEYWORD`, so they stay above ordinary matches and
+  out of the usage boost. The plugin has the keyword `t` and also answers
+  global queries (`[tasks] global`), down-weighted like other keyword plugins.
+- **Confirmation.** `Plugin::confirmation` asks for `ForceQuitApp`,
+  `KillProcess` and `RestartShell` (unless `[tasks] confirm = false`). The quit
+  rows carry a Shift secondary action, "Force quit"; the shell confirms the
+  derived item, so the question appears for that action too.
+- **Hotkeys and workflows.** `Plugin::resolve` accepts `tasks:<key>` for any
+  valid, offered task, with its data (`tasks:volume:30`, `tasks:kill:chrome.exe`),
+  and `media:<key>` for the buttons, so `[[hotkey]] run = "tasks:dark_mode"`
+  works without a query. The playing-track row is dynamic and not resolvable.
+- **Windows internals.** `windows/tasks.rs` and `windows/media.rs`: registry
+  and `WM_SETTINGCHANGE` for dark mode, `SendInput` chords (sent from a thread
+  after a short delay so they reach the app that was in front, not Sevak's
+  closing window), `IAudioEndpointVolume` for volume, WinRT
+  `Windows.Devices.Radios` for Wi-Fi and Bluetooth, `EnumWindows` (visible,
+  titled, not cloaked, not a tool window) for the app list with `WM_CLOSE` to
+  quit, `SetThreadExecutionState` on a dedicated thread for keep awake, and
+  `GlobalSystemMediaTransportControlsSessionManager` for the media session.
+  WinRT's blocking `join()` runs on a short-lived thread in the multithreaded
+  apartment (`on_mta_thread`).
+- **Dependencies.** `sysinfo` (the `system` feature only) lists processes with
+  their CPU and memory use and ends them; nothing else of it is used.
+
 ## Writing a built-in plugin
 
 The worked example is `crates/sevak-plugins/src/example_uuid.rs`: type `uuid `
@@ -398,7 +472,9 @@ Rules of thumb (all spelled out in the example):
   copy, a URL to copy). Secondary actions share the primary's `execute`.
 - Icons are `IconSource::builtin(name)` (a UI glyph: `app`, `calculator`,
   `web`, `file`, `folder`, `copy`, `terminal`, `plugin`, `lock`, `sleep`,
-  `restart`, `power`, `logout`, `trash`, `settings`), or `File` / `Shell` for real
+  `restart`, `power`, `logout`, `trash`, `settings`, `theme`, `desktop`, `camera`,
+  `volume`, `wifi`, `bluetooth`, `eject`, `bolt`, `kill`, `play`, `next`,
+  `previous`, `stop`, `note`), or `File` / `Shell` for real
   images.
 - For an action that cannot be undone, override `Plugin::confirmation(item)` to
   return the question to ask. The shell shows it in a native dialog before

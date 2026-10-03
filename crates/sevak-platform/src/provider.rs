@@ -8,9 +8,11 @@ use crate::browsers::BrowserRoot;
 use crate::capture::{CaptureOptions, SelectionCapture};
 use crate::clipboard::{ClipboardMedia, MediaRequest};
 use crate::error::Result;
+use crate::media::{MediaCommand, NowPlaying};
 use crate::os_search::{OsHit, OsSearchError, OsSearchRequest};
 use crate::paste::{ClipboardRead, ForegroundApp, PasteOutcome, PasteSupport, UNSUPPORTED_REASON};
 use crate::system::{SettingsPage, SystemCommand};
+use crate::tasks::{Drive, ProcessInfo, RunningApp, Task, TaskKind};
 
 /// Everything Sevak needs from the operating system to find and start things.
 ///
@@ -113,6 +115,60 @@ pub trait PlatformProvider: Send + Sync {
     /// and mail links.
     fn open_settings_page(&self, page: SettingsPage) -> Result<()> {
         crate::system::open_settings_page(page)
+    }
+
+    /// The automation tasks (dark mode, volume, quit an app, ...) that can work
+    /// on this system right now. Probes the system (`PATH`, radios); call it
+    /// from a background thread.
+    fn supported_tasks(&self) -> Vec<TaskKind> {
+        crate::tasks::supported_tasks()
+    }
+
+    /// Runs a [`Task`] of one of the [`PlatformProvider::supported_tasks`]
+    /// kinds. A closed vocabulary, like system commands.
+    fn run_task(&self, task: &Task) -> Result<()> {
+        crate::tasks::run_task(task)
+    }
+
+    /// Every process with its CPU and memory use, for the `kill` task. Takes a
+    /// fraction of a second; call it from a background thread.
+    fn list_processes(&self) -> Result<Vec<ProcessInfo>> {
+        crate::tasks::list_processes()
+    }
+
+    /// The apps that have a window, for the `quit` task. Call it from a
+    /// background thread.
+    fn list_running_apps(&self) -> Result<Vec<RunningApp>> {
+        crate::tasks::list_running_apps()
+    }
+
+    /// The removable drives that can be ejected. Call it from a background
+    /// thread.
+    fn list_removable_drives(&self) -> Result<Vec<Drive>> {
+        crate::tasks::list_drives()
+    }
+
+    /// The media buttons that can work here (none on Linux without `playerctl`).
+    /// Probes the system; call it from a background thread.
+    fn supported_media_commands(&self) -> Vec<MediaCommand> {
+        crate::media::available_commands()
+    }
+
+    /// Presses a media button on the player the user is listening to.
+    fn media_control(&self, command: MediaCommand) -> Result<()> {
+        crate::media::control(command)
+    }
+
+    /// Whether [`PlatformProvider::now_playing`] can work here.
+    fn now_playing_available(&self) -> bool {
+        crate::media::now_playing_available()
+    }
+
+    /// The track playing now, if any (`None` when nothing is). Talks to the
+    /// player and can take a moment: call it from a background thread, never
+    /// while the user types.
+    fn now_playing(&self) -> Result<Option<NowPlaying>> {
+        crate::media::now_playing()
     }
 
     /// The user-data folders of the web browsers installed for this user (only

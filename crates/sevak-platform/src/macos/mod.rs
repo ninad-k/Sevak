@@ -2,6 +2,7 @@
 //! standard application folders, launched and opened through `/usr/bin/open`.
 
 mod capture;
+pub(crate) mod media;
 mod paste;
 pub(crate) mod trash;
 

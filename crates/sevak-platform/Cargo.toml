@@ -14,13 +14,22 @@ arboard.workspace = true
 dirs.workspace = true
 # Clipboard images are stored as PNG files (and the Windows icon extractor encodes PNG).
 png = "0.18"
+# Process list (name, CPU, memory) for the `kill` task; nothing else of it is used.
+sysinfo = { version = "0.38", default-features = false, features = ["system"] }
 thiserror.workspace = true
 tracing.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = [
+    "Devices_Radios",
+    "Foundation",
+    "Foundation_Collections",
+    "Media_Control",
     "Win32_Foundation",
+    "Win32_Graphics_Dwm",
     "Win32_Graphics_Gdi",
+    "Win32_Media_Audio",
+    "Win32_Media_Audio_Endpoints",
     "Win32_Storage_FileSystem",
     "Win32_System_Com",
     "Win32_System_Com_StructuredStorage",
@@ -52,15 +61,20 @@ objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = [
     "std",
     "libc",
+    "NSEvent",
+    "NSGraphicsContext",
     "NSPasteboard",
     "NSRunningApplication",
     "NSWorkspace",
+    "objc2-core-graphics",
 ] }
-# NSFileManager.trashItemAtURL, for the file buffer's Move to Trash.
+# NSFileManager.trashItemAtURL, for the file buffer's Move to Trash, and NSPoint
+# for the media key events.
 objc2-foundation = { version = "0.3", default-features = false, features = [
     "std",
     "NSError",
     "NSFileManager",
+    "NSGeometry",
     "NSString",
     "NSURL",
 ] }
