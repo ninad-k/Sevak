@@ -839,12 +839,14 @@ mod tests {
 
         #[test]
         fn kills_a_process_that_outlives_the_timeout() {
-            let (program, args) = sh("echo early; sleep 30");
+            // The timeout leaves a loaded machine plenty of time to start the
+            // shell and print "early", and the sleep far outlasts it.
+            let (program, args) = sh("echo early; sleep 120");
             let started = Instant::now();
-            let output = run_lines(&program, &args, Duration::from_millis(300), 10).unwrap();
+            let output = run_lines(&program, &args, Duration::from_secs(5), 10).unwrap();
             assert!(output.timed_out);
             assert_eq!(output.lines, ["early"]);
-            assert!(started.elapsed() < Duration::from_secs(10));
+            assert!(started.elapsed() < Duration::from_secs(60));
             // Nothing found before the timeout is an error; something found is kept.
             assert!(matches!(
                 timed_out_or(output.timed_out, Vec::new()),
@@ -898,12 +900,14 @@ mod tests {
 
         #[test]
         fn kills_a_process_that_outlives_the_timeout() {
-            let (program, args) = powershell("'early'; Start-Sleep 60");
+            // PowerShell can take seconds to start on a loaded machine: the
+            // timeout leaves room for that, and the sleep far outlasts it.
+            let (program, args) = powershell("'early'; Start-Sleep 300");
             let started = Instant::now();
-            let output = run_lines(&program, &args, Duration::from_secs(5), 10).unwrap();
+            let output = run_lines(&program, &args, Duration::from_secs(20), 10).unwrap();
             assert!(output.timed_out);
             assert_eq!(output.lines, ["early"]);
-            assert!(started.elapsed() < Duration::from_secs(20));
+            assert!(started.elapsed() < Duration::from_secs(120));
         }
     }
 }

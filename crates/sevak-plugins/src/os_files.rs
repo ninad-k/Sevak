@@ -646,19 +646,39 @@ mod tests {
         assert_eq!(fake.calls(), ["budget plan"]);
     }
 
+    /// A fake index that holds every search for `held` until the returned
+    /// sender releases it (or a generous safety timeout passes, so a
+    /// regression fails instead of hanging), then answers with `paths`.
+    fn gated(held: &'static str, paths: &'static [&'static str]) -> (Arc<Fake>, mpsc::Sender<()>) {
+        let (release, gate) = mpsc::channel::<()>();
+        let gate = Mutex::new(gate);
+        let fake = Fake::new(Duration::ZERO, move |text| {
+            if text == held {
+                let _ = lock(&gate).recv_timeout(Duration::from_secs(60));
+            }
+            Ok(paths.iter().map(|p| hit(p)).collect())
+        });
+        (fake, release)
+    }
+
     #[test]
     fn a_slow_index_answers_late_and_the_shell_is_told() {
-        let fake = Fake::hits(Duration::from_millis(1500), &["/data/report.txt"]);
+        // The index does not answer until the query has returned, so the
+        // answer is late on any machine, however loaded.
+        let (fake, release) = gated("report", &["/data/report.txt"]);
         let plugin = impatient(OsSearchKind::Names, &fake);
         let notified = counting_notifier(&plugin);
 
         let started = Instant::now();
         assert!(plugin.query("report").is_empty());
+        // Typing waited for the budget, not for the index (which is still held).
         assert!(
-            started.elapsed() < Duration::from_millis(1000),
+            started.elapsed() < Duration::from_secs(30),
             "typing waited {:?}",
             started.elapsed()
         );
+        assert_eq!(notified.load(Ordering::SeqCst), 0);
+        release.send(()).unwrap();
 
         wait_until("the late answer", || notified.load(Ordering::SeqCst) == 1);
         // The re-run is answered from the cache, without asking the index again.
@@ -705,12 +725,14 @@ mod tests {
 
     #[test]
     fn a_stale_answer_is_not_shown_for_a_different_query() {
-        let fake = Fake::hits(Duration::from_millis(300), &["/data/old.txt"]);
+        // "old" is held until "new" has been typed, so its answer is stale.
+        let (fake, release) = gated("old", &["/data/old.txt"]);
         let plugin = impatient(OsSearchKind::Names, &fake);
         assert!(plugin.query("old").is_empty());
         wait_until("the first search", || fake.calls() == ["old"]);
         // Unrelated text typed before the answer: when it arrives it is dropped.
         assert!(plugin.query("new").is_empty());
+        release.send(()).unwrap();
         wait_until("both searches", || fake.calls().len() == 2);
         let rows = settle(&plugin, "new");
         assert_eq!(rows.len(), 1);
