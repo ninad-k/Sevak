@@ -7,7 +7,7 @@ Cargo.toml              workspace: crates/* and src-tauri
 crates/sevak-core       config, fuzzy matcher, search engine, usage stats, Plugin trait
 crates/sevak-platform   OS access: launching, icons, app scanning, clipboard, paths,
                         hotkey strategy, GNOME shortcut setup (Windows, macOS and Linux backends)
-crates/sevak-plugins    built-in plugins: apps, calculator, files, web search, uuid example
+crates/sevak-plugins    built-in plugins: apps, calculator (+ units, currency), files, web search, uuid example
 src-tauri               the Tauri shell: window, hotkey, tray, CLI, IPC commands, bundling config
 ui                      Svelte 5 + Vite frontend (builds to ui/dist)
 packaging/linux         desktop-entry template used by the .deb and .rpm

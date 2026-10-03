@@ -30,6 +30,7 @@ export function mockSettings(): SettingsDto {
       search: { max_results: 8, fallback_web_search: "g" },
       appearance: { theme: "system" },
       plugins: { disabled: ["uuid"] },
+      calculator: { currency: false },
       files: {
         directories: ["~/Desktop", "~/Documents", "~/Downloads"],
         max_depth: 4,
@@ -45,7 +46,7 @@ export function mockSettings(): SettingsDto {
     },
     catalog: [
       { id: "apps", name: "Applications", description: "Launches installed applications.", keyword: null, enabled: true },
-      { id: "calculator", name: "Calculator", description: "Evaluates math expressions as you type; Enter copies the result.", keyword: null, enabled: true },
+      { id: "calculator", name: "Calculator", description: "Evaluates math expressions and converts units (and currencies, if enabled) as you type; Enter copies the result.", keyword: null, enabled: true },
       { id: "files", name: "Files", description: "Finds files and folders in your configured directories.", keyword: "f", enabled: true },
       { id: "uuid", name: "UUID generator", description: "Type `uuid ` to generate random UUIDs; Enter copies one.", keyword: "uuid", enabled: false },
     ],

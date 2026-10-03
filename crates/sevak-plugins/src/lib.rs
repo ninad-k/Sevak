@@ -20,9 +20,11 @@ use sevak_platform::PlatformProvider;
 pub mod actions;
 pub mod apps;
 pub mod calculator;
+pub mod currency;
 pub mod example_uuid;
 pub mod files;
 pub mod registry;
+pub mod units;
 pub mod web_search;
 
 #[cfg(test)]

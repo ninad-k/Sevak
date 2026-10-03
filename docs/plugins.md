@@ -119,7 +119,7 @@ process, so plugins must never panic.
 | Family id | Instances | Notes |
 |---|---|---|
 | `apps` | `apps` | |
-| `calculator` | `calculator` | |
+| `calculator` | `calculator` | also converts units (`units.rs`) and, with `[calculator] currency`, currencies (`currency.rs`) |
 | `web` | `web:<keyword>` per `[[web_search]]` engine | |
 | `files` | `files` | |
 | `uuid` | `uuid` | example plugin, keyword-only |

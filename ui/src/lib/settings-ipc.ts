@@ -23,6 +23,7 @@ export interface Config {
   search: { max_results: number; fallback_web_search: string };
   appearance: { theme: ThemeSetting };
   plugins: { disabled: string[] };
+  calculator: { currency: boolean };
   files: {
     directories: string[];
     max_depth: number;

@@ -116,8 +116,8 @@ impl PluginRegistry {
         registry.register(PluginDescriptor::new(
             "calculator",
             "Calculator",
-            "Evaluates math expressions as you type; Enter copies the result.",
-            |_, platform| vec![Arc::new(CalculatorPlugin::new(platform.clone()))],
+            "Evaluates math expressions and converts units (and currencies, if enabled) as you type; Enter copies the result.",
+            |config, platform| vec![Arc::new(CalculatorPlugin::from_config(config, platform.clone()))],
         ));
         registry.register(PluginDescriptor::new(
             "web",
