@@ -50,6 +50,7 @@ pub mod file_buffer;
 pub mod files;
 mod live;
 pub mod media;
+pub mod net;
 pub mod onepassword;
 pub mod os_files;
 pub mod path_browse;

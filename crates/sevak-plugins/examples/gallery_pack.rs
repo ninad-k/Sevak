@@ -14,7 +14,7 @@ use std::io::{Cursor, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use sevak_plugins::workflow::gallery::sha256_hex;
+use sevak_plugins::net::sha256_hex;
 use zip::write::SimpleFileOptions;
 
 fn files_below(root: &Path, dir: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {

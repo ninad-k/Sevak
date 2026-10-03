@@ -1366,7 +1366,7 @@ the script plugin host.
 | The plugins: keyword, script filter, Universal Actions + hotkey + external | `workflow/plugins.rs` |
 | Discovery, approval, the settings operations | `workflow/host.rs` |
 | "New from template" | `workflow/templates.rs` |
-| The gallery: index, checksum, unpacking | `workflow/gallery.rs` |
+| The gallery: index, unpacking (download and checksum: `net.rs`, `sevak_core::checksum`) | `workflow/gallery.rs` |
 | Notifications, output windows, the Allow dialog, IPC commands, `--trigger` | `src-tauri/src/workflows.rs` (+ `cli.rs`, `hotkey.rs`, `direct.rs`) |
 | The builder and gallery pages | `ui/src/lib/workflows/` |
 
@@ -1393,8 +1393,10 @@ Design notes:
 - **Nothing user-typed is logged**: `Ctx` has a hand-written `Debug`, errors
   name nodes by id, and a program's stderr is only logged when its node sets
   `log_stderr`.
-- **Gallery** (`gallery.rs`): `fetch_https` is generic (HTTPS only, size limit,
-  timeout, redirects must stay on HTTPS) so other galleries can reuse it;
+- **Gallery** (`gallery.rs`): the download is `sevak_plugins::net::fetch_https`
+  (HTTPS only, size limit, timeout, redirects must stay on HTTPS) and the hash
+  check `sevak_core::checksum`, both shared with the theme gallery
+  (`src-tauri/src/themes.rs`, `sevak_core::theme_store`);
   `install_bytes` verifies the SHA-256 first, then unpacks with strict path
   rules (no `..`, drive letters, links, trailing dots or spaces, more than 200
   files, 2 MiB per file, 10 MiB in all), validates the manifest and renames a

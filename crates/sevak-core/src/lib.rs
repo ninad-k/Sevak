@@ -5,6 +5,7 @@
 //! matching and the search engine. It must never depend on Tauri or contain
 //! `#[cfg(target_os = ...)]` code.
 
+pub mod checksum;
 pub mod config;
 pub mod engine;
 pub mod fuzzy;

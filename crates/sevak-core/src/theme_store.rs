@@ -9,8 +9,8 @@ use std::fs;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
+use crate::checksum::verify_sha256;
 use crate::theme::{load_custom_css, MAX_CUSTOM_CSS_BYTES};
 use crate::theme_file::{self, builtin_by_name, builtin_themes, ParsedTheme, ThemeSpec};
 
@@ -308,16 +308,9 @@ pub fn is_https_url(url: &str) -> bool {
         && !url.contains('#')
 }
 
-pub fn sha256_hex(bytes: &[u8]) -> String {
-    Sha256::digest(bytes)
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
-}
-
-/// Checks a downloaded file against the hash the index promised, and returns
-/// its text. Anything else (wrong hash, too large, not UTF-8) is an error and
-/// nothing may be installed.
+/// Checks a downloaded file against the hash the index promised (with the
+/// galleries' shared [`verify_sha256`]), and returns its text. Anything else
+/// (wrong hash, too large, not UTF-8) is an error and nothing may be installed.
 pub fn verify_download(bytes: &[u8], expected_sha256: &str) -> Result<String, String> {
     if bytes.len() as u64 > MAX_THEME_BYTES {
         return Err(format!(
@@ -325,8 +318,7 @@ pub fn verify_download(bytes: &[u8], expected_sha256: &str) -> Result<String, St
             MAX_THEME_BYTES / 1024
         ));
     }
-    let actual = sha256_hex(bytes);
-    if !actual.eq_ignore_ascii_case(expected_sha256.trim()) {
+    if verify_sha256(bytes, expected_sha256).is_err() {
         return Err(
             "The downloaded theme does not match the checksum in the gallery, so it was not installed."
                 .to_owned(),
@@ -339,6 +331,7 @@ pub fn verify_download(bytes: &[u8], expected_sha256: &str) -> Result<String, St
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::checksum::sha256_hex;
 
     fn nord() -> &'static ParsedTheme {
         builtin_by_name("Nord").unwrap()
@@ -452,18 +445,6 @@ mod tests {
         assert!(install_text(dir.path(), "[light]\ntext = \"#111\"\n", " ").is_err());
         let huge = format!("#{}", "a".repeat(MAX_THEME_BYTES as usize));
         assert!(install_text(dir.path(), &huge, "x").is_err());
-    }
-
-    #[test]
-    fn sha256_matches_the_published_test_vectors() {
-        assert_eq!(
-            sha256_hex(b""),
-            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-        );
-        assert_eq!(
-            sha256_hex(b"abc"),
-            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
-        );
     }
 
     #[test]

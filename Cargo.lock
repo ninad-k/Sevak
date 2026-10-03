@@ -3761,8 +3761,6 @@ name = "sevak"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "reqwest",
- "rustls",
  "serde",
  "serde_json",
  "sevak-core",

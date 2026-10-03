@@ -5,21 +5,18 @@
 //! dialogs, the one opt-in network request (see `fetch_theme_gallery`) and
 //! telling the windows when the applied theme changed.
 
-use std::io::Read;
 use std::sync::Mutex;
-use std::time::Duration;
 
 use serde::Serialize;
 use sevak_core::theme_file;
 use sevak_core::theme_store::{self, GalleryEntry, StoredTheme, MAX_INDEX_BYTES, MAX_THEME_BYTES};
 use sevak_platform::open;
+use sevak_plugins::net;
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::state::AppState;
 use crate::window;
-
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// The gallery index as last fetched. Installing looks the entry up here, so
 /// the URL and checksum come from the index and not from the webview.
@@ -243,45 +240,16 @@ async fn blocking<T: Send + 'static>(
         .map_err(|err| format!("the operation did not finish: {err}"))?
 }
 
-/// A downloaded file of at most `limit` bytes. https only, redirects only to
-/// https, a timeout, nothing sent but the request itself.
+/// A downloaded file of at most `limit` bytes, through the download the
+/// workflow gallery uses too (`sevak_plugins::net::fetch_https`: https only,
+/// redirects only to https, a timeout, nothing sent but the request itself).
+/// The address must also pass the theme index's own URL rules.
 fn download(url: &str, limit: u64) -> Result<Vec<u8>, String> {
     if !theme_store::is_https_url(url) {
         return Err("Only https:// downloads are allowed.".to_owned());
     }
-    // reqwest builds its TLS config from the process-wide rustls provider; the
-    // updater and the currency plugin install the same one lazily.
-    if rustls::crypto::CryptoProvider::get_default().is_none() {
-        let _ = rustls::crypto::ring::default_provider().install_default();
-    }
-    let client = reqwest::blocking::Client::builder()
-        .timeout(REQUEST_TIMEOUT)
-        .redirect(reqwest::redirect::Policy::custom(|attempt| {
-            if attempt.url().scheme() == "https" && attempt.previous().len() < 3 {
-                attempt.follow()
-            } else {
-                attempt.stop()
-            }
-        }))
-        .build()
-        .map_err(|err| err.to_string())?;
-    let response = client
-        .get(url)
-        .send()
-        .and_then(reqwest::blocking::Response::error_for_status)
-        .map_err(|err| format!("Cannot download it: {}", err.without_url()))?;
-    if response.content_length().is_some_and(|n| n > limit) {
-        return Err("The download is unexpectedly large.".to_owned());
-    }
-    let mut bytes = Vec::new();
-    response
-        .take(limit + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|err| format!("Cannot download it: {err}"))?;
-    if bytes.len() as u64 > limit {
-        return Err("The download is unexpectedly large.".to_owned());
-    }
-    Ok(bytes)
+    let limit = usize::try_from(limit).unwrap_or(usize::MAX);
+    net::fetch_https(url, limit).map_err(|err| format!("Cannot download it: {err}."))
 }
 
 /// `themes\Nord.toml`, `./themes/Nord.toml` and `themes/Nord.toml` are one file.

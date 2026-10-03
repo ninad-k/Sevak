@@ -20,22 +20,21 @@
 //! ]}
 //! ```
 //!
-//! [`fetch_https`] is deliberately generic (any HTTPS URL, a size limit, a
-//! timeout), so other galleries (themes) can reuse it; only [`Kind`] is
-//! specific to workflows and script plugins, and entries of kinds this Sevak
+//! The download and the checksum are the generic [`crate::net::fetch_https`]
+//! and [`sevak_core::checksum`], shared with the theme gallery; only [`Kind`]
+//! is specific to workflows and script plugins, and entries of kinds this Sevak
 //! does not know are skipped rather than failing the index.
 
 use std::collections::HashSet;
 use std::fs;
 use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 use super::model::{valid_folder_name, Workflow, FILE as WORKFLOW_FILE};
 use super::validate::error_summary;
+use crate::net::{fetch_https, verify_sha256};
 use crate::script::{Manifest, MANIFEST_FILE as PLUGIN_FILE};
 
 /// Where the index lives. The settings window fetches it only on request.
@@ -50,8 +49,6 @@ const MAX_FILES: usize = 200;
 const MAX_FILE_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_UNPACKED_BYTES: u64 = 10 * 1024 * 1024;
 const MAX_PATH_BYTES: usize = 200;
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
-const MAX_REDIRECTS: usize = 5;
 
 /// What an entry installs as.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -194,77 +191,6 @@ fn check_entry(entry: &Entry) -> Result<(), String> {
         return Err("sha256 must be 64 hex digits".to_owned());
     }
     Ok(())
-}
-
-/// The lower-case hex SHA-256 of `bytes`.
-pub fn sha256_hex(bytes: &[u8]) -> String {
-    use std::fmt::Write as _;
-    let digest = Sha256::digest(bytes);
-    let mut out = String::with_capacity(64);
-    for byte in digest {
-        let _ = write!(out, "{byte:02x}");
-    }
-    out
-}
-
-/// Checks that `bytes` is the package the index promised.
-pub fn verify_sha256(bytes: &[u8], expected: &str) -> Result<(), String> {
-    if sha256_hex(bytes).eq_ignore_ascii_case(expected.trim()) {
-        Ok(())
-    } else {
-        Err(
-            "the download does not match the checksum in the gallery index, so it was \
-             discarded"
-                .to_owned(),
-        )
-    }
-}
-
-/// Downloads `url` (HTTPS only, redirects included) into memory, refusing
-/// anything over `max_bytes`. One `GET`: no cookies, no identifiers beyond the
-/// program name in the user agent.
-pub fn fetch_https(url: &str, max_bytes: usize) -> Result<Vec<u8>, String> {
-    if !url.to_ascii_lowercase().starts_with("https://") {
-        return Err("only https:// addresses are downloaded".to_owned());
-    }
-    // reqwest builds its TLS config from the process-wide rustls provider.
-    if rustls::crypto::CryptoProvider::get_default().is_none() {
-        let _ = rustls::crypto::ring::default_provider().install_default();
-    }
-    let client = reqwest::blocking::Client::builder()
-        .timeout(REQUEST_TIMEOUT)
-        .user_agent(concat!("Sevak/", env!("CARGO_PKG_VERSION"), " (gallery)"))
-        .redirect(reqwest::redirect::Policy::custom(|attempt| {
-            if attempt.url().scheme() != "https" {
-                attempt.error("a redirect to a non-https address")
-            } else if attempt.previous().len() >= MAX_REDIRECTS {
-                attempt.error("too many redirects")
-            } else {
-                attempt.follow()
-            }
-        }))
-        .build()
-        .map_err(|err| err.to_string())?;
-    let response = client
-        .get(url)
-        .send()
-        .and_then(reqwest::blocking::Response::error_for_status)
-        .map_err(|err| format!("could not download it: {err}"))?;
-    if response
-        .content_length()
-        .is_some_and(|length| length > max_bytes as u64)
-    {
-        return Err("the download is larger than expected".to_owned());
-    }
-    let mut body = Vec::new();
-    response
-        .take(max_bytes as u64 + 1)
-        .read_to_end(&mut body)
-        .map_err(|err| format!("the download was interrupted: {err}"))?;
-    if body.len() > max_bytes {
-        return Err("the download is larger than expected".to_owned());
-    }
-    Ok(body)
 }
 
 /// Fetches and parses the index at [`INDEX_URL`].
@@ -526,6 +452,7 @@ mod tests {
     use zip::write::SimpleFileOptions;
 
     use super::*;
+    use crate::net::sha256_hex;
 
     fn zip_of(files: &[(&str, &[u8])]) -> Vec<u8> {
         let mut out = Cursor::new(Vec::new());
@@ -641,34 +568,6 @@ mod tests {
         assert!(parse_index(r#"{"entries": []}"#).is_err());
         let empty = parse_index("\u{feff}{\"format\": 1}").unwrap();
         assert!(empty.entries.is_empty());
-    }
-
-    #[test]
-    fn checksums() {
-        // The well-known SHA-256 of "abc".
-        assert_eq!(
-            sha256_hex(b"abc"),
-            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
-        );
-        assert!(verify_sha256(b"abc", &sha256_hex(b"abc")).is_ok());
-        assert!(verify_sha256(b"abc", &sha256_hex(b"abc").to_uppercase()).is_ok());
-        let err = verify_sha256(b"abd", &sha256_hex(b"abc")).unwrap_err();
-        assert!(err.contains("checksum"), "{err}");
-        assert!(verify_sha256(b"", "").is_err());
-    }
-
-    #[test]
-    fn only_https_is_ever_requested() {
-        for url in [
-            "http://example.com/x.zip",
-            "ftp://example.com/x",
-            "file:///etc/passwd",
-            "//example.com/x",
-            "example.com/x",
-        ] {
-            let err = fetch_https(url, 1024).unwrap_err();
-            assert!(err.contains("https"), "{url}: {err}");
-        }
     }
 
     // ---- installing ---------------------------------------------------

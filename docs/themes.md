@@ -163,8 +163,10 @@ The gallery is a list of community themes kept in this repository
 - Nothing is requested until you click **Browse online themes**. That one click
   makes a single `GET` of
   `https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes.json`
-  (no cookies, no query, no identifying headers; 15-second timeout; 256 KiB
-  limit). The list is only listed, not installed.
+  (no cookies, no query, no identifying headers beyond a
+  `Sevak/<version> (gallery)` user agent; 20-second timeout; 256 KiB limit),
+  through the same download code as the [workflow gallery](workflows.md). The
+  list is only listed, not installed.
 - **Install** downloads that theme's file (https only, 64 KiB limit) and saves it
   to your themes folder only if its SHA-256 matches the `sha256` in the list. A
   mismatch, a file that is not a valid theme, or a download that is too large is
