@@ -1,0 +1,32 @@
+Sevak logo generation prompts
+Date: 2026-10-03
+Mode: built-in image_gen tool; no CLI or API fallback.
+
+INITIAL SYMBOL EXPLORATION
+Use case: logo-brand
+Asset type: new standalone brand symbol for Sevak, a keyboard-first desktop launcher
+Primary request: Design a polished original logo symbol for Sevak, a quiet, fast desktop utility for finding apps and files, calculations, and web shortcuts. The repository's existing brand uses an amber lamp on deep indigo and the phrase "at your service". Evolve that existing service-and-light idea into a distinctive modern symbol.
+
+Subject: A bold sculptural but strictly flat amber flame whose flowing inner negative space subtly suggests an uppercase S, resting over a very simple shallow amber lamp bowl. Make the flame and bowl feel like one compact intentional brand mark, two or at most three simple clean shapes. Give the upper flame a slight forward/upward sweep, suggesting quick action. Prioritize a memorable silhouette, optical balance, and clarity at 24px over clever detail. The S hint should be organic and legible without looking like an ordinary typed letter. The bowl must be shallow and elegant, not a second flame or a smiley face. Reduce detail aggressively.
+
+Style/medium: premium minimal vector-style identity, crisp smooth mathematical curves, solid flat fills, precise edges. Original contemporary desktop software identity, warm and calm.
+Color palette: solid amber #F59E0B; genuinely transparent negative space and transparent surrounding canvas. No other fill colors.
+Composition/framing: one symbol only, centered on a square canvas with about 15% breathing room on every side. Large clear silhouette.
+Constraints: transparent background; no enclosing tile, no wordmark, no text, no labels, no mockup, no gradients, no shadows, no 3D, no glow, no textures, no tiny decorative sparks, no outlines, no watermark. This must be a clean reusable logo asset.
+
+FINAL APP ICON
+Use case: logo-brand
+Asset type: finished square app icon for Sevak.
+Input image 1 is a reference for the S-shaped flame and lamp bowl silhouette. Recreate that same concept as a very clean solid geometric logo on an OPAQUE dark indigo background. The entire 1024x1024 square canvas must be solid deep indigo #1E1B4B right up to every edge, with absolutely no transparent pixels.
+Center one compact amber #F59E0B logo consisting of a flowing S-shaped flame above a separate shallow curved lamp bowl. Refine the reference into smooth bold simplified curves, keep the recognizable S-shaped opening and forward flame tip. Use uniform solid amber fills with no gradients. Leave a clear generous indigo gap above the bowl and a broad clean indigo channel in the flame; remove EVERY speckle, tiny spot, scratch, outline, fringe, and small disconnected island. Every negative space must be the same solid indigo as the background.
+The symbol occupies about 58% of canvas width and 72% of canvas height, optically centered. Premium restrained desktop software brand, flat vector-like precision, clear at small sizes.
+No wordmark, no text, no outer rounded tile, no shadows, no lighting, no dimensionality, no extra decorations. The background is one entirely opaque uniform indigo square.
+
+FINAL PRIMARY LOGO
+Use case: logo-brand
+Asset type: finished primary horizontal logo lockup for Sevak, clean light-background PNG.
+Input image 1 is a reference containing the approved Sevak symbol: amber S-shaped flame above shallow lamp bowl. Precisely preserve that symbol's silhouette and its amber color when placing it in this layout. Discard its indigo background.
+Create one elegantly balanced horizontal lockup on a completely uniform opaque near-white #FCFCFD landscape canvas, approximately 3:2 aspect ratio. On the left, the reference symbol in amber #F59E0B. To its right, the exact brand name "Sevak" in very dark indigo #1C1B2E. Spell S-e-v-a-k, with only S capitalized.
+Wordmark typography: a confident modern humanist geometric sans serif, medium-to-semibold weight, slightly softened terminals, open e, clean angled k, optically balanced kerning. The logo should feel like thoughtful desktop productivity software: calm, helpful, fast. Wordmark is large and immediately readable. Symbol and wordmark vertically optically centered, symbol about 1.5 times the capital letter height, generous but intentional gap. Plenty of plain whitespace around the complete lockup, which spans roughly 72% of the canvas width.
+No tagline, no other text, no border, no annotations, no swatches, no UI, no presentation sheet, no mockup, no shadows, no 3D, no gradient, no texture. One flat clean logo lockup only. All curves and letters have crisp precision edges. The background must be opaque near-white, not transparent.
+
