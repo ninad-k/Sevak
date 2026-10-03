@@ -1,6 +1,8 @@
 //! macOS implementation of [`crate::PlatformProvider`]: `.app` bundles from the
 //! standard application folders, launched and opened through `/usr/bin/open`.
 
+mod paste;
+
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -11,6 +13,7 @@ use sevak_core::{AppEntry, IconData, IconSource, LaunchTarget};
 
 use crate::error::{PlatformError, Result};
 use crate::icon_file;
+use crate::paste::{ClipboardRead, ForegroundApp, PasteOutcome, PasteSupport};
 use crate::process::spawn_detached_in;
 use crate::provider::PlatformProvider;
 
@@ -69,6 +72,30 @@ impl PlatformProvider for MacProvider {
             IconSource::Shell { .. } => Err(PlatformError::Unsupported("shell icons")),
             IconSource::Builtin { .. } => Err(PlatformError::Unsupported("built-in icons")),
         }
+    }
+
+    fn remember_foreground_app(&self) {
+        paste::remember_foreground_app();
+    }
+
+    fn foreground_app(&self) -> Option<ForegroundApp> {
+        paste::foreground_app()
+    }
+
+    fn paste_support(&self) -> PasteSupport {
+        paste::paste_support()
+    }
+
+    fn paste_text(&self, text: &str, restore_clipboard: bool) -> Result<PasteOutcome> {
+        paste::paste_text(text, restore_clipboard)
+    }
+
+    fn clipboard_sequence(&self) -> Option<u64> {
+        paste::clipboard_sequence()
+    }
+
+    fn read_clipboard(&self) -> Result<ClipboardRead> {
+        paste::read_clipboard()
     }
 }
 

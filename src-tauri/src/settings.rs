@@ -4,6 +4,7 @@ use std::collections::HashSet;
 
 use serde::Serialize;
 use sevak_core::config::{Config, Theme};
+use sevak_core::theme;
 use sevak_platform::{gnome, open, paths, session, HotkeyStrategy};
 use sevak_plugins::{PluginInfo, PluginRegistry};
 use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
@@ -79,7 +80,8 @@ pub struct SettingsDto {
 pub async fn get_settings(app: AppHandle) -> SettingsDto {
     let state = app.state::<AppState>();
     let config = state.config();
-    let catalog = PluginRegistry::builtin().catalog(&config, state.search.platform.clone());
+    let mut catalog = PluginRegistry::builtin().catalog(&config, state.search.platform.clone());
+    catalog.extend(state.search.scripts.catalog(&config));
     SettingsDto {
         config,
         catalog,
@@ -100,10 +102,10 @@ pub async fn get_settings(app: AppHandle) -> SettingsDto {
 /// Parses a shortcut with the same parser the global-shortcut plugin uses.
 fn check_accelerator(accelerator: &str) -> Result<(), String> {
     accelerator.parse::<Shortcut>().map(|_| ()).map_err(|err| {
-        // The parser appends a "please report this to ..." plea; drop it.
-        let reason = err.to_string();
-        let reason = reason.split(", if you feel").next().unwrap_or(&reason);
-        format!("\"{accelerator}\" is not a valid shortcut: {reason}")
+        format!(
+            "\"{accelerator}\" is not a valid shortcut: {}",
+            hotkey::parse_error_reason(&err)
+        )
     })
 }
 
@@ -118,6 +120,9 @@ pub fn validate(config: &Config, strategy: HotkeyStrategy) -> Result<(), String>
     if strategy == HotkeyStrategy::InApp {
         check_accelerator(hotkey)?;
     }
+
+    validate_hotkeys(config, strategy)?;
+    theme::validate(&config.appearance).map_err(|reason| format!("Appearance: {reason}."))?;
 
     let mut keywords: HashSet<String> = HashSet::new();
     for engine in &config.web_search {
@@ -145,11 +150,12 @@ pub fn validate(config: &Config, strategy: HotkeyStrategy) -> Result<(), String>
         }
     }
 
-    let fallback = config.search.fallback_web_search.trim();
-    if !fallback.is_empty() && !keywords.contains(&fallback.to_lowercase()) {
-        return Err(format!(
-            "The fallback search engine \"{fallback}\" is not defined."
-        ));
+    for fallback in config.search.fallback_web_search.keywords() {
+        if !keywords.contains(&fallback.to_lowercase()) {
+            return Err(format!(
+                "The fallback search engine \"{fallback}\" is not defined."
+            ));
+        }
     }
 
     let files_keyword = config.files.keyword.trim();
@@ -161,6 +167,15 @@ pub fn validate(config: &Config, strategy: HotkeyStrategy) -> Result<(), String>
             "The files keyword \"{files_keyword}\" is already a web search keyword."
         ));
     }
+    let bookmarks_keyword = config.bookmarks.keyword.trim();
+    if bookmarks_keyword.chars().any(char::is_whitespace) {
+        return Err("The bookmarks keyword cannot contain spaces.".to_owned());
+    }
+    if !bookmarks_keyword.is_empty() && keywords.contains(&bookmarks_keyword.to_lowercase()) {
+        return Err(format!(
+            "The bookmarks keyword \"{bookmarks_keyword}\" is already a web search keyword."
+        ));
+    }
     if config
         .files
         .directories
@@ -168,6 +183,44 @@ pub fn validate(config: &Config, strategy: HotkeyStrategy) -> Result<(), String>
         .any(|dir| dir.trim().is_empty())
     {
         return Err("A files directory is empty.".to_owned());
+    }
+    Ok(())
+}
+
+/// A key's identity for finding duplicates: spelling variants of one
+/// shortcut (`ctrl+alt+t`, `Control + Alt + T`) must compare equal.
+fn key_identity(accelerator: &str, strategy: HotkeyStrategy) -> String {
+    match (strategy, accelerator.parse::<Shortcut>()) {
+        (HotkeyStrategy::InApp, Ok(shortcut)) => shortcut.id().to_string(),
+        _ => accelerator
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .collect::<String>()
+            .to_lowercase(),
+    }
+}
+
+/// The `[[hotkey]]` entries: a usable key, one action, no key used twice.
+fn validate_hotkeys(config: &Config, strategy: HotkeyStrategy) -> Result<(), String> {
+    let mut seen = vec![key_identity(config.general.hotkey.trim(), strategy)];
+    for binding in &config.hotkeys {
+        let key = binding.key.trim();
+        if key.is_empty() {
+            return Err("A hotkey entry needs a shortcut.".to_owned());
+        }
+        if strategy == HotkeyStrategy::InApp {
+            check_accelerator(key)?;
+        }
+        if let Err(reason) = binding.target() {
+            return Err(format!("The hotkey \"{key}\": {reason}."));
+        }
+        let identity = key_identity(key, strategy);
+        if seen.contains(&identity) {
+            return Err(format!(
+                "The shortcut \"{key}\" is used more than once (the main shortcut counts)."
+            ));
+        }
+        seen.push(identity);
     }
     Ok(())
 }
@@ -251,10 +304,12 @@ pub async fn pick_directory(app: AppHandle, window: WebviewWindow) -> Option<Str
     })
 }
 
-/// "Set up GNOME shortcut": see [`gnome::setup_for_ui`].
+/// "Set up GNOME shortcut": see [`gnome::setup_for_ui`]. The saved `[[hotkey]]`
+/// entries are bound along with the typed shortcut.
 #[tauri::command]
-pub async fn setup_wayland_hotkey(hotkey: String) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || gnome::setup_for_ui(hotkey.trim()))
+pub async fn setup_wayland_hotkey(app: AppHandle, hotkey: String) -> Result<String, String> {
+    let customs = hotkey::custom_shortcuts(&app.state::<AppState>().config());
+    tauri::async_runtime::spawn_blocking(move || gnome::setup_for_ui(hotkey.trim(), &customs))
         .await
         .map_err(|err| format!("the setup did not finish: {err}"))?
 }
@@ -294,7 +349,7 @@ pub fn window_theme(theme: Theme) -> Option<tauri::Theme> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sevak_core::config::WebSearchEngine;
+    use sevak_core::config::{FallbackSearch, HotkeyBinding, WebSearchEngine};
 
     fn engine(keyword: &str, url: &str) -> WebSearchEngine {
         WebSearchEngine {
@@ -362,12 +417,16 @@ mod tests {
     #[test]
     fn fallback_must_exist_or_be_empty() {
         let mut config = Config::default();
-        config.search.fallback_web_search = "nope".to_owned();
+        config.search.fallback_web_search = FallbackSearch::single("nope");
         assert!(check(&config).is_err());
-        config.search.fallback_web_search = String::new();
+        config.search.fallback_web_search = FallbackSearch::single("");
         assert_eq!(check(&config), Ok(()));
-        config.search.fallback_web_search = "yt".to_owned();
+        config.search.fallback_web_search = FallbackSearch::single("yt");
         assert_eq!(check(&config), Ok(()));
+        config.search.fallback_web_search = FallbackSearch::list(["g", "yt"]);
+        assert_eq!(check(&config), Ok(()));
+        config.search.fallback_web_search = FallbackSearch::list(["g", "nope"]);
+        assert!(check(&config).unwrap_err().contains("nope"));
     }
 
     #[test]
@@ -377,6 +436,91 @@ mod tests {
         assert!(check(&config).is_err());
         config.files.keyword = "find me".to_owned();
         assert!(check(&config).is_err());
+    }
+
+    fn entry(key: &str, query: Option<&str>, run: Option<&str>) -> HotkeyBinding {
+        HotkeyBinding {
+            key: key.to_owned(),
+            query: query.map(str::to_owned),
+            run: run.map(str::to_owned),
+        }
+    }
+
+    fn with_entries(entries: Vec<HotkeyBinding>) -> Config {
+        Config {
+            hotkeys: entries,
+            ..Config::default()
+        }
+    }
+
+    #[test]
+    fn hotkey_entries_are_validated() {
+        let good = with_entries(vec![
+            entry("Ctrl+Alt+T", Some("> "), None),
+            entry("Ctrl+Alt+F", None, Some("apps:firefox.desktop")),
+            entry("F9", Some(""), None),
+        ]);
+        assert_eq!(check(&good), Ok(()));
+
+        let bad = [
+            entry("", Some("x"), None),
+            entry("Banana+K", Some("x"), None),
+            entry("Ctrl+Alt+T", None, None),
+            entry("Ctrl+Alt+T", Some("x"), Some("y")),
+            entry("Ctrl+Alt+T", None, Some("  ")),
+        ];
+        for entry in bad {
+            assert!(
+                check(&with_entries(vec![entry.clone()])).is_err(),
+                "{entry:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn hotkey_entries_cannot_share_a_key() {
+        let twice = with_entries(vec![
+            entry("Ctrl+Alt+T", Some("a"), None),
+            entry("ctrl + alt + t", Some("b"), None),
+        ]);
+        assert!(check(&twice).unwrap_err().contains("more than once"));
+
+        // The main shortcut counts, however it is spelled.
+        let clash = with_entries(vec![entry("alt+space", Some("a"), None)]);
+        assert!(check(&clash).is_err());
+    }
+
+    #[test]
+    fn wayland_does_not_parse_entry_keys_but_still_needs_an_action() {
+        let config = with_entries(vec![entry("Banana+K", Some("x"), None)]);
+        assert_eq!(validate(&config, HotkeyStrategy::External), Ok(()));
+        let config = with_entries(vec![entry("Banana+K", None, None)]);
+        assert!(validate(&config, HotkeyStrategy::External).is_err());
+    }
+
+    #[test]
+    fn appearance_values_are_validated() {
+        let mut config = Config::default();
+        config.appearance.accent = "#7c3aed".to_owned();
+        config.appearance.font_size = 18;
+        assert_eq!(check(&config), Ok(()));
+
+        config.appearance.accent = "violet".to_owned();
+        assert!(check(&config).unwrap_err().starts_with("Appearance:"));
+        config.appearance.accent = String::new();
+        config.appearance.opacity = 10;
+        assert!(check(&config).is_err());
+    }
+
+    #[test]
+    fn bookmarks_keyword_must_not_clash_with_a_web_keyword() {
+        let mut config = Config::default();
+        config.bookmarks.keyword = "gh".to_owned();
+        assert!(check(&config).is_err());
+        config.bookmarks.keyword = "my marks".to_owned();
+        assert!(check(&config).is_err());
+        config.bookmarks.keyword = String::new();
+        assert_eq!(check(&config), Ok(()));
     }
 
     #[test]

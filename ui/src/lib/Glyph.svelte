@@ -37,6 +37,34 @@
   {:else if name === "copy"}
     <rect x="8.5" y="8.5" width="12" height="12" rx="2.4" />
     <path d="M15.5 8.5v-1A2.5 2.5 0 0 0 13 5H6.5A2.5 2.5 0 0 0 4 7.5V14a2.5 2.5 0 0 0 2.5 2.5h2" />
+  {:else if name === "lock"}
+    <rect x="5" y="10.5" width="14" height="10" rx="2.2" />
+    <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" />
+    <path d="M12 14.5v2.5" />
+  {:else if name === "sleep"}
+    <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z" />
+  {:else if name === "restart"}
+    <path d="M20 12a8 8 0 1 1-2.6-5.9" />
+    <path d="M20 4v4.5h-4.5" />
+  {:else if name === "power"}
+    <path d="M12 3v8" />
+    <path d="M6.6 6.8a8 8 0 1 0 10.8 0" />
+  {:else if name === "logout"}
+    <path d="M9.5 4H6.5A2.5 2.5 0 0 0 4 6.5v11A2.5 2.5 0 0 0 6.5 20h3" />
+    <path d="M15 8l4 4-4 4" />
+    <path d="M19 12H9.5" />
+  {:else if name === "trash"}
+    <path d="M4 7h16" />
+    <path d="M9.5 7V4.5h5V7" />
+    <path d="M6.5 7l.8 11.5a2 2 0 0 0 2 1.9h5.4a2 2 0 0 0 2-1.9L17.5 7" />
+    <path d="M10 11v6M14 11v6" />
+  {:else if name === "settings"}
+    <path d="M4 7h9M17 7h3M4 17h3M11 17h9" />
+    <circle cx="15" cy="7" r="2" />
+    <circle cx="9" cy="17" r="2" />
+  {:else if name === "terminal"}
+    <rect x="3" y="4.5" width="18" height="15" rx="2.4" />
+    <path d="m7.5 10 3 2.5-3 2.5M13 15h3.5" />
   {:else}
     <path d="M9 3v4M15 3v4" />
     <path d="M6 7h12v4.5a6 6 0 0 1-12 0Z" />

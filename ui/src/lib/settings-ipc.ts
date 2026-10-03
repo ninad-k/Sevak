@@ -10,6 +10,23 @@ export interface WebSearchEngine {
   url: string;
 }
 
+/** One `[[hotkey]]` entry: set `query` (open with text) or `run` (a result id), not both. */
+export interface HotkeyBinding {
+  key: string;
+  query?: string | null;
+  run?: string | null;
+}
+
+export interface Appearance {
+  theme: ThemeSetting;
+  accent: string;
+  font_size: number;
+  font_family: string;
+  opacity: number;
+  radius: number;
+  custom_css: string;
+}
+
 /** Mirrors `sevak_core::Config` (serde defaults make every field present). */
 export interface Config {
   general: {
@@ -20,9 +37,15 @@ export interface Config {
   };
   window: { width: number };
   linux: { wayland_use_xwayland: boolean };
-  search: { max_results: number; fallback_web_search: string };
-  appearance: { theme: ThemeSetting };
+  search: {
+    max_results: number;
+    /** One engine keyword, or several (config.toml accepts a string or a list). */
+    fallback_web_search: string | string[];
+    query_history: boolean;
+  };
+  appearance: Appearance;
   plugins: { disabled: string[] };
+  calculator: { currency: boolean };
   files: {
     directories: string[];
     max_depth: number;
@@ -30,7 +53,11 @@ export interface Config {
     keyword: string;
     global: boolean;
   };
+  bookmarks: { browsers: string[]; keyword: string; global: boolean };
+  /** Edited in the config file; kept here so saving the form round-trips it. */
+  shell: { terminal: string; shell: string; keep_open: boolean };
   web_search: WebSearchEngine[];
+  hotkey: HotkeyBinding[];
 }
 
 export interface PluginInfo {
@@ -156,3 +183,8 @@ async function simple(command: string): Promise<string | null> {
 export const openConfigFile = () => simple("open_config_file");
 export const openLogDir = () => simple("open_log_dir");
 export const closeSettings = () => simple("close_settings");
+
+/** The fallback engine keywords in order, whichever form the config uses. */
+export function fallbackList(value: string | string[]): string[] {
+  return (Array.isArray(value) ? value : [value]).map((k) => k.trim()).filter((k) => k !== "");
+}

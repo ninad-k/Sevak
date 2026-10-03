@@ -5,9 +5,11 @@ mod app;
 mod autostart;
 mod cli;
 mod commands;
+mod direct;
 mod hotkey;
 mod icons;
 mod logging;
+mod script_plugins;
 mod search;
 mod settings;
 mod state;
@@ -15,17 +17,18 @@ mod tray;
 mod updater;
 mod window;
 
+use std::path::Path;
 use std::process::ExitCode;
 
 use anyhow::Context;
 use sevak_core::{Config, ConfigOrigin};
 use sevak_platform::{process, session, AppPaths, DisplayServer};
 
-use cli::{Invocation, Launch};
+use cli::{Command, Invocation, Launch};
 
 fn main() -> ExitCode {
-    let invocation = match cli::parse(std::env::args().skip(1)) {
-        Ok(invocation) => invocation,
+    let Command { invocation, config } = match cli::parse(std::env::args().skip(1)) {
+        Ok(command) => command,
         Err(message) => {
             process::attach_parent_console();
             eprintln!("sevak: {message}\n\n{}", cli::USAGE);
@@ -46,9 +49,9 @@ fn main() -> ExitCode {
         }
         Invocation::SetupHotkey(key) => {
             process::attach_parent_console();
-            setup_hotkey(key)
+            setup_hotkey(key, config.as_deref())
         }
-        Invocation::Run(launch) => match run(launch) {
+        Invocation::Run(launch) => match run(launch, config.as_deref()) {
             Ok(()) => ExitCode::SUCCESS,
             Err(err) => {
                 tracing::error!("{err:#}");
@@ -62,8 +65,9 @@ fn main() -> ExitCode {
     }
 }
 
-fn run(launch: Launch) -> anyhow::Result<()> {
-    let paths = AppPaths::resolve().context("cannot determine Sevak's directories")?;
+fn run(launch: Launch, config_override: Option<&Path>) -> anyhow::Result<()> {
+    let paths = AppPaths::resolve_with_config(config_override)
+        .context("cannot determine Sevak's directories")?;
     logging::init(&paths);
 
     let config = match Config::load_or_create(&paths.config_file) {
@@ -104,29 +108,31 @@ fn run(launch: Launch) -> anyhow::Result<()> {
     app::run(paths, server, config, launch)
 }
 
-/// `sevak --setup-hotkey [KEY]`: binds KEY to `sevak --toggle` where the
-/// desktop owns global shortcuts (GNOME on Wayland).
-fn setup_hotkey(key: Option<String>) -> ExitCode {
-    let hotkey = key.unwrap_or_else(|| {
-        AppPaths::resolve()
-            .ok()
-            .and_then(|paths| Config::load_or_create(&paths.config_file).ok())
-            .map(|(config, _)| config.general.hotkey)
-            .unwrap_or_else(|| Config::default().general.hotkey)
-    });
-    setup_hotkey_for_platform(&hotkey)
+/// `sevak --setup-hotkey [KEY]`: binds KEY to `sevak --toggle`, and the
+/// config's `[[hotkey]]` entries to `--query` / `--run`, where the desktop owns
+/// global shortcuts (GNOME on Wayland).
+fn setup_hotkey(key: Option<String>, config_override: Option<&Path>) -> ExitCode {
+    let config = AppPaths::resolve_with_config(config_override)
+        .ok()
+        .and_then(|paths| Config::load_or_create(&paths.config_file).ok())
+        .map(|(config, _)| config)
+        .unwrap_or_default();
+    let hotkey = key.unwrap_or_else(|| config.general.hotkey.clone());
+    setup_hotkey_for_platform(&hotkey, &config)
 }
 
 #[cfg(not(target_os = "linux"))]
-fn setup_hotkey_for_platform(hotkey: &str) -> ExitCode {
+fn setup_hotkey_for_platform(hotkey: &str, config: &Config) -> ExitCode {
+    let _ = config;
     println!("Nothing to set up: on this platform Sevak registers {hotkey} itself while it runs.");
     ExitCode::SUCCESS
 }
 
 #[cfg(target_os = "linux")]
-fn setup_hotkey_for_platform(hotkey: &str) -> ExitCode {
+fn setup_hotkey_for_platform(hotkey: &str, config: &Config) -> ExitCode {
     use sevak_platform::gnome;
 
+    let customs = hotkey::custom_shortcuts(config);
     let command = match gnome::toggle_command() {
         Ok(command) => command,
         Err(err) => {
@@ -140,17 +146,25 @@ fn setup_hotkey_for_platform(hotkey: &str) -> ExitCode {
             "This is not a GNOME session, so the shortcut cannot be installed automatically.\n"
         );
         println!("{}", gnome::manual_instructions(hotkey, &command));
+        print!("{}", gnome::manual_custom_instructions(&customs));
         return ExitCode::SUCCESS;
     }
 
     match gnome::install_shortcut(hotkey, &command) {
         Ok(report) => {
             print!("{}", report.describe());
-            ExitCode::SUCCESS
+            let (text, failed) = gnome::install_custom_shortcuts(&customs);
+            print!("{text}");
+            if failed {
+                ExitCode::FAILURE
+            } else {
+                ExitCode::SUCCESS
+            }
         }
         Err(err) => {
             eprintln!("error: {err}\n");
             println!("{}", gnome::manual_instructions(hotkey, &command));
+            print!("{}", gnome::manual_custom_instructions(&customs));
             ExitCode::FAILURE
         }
     }

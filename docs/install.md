@@ -44,6 +44,12 @@ Intel), open it and drag Sevak into Applications.
 - File search asks for permission the first time it indexes Desktop, Documents
   or Downloads. Decline and remove those folders in Settings if you don't use it.
 - Config and usage data: `~/Library/Application Support/sevak/`.
+- Pasting from clipboard history and snippets sends Cmd+V to the app you were
+  using, which macOS only allows once you turn Sevak on under **System Settings
+  → Privacy & Security → Accessibility**. Until then those results copy instead
+  and say "Copies to clipboard". If you update Sevak and pasting stops, remove
+  Sevak from that list and add it again (the build is ad-hoc signed, so macOS
+  may treat each version as a new app).
 
 ## Ubuntu 22.04+ / Debian
 
@@ -86,7 +92,9 @@ runs the command it was set up from.
   sevak --setup-hotkey Ctrl+Space   # or choose another
   ```
 
-  It adds a GNOME custom keyboard shortcut that runs `sevak --toggle`. On
+  It adds a GNOME custom keyboard shortcut that runs `sevak --toggle`, plus one
+  for every `[[hotkey]]` entry in `config.toml` (running `sevak --query '<text>'`
+  or `sevak --run <id>`; see the README's "Custom hotkeys"). On
   other desktops (KDE, Sway, ...) bind a key to `sevak --toggle` yourself in
   the desktop's keyboard settings.
 - **GNOME binds `Alt+Space` to the window menu.** `--setup-hotkey` warns when a

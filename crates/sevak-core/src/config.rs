@@ -13,7 +13,7 @@ use thiserror::Error;
 
 /// The file written on first run. It mirrors [`Config::default`] (enforced by a
 /// unit test) but carries comments, which `toml::to_string` cannot produce.
-pub const DEFAULT_CONFIG_TOML: &str = r#"# Sevak configuration
+pub const DEFAULT_CONFIG_TOML: &str = r##"# Sevak configuration
 #
 # Created with default values on first run. Edit it, then choose "Reload index"
 # from the tray menu (or restart Sevak) to apply changes.
@@ -32,7 +32,8 @@ hide_on_blur = true
 launch_at_login = false
 
 # Check GitHub for a new version at startup and once a day. Updates are only
-# installed after you agree. This is the only request Sevak makes on its own.
+# installed after you agree. Apart from the optional currency rates (see
+# [calculator]), this is the only request Sevak makes on its own.
 check_for_updates = true
 
 [window]
@@ -48,17 +49,41 @@ wayland_use_xwayland = true
 [search]
 # Number of results shown (1-20).
 max_results = 8
-# Keyword of the web search engine offered when nothing else matches
-# ("" to disable).
+# Keyword of the web search engine offered when nothing else matches ("" to
+# disable). A list offers several, in order: ["g", "yt", "gh"].
 fallback_web_search = "g"
+# Up/Down on an empty search box recalls the last 50 searches you ran. They are
+# kept in usage.json in the data folder; false stops recording and forgets them.
+query_history = true
 
 [appearance]
 # "system", "light" or "dark".
 theme = "system"
+# Accent color as "#rrggbb", "#rgb" or "rgb(r, g, b)". "" keeps the theme's own.
+accent = ""
+# Size of the result titles in pixels (12-22); the rest of the bar scales with it.
+font_size = 15
+# Font for the search bar, e.g. "Fira Sans, sans-serif". "" uses the system font.
+font_family = ""
+# How opaque the search bar's background is, in percent (30-100).
+opacity = 100
+# Corner radius of the search bar in pixels (0-32).
+radius = 14
+# A stylesheet inside this config folder that overrides the theme's CSS variables
+# (see docs/themes.md), for example "theme.css". "" loads none.
+custom_css = ""
 
 [plugins]
-# Ids of built-in plugins to turn off: "apps", "calculator", "files", "web:<keyword>".
+# Ids of built-in plugins to turn off: "apps", "calculator", "files",
+# "bookmarks", "system", "shell", "clipboard", "snippets", "web:<keyword>".
 disabled = []
+
+[calculator]
+# Convert currencies ("100 usd in eur"). Off by default because it needs the
+# network: when on, Sevak downloads the European Central Bank's daily reference
+# rates (a small XML file, no account or key) in the background at most once a
+# day and keeps them on disk. Unit conversion ("10 km in mi") never needs it.
+currency = false
 
 [files]
 # Folders whose files and subfolders are searchable. "~" is your home folder.
@@ -71,6 +96,67 @@ include_hidden = false
 keyword = "f"
 # Also show (lower-ranked) file results for plain queries.
 global = true
+
+[bookmarks]
+# Browsers whose bookmarks are searchable; [] means every browser found.
+# Names: "chrome", "edge", "brave", "vivaldi", "chromium", "opera", "opera-gx",
+# "firefox", "librewolf", "zen". All profiles of each browser are read.
+browsers = []
+# Type "<keyword> <text>" to search only bookmarks.
+keyword = "b"
+# Also show (lower-ranked) bookmark results for plain queries.
+global = true
+
+[system]
+# System commands: lock, sleep, hibernate, restart, shut down, log out, empty
+# the trash, and shortcuts to OS settings pages. Ask before restart, shut down,
+# log out and emptying the trash.
+confirm = true
+# Commands or pages to hide: "lock", "sleep", "hibernate", "restart",
+# "shutdown", "logout", "empty_trash", "settings" (every settings page) or
+# "settings:<page>" such as "settings:bluetooth". To turn the whole plugin off,
+# add "system" to [plugins] disabled instead.
+disabled = []
+
+[shell]
+# Type "> <command>" (or ">command") to run a command in a terminal window. It
+# only runs when you press Enter; recent commands are offered again.
+# Terminal to use. "" detects one: Windows Terminal (else a console window) on
+# Windows, Terminal.app on macOS, $TERMINAL then common terminals on Linux.
+# Examples: "wt", "iterm", "kitty", "gnome-terminal", "alacritty --class sevak".
+terminal = ""
+# Shell that runs the command. "" picks pwsh, powershell, then cmd on Windows
+# and $SHELL (or sh) on Linux. Not used on macOS: your login shell runs it.
+shell = ""
+# Leave the terminal open, at a shell prompt, after the command exits.
+keep_open = true
+
+[paste]
+# Clipboard history and snippets paste into the app you were using before Sevak
+# opened. With this on, the clipboard's previous text is put back afterwards.
+restore_clipboard = false
+
+[clipboard]
+# Clipboard history ("cb <text>"). Off by default: turning it on makes Sevak
+# watch the clipboard and keep copied text in clipboard-history.json in its data
+# folder. Text only. Content that apps mark as secret (password managers) is
+# never recorded.
+enabled = false
+# Items kept (the oldest are dropped).
+max_items = 200
+# Longer text is not recorded.
+max_item_bytes = 65536
+# Never record text copied from these apps, e.g. ["KeePassXC", "1Password"].
+# Matched case-insensitively against the program or app name.
+ignore_apps = []
+
+# Snippets ("s <name>"): text you paste often. Placeholders: {date}, {time},
+# {datetime}, {date:%d %B %Y}, {clipboard}, {uuid}; write {{ and }} for literal
+# braces. "keyword" is optional and also matches the search.
+# [[snippet]]
+# name = "Email signature"
+# keyword = "sig"
+# text = "Best regards,\nNinad"
 
 # Web search engines: type "<keyword> <terms>". "{query}" is replaced by the
 # URL-encoded terms. Defining any [[web_search]] entry replaces this list.
@@ -88,8 +174,24 @@ url = "https://www.youtube.com/results?search_query={query}"
 keyword = "gh"
 name = "GitHub"
 url = "https://github.com/search?q={query}"
-"#;
 
+# Extra global hotkeys. Each [[hotkey]] has a "key" and exactly one of:
+#   query = "..."  open Sevak with this text already typed
+#   run = "..."    run a result directly, without showing Sevak; the value is a
+#                  result id such as "apps:firefox.desktop" or "files:<full path>"
+# On Linux Wayland, `sevak --setup-hotkey` binds these in GNOME as well.
+#
+# [[hotkey]]
+# key = "Ctrl+Alt+T"
+# query = "> "
+#
+# [[hotkey]]
+# key = "Ctrl+Alt+F"
+# run = "apps:firefox.desktop"
+"##;
+
+pub const MAX_CLIPBOARD_ITEMS_LIMIT: usize = 5_000;
+pub const MAX_CLIPBOARD_ITEM_BYTES_LIMIT: usize = 4 * 1024 * 1024;
 pub const MIN_WINDOW_WIDTH: u32 = 400;
 pub const MAX_WINDOW_WIDTH: u32 = 1600;
 pub const MAX_RESULTS_LIMIT: usize = 20;
@@ -103,8 +205,20 @@ pub struct Config {
     pub search: SearchConfig,
     pub appearance: AppearanceConfig,
     pub plugins: PluginsConfig,
+    pub calculator: CalculatorConfig,
     pub files: FilesConfig,
+    pub bookmarks: BookmarksConfig,
+    pub system: SystemConfig,
+    pub shell: ShellConfig,
+    pub paste: PasteConfig,
+    pub clipboard: ClipboardConfig,
+    /// `[[snippet]]` entries. Edited by hand only: saves from the settings
+    /// window leave them untouched (see `merge_document`).
+    pub snippet: Vec<Snippet>,
     pub web_search: Vec<WebSearchEngine>,
+    /// Extra global hotkeys (`[[hotkey]]` tables).
+    #[serde(rename = "hotkey")]
+    pub hotkeys: Vec<HotkeyBinding>,
 }
 
 impl Default for Config {
@@ -116,8 +230,16 @@ impl Default for Config {
             search: SearchConfig::default(),
             appearance: AppearanceConfig::default(),
             plugins: PluginsConfig::default(),
+            calculator: CalculatorConfig::default(),
             files: FilesConfig::default(),
+            bookmarks: BookmarksConfig::default(),
+            system: SystemConfig::default(),
+            shell: ShellConfig::default(),
+            paste: PasteConfig::default(),
+            clipboard: ClipboardConfig::default(),
+            snippet: Vec::new(),
             web_search: WebSearchEngine::defaults(),
+            hotkeys: Vec::new(),
         }
     }
 }
@@ -176,17 +298,95 @@ impl Default for LinuxConfig {
 #[serde(default)]
 pub struct SearchConfig {
     pub max_results: usize,
-    /// Keyword of the `[[web_search]]` engine offered when nothing matched;
+    /// Keyword(s) of the `[[web_search]]` engines offered when nothing matched;
     /// empty disables the fallback.
-    pub fallback_web_search: String,
+    pub fallback_web_search: FallbackSearch,
+    /// Remember executed queries so Up/Down can recall them.
+    pub query_history: bool,
 }
 
 impl Default for SearchConfig {
     fn default() -> Self {
         Self {
             max_results: 8,
-            fallback_web_search: "g".to_owned(),
+            fallback_web_search: FallbackSearch::single("g"),
+            query_history: true,
         }
+    }
+}
+
+/// `fallback_web_search`: one keyword written as a string (`"g"`, the original
+/// form) or several written as a list (`["g", "yt"]`). Both forms read and
+/// write back as they were written, so saving never rewrites the user's choice.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FallbackSearch {
+    keywords: Vec<String>,
+    /// Written as a list rather than a string.
+    list: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(untagged)]
+enum FallbackRepr {
+    One(String),
+    Many(Vec<String>),
+}
+
+impl FallbackSearch {
+    /// One keyword in string form; `""` disables the fallback.
+    pub fn single(keyword: impl Into<String>) -> Self {
+        Self::from_repr(FallbackRepr::One(keyword.into()))
+    }
+
+    /// Several keywords in list form, tried in this order.
+    pub fn list(keywords: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        Self::from_repr(FallbackRepr::Many(
+            keywords.into_iter().map(Into::into).collect(),
+        ))
+    }
+
+    /// The keywords in order: trimmed, without blanks or case-insensitive repeats.
+    pub fn keywords(&self) -> &[String] {
+        &self.keywords
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.keywords.is_empty()
+    }
+
+    fn from_repr(repr: FallbackRepr) -> Self {
+        let (raw, list) = match repr {
+            FallbackRepr::One(keyword) => (vec![keyword], false),
+            FallbackRepr::Many(keywords) => (keywords, true),
+        };
+        let mut keywords: Vec<String> = Vec::new();
+        for keyword in raw {
+            let keyword = keyword.trim();
+            let repeated = keywords.iter().any(|k| k.eq_ignore_ascii_case(keyword));
+            if !keyword.is_empty() && !repeated {
+                keywords.push(keyword.to_owned());
+            }
+        }
+        Self { keywords, list }
+    }
+}
+
+impl Serialize for FallbackSearch {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        if self.list {
+            self.keywords.serialize(serializer)
+        } else {
+            self.keywords
+                .first()
+                .map_or("", String::as_str)
+                .serialize(serializer)
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for FallbackSearch {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        FallbackRepr::deserialize(deserializer).map(Self::from_repr)
     }
 }
 
@@ -199,10 +399,84 @@ pub enum Theme {
     Dark,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+/// Appearance settings. Values are stored as written; [`crate::theme::resolve`]
+/// validates them (falling back to the defaults) when they are applied, so a typo
+/// never costs the user the rest of the file.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppearanceConfig {
     pub theme: Theme,
+    /// `#rgb`, `#rrggbb` or `rgb(r, g, b)`; empty keeps the theme's accent.
+    pub accent: String,
+    /// Pixel size of result titles.
+    pub font_size: u32,
+    /// Comma-separated font families; empty uses the system font.
+    pub font_family: String,
+    /// Background opacity of the search bar, in percent.
+    pub opacity: u32,
+    /// Corner radius of the search bar, in pixels.
+    pub radius: u32,
+    /// Stylesheet inside the config directory; empty loads none.
+    pub custom_css: String,
+}
+
+impl Default for AppearanceConfig {
+    fn default() -> Self {
+        Self {
+            theme: Theme::default(),
+            accent: String::new(),
+            font_size: crate::theme::DEFAULT_FONT_SIZE,
+            font_family: String::new(),
+            opacity: crate::theme::MAX_OPACITY,
+            radius: crate::theme::DEFAULT_RADIUS,
+            custom_css: String::new(),
+        }
+    }
+}
+
+/// One `[[hotkey]]` entry: a global key bound to a query or a result.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HotkeyBinding {
+    /// Accelerator string, parsed like `general.hotkey`.
+    pub key: String,
+    /// Open Sevak with this text typed in.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub query: Option<String>,
+    /// Run the result with this id without showing Sevak.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run: Option<String>,
+}
+
+/// What a [`HotkeyBinding`] does when its key is pressed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HotkeyTarget {
+    Query(String),
+    Run(String),
+}
+
+impl HotkeyBinding {
+    /// The binding's action, or why it has none (both or neither of `query`
+    /// and `run` given, or an empty `run`).
+    pub fn target(&self) -> Result<HotkeyTarget, &'static str> {
+        match (&self.query, &self.run) {
+            (Some(_), Some(_)) => Err("set either \"query\" or \"run\", not both"),
+            (None, None) => Err("set \"query\" or \"run\""),
+            (Some(query), None) => Ok(HotkeyTarget::Query(query.clone())),
+            (None, Some(run)) if run.trim().is_empty() => Err("\"run\" is empty"),
+            (None, Some(run)) => Ok(HotkeyTarget::Run(run.trim().to_owned())),
+        }
+    }
+
+    /// Short description for logs and the settings window.
+    pub fn describe(&self) -> String {
+        match self.target() {
+            Ok(HotkeyTarget::Query(query)) if query.is_empty() => "Open Sevak".to_owned(),
+            Ok(HotkeyTarget::Query(query)) => format!("Open Sevak with \"{query}\""),
+            Ok(HotkeyTarget::Run(id)) => format!("Run {id}"),
+            Err(reason) => format!("Invalid ({reason})"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -216,6 +490,14 @@ impl PluginsConfig {
     pub fn is_enabled(&self, plugin_id: &str) -> bool {
         !self.disabled.iter().any(|id| id == plugin_id)
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CalculatorConfig {
+    /// Convert fiat currencies with the ECB's daily reference rates. Off by
+    /// default: it is the one calculator feature that uses the network.
+    pub currency: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -244,6 +526,122 @@ impl Default for FilesConfig {
             global: true,
         }
     }
+}
+
+/// The `>` shell command plugin: which terminal and shell run the command.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShellConfig {
+    /// Terminal program (a name on `PATH` or a full path, optionally followed
+    /// by extra arguments) or a well-known name such as `iterm`. Empty means
+    /// auto-detect.
+    pub terminal: String,
+    /// Shell program that runs the command; empty means auto-detect. Unused on
+    /// macOS, where the terminal starts the user's login shell itself.
+    pub shell: String,
+    /// Keep the terminal open, at a shell prompt, after the command exits.
+    pub keep_open: bool,
+}
+
+impl Default for ShellConfig {
+    fn default() -> Self {
+        Self {
+            terminal: String::new(),
+            shell: String::new(),
+            keep_open: true,
+        }
+    }
+}
+
+/// How text is pasted into the previously focused app.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PasteConfig {
+    /// Put the clipboard's previous text back after pasting.
+    pub restore_clipboard: bool,
+}
+
+/// The clipboard history plugin (`cb`). Opt-in: nothing is watched or stored
+/// unless `enabled` is set.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ClipboardConfig {
+    pub enabled: bool,
+    pub max_items: usize,
+    /// Text longer than this many bytes is not recorded.
+    pub max_item_bytes: usize,
+    /// Apps whose copies are never recorded (program or app names).
+    pub ignore_apps: Vec<String>,
+}
+
+impl Default for ClipboardConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            max_items: 200,
+            max_item_bytes: 64 * 1024,
+            ignore_apps: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SystemConfig {
+    /// Ask before restart, shut down, log out and emptying the trash.
+    pub confirm: bool,
+    /// Commands and settings pages to hide, by key (`restart`, `settings`,
+    /// `settings:bluetooth`, ...). Matched by the system plugin.
+    pub disabled: Vec<String>,
+}
+
+impl Default for SystemConfig {
+    fn default() -> Self {
+        Self {
+            confirm: true,
+            disabled: Vec::new(),
+        }
+    }
+}
+
+impl SystemConfig {
+    /// Whether `key` is switched off in `disabled` (case-insensitive).
+    pub fn is_disabled(&self, key: &str) -> bool {
+        self.disabled
+            .iter()
+            .any(|entry| entry.trim().eq_ignore_ascii_case(key))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BookmarksConfig {
+    /// Browser ids to read (`chrome`, `firefox`, ...); empty means every
+    /// browser found. The ids are defined by the platform layer.
+    pub browsers: Vec<String>,
+    pub keyword: String,
+    pub global: bool,
+}
+
+impl Default for BookmarksConfig {
+    fn default() -> Self {
+        Self {
+            browsers: Vec::new(),
+            keyword: "b".to_owned(),
+            global: true,
+        }
+    }
+}
+
+/// One `[[snippet]]`: text pasted on demand, with placeholders expanded.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Snippet {
+    pub name: String,
+    /// Extra word the snippet is found by (`s sig`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub keyword: Option<String>,
+    pub text: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -400,30 +798,66 @@ impl Config {
     pub fn normalized(mut self) -> Self {
         self.window.width = self.window.width.clamp(MIN_WINDOW_WIDTH, MAX_WINDOW_WIDTH);
         self.search.max_results = self.search.max_results.clamp(1, MAX_RESULTS_LIMIT);
-        self.search.fallback_web_search = self.search.fallback_web_search.trim().to_owned();
         // Engines without a keyword or a `{query}` placeholder cannot work.
         self.web_search
             .retain(|engine| !engine.keyword.trim().is_empty() && engine.url.contains("{query}"));
+        self.shell.terminal = self.shell.terminal.trim().to_owned();
+        self.shell.shell = self.shell.shell.trim().to_owned();
+        self.clipboard.max_items = self.clipboard.max_items.clamp(1, MAX_CLIPBOARD_ITEMS_LIMIT);
+        self.clipboard.max_item_bytes = self
+            .clipboard
+            .max_item_bytes
+            .clamp(1, MAX_CLIPBOARD_ITEM_BYTES_LIMIT);
+        self.clipboard
+            .ignore_apps
+            .retain(|app| !app.trim().is_empty());
+        // A snippet needs a name to be found by and text to paste.
+        self.snippet
+            .retain(|snippet| !snippet.name.trim().is_empty() && !snippet.text.is_empty());
+        for snippet in &mut self.snippet {
+            snippet.keyword = snippet
+                .keyword
+                .take()
+                .map(|keyword| keyword.trim().to_owned())
+                .filter(|keyword| !keyword.is_empty());
+        }
         let hotkey = self.general.hotkey.trim();
         self.general.hotkey = if hotkey.is_empty() {
             GeneralConfig::default().hotkey
         } else {
             hotkey.to_owned()
         };
+        // An entry without a key cannot be reported against anything.
+        for binding in &mut self.hotkeys {
+            binding.key = binding.key.trim().to_owned();
+        }
+        self.hotkeys.retain(|binding| !binding.key.is_empty());
         self
     }
 }
 
-/// Key of the one array of tables in the schema.
+/// Keys of the arrays of tables in the schema.
 const WEB_SEARCH_KEY: &str = "web_search";
+/// `[[snippet]]` is edited by hand only; the settings window never changes it,
+/// so saving leaves the user's entries exactly as written.
+const SNIPPET_KEY: &str = "snippet";
+const HOTKEY_KEY: &str = "hotkey";
 
 /// Applies `updated` (a freshly serialized config) onto `document`.
 fn merge_document(document: &mut toml_edit::DocumentMut, updated: &toml_edit::DocumentMut) {
     use toml_edit::Item;
 
     for (key, new_item) in updated.as_table() {
+        if key == SNIPPET_KEY {
+            continue;
+        }
         if key == WEB_SEARCH_KEY {
-            merge_web_search(document.as_table_mut(), new_item);
+            // The defaults come back when the key is absent, so "none" is written out.
+            merge_table_list(document.as_table_mut(), key, new_item, true);
+            continue;
+        }
+        if key == HOTKEY_KEY {
+            merge_table_list(document.as_table_mut(), key, new_item, false);
             continue;
         }
         // The serializer emits sections as inline tables; edit them as tables.
@@ -479,7 +913,14 @@ fn merge_item(table: &mut toml_edit::Table, key: &str, new_item: &toml_edit::Ite
     }
 }
 
-fn merge_web_search(root: &mut toml_edit::Table, new_item: &toml_edit::Item) {
+/// Replaces the array of tables `key` as a whole. An empty list is written as
+/// `key = []` when `keep_empty` is set, and removed otherwise.
+fn merge_table_list(
+    root: &mut toml_edit::Table,
+    key: &str,
+    new_item: &toml_edit::Item,
+    keep_empty: bool,
+) {
     use toml_edit::Item;
 
     let mut new_engines = match new_item {
@@ -490,7 +931,7 @@ fn merge_web_search(root: &mut toml_edit::Table, new_item: &toml_edit::Item) {
             .unwrap_or_else(|_| toml_edit::ArrayOfTables::new()),
     };
 
-    let unchanged = match root.get(WEB_SEARCH_KEY) {
+    let unchanged = match root.get(key) {
         Some(Item::ArrayOfTables(old)) => {
             old.len() == new_engines.len()
                 && old
@@ -499,31 +940,39 @@ fn merge_web_search(root: &mut toml_edit::Table, new_item: &toml_edit::Item) {
                     .all(|(a, b)| tables_equal(a, b))
         }
         Some(Item::Value(toml_edit::Value::Array(old))) => old.is_empty() && new_engines.is_empty(),
+        None => new_engines.is_empty() && !keep_empty,
         _ => false,
     };
     if unchanged {
         return;
     }
 
-    // An empty list cannot be written as `[[web_search]]` tables, and omitting
-    // the key would bring the default engines back on the next load.
+    // An empty list cannot be written as `[[...]]` tables.
     if new_engines.is_empty() {
-        root.insert(
-            WEB_SEARCH_KEY,
-            Item::Value(toml_edit::Value::Array(toml_edit::Array::new())),
-        );
+        if keep_empty {
+            // Omitting the key would bring the defaults back on the next load.
+            root.insert(
+                key,
+                Item::Value(toml_edit::Value::Array(toml_edit::Array::new())),
+            );
+        } else {
+            root.remove(key);
+        }
         return;
     }
 
-    // The comment block above the first `[[web_search]]` belongs to the list.
-    let leading_decor = match root.get(WEB_SEARCH_KEY) {
+    // The comment block above the first `[[...]]` belongs to the list.
+    let leading_decor = match root.get(key) {
         Some(Item::ArrayOfTables(old)) => old.iter().next().map(|t| t.decor().clone()),
         _ => None,
     };
-    if let (Some(decor), Some(first)) = (leading_decor, new_engines.iter_mut().next()) {
-        *first.decor_mut() = decor;
+    match (leading_decor, new_engines.iter_mut().next()) {
+        (Some(decor), Some(first)) => *first.decor_mut() = decor,
+        // A list new to the file: set it apart from what precedes it.
+        (None, Some(first)) => first.decor_mut().set_prefix("\n"),
+        _ => {}
     }
-    root.insert(WEB_SEARCH_KEY, Item::ArrayOfTables(new_engines));
+    root.insert(key, Item::ArrayOfTables(new_engines));
 }
 
 fn tables_equal(a: &toml_edit::Table, b: &toml_edit::Table) -> bool {
@@ -616,9 +1065,121 @@ url = "https://example.com"
     }
 
     #[test]
+    fn bookmarks_section_parses_with_defaults() {
+        let config = Config::from_toml_str(
+            "[bookmarks]\nbrowsers = [\"firefox\", \"chrome\"]\nkeyword = \"bm\"\n",
+        )
+        .unwrap();
+        assert_eq!(config.bookmarks.browsers, ["firefox", "chrome"]);
+        assert_eq!(config.bookmarks.keyword, "bm");
+        assert!(config.bookmarks.global);
+
+        let config = Config::from_toml_str("").unwrap();
+        assert!(config.bookmarks.browsers.is_empty());
+        assert_eq!(config.bookmarks.keyword, "b");
+    }
+
+    #[test]
+    fn system_section_defaults_to_confirming_everything_enabled() {
+        let config = Config::from_toml_str("").unwrap();
+        assert!(config.system.confirm);
+        assert!(config.system.disabled.is_empty());
+    }
+
+    #[test]
+    fn system_section_parses_and_matches_keys_ignoring_case() {
+        let config = Config::from_toml_str(
+            "[system]\nconfirm = false\ndisabled = [\"Restart\", \"settings:wifi\"]\n",
+        )
+        .unwrap();
+        assert!(!config.system.confirm);
+        assert!(config.system.is_disabled("restart"));
+        assert!(config.system.is_disabled("settings:wifi"));
+        assert!(!config.system.is_disabled("shutdown"));
+    }
+
+    #[test]
+    fn shell_section_defaults_and_parses() {
+        let defaults = Config::default().shell;
+        assert_eq!(defaults.terminal, "");
+        assert_eq!(defaults.shell, "");
+        assert!(defaults.keep_open);
+
+        let config = Config::from_toml_str(
+            "[shell]\nterminal = \"  kitty --single-instance \"\nkeep_open = false\n",
+        )
+        .unwrap();
+        assert_eq!(config.shell.terminal, "kitty --single-instance");
+        assert_eq!(config.shell.shell, "");
+        assert!(!config.shell.keep_open);
+    }
+
+    #[test]
+    fn currency_conversion_is_off_unless_enabled() {
+        assert!(!Config::default().calculator.currency);
+        let config = Config::from_toml_str("[calculator]\ncurrency = true\n").unwrap();
+        assert!(config.calculator.currency);
+    }
+
+    #[test]
     fn unknown_keys_are_ignored() {
         let config = Config::from_toml_str("[future]\nthing = 1\n[general]\nnew_key = true\n");
         assert_eq!(config.unwrap(), Config::default());
+    }
+
+    #[test]
+    fn clipboard_is_opt_in_and_paste_keeps_the_clipboard_by_default() {
+        let config = Config::default();
+        assert!(!config.clipboard.enabled);
+        assert_eq!(config.clipboard.max_items, 200);
+        assert!(!config.paste.restore_clipboard);
+        assert!(config.snippet.is_empty());
+    }
+
+    #[test]
+    fn clipboard_and_paste_sections_parse_and_are_clamped() {
+        let config = Config::from_toml_str(
+            "[paste]\nrestore_clipboard = true\n[clipboard]\nenabled = true\nmax_items = 0\n\
+             max_item_bytes = 999999999\nignore_apps = [\"KeePassXC\", \"  \"]\n",
+        )
+        .unwrap();
+        assert!(config.paste.restore_clipboard);
+        assert!(config.clipboard.enabled);
+        assert_eq!(config.clipboard.max_items, 1);
+        assert_eq!(
+            config.clipboard.max_item_bytes,
+            MAX_CLIPBOARD_ITEM_BYTES_LIMIT
+        );
+        assert_eq!(config.clipboard.ignore_apps, ["KeePassXC"]);
+    }
+
+    #[test]
+    fn snippets_parse_and_incomplete_ones_are_dropped() {
+        let config = Config::from_toml_str(
+            r#"
+[[snippet]]
+name = "Signature"
+keyword = " sig "
+text = "Regards\nNinad"
+
+[[snippet]]
+name = "No keyword"
+text = "x"
+
+[[snippet]]
+name = "  "
+text = "nameless"
+
+[[snippet]]
+name = "Empty"
+text = ""
+"#,
+        )
+        .unwrap();
+        assert_eq!(config.snippet.len(), 2);
+        assert_eq!(config.snippet[0].keyword.as_deref(), Some("sig"));
+        assert_eq!(config.snippet[0].text, "Regards\nNinad");
+        assert_eq!(config.snippet[1].keyword, None);
     }
 
     #[test]
@@ -729,6 +1290,101 @@ url = "https://example.com"
         assert!(general < hotkey && hotkey < hide);
     }
 
+    fn fallbacks(text: &str) -> Vec<String> {
+        Config::from_toml_str(text)
+            .unwrap()
+            .search
+            .fallback_web_search
+            .keywords()
+            .to_vec()
+    }
+
+    #[test]
+    fn fallback_accepts_a_string_or_a_list() {
+        assert_eq!(fallbacks(""), ["g"]);
+        assert_eq!(
+            fallbacks("[search]\nfallback_web_search = \" yt \"\n"),
+            ["yt"]
+        );
+        assert!(fallbacks("[search]\nfallback_web_search = \"\"\n").is_empty());
+        assert_eq!(
+            fallbacks("[search]\nfallback_web_search = [\"g\", \"yt\", \"G\", \" \", \"gh\"]\n"),
+            ["g", "yt", "gh"]
+        );
+        assert!(fallbacks("[search]\nfallback_web_search = []\n").is_empty());
+        assert!(Config::from_toml_str("[search]\nfallback_web_search = 3\n").is_err());
+    }
+
+    #[test]
+    fn fallback_round_trips_through_json_in_either_form() {
+        let one = FallbackSearch::single("g");
+        assert_eq!(serde_json::to_string(&one).unwrap(), "\"g\"");
+        let many = FallbackSearch::list(["g", "yt"]);
+        assert_eq!(serde_json::to_string(&many).unwrap(), "[\"g\",\"yt\"]");
+        for value in [
+            one,
+            many,
+            FallbackSearch::single(""),
+            FallbackSearch::list(["g"]),
+        ] {
+            let json = serde_json::to_string(&value).unwrap();
+            assert_eq!(
+                serde_json::from_str::<FallbackSearch>(&json).unwrap(),
+                value
+            );
+        }
+    }
+
+    #[test]
+    fn saving_keeps_the_fallback_form_and_its_comments() {
+        let mut config = Config::default();
+        // Unchanged: a list of one stays a list, the file stays byte-identical.
+        let existing = DEFAULT_CONFIG_TOML.replace(
+            "fallback_web_search = \"g\"",
+            "fallback_web_search = [\"g\"]",
+        );
+        config.search.fallback_web_search = FallbackSearch::list(["g"]);
+        assert_eq!(saved(Some(&existing), &config), existing);
+
+        config.search.fallback_web_search = FallbackSearch::list(["g", "yt", "gh"]);
+        config.search.query_history = false;
+        let text = saved(Some(&existing), &config);
+        assert!(
+            text.contains("fallback_web_search = [\"g\", \"yt\", \"gh\"]"),
+            "{text}"
+        );
+        assert!(text.contains("# disable). A list offers several"), "{text}");
+        assert!(text.contains("query_history = false"), "{text}");
+        assert_eq!(Config::from_toml_str(&text).unwrap(), config);
+
+        // Back to the string form.
+        config.search.fallback_web_search = FallbackSearch::single("yt");
+        let text = saved(Some(&text), &config);
+        assert!(text.contains("fallback_web_search = \"yt\""), "{text}");
+    }
+
+    #[test]
+    fn query_history_defaults_on_and_is_added_to_older_files() {
+        assert!(Config::default().search.query_history);
+        let old = "[search]\nmax_results = 8\n";
+        assert!(Config::from_toml_str(old).unwrap().search.query_history);
+        let text = saved(Some(old), &Config::default());
+        assert!(text.contains("query_history = true"), "{text}");
+    }
+
+    #[test]
+    fn currency_setting_is_added_to_a_config_written_by_an_older_version() {
+        let mut config = Config::default();
+        config.calculator.currency = true;
+        let text = saved(Some("[general]\nhotkey = \"Alt+Space\"\n"), &config);
+        assert!(text.contains("[calculator]") && text.contains("currency = true"));
+        assert_eq!(Config::from_toml_str(&text).unwrap(), config);
+
+        let text = saved(Some(DEFAULT_CONFIG_TOML), &config);
+        assert!(text.contains("# Convert currencies"));
+        assert_eq!(Config::from_toml_str(&text).unwrap(), config);
+    }
+
     #[test]
     fn user_comments_and_unknown_keys_survive() {
         let existing = "\
@@ -765,6 +1421,23 @@ thing = true
         assert!(text.contains("hide_on_blur = true"));
         assert!(text.contains("[window]\nwidth = 720"));
         assert_eq!(Config::from_toml_str(&text).unwrap(), Config::default());
+    }
+
+    #[test]
+    fn hand_written_snippets_survive_a_save() {
+        let existing = format!(
+            "{DEFAULT_CONFIG_TOML}\n[[snippet]]\nname = \"Sig\"   # mine\ntext = \"Hi\\nthere\"\n"
+        );
+        let mut config = Config::from_toml_str(&existing).unwrap();
+        config.clipboard.enabled = true;
+        let text = saved(Some(&existing), &config);
+
+        assert!(text.contains("name = \"Sig\"   # mine"));
+        assert!(text.contains("text = \"Hi\\nthere\""));
+        assert_eq!(text.matches("[[snippet]]").count(), 2); // the template's comment + ours
+        let reloaded = Config::from_toml_str(&text).unwrap();
+        assert!(reloaded.clipboard.enabled);
+        assert_eq!(reloaded.snippet, config.snippet);
     }
 
     #[test]
@@ -838,5 +1511,115 @@ thing = true
         let text = saved(Some(&existing), &config);
         assert!(text.contains("# Sevak configuration\r\n"), "{text:?}");
         assert_eq!(Config::from_toml_str(&text).unwrap(), config);
+    }
+
+    fn binding(key: &str, query: Option<&str>, run: Option<&str>) -> HotkeyBinding {
+        HotkeyBinding {
+            key: key.to_owned(),
+            query: query.map(str::to_owned),
+            run: run.map(str::to_owned),
+        }
+    }
+
+    #[test]
+    fn hotkey_entries_parse() {
+        let config = Config::from_toml_str(
+            r#"
+[[hotkey]]
+key = " Ctrl+Alt+T "
+query = "> "
+
+[[hotkey]]
+key = "Ctrl+Alt+F"
+run = "apps:firefox.desktop"
+
+[[hotkey]]
+query = "no key, dropped"
+"#,
+        )
+        .unwrap();
+        assert_eq!(
+            config.hotkeys,
+            vec![
+                binding("Ctrl+Alt+T", Some("> "), None),
+                binding("Ctrl+Alt+F", None, Some("apps:firefox.desktop")),
+            ]
+        );
+    }
+
+    #[test]
+    fn hotkey_targets() {
+        assert_eq!(
+            binding("K", Some("> "), None).target(),
+            Ok(HotkeyTarget::Query("> ".to_owned()))
+        );
+        assert_eq!(
+            binding("K", None, Some(" apps:x ")).target(),
+            Ok(HotkeyTarget::Run("apps:x".to_owned()))
+        );
+        assert!(binding("K", Some("a"), Some("b")).target().is_err());
+        assert!(binding("K", None, None).target().is_err());
+        assert!(binding("K", None, Some("  ")).target().is_err());
+        assert_eq!(binding("K", Some(""), None).describe(), "Open Sevak");
+        assert_eq!(
+            binding("K", Some("> "), None).describe(),
+            "Open Sevak with \"> \""
+        );
+    }
+
+    #[test]
+    fn hotkey_entries_are_written_and_removed_again() {
+        let mut config = Config {
+            hotkeys: vec![
+                binding("Ctrl+Alt+T", Some("> "), None),
+                binding("Ctrl+Alt+F", None, Some("apps:firefox.desktop")),
+            ],
+            ..Config::default()
+        };
+        let text = saved(Some(DEFAULT_CONFIG_TOML), &config);
+        assert_eq!(text.matches("\n[[hotkey]]\n").count(), 2, "{text}");
+        assert!(text.contains("# Extra global hotkeys."));
+        assert!(text.contains("# [[hotkey]]"));
+        assert_eq!(Config::from_toml_str(&text).unwrap(), config);
+
+        // An unchanged list leaves the file alone.
+        assert_eq!(saved(Some(&text), &config), text);
+
+        config.hotkeys.remove(0);
+        let text = saved(Some(&text), &config);
+        assert_eq!(text.matches("\n[[hotkey]]\n").count(), 1, "{text}");
+        assert_eq!(Config::from_toml_str(&text).unwrap(), config);
+
+        let text = saved(Some(&text), &Config::default());
+        assert!(!text.contains("\n[[hotkey]]\n"), "{text}");
+        assert_eq!(text, DEFAULT_CONFIG_TOML);
+    }
+
+    #[test]
+    fn appearance_options_roundtrip_and_keep_comments() {
+        let mut config = Config::default();
+        config.appearance.accent = "#7c3aed".to_owned();
+        config.appearance.font_size = 18;
+        config.appearance.font_family = "Fira Sans, sans-serif".to_owned();
+        config.appearance.opacity = 85;
+        config.appearance.radius = 4;
+        config.appearance.custom_css = "theme.css".to_owned();
+        let text = saved(Some(DEFAULT_CONFIG_TOML), &config);
+        assert!(text.contains("# Corner radius of the search bar in pixels (0-32)."));
+        assert_eq!(Config::from_toml_str(&text).unwrap(), config);
+    }
+
+    #[test]
+    fn older_files_without_the_new_options_load_with_defaults() {
+        let config = Config::from_toml_str("[appearance]\ntheme = \"dark\"\n").unwrap();
+        assert_eq!(config.appearance.theme, Theme::Dark);
+        assert_eq!(
+            AppearanceConfig {
+                theme: Theme::Dark,
+                ..AppearanceConfig::default()
+            },
+            config.appearance
+        );
+        assert!(config.hotkeys.is_empty());
     }
 }

@@ -15,19 +15,54 @@ export interface HotkeyStatus {
 
 export type ThemeSetting = "system" | "light" | "dark";
 
+/** How one `[[hotkey]]` entry of the config fared, in config order. */
+export interface CustomHotkeyStatus {
+  key: string;
+  description: string;
+  /** Why it is not active, if it is not. */
+  error: string | null;
+}
+
+/** The validated appearance settings as CSS (see `appearance.ts`). */
+export interface AppearanceCss {
+  css: string;
+  custom_css: string;
+  /** Why a setting was ignored. */
+  warnings: string[];
+}
+
 export interface Status {
   version: string;
   display: "windows" | "macos" | "x11" | "wayland" | "unknown";
   hotkey: HotkeyStatus;
+  custom_hotkeys: CustomHotkeyStatus[];
+  appearance: AppearanceCss;
   /** The configured theme; `system` follows `prefers-color-scheme`. */
   theme: ThemeSetting;
   /** The search index is being (re)built. */
   indexing: boolean;
 }
 
-export type ActionKind = "launch" | "open_path" | "open_url" | "copy_text" | "custom";
+export type ActionKind =
+  | "launch"
+  | "open_path"
+  | "open_url"
+  | "copy_text"
+  | "reveal_path"
+  | "run_as_admin"
+  | "paste_text"
+  | "custom";
 
 export type IconDto = { kind: "url"; url: string } | { kind: "builtin"; name: string };
+
+/** A key held with Enter to run a secondary action. `ctrl` is Cmd on macOS. */
+export type Modifier = "ctrl" | "shift" | "alt";
+
+export interface SecondaryDto {
+  label: string;
+  modifier: Modifier | null;
+  kind: ActionKind;
+}
 
 export interface ResultDto {
   id: string;
@@ -35,7 +70,13 @@ export interface ResultDto {
   subtitle: string;
   icon: IconDto | null;
   plugin_id: string;
+  /** What Tab turns the input into, when the plugin offers a completion. */
+  autocomplete?: string | null;
   action: ActionKind;
+  /** Other actions; `execute`'s `action` index refers to this list. */
+  secondary: SecondaryDto[];
+  /** What Ctrl+C copies for this row, if anything. */
+  copy_text: string | null;
 }
 
 export type IndexState = "indexing" | "ready";
@@ -48,6 +89,7 @@ export const EVENT_SHOW = "sevak:show";
 export const EVENT_HIDDEN = "sevak:hidden";
 export const EVENT_STATUS = "sevak:status";
 export const EVENT_INDEX = "sevak:index";
+export const EVENT_RESULTS = "sevak:results";
 
 /** Hide the launcher window. */
 export async function hideWindow(): Promise<void> {
@@ -102,21 +144,72 @@ export async function search(query: string): Promise<SearchResponse | null> {
   }
 }
 
+/** Executed queries, most recent first (empty when history is off). */
+export async function queryHistory(): Promise<string[]> {
+  if (import.meta.env.DEV && !hasTauri()) {
+    const { mockHistory } = await import("./mock");
+    return mockHistory();
+  }
+  try {
+    return await invoke<string[]>("query_history");
+  } catch (err) {
+    console.warn("[ipc] query_history failed:", err);
+    return [];
+  }
+}
+
 /**
- * Run result `id` of search `ticket` (the results on screen). Resolves to an
- * error message, or `null` on success.
+ * Run result `id` of search `ticket` (the results on screen). `action` is the
+ * index of one of its secondary actions; omit it for the primary action.
+ * Resolves to an error message, or `null` on success.
  */
-export async function execute(id: string, ticket: number): Promise<string | null> {
+export async function execute(
+  id: string,
+  ticket: number,
+  action?: number,
+): Promise<string | null> {
   if (import.meta.env.DEV && !hasTauri()) {
     return id === "m:broken" ? "Could not start “Broken icon app” (preview error)" : null;
   }
   try {
-    await invoke("execute", { id, ticket });
+    await invoke("execute", { id, ticket, action: action ?? null });
     return null;
   } catch (err) {
     console.warn("[ipc] execute failed:", err);
-    return typeof err === "string" ? err : err instanceof Error ? err.message : String(err);
+    return errorText(err);
   }
+}
+
+/** Copy result `id`'s most useful text (see `ResultDto.copy_text`) and hide. */
+export async function copyResult(id: string, ticket: number): Promise<string | null> {
+  if (import.meta.env.DEV && !hasTauri()) return null;
+  try {
+    await invoke("copy_result", { id, ticket });
+    return null;
+  } catch (err) {
+    console.warn("[ipc] copy_result failed:", err);
+    return errorText(err);
+  }
+}
+
+/**
+ * Stretch the window over the screen (`true`) for Large Type, or restore it.
+ * Resolves to whether the window now covers the screen; `false` means the
+ * caller should show the text inside the launcher instead.
+ */
+export async function setLargeType(on: boolean): Promise<boolean> {
+  if (!hasTauri()) return on;
+  try {
+    await invoke("set_large_type", { on });
+    return on;
+  } catch (err) {
+    console.warn("[ipc] set_large_type failed:", err);
+    return false;
+  }
+}
+
+function errorText(err: unknown): string {
+  return typeof err === "string" ? err : err instanceof Error ? err.message : String(err);
 }
 
 async function safeListen<T>(event: string, cb: (payload: T) => void): Promise<UnlistenFn> {
@@ -128,9 +221,30 @@ async function safeListen<T>(event: string, cb: (payload: T) => void): Promise<U
   }
 }
 
-/** Window is being shown: clear the query, focus and select the input. */
-export function onShow(cb: () => void): Promise<UnlistenFn> {
-  return safeListen<void>(EVENT_SHOW, () => cb());
+/** What the launcher is asked to show with (`sevak --query`, hotkey entries, errors). */
+export interface ShowPayload {
+  /** Text to put in the search field. */
+  query: string | null;
+  /** A message to show instead of results. */
+  error: string | null;
+}
+
+/** Window is being shown: clear the query, focus the input, apply the payload. */
+export function onShow(cb: (payload: ShowPayload | null) => void): Promise<UnlistenFn> {
+  return safeListen<ShowPayload | null>(EVENT_SHOW, cb);
+}
+
+/**
+ * Asks for a show request that arrived before this page was listening. Also
+ * tells Rust the page is ready to hear later ones directly.
+ */
+export async function takePendingShow(): Promise<ShowPayload | null> {
+  try {
+    return await invoke<ShowPayload | null>("take_pending_show");
+  } catch (err) {
+    console.warn("[ipc] take_pending_show failed:", err);
+    return null;
+  }
 }
 
 /** Window was hidden: clear the query. */
@@ -141,6 +255,14 @@ export function onHidden(cb: () => void): Promise<UnlistenFn> {
 /** Config reloaded / hotkey status changed. */
 export function onStatus(cb: (status: Status) => void): Promise<UnlistenFn> {
   return safeListen<Status>(EVENT_STATUS, cb);
+}
+
+/**
+ * A slow plugin (a script plugin) has answers for the query on screen: run the
+ * query again to pick them up.
+ */
+export function onResultsUpdated(cb: () => void): Promise<UnlistenFn> {
+  return safeListen<string>(EVENT_RESULTS, () => cb());
 }
 
 /** The search index started or finished (re)building. */

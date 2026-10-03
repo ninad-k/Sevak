@@ -1,12 +1,14 @@
 //! Show / hide / toggle / position logic for the resident launcher window.
 
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use tauri::{
-    AppHandle, Emitter, LogicalSize, Manager, Monitor, PhysicalPosition, WebviewWindow, Window,
-    WindowEvent,
+    AppHandle, Emitter, LogicalSize, Manager, Monitor, PhysicalPosition, PhysicalSize,
+    WebviewWindow, Window, WindowEvent,
 };
 
+use crate::direct::{self, ShowPayload};
 use crate::state::{lock, AppState};
 
 pub const MAIN_LABEL: &str = "main";
@@ -28,15 +30,27 @@ const TOP_OFFSET_FRACTION: f64 = 0.25;
 const DEFAULT_HEIGHT: f64 = 92.0;
 
 pub fn show(app: &AppHandle) {
+    show_with(app, ShowPayload::default());
+}
+
+/// Shows the window; `payload` can prefill the query or carry an error line.
+pub fn show_with(app: &AppHandle, payload: ShowPayload) {
     let Some(window) = app.get_webview_window(MAIN_LABEL) else {
         tracing::warn!("show: main window not found");
         return;
     };
 
     tracing::info!("showing window");
+    // While the user's app still has focus: pasting returns to it later.
+    if let Some(state) = app.try_state::<AppState>() {
+        state.search.platform.remember_foreground_app();
+    }
     // Before showing, so the UI clears its query and is ready to focus.
-    if let Err(err) = app.emit_to(MAIN_LABEL, EVENT_SHOW, ()) {
-        tracing::warn!("show: could not emit {EVENT_SHOW}: {err}");
+    // Until the UI has loaded it cannot hear this; it asks for what it missed.
+    if let Some(payload) = direct::deliver(payload) {
+        if let Err(err) = app.emit_to(MAIN_LABEL, EVENT_SHOW, payload) {
+            tracing::warn!("show: could not emit {EVENT_SHOW}: {err}");
+        }
     }
 
     position(app, &window);
@@ -196,6 +210,8 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
 /// Native Wayland clients cannot position their own windows, so there this is
 /// a harmless no-op (Sevak runs under XWayland by default for this reason).
 fn position(app: &AppHandle, window: &WebviewWindow) {
+    // A Large Type left over from before the window was hidden.
+    leave_large_type(app);
     let width = configured_width(app);
     apply_width(window, width);
 
@@ -234,6 +250,56 @@ fn apply_width(window: &WebviewWindow, width: u32) {
         .unwrap_or(DEFAULT_HEIGHT);
     if let Err(err) = window.set_size(LogicalSize::new(f64::from(width), logical_height)) {
         tracing::debug!("set_size failed: {err}");
+    }
+}
+
+/// The launcher's position and size before [`enter_large_type`], to restore.
+static BEFORE_LARGE_TYPE: Mutex<Option<(PhysicalPosition<i32>, PhysicalSize<u32>)>> =
+    Mutex::new(None);
+
+/// Stretches the (transparent) window over its monitor's work area so Large
+/// Type can fill the screen. The size and position it had are kept for
+/// [`leave_large_type`]. Where the window manager refuses to move or resize
+/// (native Wayland), the error says so and the UI falls back to the launcher's
+/// own size.
+pub fn enter_large_type(app: &AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window(MAIN_LABEL)
+        .ok_or("the launcher window is missing")?;
+    let monitor = target_monitor(app, &window).ok_or("no monitor found")?;
+    let before = window
+        .outer_position()
+        .and_then(|position| window.outer_size().map(|size| (position, size)))
+        .map_err(|err| err.to_string())?;
+
+    // Keep the first saved bounds if called twice in a row.
+    lock(&BEFORE_LARGE_TYPE).get_or_insert(before);
+
+    let area = monitor.work_area();
+    let stretched = window
+        .set_position(area.position)
+        .and_then(|()| window.set_size(area.size));
+    if let Err(err) = stretched {
+        leave_large_type(app);
+        return Err(err.to_string());
+    }
+    Ok(())
+}
+
+/// Puts the window back to what it was before [`enter_large_type`]. A no-op if
+/// Large Type was not active.
+pub fn leave_large_type(app: &AppHandle) {
+    let Some((position, size)) = lock(&BEFORE_LARGE_TYPE).take() else {
+        return;
+    };
+    let Some(window) = app.get_webview_window(MAIN_LABEL) else {
+        return;
+    };
+    if let Err(err) = window
+        .set_size(size)
+        .and_then(|()| window.set_position(position))
+    {
+        tracing::debug!("leave_large_type: could not restore the window: {err}");
     }
 }
 

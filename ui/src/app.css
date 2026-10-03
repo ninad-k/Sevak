@@ -5,6 +5,11 @@
  * pinned light in settings (`data-theme="light"`), or whenever they pinned dark
  * (`data-theme="dark"`). The dark block therefore appears twice; keep the two
  * copies identical. `theme.ts` sets and clears `data-theme`.
+ *
+ * `:where()` keeps every theme selector at the specificity of plain `:root`, so
+ * the stylesheets injected after this one (`appearance.ts`: the accent and size
+ * settings, then the user's custom_css) win with an ordinary `:root { ... }`.
+ * docs/themes.md lists the variables.
  */
 :root {
   --bg: #fcfcfd;
@@ -32,7 +37,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  :root:where(:not([data-theme="light"])) {
     --bg: #17152b;
     --fg: #ece9fb;
     --muted: #9a97b8;
@@ -57,7 +62,7 @@
   }
 }
 
-:root[data-theme="dark"] {
+:root:where([data-theme="dark"]) {
   --bg: #17152b;
   --fg: #ece9fb;
   --muted: #9a97b8;

@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
+  import AppearanceExtras from "./lib/AppearanceExtras.svelte";
   import HotkeyField from "./lib/HotkeyField.svelte";
+  import HotkeyList from "./lib/HotkeyList.svelte";
   import Toggle from "./lib/Toggle.svelte";
   import { getStatus, onStatus, type Status } from "./lib/ipc";
   import {
@@ -12,11 +14,13 @@
     saveSettings,
     setupWaylandHotkey,
     validateHotkey,
+    fallbackList,
     type Config,
     type Outcome,
     type PluginInfo,
     type SettingsDto,
   } from "./lib/settings-ipc";
+  import { applyAppearance } from "./lib/appearance";
   import { applyTheme } from "./lib/theme";
   import {
     MAX_DEPTH,
@@ -31,11 +35,23 @@
     general: { hotkey: "", hide_on_blur: true, launch_at_login: false, check_for_updates: true },
     window: { width: 720 },
     linux: { wayland_use_xwayland: true },
-    search: { max_results: 8, fallback_web_search: "" },
-    appearance: { theme: "system" },
+    search: { max_results: 8, fallback_web_search: "", query_history: true },
+    appearance: {
+      theme: "system",
+      accent: "",
+      font_size: 15,
+      font_family: "",
+      opacity: 100,
+      radius: 14,
+      custom_css: "",
+    },
     plugins: { disabled: [] },
+    calculator: { currency: false },
     files: { directories: [], max_depth: 4, include_hidden: false, keyword: "", global: true },
+    bookmarks: { browsers: [], keyword: "", global: true },
+    shell: { terminal: "", shell: "", keep_open: true },
     web_search: [],
+    hotkey: [],
   });
 
   const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
@@ -48,6 +64,8 @@
   /** `linux.wayland_use_xwayland` as it was when this window opened. */
   let xwaylandAtOpen = $state<boolean | null>(null);
   let status = $state<Status | null>(null);
+  /** Hotkey entries whose key Rust cannot parse (reported by the list). */
+  let hotkeyParseProblems = $state(0);
 
   let active = $state<SectionId>("general");
   let hotkeyError = $state<string | null>(null);
@@ -66,13 +84,16 @@
   const showLinux = $derived(display === "x11" || display === "wayland");
   const dirty = $derived(ready && JSON.stringify(draft) !== baseline);
   const problems = $derived(validate(draft));
-  const problemCount = $derived(totalProblems(problems) + (hotkeyError ? 1 : 0));
+  const problemCount = $derived(
+    totalProblems(problems) + (hotkeyError ? 1 : 0) + hotkeyParseProblems,
+  );
   const canSave = $derived(ready && dirty && problemCount === 0 && !saving);
 
   const sections = $derived(
     (
       [
         { id: "general", label: "General" },
+        { id: "hotkeys", label: "Hotkeys" },
         { id: "appearance", label: "Appearance" },
         { id: "search", label: "Search" },
         { id: "plugins", label: "Plugins" },
@@ -82,7 +103,10 @@
       ] as { id: SectionId; label: string }[]
     ).map((section) => ({
       ...section,
-      problems: problems.count[section.id] + (section.id === "general" && hotkeyError ? 1 : 0),
+      problems:
+        problems.count[section.id] +
+        (section.id === "general" && hotkeyError ? 1 : 0) +
+        (section.id === "hotkeys" ? hotkeyParseProblems : 0),
     })),
   );
 
@@ -100,10 +124,29 @@
       }),
     ),
   );
+  // config.toml may list several fallbacks; the select shows one, and leaves a
+  // list alone until the user picks an engine.
+  const MANY_FALLBACKS = "__many__";
+  const fallbackKeywords = $derived(fallbackList(draft.search.fallback_web_search));
+  const fallbackMany = $derived(fallbackKeywords.length > 1);
   const fallbackMissing = $derived(
-    draft.search.fallback_web_search !== "" &&
-      !engineKeywords.some((e) => e.keyword === draft.search.fallback_web_search),
+    fallbackKeywords.length === 1 && !engineKeywords.some((e) => e.keyword === fallbackKeywords[0]),
   );
+  function getFallback(): string {
+    return fallbackMany ? MANY_FALLBACKS : (fallbackKeywords[0] ?? "");
+  }
+  function setFallback(value: string) {
+    if (value !== MANY_FALLBACKS) draft.search.fallback_web_search = value;
+  }
+  /** Rewrites the fallback keywords (string or list form); `null` drops one. */
+  function mapFallback(change: (keyword: string) => string | null) {
+    const current = draft.search.fallback_web_search;
+    if (Array.isArray(current)) {
+      draft.search.fallback_web_search = current.flatMap((k) => change(k.trim()) ?? []);
+    } else {
+      draft.search.fallback_web_search = change(current.trim()) ?? "";
+    }
+  }
 
   /** Plugin rows: the backend catalog, with the web engines taken live from the form. */
   const pluginRows = $derived.by(() => {
@@ -176,6 +219,9 @@
     if (ready) applyTheme(draft.appearance.theme);
   });
 
+  // The rest of the appearance (accent, fonts, custom stylesheet) follows the saved config.
+  $effect(() => applyAppearance(status?.appearance));
+
   const registrationWarning = $derived(
     !isWayland &&
       status?.hotkey.error &&
@@ -210,7 +256,17 @@
     payload.general.hotkey = payload.general.hotkey.trim();
     payload.files.keyword = payload.files.keyword.trim();
     payload.files.directories = payload.files.directories.map((dir) => dir.trim());
-    payload.search.fallback_web_search = payload.search.fallback_web_search.trim();
+    payload.search.fallback_web_search = Array.isArray(payload.search.fallback_web_search)
+      ? payload.search.fallback_web_search.map((k) => k.trim())
+      : payload.search.fallback_web_search.trim();
+    payload.appearance.accent = payload.appearance.accent.trim();
+    payload.appearance.font_family = payload.appearance.font_family.trim();
+    payload.appearance.custom_css = payload.appearance.custom_css.trim();
+    payload.hotkey = payload.hotkey.map((binding) =>
+      binding.run != null
+        ? { key: binding.key.trim(), run: binding.run.trim() }
+        : { key: binding.key.trim(), query: binding.query ?? "" },
+    );
     payload.web_search = payload.web_search.map((engine) => ({
       keyword: engine.keyword.trim(),
       name: engine.name.trim(),
@@ -264,18 +320,14 @@
     const removed = draft.web_search[index];
     draft.web_search = draft.web_search.filter((_, i) => i !== index);
     const stillDefined = draft.web_search.some((e) => e.keyword.trim() === removed.keyword.trim());
-    if (!stillDefined && draft.search.fallback_web_search === removed.keyword.trim()) {
-      draft.search.fallback_web_search = "";
-    }
+    if (!stillDefined) mapFallback((k) => (k === removed.keyword.trim() ? null : k));
   }
 
   function renameKeyword(index: number, value: string) {
     const old = draft.web_search[index].keyword;
     draft.web_search[index].keyword = value;
     // The fallback follows a renamed engine instead of silently dangling.
-    if (old.trim() !== "" && draft.search.fallback_web_search === old.trim()) {
-      draft.search.fallback_web_search = value.trim();
-    }
+    if (old.trim() !== "") mapFallback((k) => (k === old.trim() ? value.trim() : k));
   }
 
   function onKeydown(e: KeyboardEvent) {
@@ -422,6 +474,15 @@
               <Toggle bind:checked={draft.general.check_for_updates} label="Check for updates" />
             </div>
           </section>
+        {:else if active === "hotkeys"}
+          <h1>Hotkeys</h1>
+          <HotkeyList
+            bind:bindings={draft.hotkey}
+            bind:parseProblems={hotkeyParseProblems}
+            errors={problems.hotkeys}
+            statuses={status?.custom_hotkeys ?? []}
+            wayland={isWayland}
+          />
         {:else if active === "appearance"}
           <h1>Appearance</h1>
 
@@ -464,6 +525,12 @@
               </div>
             </div>
           </section>
+
+          <AppearanceExtras
+            bind:appearance={draft.appearance}
+            errors={problems.appearance}
+            warnings={status?.appearance.warnings ?? []}
+          />
         {:else if active === "search"}
           <h1>Search</h1>
 
@@ -489,7 +556,9 @@
             <div class="row">
               <div class="label">
                 <label class="name" for="fallback">Fallback web search</label>
-                <span class="hint">Offered when nothing else matches your query.</span>
+                <span class="hint">
+                  Offered when nothing else matches your query. config.toml can list several.
+                </span>
                 {#if problems.fallback}
                   <span class="msg error" role="alert">{problems.fallback}</span>
                 {/if}
@@ -498,20 +567,32 @@
                 id="fallback"
                 class="input select"
                 class:invalid={!!problems.fallback}
-                bind:value={draft.search.fallback_web_search}
+                bind:value={getFallback, setFallback}
               >
                 <option value="">None</option>
+                {#if fallbackMany}
+                  <option value={MANY_FALLBACKS}>{fallbackKeywords.join(", ")}</option>
+                {/if}
                 {#each engineKeywords as engine (engine.keyword)}
                   <option value={engine.keyword}>
                     {engine.name ? `${engine.name} (${engine.keyword})` : engine.keyword}
                   </option>
                 {/each}
                 {#if fallbackMissing}
-                  <option value={draft.search.fallback_web_search}>
-                    {draft.search.fallback_web_search} (missing)
-                  </option>
+                  <option value={fallbackKeywords[0]}>{fallbackKeywords[0]} (missing)</option>
                 {/if}
               </select>
+            </div>
+
+            <div class="row">
+              <div class="label">
+                <span class="name">Remember searches</span>
+                <span class="hint">
+                  Up and Down on an empty search bar recall what you last ran. Kept on this
+                  computer only.
+                </span>
+              </div>
+              <Toggle bind:checked={draft.search.query_history} label="Remember searches" />
             </div>
           </section>
         {:else if active === "plugins"}
@@ -534,6 +615,17 @@
                 />
               </div>
             {/each}
+
+            <div class="row">
+              <div class="label">
+                <span class="name">Currency conversion</span>
+                <span class="hint">
+                  Calculator: “100 usd in eur”. Downloads the European Central Bank’s daily
+                  rates in the background, at most once a day. Off keeps Sevak offline.
+                </span>
+              </div>
+              <Toggle bind:checked={draft.calculator.currency} label="Convert currencies" />
+            </div>
           </section>
           <p class="note">
             Web search engines are edited under “Web search”. Changes apply when you save.

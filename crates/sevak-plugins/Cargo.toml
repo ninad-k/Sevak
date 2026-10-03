@@ -1,21 +1,44 @@
 [package]
 name = "sevak-plugins"
-description = "Sevak built-in plugins: applications, calculator, web search, file search and an example plugin."
+description = "Sevak built-in plugins: applications, calculator and conversions, web search, file search, bookmarks, system commands, terminal commands, clipboard history, snippets and an example plugin."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
 rust-version.workspace = true
 
+# A tiny script plugin for tests/script_plugins.rs. A binary target is the one
+# kind of helper cargo builds before an integration test and locates for it
+# (CARGO_BIN_EXE_*), so the test needs no Python or Node.
+[[bin]]
+name = "sevak-script-fixture"
+path = "tests/fixtures/script_fixture.rs"
+test = false
+doc = false
+
 [dependencies]
 sevak-core.workspace = true
 sevak-platform.workspace = true
 serde.workspace = true
+# serde_json: script plugins' JSON protocol, bookmarks (Chromium) and clipboard
+# history files; toml: script plugin manifests; tempfile: bookmarks' private copy
+# of Firefox's database.
+serde_json.workspace = true
+tempfile.workspace = true
+toml.workspace = true
 tracing.workspace = true
 # OS random bytes for the example UUID plugin (see `example_uuid`).
 getrandom = "0.4"
+# Reads (a private copy of) Firefox's `places.sqlite` for the bookmarks plugin.
+# `bundled` compiles SQLite from source, so no system library is needed; it only
+# needs the C compiler that Tauri's own build already requires.
+rusqlite = { version = "0.40", features = ["bundled"] }
+# Local date and time for snippet placeholders (no timezone database needed).
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 walkdir = "2"
+# Daily ECB exchange rates for the opt-in currency conversion (see `currency`).
+# Same crates and TLS backend (rustls + ring) the updater already links; the
+# blocking client runs on a plain background thread, never on the typing path.
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 
-[dev-dependencies]
-serde_json.workspace = true
-tempfile.workspace = true

@@ -10,7 +10,11 @@
 //!    `rest.trim_start()`. `rest` may be empty (`"g "`): the plugin decides what
 //!    to show, e.g. a "type to search Google" hint. No fallbacks run in this
 //!    mode. A keyword without a following whitespace character (`"g"`) is an
-//!    ordinary global query.
+//!    ordinary global query, except for symbol keywords: a keyword made only
+//!    of punctuation or symbols (`>`) needs no whitespace after it. `>ls` and
+//!    `> ls` both route to the plugin with `ls`, and a bare `>` routes with an
+//!    empty rest. If several symbol keywords match (`>` and `>>`), the longest
+//!    wins.
 //! 3. Otherwise every plugin with `global() == true` is queried with the
 //!    trimmed input. Results from a plugin that *has* a keyword but answered
 //!    globally (e.g. files) have their score multiplied by
@@ -31,8 +35,13 @@
 //!    `max_results`.
 //! 6. If step 3 found nothing and the input is non-empty, each configured
 //!    fallback plugin is queried with the full trimmed input and its results
-//!    are returned (also truncated, not boosted).
-//! 7. Query time is logged at `debug`; a query over [`LATENCY_BUDGET`] logs a
+//!    are returned in the configured order (truncated, not boosted).
+//! 7. Keyword hints: a global input that is exactly a plugin's keyword (`g`)
+//!    gets that plugin's [`Plugin::keyword_row`] appended last, so Tab can
+//!    complete `g` to `g `. Hints never trigger or replace the fallback.
+//!    Rows from a keyword route carry [`ResultItem::autocomplete`] relative to
+//!    the plugin's input; the engine prefixes the typed keyword.
+//! 8. Query time is logged at `debug`; a query over [`LATENCY_BUDGET`] logs a
 //!    `warn` naming the slowest plugin.
 //!
 //! Plugin panics are not caught: the release profile uses `panic = "abort"`, so
@@ -45,11 +54,18 @@ use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::model::{score, ResultItem};
-use crate::plugin::{Plugin, PluginError, PluginResult};
+use crate::plugin::{Plugin, PluginError, PluginResult, ResultsNotifier};
 use crate::usage::{normalize_query, UsageStore};
+
+/// A keyword route: the plugins the keyword selects, the rest of the input
+/// (their query) and the keyword as typed.
+type KeywordRoute<'p, 'a> = (Vec<&'p Arc<dyn Plugin>>, &'a str, &'a str);
 
 /// Score multiplier for results of keyword plugins that answer global queries.
 pub const GLOBAL_SECONDARY_WEIGHT: f64 = 0.5;
+
+/// How many previously run results per plugin [`Plugin::restore_history`] gets.
+const HISTORY_LIMIT: usize = 50;
 
 /// Time a single query should stay under to feel instantaneous.
 pub const LATENCY_BUDGET: Duration = Duration::from_millis(16);
@@ -61,6 +77,8 @@ pub struct EngineOptions {
     /// Ids of plugins queried with the full input, only when nothing else
     /// matched (e.g. `web:g`).
     pub fallback_plugins: Vec<String>,
+    /// Remember executed queries for recall ([`SearchEngine::history`]).
+    pub query_history: bool,
 }
 
 impl Default for EngineOptions {
@@ -68,6 +86,7 @@ impl Default for EngineOptions {
         Self {
             max_results: 8,
             fallback_plugins: Vec::new(),
+            query_history: true,
         }
     }
 }
@@ -94,6 +113,15 @@ fn split_keyword(input: &str) -> Option<(&str, &str)> {
     Some((&input[..idx], input[idx..].trim_start()))
 }
 
+/// Whether `keyword` consists only of symbols (`>`, `!`, `?`): such keywords
+/// are recognised without a following space.
+fn is_symbol_keyword(keyword: &str) -> bool {
+    !keyword.is_empty()
+        && keyword
+            .chars()
+            .all(|c| !c.is_alphanumeric() && !c.is_whitespace() && !c.is_control())
+}
+
 /// Runs one plugin call, turning a panic into an error so a faulty plugin
 /// cannot take a search, or the resident app, down with it. (Release builds
 /// unwind rather than abort for this reason.)
@@ -107,6 +135,18 @@ fn guarded<T>(plugin: &dyn Plugin, call: &str, f: impl FnOnce() -> T) -> Result<
         tracing::error!(plugin = plugin.id(), call, %reason, "plugin panicked");
         PluginError::Message(format!("the {} plugin crashed: {reason}", plugin.id()))
     })
+}
+
+/// Like [`finalize`] for fallback rows: keeps the first item per id and the
+/// order the plugins were configured in (their scores are all equal).
+fn finalize_ordered(items: Vec<ResultItem>, max_results: usize) -> Vec<ResultItem> {
+    let mut seen = std::collections::HashSet::new();
+    let mut out: Vec<ResultItem> = items
+        .into_iter()
+        .filter(|item| seen.insert(item.id.clone()))
+        .collect();
+    out.truncate(max_results);
+    out
 }
 
 fn rank_order(a: &ResultItem, b: &ResultItem) -> Ordering {
@@ -135,21 +175,39 @@ fn finalize(items: Vec<ResultItem>, max_results: usize) -> Vec<ResultItem> {
 
 impl SearchEngine {
     pub fn new(plugins: Vec<Arc<dyn Plugin>>, usage: UsageStore, options: EngineOptions) -> Self {
-        Self {
+        let engine = Self {
             plugins,
             usage: Arc::new(RwLock::new(usage)),
             options,
-        }
+        };
+        engine.restore_history();
+        engine
     }
 
     /// A new engine over `plugins` that shares this engine's usage statistics
     /// (used after a config reload). A launch still finishing on the old engine
     /// is therefore recorded in the new one too, rather than lost with a copy.
     pub fn rebuild(&self, plugins: Vec<Arc<dyn Plugin>>, options: EngineOptions) -> Self {
-        Self {
+        let engine = Self {
             plugins,
             usage: Arc::clone(&self.usage),
             options,
+        };
+        engine.restore_history();
+        engine
+    }
+
+    /// Tells every plugin which of its results were run before.
+    fn restore_history(&self) {
+        let usage = self.usage_read();
+        for plugin in &self.plugins {
+            let keys = usage.recent_keys(plugin.id(), HISTORY_LIMIT);
+            if !keys.is_empty() {
+                // A panicking plugin is logged by `guarded`; nothing else to do.
+                let _ = guarded(plugin.as_ref(), "restore_history", || {
+                    plugin.restore_history(&keys)
+                });
+            }
         }
     }
 
@@ -169,6 +227,31 @@ impl SearchEngine {
 
     fn usage_write(&self) -> RwLockWriteGuard<'_, UsageStore> {
         self.usage.write().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Keyword routing for symbol keywords such as `>`, which need no space
+    /// after them (`>ls` as well as `> ls`): the plugins whose keyword is the
+    /// longest symbol keyword that `input` starts with, the rest of the input
+    /// and the keyword as typed.
+    fn symbol_keyword_route<'a>(&self, input: &'a str) -> Option<KeywordRoute<'_, 'a>> {
+        let input = input.trim_start();
+        let matches = |keyword: &str| is_symbol_keyword(keyword) && input.starts_with(keyword);
+        let longest = self
+            .plugins
+            .iter()
+            .filter_map(|p| p.keyword())
+            .filter(|k| matches(k))
+            .map(str::len)
+            .max()?;
+        let plugins = self
+            .plugins
+            .iter()
+            .filter(|p| {
+                p.keyword()
+                    .is_some_and(|k| k.len() == longest && matches(k))
+            })
+            .collect();
+        Some((plugins, input[longest..].trim_start(), &input[..longest]))
     }
 
     pub fn query(&self, input: &str) -> Vec<ResultItem> {
@@ -197,26 +280,51 @@ impl SearchEngine {
         let mut collected: Vec<ResultItem> = Vec::new();
         let mut keyword_mode = false;
 
-        let keyword_route = split_keyword(input).and_then(|(kw, rest)| {
-            let plugins: Vec<&Arc<dyn Plugin>> = self
-                .plugins
-                .iter()
-                // Case-insensitive, like the settings' duplicate check, so
-                // Caps Lock or a habitual capital does not bypass the keyword.
-                .filter(|p| {
-                    p.keyword()
-                        .is_some_and(|k| k.to_lowercase() == kw.to_lowercase())
-                })
-                .collect();
-            (!plugins.is_empty()).then_some((plugins, rest))
-        });
+        let keyword_route = split_keyword(input)
+            .and_then(|(kw, rest)| {
+                let plugins: Vec<&Arc<dyn Plugin>> = self
+                    .plugins
+                    .iter()
+                    // Case-insensitive, like the settings' duplicate check, so
+                    // Caps Lock or a habitual capital does not bypass the keyword.
+                    .filter(|p| {
+                        p.keyword()
+                            .is_some_and(|k| k.to_lowercase() == kw.to_lowercase())
+                    })
+                    .collect();
+                (!plugins.is_empty()).then_some((plugins, rest, kw))
+            })
+            .or_else(|| self.symbol_keyword_route(input));
 
-        if let Some((keyword_plugins, rest)) = keyword_route {
+        let mut hints: Vec<ResultItem> = Vec::new();
+        if let Some((keyword_plugins, rest, kw)) = keyword_route {
             keyword_mode = true;
             for plugin in keyword_plugins {
-                collected.extend(run(plugin, rest));
+                let mut items = run(plugin, rest);
+                for item in &mut items {
+                    // The plugin completes its own input; the typed keyword
+                    // stays in front of it.
+                    if let Some(text) = item.autocomplete.take() {
+                        item.autocomplete = Some(format!("{kw} {text}"));
+                    }
+                }
+                collected.extend(items);
             }
         } else {
+            if !trimmed.contains(char::is_whitespace) {
+                for plugin in &self.plugins {
+                    if plugin
+                        .keyword()
+                        .is_some_and(|k| k.to_lowercase() == trimmed.to_lowercase())
+                    {
+                        hints.extend(
+                            guarded(plugin.as_ref(), "keyword_row", || plugin.keyword_row())
+                                .ok()
+                                .flatten(),
+                        );
+                    }
+                }
+            }
             for plugin in self.plugins.iter().filter(|p| p.global()) {
                 let secondary = plugin.keyword().is_some();
                 let mut items = run(plugin, trimmed);
@@ -265,7 +373,14 @@ impl SearchEngine {
                     fallback.extend(run(plugin, trimmed));
                 }
             }
-            results = finalize(fallback, self.options.max_results);
+            results = finalize_ordered(fallback, self.options.max_results);
+        }
+
+        if !hints.is_empty() {
+            // Reserve room so the hint is never cut off by a full list.
+            results.retain(|r| hints.iter().all(|h| h.id != r.id));
+            results.truncate(self.options.max_results.saturating_sub(hints.len()));
+            results.extend(hints);
         }
 
         let total = started.elapsed();
@@ -289,6 +404,36 @@ impl SearchEngine {
         results
     }
 
+    /// The question to ask the user before [`SearchEngine::execute`] runs
+    /// `item`, if its plugin wants one (see [`Plugin::confirmation`]). Before a
+    /// secondary action, ask about [`ResultItem::secondary_as_primary`], the
+    /// item as [`SearchEngine::execute_secondary`] will run it.
+    pub fn confirmation(&self, item: &ResultItem) -> Option<String> {
+        let plugin = self.plugin(&item.plugin_id)?;
+        guarded(plugin.as_ref(), "confirmation", || {
+            plugin.confirmation(item)
+        })
+        .unwrap_or(None)
+    }
+
+    /// Finds the result with id `id` (`<plugin id>:<key>`) through its owning
+    /// plugin, for running it without a query. `None` if no plugin owns the id
+    /// or the plugin cannot rebuild it (not indexed yet, uninstalled, ...).
+    pub fn resolve(&self, id: &str) -> Option<ResultItem> {
+        // Plugin ids may contain a colon themselves (`web:g`), so match prefixes.
+        self.plugins
+            .iter()
+            .filter(|p| {
+                id.strip_prefix(p.id())
+                    .is_some_and(|rest| rest.starts_with(':'))
+            })
+            .find_map(|p| {
+                guarded(p.as_ref(), "resolve", || p.resolve(id))
+                    .ok()
+                    .flatten()
+            })
+    }
+
     /// Executes `item` through its plugin and, on success, records the launch.
     /// `query` is the text the user had typed (the whole input, keyword
     /// included, so it matches what [`SearchEngine::query`] later receives).
@@ -301,13 +446,92 @@ impl SearchEngine {
             .plugin(&item.plugin_id)
             .ok_or_else(|| PluginError::Unsupported(item.id.clone()))?;
         guarded(plugin.as_ref(), "execute", || plugin.execute(item))??;
-        self.usage_write().record(&item.id, query, now);
+        let mut usage = self.usage_write();
+        usage.record(&item.id, query, now);
+        if self.options.query_history {
+            usage.record_history(query);
+        } else {
+            // Turning the option off also forgets what was kept before.
+            usage.clear_history();
+        }
         Ok(())
+    }
+
+    /// Copies `item`'s [`ResultItem::copy_text`] (Ctrl+C) through its plugin:
+    /// the plugin's `execute` sees the item with an [`Action::CopyText`] of that
+    /// text, so a plugin whose rows carry a template (snippets) copies the
+    /// expanded text, as Enter would. Nothing is recorded: copying is not
+    /// picking. `Ok(false)` when the item has nothing to copy;
+    /// [`PluginError::Unsupported`] when the plugin does not take `CopyText`.
+    ///
+    /// [`Action::CopyText`]: crate::Action::CopyText
+    pub fn copy(&self, item: &ResultItem) -> PluginResult<bool> {
+        let Some(text) = item.copy_text() else {
+            return Ok(false);
+        };
+        let plugin = self
+            .plugin(&item.plugin_id)
+            .ok_or_else(|| PluginError::Unsupported(item.id.clone()))?;
+        let mut derived = item.clone();
+        derived.action = crate::Action::CopyText { text };
+        derived.secondary.clear();
+        guarded(plugin.as_ref(), "execute", || plugin.execute(&derived))??;
+        Ok(true)
+    }
+
+    /// Like [`SearchEngine::execute`], but runs the item's `index`th secondary
+    /// action instead of its primary one. The owning plugin sees the item with
+    /// that action as its `action` (and no secondary actions), so plugins need
+    /// no extra code to support it. Usage is recorded for the item, as if the
+    /// user had picked it.
+    pub fn execute_secondary(
+        &self,
+        item: &ResultItem,
+        index: usize,
+        query: &str,
+    ) -> PluginResult<()> {
+        self.execute_secondary_at(item, index, query, unix_now())
+    }
+
+    pub fn execute_secondary_at(
+        &self,
+        item: &ResultItem,
+        index: usize,
+        query: &str,
+        now: u64,
+    ) -> PluginResult<()> {
+        let derived = item.secondary_as_primary(index).ok_or_else(|| {
+            PluginError::Message(format!("{} has no action number {index}", item.id))
+        })?;
+        self.execute_at(&derived, query, now)
+    }
+
+    /// Executed queries, most recent first; empty when `query_history` is off.
+    pub fn history(&self) -> Vec<String> {
+        if self.options.query_history {
+            self.usage_read().history().to_vec()
+        } else {
+            Vec::new()
+        }
     }
 
     /// A copy of the usage statistics, to save from another thread.
     pub fn usage_snapshot(&self) -> UsageStore {
         self.usage_read().clone()
+    }
+
+    /// Gives every plugin the shell's "results updated" callback.
+    pub fn attach_notifier(&self, notifier: &ResultsNotifier) {
+        for plugin in &self.plugins {
+            plugin.attach_notifier(Arc::clone(notifier));
+        }
+    }
+
+    /// Asks every plugin to stop its background work (called when quitting).
+    pub fn shutdown(&self) {
+        for plugin in &self.plugins {
+            let _ = guarded(plugin.as_ref(), "shutdown", || plugin.shutdown());
+        }
     }
 
     /// Refreshes every plugin one after another; returns the failures.
@@ -337,7 +561,7 @@ mod tests {
     use std::sync::Mutex;
 
     use super::*;
-    use crate::model::Action;
+    use crate::model::{Action, Modifier};
 
     const T0: u64 = 1_700_000_000;
 
@@ -350,8 +574,10 @@ mod tests {
         query_fn: QueryFn,
         fail_execute: bool,
         executed: AtomicUsize,
+        actions: Mutex<Vec<Action>>,
         refresh_error: Option<String>,
         inputs: Mutex<Vec<String>>,
+        keyword_row: Option<ResultItem>,
     }
 
     impl Mock {
@@ -366,8 +592,10 @@ mod tests {
                 query_fn: Box::new(query_fn),
                 fail_execute: false,
                 executed: AtomicUsize::new(0),
+                actions: Mutex::new(Vec::new()),
                 refresh_error: None,
                 inputs: Mutex::new(Vec::new()),
+                keyword_row: None,
             }
         }
 
@@ -396,6 +624,11 @@ mod tests {
             self
         }
 
+        fn with_keyword_row(mut self, row: ResultItem) -> Self {
+            self.keyword_row = Some(row);
+            self
+        }
+
         fn failing(mut self) -> Self {
             self.fail_execute = true;
             self
@@ -419,6 +652,9 @@ mod tests {
         fn global(&self) -> bool {
             self.global.unwrap_or_else(|| self.keyword.is_none())
         }
+        fn keyword_row(&self) -> Option<ResultItem> {
+            self.keyword_row.clone()
+        }
         fn query(&self, input: &str) -> Vec<ResultItem> {
             self.inputs.lock().unwrap().push(input.to_owned());
             (self.query_fn)(input)
@@ -427,9 +663,15 @@ mod tests {
             if self.fail_execute {
                 return Err(PluginError::Message("boom".into()));
             }
-            let _ = item;
+            self.actions.lock().unwrap().push(item.action.clone());
             self.executed.fetch_add(1, AtomicOrdering::SeqCst);
             Ok(())
+        }
+        fn confirmation(&self, item: &ResultItem) -> Option<String> {
+            (item.id.ends_with(":danger")).then(|| format!("Run {}?", item.title))
+        }
+        fn resolve(&self, id: &str) -> Option<ResultItem> {
+            (self.query_fn)("").into_iter().find(|item| item.id == id)
         }
         fn refresh(&self) -> PluginResult<()> {
             match &self.refresh_error {
@@ -467,6 +709,7 @@ mod tests {
             EngineOptions {
                 max_results,
                 fallback_plugins: fallbacks.iter().map(|s| (*s).to_owned()).collect(),
+                ..EngineOptions::default()
             },
         )
     }
@@ -750,10 +993,124 @@ mod tests {
     }
 
     #[test]
+    fn several_fallbacks_keep_their_configured_order() {
+        let web = |kw: &'static str, title: &'static str| {
+            let id = format!("web:{kw}");
+            Mock::new(&id.clone(), move |_| {
+                vec![item(&id, "q", title, score::FALLBACK)]
+            })
+            .keyword(kw)
+            .arc()
+        };
+        let app = Mock::new("app", |_| Vec::new()).arc();
+        let e = engine(
+            vec![
+                app,
+                web("g", "Search Google"),
+                web("gh", "Search GitHub"),
+                web("yt", "Search YouTube"),
+            ],
+            8,
+            &["web:yt", "web:g", "web:gh"],
+        );
+        assert_eq!(
+            ids(&e.query_at("zzz", T0)),
+            vec!["web:yt:q", "web:g:q", "web:gh:q"]
+        );
+        // A result limit cuts from the end, not alphabetically.
+        let e = engine(
+            vec![web("g", "Search Google"), web("yt", "Search YouTube")],
+            1,
+            &["web:yt", "web:g"],
+        );
+        assert_eq!(ids(&e.query_at("zzz", T0)), vec!["web:yt:q"]);
+    }
+
+    #[test]
     fn missing_fallback_plugin_is_ignored() {
         let app = Mock::new("app", |_| Vec::new()).arc();
         let e = engine(vec![app], 8, &["web:nope"]);
         assert!(e.query_at("zzz", T0).is_empty());
+    }
+
+    /// A keyword plugin that echoes `autocomplete` and offers a keyword row.
+    fn completing_plugin() -> Arc<Mock> {
+        Mock::new("web:g", |input| {
+            vec![item("web:g", "q", input, score::KEYWORD).with_autocomplete(format!("{input}!"))]
+        })
+        .keyword("g")
+        .with_keyword_row(
+            item("web:g", "home", "Search Google", score::KEYWORD).with_autocomplete("g "),
+        )
+        .arc()
+    }
+
+    #[test]
+    fn keyword_route_prefixes_the_typed_keyword_to_autocomplete() {
+        let e = engine(vec![completing_plugin()], 8, &[]);
+        let r = e.query_at("G  rust", T0);
+        assert_eq!(r[0].autocomplete.as_deref(), Some("G rust!"));
+    }
+
+    #[test]
+    fn bare_keyword_gets_a_hint_row_after_real_matches() {
+        let app = Mock::new("app", |input| {
+            if input == "g" {
+                vec![item("app", "git", "Git GUI", 80.0)]
+            } else {
+                Vec::new()
+            }
+        })
+        .arc();
+        let e = engine(vec![app, completing_plugin()], 8, &["web:g"]);
+        let r = e.query_at("g", T0);
+        assert_eq!(ids(&r), vec!["app:git", "web:g:home"]);
+        assert_eq!(r[1].autocomplete.as_deref(), Some("g "));
+        // Case-insensitive; not for longer inputs.
+        assert_eq!(e.query_at("G", T0).last().unwrap().id, "web:g:home");
+        assert!(e.query_at("gx", T0).iter().all(|r| r.id != "web:g:home"));
+    }
+
+    #[test]
+    fn hint_row_does_not_replace_the_fallback_and_survives_a_full_list() {
+        let quiet = Mock::new("app", |_| Vec::new()).arc();
+        let e = engine(vec![quiet, completing_plugin()], 2, &["web:g"]);
+        // Nothing matched "g": the fallback row (limited to leave room) and the hint.
+        assert_eq!(ids(&e.query_at("g", T0)), vec!["web:g:q", "web:g:home"]);
+
+        let many = Mock::fixed("app", &[("1", "a", 9.0), ("2", "b", 8.0), ("3", "c", 7.0)]).arc();
+        let e = engine(vec![many, completing_plugin()], 2, &[]);
+        assert_eq!(ids(&e.query_at("g", T0)), vec!["app:1", "web:g:home"]);
+    }
+
+    #[test]
+    fn history_records_executed_queries_when_enabled() {
+        let ok = Mock::fixed("ok", &[("a", "A", 1.0)]).arc();
+        let e = engine(vec![ok], 8, &[]);
+        let it = item("ok", "a", "A", 1.0);
+        e.execute_at(&it, "first", T0).unwrap();
+        e.execute_at(&it, " second ", T0).unwrap();
+        e.execute_at(&it, "FIRST", T0).unwrap();
+        assert_eq!(e.history(), vec!["FIRST", "second"]);
+    }
+
+    #[test]
+    fn history_off_records_nothing_and_forgets() {
+        let ok = Mock::fixed("ok", &[("a", "A", 1.0)]).arc();
+        let mut usage = UsageStore::default();
+        usage.record_history("old");
+        let e = SearchEngine::new(
+            vec![ok as Arc<dyn Plugin>],
+            usage,
+            EngineOptions {
+                query_history: false,
+                ..EngineOptions::default()
+            },
+        );
+        assert!(e.history().is_empty());
+        e.execute_at(&item("ok", "a", "A", 1.0), "new", T0).unwrap();
+        assert!(e.history().is_empty());
+        assert!(e.usage_snapshot().history().is_empty());
     }
 
     #[test]
@@ -773,6 +1130,81 @@ mod tests {
         let bad_item = item("bad", "b", "B", 1.0);
         assert!(e.execute_at(&bad_item, "x", T0).is_err());
         assert!(e.usage_snapshot().get("bad:b").is_none());
+    }
+
+    #[test]
+    fn execute_secondary_runs_that_action_and_records_the_item() {
+        let ok = Mock::fixed("ok", &[("a", "A", 1.0)]).arc();
+        let e = engine(vec![ok.clone()], 8, &[]);
+        let reveal = Action::RevealPath {
+            path: "/tmp/a".into(),
+        };
+        let with = item("ok", "a", "A", 1.0)
+            .with_secondary("Reveal", Some(Modifier::Ctrl), reveal.clone())
+            .with_secondary("Again", None, reveal.clone());
+
+        e.execute_secondary_at(&with, 1, "Foo", T0).unwrap();
+        assert_eq!(*ok.actions.lock().unwrap(), vec![reveal]);
+        // Usage is keyed by the item, not by the action that ran.
+        assert_eq!(e.usage_snapshot().get("ok:a").unwrap().count, 1);
+        // And the query is remembered for recall, as for the primary action.
+        assert_eq!(e.history(), vec!["Foo"]);
+    }
+
+    #[test]
+    fn copy_runs_the_plugin_with_copy_text_and_records_nothing() {
+        let ok = Mock::fixed("ok", &[("a", "A", 1.0)]).arc();
+        let e = engine(vec![ok.clone()], 8, &[]);
+        let paste = ResultItem::new(
+            "ok",
+            "a",
+            "A",
+            Action::PasteText {
+                text: "{date}".into(),
+                restore_clipboard: false,
+            },
+        );
+        assert!(e.copy(&paste).unwrap());
+        assert_eq!(
+            *ok.actions.lock().unwrap(),
+            vec![Action::CopyText {
+                text: "{date}".into()
+            }]
+        );
+        assert!(e.usage_snapshot().is_empty());
+        assert!(e.history().is_empty());
+
+        let custom = ResultItem::new(
+            "ok",
+            "b",
+            "B",
+            Action::Custom {
+                payload: "x".into(),
+            },
+        );
+        assert!(!e.copy(&custom).unwrap());
+        assert_eq!(ok.executed.load(AtomicOrdering::SeqCst), 1);
+    }
+
+    #[test]
+    fn execute_secondary_rejects_an_unknown_index_without_recording() {
+        let ok = Mock::fixed("ok", &[("a", "A", 1.0)]).arc();
+        let e = engine(vec![ok.clone()], 8, &[]);
+        let err = e
+            .execute_secondary_at(&item("ok", "a", "A", 1.0), 0, "x", T0)
+            .unwrap_err();
+        assert!(matches!(err, PluginError::Message(_)));
+        assert_eq!(ok.executed.load(AtomicOrdering::SeqCst), 0);
+        assert!(e.usage_snapshot().is_empty());
+    }
+
+    #[test]
+    fn confirmation_comes_from_the_owning_plugin() {
+        let e = engine(vec![Mock::fixed("p", &[]).arc()], 8, &[]);
+        let danger = item("p", "danger", "Format", 1.0);
+        assert_eq!(e.confirmation(&danger).as_deref(), Some("Run Format?"));
+        assert_eq!(e.confirmation(&item("p", "safe", "Open", 1.0)), None);
+        assert_eq!(e.confirmation(&item("ghost", "danger", "X", 1.0)), None);
     }
 
     #[test]
@@ -811,6 +1243,237 @@ mod tests {
         assert!(e.plugin("app").is_some());
         assert!(e.plugin("nope").is_none());
         assert_eq!(e.plugins().len(), 1);
+    }
+
+    /// A plugin that records the notifier it was given and whether it was shut down.
+    #[derive(Default)]
+    struct Slow {
+        notifier: Mutex<Option<ResultsNotifier>>,
+        shut_down: AtomicUsize,
+        panic_on_shutdown: bool,
+    }
+
+    impl Plugin for Slow {
+        fn id(&self) -> &str {
+            "slow"
+        }
+        fn name(&self) -> &str {
+            "Slow"
+        }
+        fn keyword(&self) -> Option<&str> {
+            Some("slow")
+        }
+        fn query(&self, _input: &str) -> Vec<ResultItem> {
+            Vec::new()
+        }
+        fn execute(&self, item: &ResultItem) -> PluginResult<()> {
+            Err(PluginError::Unsupported(item.id.clone()))
+        }
+        fn attach_notifier(&self, notifier: ResultsNotifier) {
+            *self.notifier.lock().unwrap() = Some(notifier);
+        }
+        fn shutdown(&self) {
+            self.shut_down.fetch_add(1, AtomicOrdering::SeqCst);
+            assert!(!self.panic_on_shutdown, "boom");
+        }
+    }
+
+    #[test]
+    fn the_notifier_reaches_every_plugin_and_shutdown_survives_a_panic() {
+        let slow = Arc::new(Slow::default());
+        let crashing = Arc::new(Slow {
+            panic_on_shutdown: true,
+            ..Slow::default()
+        });
+        let plain = Mock::new("plain", |_| Vec::new()).arc();
+        let plugins: Vec<Arc<dyn Plugin>> = vec![slow.clone(), crashing.clone(), plain];
+        let e = SearchEngine::new(plugins, UsageStore::default(), EngineOptions::default());
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = Arc::clone(&calls);
+        let notifier: ResultsNotifier = Arc::new(move |id| {
+            assert_eq!(id, "slow");
+            seen.fetch_add(1, AtomicOrdering::SeqCst);
+        });
+        e.attach_notifier(&notifier);
+        let attached = slow.notifier.lock().unwrap().clone().unwrap();
+        attached("slow");
+        assert_eq!(calls.load(AtomicOrdering::SeqCst), 1);
+        assert!(crashing.notifier.lock().unwrap().is_some());
+
+        e.shutdown();
+        assert_eq!(slow.shut_down.load(AtomicOrdering::SeqCst), 1);
+        assert_eq!(crashing.shut_down.load(AtomicOrdering::SeqCst), 1);
+    }
+
+    #[test]
+    fn symbol_keyword_needs_no_space() {
+        let app = Mock::fixed("app", &[("a", "App", 50.0)]).arc();
+        let shell = Mock::fixed("shell", &[("run", "Run", score::KEYWORD)])
+            .keyword(">")
+            .arc();
+        let e = engine(vec![app.clone(), shell.clone()], 8, &[]);
+
+        for (input, rest) in [
+            ("> ls -la", "ls -la"),
+            (">ls -la", "ls -la"),
+            ("  >   ls", "ls"),
+            ("> ", ""),
+            (">", ""),
+            (">> x", "> x"),
+        ] {
+            shell.inputs.lock().unwrap().clear();
+            assert_eq!(ids(&e.query_at(input, T0)), vec!["shell:run"], "{input:?}");
+            assert_eq!(*shell.inputs.lock().unwrap(), vec![rest.to_owned()]);
+        }
+        assert!(app.inputs.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn symbol_keyword_rows_get_the_keyword_prefixed_to_autocomplete() {
+        let shell = Mock::new("shell", |input| {
+            vec![item("shell", "x", input, score::KEYWORD).with_autocomplete(format!("{input}-la"))]
+        })
+        .keyword(">")
+        .arc();
+        let e = engine(vec![shell], 8, &[]);
+        assert_eq!(
+            e.query_at(">ls ", T0)[0].autocomplete.as_deref(),
+            Some("> ls -la")
+        );
+    }
+
+    #[test]
+    fn symbol_keyword_does_not_hijack_other_queries() {
+        let app = Mock::fixed("app", &[("a", "App", 50.0)]).arc();
+        let shell = Mock::fixed("shell", &[("run", "Run", score::KEYWORD)])
+            .keyword(">")
+            .arc();
+        let e = engine(vec![app.clone(), shell.clone()], 8, &[]);
+
+        assert_eq!(ids(&e.query_at("a>b", T0)), vec!["app:a"]);
+        assert!(shell.inputs.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn longest_symbol_keyword_wins_and_letter_keywords_still_need_a_space() {
+        let one = Mock::fixed("one", &[("x", "One", score::KEYWORD)])
+            .keyword(">")
+            .arc();
+        let two = Mock::fixed("two", &[("x", "Two", score::KEYWORD)])
+            .keyword(">>")
+            .arc();
+        let web = Mock::fixed("web:g", &[("q", "Search", score::KEYWORD)])
+            .keyword("g")
+            .arc();
+        let e = engine(vec![one.clone(), two.clone(), web.clone()], 8, &[]);
+
+        assert_eq!(ids(&e.query_at(">>ls", T0)), vec!["two:x"]);
+        assert_eq!(*two.inputs.lock().unwrap(), vec!["ls".to_owned()]);
+        assert_eq!(ids(&e.query_at(">ls", T0)), vec!["one:x"]);
+        assert!(web.inputs.lock().unwrap().is_empty());
+        assert!(e.query_at("grust", T0).is_empty());
+    }
+
+    #[test]
+    fn symbol_keyword_detection() {
+        assert!(is_symbol_keyword(">"));
+        assert!(is_symbol_keyword(">>"));
+        assert!(is_symbol_keyword("!"));
+        assert!(!is_symbol_keyword(""));
+        assert!(!is_symbol_keyword("g"));
+        assert!(!is_symbol_keyword("g>"));
+        assert!(!is_symbol_keyword("> "));
+    }
+
+    /// Records what `restore_history` was given.
+    struct HistoryProbe {
+        restored: Mutex<Vec<Vec<String>>>,
+    }
+
+    impl Plugin for HistoryProbe {
+        fn id(&self) -> &str {
+            "shell"
+        }
+        fn name(&self) -> &str {
+            "shell"
+        }
+        fn keyword(&self) -> Option<&str> {
+            Some(">")
+        }
+        fn query(&self, _input: &str) -> Vec<ResultItem> {
+            Vec::new()
+        }
+        fn execute(&self, _item: &ResultItem) -> PluginResult<()> {
+            Ok(())
+        }
+        fn restore_history(&self, keys: &[String]) {
+            self.restored.lock().unwrap().push(keys.to_vec());
+        }
+    }
+
+    #[test]
+    fn plugins_get_their_history_when_the_engine_is_built_or_rebuilt() {
+        let mut usage = UsageStore::default();
+        usage.record("shell:ls", "> ls", T0);
+        usage.record("shell:pwd", "> pwd", T0 + 5);
+        usage.record("app:fx", "", T0 + 9);
+
+        let first = Arc::new(HistoryProbe {
+            restored: Mutex::new(Vec::new()),
+        });
+        let e = SearchEngine::new(
+            vec![first.clone() as Arc<dyn Plugin>],
+            usage,
+            EngineOptions::default(),
+        );
+        assert_eq!(*first.restored.lock().unwrap(), vec![vec!["pwd", "ls"]]);
+
+        // A reload builds new plugin instances over the same statistics.
+        let second = Arc::new(HistoryProbe {
+            restored: Mutex::new(Vec::new()),
+        });
+        e.execute_at(
+            &ResultItem::new(
+                "shell",
+                "date",
+                "date",
+                Action::Custom {
+                    payload: "date".into(),
+                },
+            ),
+            "> date",
+            T0 + 20,
+        )
+        .unwrap();
+        let _rebuilt = e.rebuild(
+            vec![second.clone() as Arc<dyn Plugin>],
+            EngineOptions::default(),
+        );
+        assert_eq!(
+            *second.restored.lock().unwrap(),
+            vec![vec!["date", "pwd", "ls"]]
+        );
+    }
+
+    #[test]
+    fn resolve_asks_the_plugin_that_owns_the_id() {
+        let e = engine(
+            vec![
+                Mock::fixed("apps", &[("a.desktop", "A", 1.0)]).arc(),
+                // A plugin id containing a colon, like the web engines.
+                Mock::fixed("web:g", &[("home", "Google", 1.0)]).arc(),
+                Mock::fixed("apps2", &[("a.desktop", "Other", 1.0)]).arc(),
+            ],
+            8,
+            &[],
+        );
+        assert_eq!(e.resolve("apps:a.desktop").unwrap().title, "A");
+        assert_eq!(e.resolve("web:g:home").unwrap().title, "Google");
+        assert_eq!(e.resolve("apps2:a.desktop").unwrap().title, "Other");
+        assert!(e.resolve("apps:missing").is_none());
+        assert!(e.resolve("apps").is_none());
+        assert!(e.resolve("nope:a.desktop").is_none());
     }
 
     #[test]

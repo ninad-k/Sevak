@@ -5,6 +5,7 @@ use std::env;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::time::Duration;
 
 use crate::error::{PlatformError, Result};
 
@@ -40,6 +41,79 @@ pub fn find_in_path(program: &str) -> Option<PathBuf> {
 fn apply_child_env(command: &mut Command, xwayland_forced: bool) {
     if xwayland_forced {
         command.env_remove("GDK_BACKEND");
+    }
+}
+
+/// Prepares a long-lived helper child that Sevak talks to over pipes (a script
+/// plugin): the same child environment as [`spawn_detached`], and on Windows no
+/// console window, which would otherwise flash for every console program.
+pub fn configure_helper_command(command: &mut Command) {
+    apply_child_env(command, crate::session::xwayland_forced());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+}
+
+/// How to run a script file, by its extension.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ScriptRunner {
+    /// Run `<command...> <script path>`; the command is on `PATH`.
+    Interpreter(Vec<String>),
+    /// No interpreter is needed: start the file itself (an executable, a batch
+    /// file, or a script with a shebang line on Unix).
+    Direct,
+    /// The extension needs an interpreter and none of these is installed.
+    Missing(Vec<String>),
+}
+
+/// Picks how to run a script file with extension `extension` (no dot, any
+/// case). Python runs unbuffered (`-u`), so output reaches Sevak without the
+/// script having to flush.
+pub fn script_runner(extension: &str) -> ScriptRunner {
+    let candidates = interpreter_candidates(extension, cfg!(windows));
+    if candidates.is_empty() {
+        return ScriptRunner::Direct;
+    }
+    let names = candidates.iter().map(|c| c[0].to_owned()).collect();
+    candidates
+        .into_iter()
+        .find(|candidate| find_in_path(candidate[0]).is_some())
+        .map_or(ScriptRunner::Missing(names), |candidate| {
+            ScriptRunner::Interpreter(candidate.into_iter().map(str::to_owned).collect())
+        })
+}
+
+/// The interpreters to try for `extension`, best first. On Windows `python` and
+/// `python3` may be Microsoft Store stubs that open the Store instead of
+/// running anything, so the `py` launcher (which only exists for a real Python
+/// install) goes first.
+fn interpreter_candidates(extension: &str, windows: bool) -> Vec<Vec<&'static str>> {
+    match (extension.to_ascii_lowercase().as_str(), windows) {
+        ("py", true) => vec![
+            vec!["py", "-3", "-u"],
+            vec!["python", "-u"],
+            vec!["python3", "-u"],
+        ],
+        ("py", false) => vec![vec!["python3", "-u"], vec!["python", "-u"]],
+        ("ps1", true) => vec![
+            vec!["pwsh", "-NoProfile", "-NonInteractive", "-File"],
+            vec![
+                "powershell",
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+            ],
+        ],
+        ("ps1", false) => vec![vec!["pwsh", "-NoProfile", "-NonInteractive", "-File"]],
+        ("js" | "mjs" | "cjs", _) => vec![vec!["node"]],
+        ("sh", false) => vec![vec!["sh"]],
+        _ => Vec::new(),
     }
 }
 
@@ -122,6 +196,107 @@ pub fn spawn_detached_in<S: AsRef<OsStr>>(
         .map_err(|err| spawn_error(program, err))
 }
 
+/// Runs `program` and reports an immediate failure.
+///
+/// Waits up to `grace` for the program to exit. A non-zero exit inside that
+/// time becomes a [`PlatformError::CommandFailed`] carrying the program's
+/// stderr; a program still running afterwards (a slow job, or a window that
+/// stays open) is left to finish in the background and counts as started.
+pub fn run_checked<S: AsRef<OsStr>>(program: &str, args: &[S], grace: Duration) -> Result<()> {
+    use std::io::Read;
+    use std::sync::mpsc;
+
+    let mut command = Command::new(program);
+    command
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped());
+    apply_child_env(&mut command, crate::session::xwayland_forced());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // Console tools such as shutdown.exe would flash a console window.
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    let mut child = command.spawn().map_err(|err| spawn_error(program, err))?;
+
+    // A thread owns the child so a slow program never blocks the caller and is
+    // still reaped; it reports the exit through the channel if anyone listens.
+    let (tx, rx) = mpsc::channel();
+    let name = program.to_owned();
+    let waiter = std::thread::Builder::new()
+        .name("sevak-run".into())
+        .spawn(move || {
+            let mut stderr = String::new();
+            if let Some(mut pipe) = child.stderr.take() {
+                let _ = pipe.read_to_string(&mut stderr);
+            }
+            let status = child.wait();
+            if let Err(err) = &status {
+                tracing::debug!(program = %name, %err, "waiting on child failed");
+            }
+            let _ = tx.send((status, stderr));
+        });
+    if let Err(err) = waiter {
+        tracing::debug!(program, %err, "could not start waiter thread");
+        return Ok(());
+    }
+
+    match rx.recv_timeout(grace) {
+        Ok((Ok(status), _)) if status.success() => Ok(()),
+        Ok((Ok(status), stderr)) => {
+            let stderr = stderr.trim();
+            Err(PlatformError::CommandFailed {
+                command: program.to_owned(),
+                message: if stderr.is_empty() {
+                    status.to_string()
+                } else {
+                    format!("{status}: {stderr}")
+                },
+            })
+        }
+        Ok((Err(err), _)) => Err(spawn_error(program, err)),
+        // Still running, or the waiter vanished: nothing failed yet.
+        Err(_) => Ok(()),
+    }
+}
+
+/// Spawns a console program (a shell) in a new console window of its own.
+///
+/// Unlike [`spawn_detached_in`] the child's standard handles are *not* nulled:
+/// the new console supplies them, and a shell with stdin redirected to `NUL`
+/// would exit at once. Sevak is a GUI process without a console, so there are no
+/// inherited handles to leak. `raw_tail` is appended to the command line as is
+/// (see [`crate::terminal::Invocation::raw_tail`]).
+#[cfg(windows)]
+pub fn spawn_console_in<S: AsRef<OsStr>>(
+    program: &str,
+    args: &[S],
+    raw_tail: Option<&str>,
+    cwd: Option<&Path>,
+) -> Result<()> {
+    use std::os::windows::process::CommandExt;
+
+    const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
+    const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+
+    let mut command = Command::new(program);
+    command.args(args);
+    if let Some(raw_tail) = raw_tail {
+        command.raw_arg(raw_tail);
+    }
+    if let Some(cwd) = cwd {
+        command.current_dir(cwd);
+    }
+    command
+        .creation_flags(CREATE_NEW_CONSOLE | CREATE_NEW_PROCESS_GROUP)
+        .spawn()
+        .map(drop)
+        .map_err(|err| spawn_error(program, err))
+}
+
 /// Lets the already-running Sevak instance bring its window to the foreground
 /// when this (second) process forwards it `--toggle`.
 ///
@@ -171,6 +346,77 @@ mod tests {
         };
         assert!(removed(true));
         assert!(!removed(false));
+    }
+
+    fn shell(script: &str) -> (&'static str, Vec<String>) {
+        if cfg!(windows) {
+            ("cmd", vec!["/c".into(), script.into()])
+        } else {
+            ("sh", vec!["-c".into(), script.into()])
+        }
+    }
+
+    #[test]
+    fn run_checked_succeeds_for_a_clean_exit() {
+        let (program, args) = shell("exit 0");
+        assert!(run_checked(program, &args, Duration::from_secs(10)).is_ok());
+    }
+
+    #[test]
+    fn run_checked_reports_a_failure_with_its_stderr() {
+        let (program, args) = shell(if cfg!(windows) {
+            "echo boom 1>&2 & exit 3"
+        } else {
+            "echo boom >&2; exit 3"
+        });
+        let err = run_checked(program, &args, Duration::from_secs(10)).unwrap_err();
+        let text = err.to_string();
+        assert!(text.contains("boom"), "{text}");
+        assert!(matches!(err, PlatformError::CommandFailed { .. }));
+    }
+
+    #[test]
+    fn run_checked_does_not_wait_for_a_slow_program() {
+        let (program, args) = if cfg!(windows) {
+            (
+                "cmd",
+                vec!["/c".to_owned(), "ping -n 6 127.0.0.1 >nul".to_owned()],
+            )
+        } else {
+            ("sh", vec!["-c".to_owned(), "sleep 5".to_owned()])
+        };
+        let started = std::time::Instant::now();
+        assert!(run_checked(program, &args, Duration::from_millis(100)).is_ok());
+        assert!(started.elapsed() < Duration::from_secs(4));
+    }
+
+    #[test]
+    fn run_checked_of_missing_program_is_an_error() {
+        let result = run_checked(
+            "sevak-definitely-not-a-real-program",
+            &[] as &[&str],
+            Duration::from_secs(1),
+        );
+        assert!(matches!(result, Err(PlatformError::CommandFailed { .. })));
+    }
+
+    #[test]
+    fn interpreter_by_extension() {
+        let first = |ext, windows| interpreter_candidates(ext, windows).remove(0);
+        assert_eq!(first("py", true), ["py", "-3", "-u"]);
+        assert_eq!(first("PY", false), ["python3", "-u"]);
+        assert_eq!(first("js", true), ["node"]);
+        assert_eq!(first("ps1", true)[0], "pwsh");
+        assert!(interpreter_candidates("sh", true).is_empty());
+        assert!(interpreter_candidates("exe", true).is_empty());
+        assert!(interpreter_candidates("", false).is_empty());
+        assert_eq!(script_runner("exe"), ScriptRunner::Direct);
+        // Whatever is found must be a command that exists.
+        match script_runner("py") {
+            ScriptRunner::Interpreter(argv) => assert!(find_in_path(&argv[0]).is_some()),
+            ScriptRunner::Missing(names) => assert!(!names.is_empty()),
+            ScriptRunner::Direct => panic!("python scripts need an interpreter"),
+        }
     }
 
     #[test]
