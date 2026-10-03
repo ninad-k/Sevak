@@ -1,7 +1,18 @@
 // Dev-only fixtures so the UI can be previewed in a plain browser (`npm run dev`)
 // where there is no Rust backend. Never imported in production builds.
 
-import type { ResultDto, SecondaryDto, SelectionActionDto, SelectionPayload } from "./ipc";
+import type {
+  BufferActionDto,
+  BufferDestination,
+  BufferDto,
+  BufferItemDto,
+  BufferProgress,
+  BufferRunDto,
+  ResultDto,
+  SecondaryDto,
+  SelectionActionDto,
+  SelectionPayload,
+} from "./ipc";
 import type { SettingsDto } from "./settings-ipc";
 
 const appActions: SecondaryDto[] = [
@@ -17,6 +28,10 @@ const rows: ResultDto[] = [
   { id: "m:calc", title: "Calculator", subtitle: "Application", icon: { kind: "builtin", name: "calculator" }, plugin_id: "apps", action: "launch", ...noExtras },
   { id: "m:file", title: "quarterly-report-final-v2.xlsx", subtitle: "C:/Users/someone/Documents/Reports/2026/Q3/quarterly-report-final-v2.xlsx", icon: { kind: "builtin", name: "file" }, plugin_id: "files", action: "open_path", secondary: fileActions, copy_text: "C:/Users/someone/Documents/Reports/2026/Q3/quarterly-report-final-v2.xlsx" },
   { id: "m:folder", title: "Projects", subtitle: "D:/Projects", icon: { kind: "builtin", name: "folder" }, plugin_id: "files", action: "open_path", secondary: fileActions, copy_text: "D:/Projects", autocomplete: "D:/Projects/" },
+  { id: "m:file2", title: "budget-2026.pdf", subtitle: "~/Documents/Finance", icon: { kind: "builtin", name: "file" }, plugin_id: "files", action: "open_path", secondary: fileActions, copy_text: "C:/Users/someone/Documents/Finance/budget-2026.pdf" },
+  { id: "m:file3", title: "meeting-notes.md", subtitle: "~/Documents", icon: { kind: "builtin", name: "file" }, plugin_id: "files", action: "open_path", secondary: fileActions, copy_text: "C:/Users/someone/Documents/meeting-notes.md" },
+  { id: "m:folder2", title: "Documents", subtitle: "~", icon: { kind: "builtin", name: "folder" }, plugin_id: "files", action: "open_path", secondary: fileActions, copy_text: "C:/Users/someone/Documents", autocomplete: "~/Documents/" },
+  { id: "m:folder3", title: "Downloads", subtitle: "~", icon: { kind: "builtin", name: "folder" }, plugin_id: "files", action: "open_path", secondary: fileActions, copy_text: "C:/Users/someone/Downloads", autocomplete: "~/Downloads/" },
   { id: "m:web", title: "Search Google for “rust traits”", subtitle: "Web search", icon: { kind: "builtin", name: "web" }, plugin_id: "web:g", action: "open_url", secondary: [{ label: "Copy URL", modifier: "shift", kind: "copy_text" }], copy_text: "https://www.google.com/search?q=rust%20traits" },
   { id: "m:copy", title: "8", subtitle: "2+2*3 · Enter to copy", icon: { kind: "builtin", name: "copy" }, plugin_id: "calculator", action: "copy_text", secondary: [], copy_text: "8" },
   { id: "m:broken", title: "Broken icon app", subtitle: "Falls back to the app glyph", icon: { kind: "url", url: "http://sevak-icon.localhost/0000000000000000" }, plugin_id: "apps", action: "launch", ...noExtras },
@@ -67,6 +82,86 @@ export function mockSelection(): SelectionPayload {
     ],
   };
 }
+
+/** The files-plugin rows of the preview, as buffer items. */
+function bufferItemFor(id: string): BufferItemDto | null {
+  const row = rows.find((r) => r.id === id && r.plugin_id === "files");
+  if (!row?.copy_text) return null;
+  return {
+    path: row.copy_text,
+    name: row.title,
+    is_dir: !!row.autocomplete,
+    icon: row.icon,
+  };
+}
+
+const bufferActions: BufferActionDto[] = [
+  { key: "open_all", label: "Open all", destination: false },
+  { key: "show_in_folder", label: "Show in folder", destination: false },
+  { key: "copy_paths", label: "Copy paths", destination: false },
+  { key: "copy_files", label: "Copy files to clipboard", destination: false },
+  { key: "move_to", label: "Move to…", destination: true },
+  { key: "copy_to", label: "Copy to…", destination: true },
+  { key: "trash", label: "Move to Trash", destination: false },
+  { key: "zip", label: "Compress to .zip", destination: false },
+  { key: "open_terminal", label: "Open in terminal", destination: false },
+];
+
+/** In-memory file buffer for the browser preview (the real one lives in the shell). */
+let previewItems: BufferItemDto[] = [];
+const progressListeners = new Set<(progress: BufferProgress) => void>();
+const snapshot = (): BufferDto => ({ items: [...previewItems], actions: bufferActions });
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export const mockBuffer = {
+  get: (): BufferDto => snapshot(),
+  add(id: string): BufferDto | string {
+    const item = bufferItemFor(id);
+    if (!item) return "Only files and folders from the file results can be collected.";
+    if (!previewItems.some((i) => i.path === item.path)) previewItems.push(item);
+    return snapshot();
+  },
+  remove(index?: number): BufferDto {
+    if (index === undefined) previewItems.pop();
+    else previewItems = previewItems.filter((_, i) => i !== index);
+    return snapshot();
+  },
+  clear(): BufferDto {
+    previewItems = [];
+    return snapshot();
+  },
+  /** A few seeded items, for `/#buffer`. */
+  seed(): BufferDto {
+    previewItems = ["m:file", "m:folder", "m:file2", "m:file3"].flatMap((id) => {
+      const item = bufferItemFor(id);
+      return item ? [item] : [];
+    });
+    return snapshot();
+  },
+  /** Pretends to run an action, with progress, so the progress row can be seen. */
+  async run(key: string, destination: BufferDestination | null): Promise<BufferRunDto | string> {
+    const action = bufferActions.find((a) => a.key === key);
+    if (!action) return "that action is not available";
+    if (action.destination && !destination) return "Pick a destination folder first.";
+    const total = previewItems.length;
+    if (["move_to", "copy_to", "trash", "zip"].includes(key)) {
+      for (let done = 0; done <= total; done++) {
+        for (const listener of progressListeners) {
+          listener({ label: action.label, done, total, name: previewItems[done]?.name ?? "" });
+        }
+        await pause(450);
+      }
+    }
+    const consumed = key === "move_to" || key === "trash";
+    const message = `${action.label}: ${total} items (preview, nothing was changed).`;
+    if (consumed) previewItems = [];
+    return { message, ok: true, declined: false, hidden: false, buffer: snapshot() };
+  },
+  onProgress(cb: (progress: BufferProgress) => void) {
+    progressListeners.add(cb);
+    return () => void progressListeners.delete(cb);
+  },
+};
 
 export function mockHistory(): string[] {
   return ["g rust traits", "chrome", "~/Documents/"];

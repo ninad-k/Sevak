@@ -198,6 +198,17 @@ use_clipboard_fallback = false      # act on the clipboard when the selection ca
 pick another key if it does. On Wayland, `sevak --setup-hotkey` binds the key
 to `sevak --actions`. [How it works](usage.md#universal-actions).
 
+### File buffer
+
+```toml
+[file_buffer]
+keep_between_shows = false   # true: keep collected files when the launcher hides
+```
+
+The [file buffer](usage.md#file-buffer) is emptied whenever the launcher hides;
+turn this on to build up a collection over several visits. There is no settings
+page for it.
+
 ### Keep the config in a synced folder
 
 Point Sevak at a config folder in Dropbox, iCloud Drive, OneDrive or a git
@@ -292,6 +303,7 @@ available in the tray menu. Update installation requires your agreement.
 | `system.confirm` / `disabled` | `true` / `[]` | Confirmation for destructive commands |
 | `shell.terminal` / `shell` / `keep_open` | `""` / `""` / `true` | Empty auto-detects |
 | `clipboard.enabled` | `false` | Clipboard history is opt-in |
+| `file_buffer.keep_between_shows` | `false` | Keep collected files when the launcher hides |
 | `paste.restore_clipboard` | `false` | Restore the clipboard after pasting |
 | `files.directories` | Desktop, Documents, Downloads under `~` | Replaced when explicitly set |
 | `files.max_depth` | `4` | Settings accepts 0–32 |

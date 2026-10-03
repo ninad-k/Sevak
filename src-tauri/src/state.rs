@@ -9,6 +9,7 @@ use sevak_core::theme::{self, ResolvedAppearance};
 use sevak_core::Config;
 use sevak_platform::{AppPaths, DisplayServer};
 
+use crate::file_buffer::BufferState;
 use crate::search::Search;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -59,6 +60,8 @@ pub struct AppState {
     pub display: DisplayServer,
     pub config: RwLock<Config>,
     pub search: Search,
+    /// Files collected for acting on together (the file buffer).
+    pub file_buffer: BufferState,
     pub hotkey: RwLock<HotkeyStatus>,
     pub custom_hotkeys: RwLock<Vec<CustomHotkeyStatus>>,
     pub actions_hotkey: RwLock<Option<CustomHotkeyStatus>>,
@@ -82,6 +85,7 @@ impl AppState {
             paths,
             display,
             search,
+            file_buffer: BufferState::default(),
             config: RwLock::new(config),
             hotkey: RwLock::new(hotkey),
             custom_hotkeys: RwLock::new(Vec::new()),

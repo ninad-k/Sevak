@@ -15,8 +15,9 @@ pub mod theme;
 pub mod usage;
 
 pub use config::{
-    ActionsConfig, ClipboardConfig, Config, ConfigError, ConfigOrigin, GeneralConfig,
-    HotkeyBinding, HotkeyTarget, LinuxConfig, PasteConfig, ShellConfig, Snippet, WindowConfig,
+    ActionsConfig, ClipboardConfig, Config, ConfigError, ConfigOrigin, FileBufferConfig,
+    GeneralConfig, HotkeyBinding, HotkeyTarget, LinuxConfig, PasteConfig, ShellConfig, Snippet,
+    WindowConfig,
 };
 pub use engine::{EngineOptions, SearchEngine};
 pub use fuzzy::FuzzyQuery;

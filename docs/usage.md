@@ -127,6 +127,68 @@ folder, and Enter opens the entry. In ordinary searches this needs
 `files.global = true`; after `f ` it always works. Slow or unreachable drives
 never freeze typing.
 
+### File buffer
+
+Collect several files and folders, then act on all of them. With a file or
+folder result selected (from file search or a browsed path; not bookmarks or
+apps):
+
+| Key | What it does |
+|---|---|
+| `Alt+Up` / `Alt+Down` | Add the selected result to the buffer and move the selection up / down (Option on macOS) |
+| `Alt+Left` | Remove the last item |
+| `Alt+Backspace` / `Alt+Delete` | Empty the buffer |
+| `Alt+Right` | Open the buffer's actions |
+
+The buffer is a strip of chips above the results (click the `x` on a chip to
+drop it). It stays while you search for other things, and is emptied when the
+launcher hides, unless you set
+[`file_buffer.keep_between_shows`](configuration.md#file-buffer). The same
+actions are in the action panel of a file result (**Add to file buffer**, and
+**File buffer actions** once something is collected). The `Alt+Left`,
+`Alt+Right` and `Alt+Backspace` keys only act while the buffer holds something,
+so on macOS Option+Left and Option+Backspace keep their text-editing meaning
+when it is empty.
+
+| Buffer action | What it does |
+|---|---|
+| Open all | Opens each item with its default application (asks above 10 items) |
+| Show in folder | Opens a file manager window for each folder the items are in (asks above 3) |
+| Copy paths | Copies the paths, one per line |
+| Copy files to clipboard | Puts the files on the clipboard as a file list, so pasting in Explorer, Finder or a file manager copies them |
+| Move to… / Copy to… | Asks for a folder, then moves or copies the items there |
+| Move to Trash | Sends the items to the Recycle Bin, Trash or freedesktop trash |
+| Compress to .zip | Writes `Archive.zip` (one item: `<name>.zip`) into the folder the items share |
+| Open in terminal | Opens a terminal in each folder, or in the folder of each file (asks above 3) |
+| More file actions… | The [Universal Actions](#universal-actions) for files, over the collected items |
+
+**Move to…** and **Copy to…** turn the search bar into a folder picker, starting
+at `~/`. Type a path or browse it as usual: `Tab` opens the highlighted folder,
+`Shift+Tab` goes up, `Enter` uses the highlighted folder, `Ctrl+Enter` uses the
+path exactly as typed, and `Esc` cancels. Only folders are listed; the path
+browsing needs [`files.global`](configuration.md#search-a-project-folder) or
+the `f ` prefix.
+
+What to expect:
+
+- Moving and trashing ask first, naming the items. Nothing is overwritten: a
+  name that is taken becomes `report (2).docx` (`photos (2)`, `a (2).tar.gz`).
+- Move, copy, trash and zip run in the background with a progress line under the
+  chips; you can keep typing. When done, a line says what happened. If some
+  items failed it says how many worked and why the first one did not, and the
+  failed ones stay in the buffer. Moved and trashed items leave the buffer;
+  copied and zipped ones stay for the next action.
+- A folder is never moved or copied into itself. Items inside a collected folder
+  are handled with the folder, not twice. Moving to another drive copies first
+  and removes the original only if the copy worked.
+- Zip archives skip symbolic links, and files that cannot be read (the line
+  says how many).
+- There is no undo, and no way to cancel a running operation. Trashed items can
+  be restored from the Recycle Bin or Trash.
+- On Linux, trashing needs `gio` (part of GLib), and "Copy files to clipboard"
+  works with file managers that read `text/uri-list`; some (Nautilus) only
+  accept their own format and may ignore it.
+
 ## Bookmarks
 
 Type `b ` and part of a bookmark's title or address. Sevak reads the bookmarks
@@ -331,6 +393,8 @@ lets many existing Alfred scripts work. Three examples are in
 | `Ctrl+C` (no text selected) | Copy the selected result's path, URL or value |
 | `Ctrl+L` | Show the selected result as Large Type |
 | `Ctrl+1` … `Ctrl+9` | Execute the corresponding result |
+| `Alt+Up` / `Alt+Down` on a file | Add it to the [file buffer](#file-buffer), then move |
+| `Alt+Left` / `Alt+Right` / `Alt+Backspace` | Remove the last buffered file / its actions / empty it |
 | `Esc` | Hide the launcher (or close the action panel) |
 
 On macOS, `Command` takes the place of `Ctrl`.

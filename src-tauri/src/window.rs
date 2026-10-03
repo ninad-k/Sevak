@@ -119,6 +119,9 @@ pub fn unhide_app(_app: &AppHandle) {}
 pub fn announce_hidden(app: &AppHandle) {
     if let Some(state) = app.try_state::<AppState>() {
         state.search.forget_selection();
+        state
+            .file_buffer
+            .on_hidden(state.config().file_buffer.keep_between_shows);
     }
     if let Err(err) = app.emit_to(MAIN_LABEL, EVENT_HIDDEN, ()) {
         tracing::warn!("hide: could not emit {EVENT_HIDDEN}: {err}");
@@ -186,6 +189,10 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
                 return;
             };
             if !state.config().general.hide_on_blur || !window.is_visible().unwrap_or(false) {
+                return;
+            }
+            if state.file_buffer.confirming() {
+                tracing::debug!("ignoring blur: a file buffer confirmation is open");
                 return;
             }
             if lock(&state.last_shown).is_some_and(|at| at.elapsed() < SHOW_BLUR_GRACE) {

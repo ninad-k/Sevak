@@ -52,6 +52,14 @@ objc2-app-kit = { version = "0.3", default-features = false, features = [
     "NSRunningApplication",
     "NSWorkspace",
 ] }
+# NSFileManager.trashItemAtURL, for the file buffer's Move to Trash.
+objc2-foundation = { version = "0.3", default-features = false, features = [
+    "std",
+    "NSError",
+    "NSFileManager",
+    "NSString",
+    "NSURL",
+] }
 objc2-core-graphics = { version = "0.3", default-features = false, features = [
     "std",
     "CGEvent",

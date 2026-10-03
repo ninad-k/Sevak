@@ -8,6 +8,7 @@ mod paste;
 mod provider;
 mod shortcuts;
 pub(crate) mod system;
+pub(crate) mod trash;
 
 pub(crate) use provider::WindowsProvider;
 

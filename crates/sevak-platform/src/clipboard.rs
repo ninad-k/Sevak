@@ -90,6 +90,18 @@ pub fn get_files() -> Result<Vec<PathBuf>> {
     Ok(read_with(|clipboard| clipboard.get().file_list())?.unwrap_or_default())
 }
 
+/// Replaces the clipboard's contents with a list of files and folders (what a
+/// file manager's Copy puts there), so a paste in Explorer or Finder copies them.
+pub fn set_files(paths: &[PathBuf]) -> Result<()> {
+    if paths.is_empty() {
+        return Err(PlatformError::Os {
+            operation: "clipboard",
+            message: "there are no files to copy".to_owned(),
+        });
+    }
+    with_handle(&CLIPBOARD, |clipboard| clipboard.set().file_list(paths))
+}
+
 /// The X11 PRIMARY selection: the text highlighted in the app that owns it,
 /// without anything having been copied. `None` if there is none.
 #[cfg(target_os = "linux")]
@@ -283,6 +295,12 @@ pub fn take_own_write(text: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_empty_file_list_is_refused_before_the_clipboard_is_touched() {
+        let err = set_files(&[]).unwrap_err();
+        assert!(err.to_string().contains("no files"), "{err}");
+    }
 
     #[test]
     fn overlapping_borrows_are_counted() {

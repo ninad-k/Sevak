@@ -10,7 +10,8 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent};
 use crate::cli::{self, Launch};
 use crate::state::AppState;
 use crate::{
-    autostart, commands, direct, hotkey, icons, search, selection, settings, tray, updater, window,
+    autostart, commands, direct, file_buffer, hotkey, icons, search, selection, settings, tray,
+    updater, window,
 };
 
 pub fn run(
@@ -64,6 +65,12 @@ pub fn run(
             commands::copy_result,
             commands::set_large_type,
             commands::query_history,
+            file_buffer::file_buffer_get,
+            file_buffer::file_buffer_add,
+            file_buffer::file_buffer_remove,
+            file_buffer::file_buffer_clear,
+            file_buffer::file_buffer_run,
+            file_buffer::file_buffer_selection,
             direct::take_pending_show,
             settings::get_settings,
             settings::save_settings,

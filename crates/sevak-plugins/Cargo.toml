@@ -36,6 +36,11 @@ rusqlite = { version = "0.40", features = ["bundled"] }
 # Local date and time for snippet placeholders (no timezone database needed).
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 walkdir = "2"
+# Compress to .zip in the file buffer (pure Rust; the version the updater already
+# links, with only the deflate encoder).
+zip = { version = "4", default-features = false, features = ["deflate-flate2"] }
+# zip's deflate encoder is flate2, which needs one backend picked; the pure-Rust one.
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 # Daily ECB exchange rates for the opt-in currency conversion (see `currency`).
 # Same crates and TLS backend (rustls + ring) the updater already links; the
 # blocking client runs on a plain background thread, never on the typing path.

@@ -38,6 +38,12 @@ pub struct MockPlatform {
     pub clipboard_sequence: Mutex<Option<u64>>,
     /// What `read_clipboard` returns; `None` makes it fail like a busy clipboard.
     pub clipboard_read: Mutex<Option<ClipboardRead>>,
+    /// File lists put on the clipboard.
+    pub clipboard_files: Mutex<Vec<Vec<PathBuf>>>,
+    /// Paths `move_to_trash` was given (the mock does not touch the disk).
+    pub trashed: Mutex<Vec<PathBuf>>,
+    /// Paths `move_to_trash` fails for.
+    pub trash_refuses: Mutex<Vec<PathBuf>>,
 }
 
 impl MockPlatform {
@@ -114,6 +120,19 @@ impl PlatformProvider for MockPlatform {
 
     fn set_clipboard_text(&self, text: &str) -> Result<()> {
         self.clipboard.lock().unwrap().push(text.to_owned());
+        Ok(())
+    }
+
+    fn set_clipboard_files(&self, paths: &[PathBuf]) -> Result<()> {
+        self.clipboard_files.lock().unwrap().push(paths.to_vec());
+        Ok(())
+    }
+
+    fn move_to_trash(&self, path: &Path) -> Result<()> {
+        if self.trash_refuses.lock().unwrap().iter().any(|p| p == path) {
+            return Err(PlatformError::Unsupported("trashing this item"));
+        }
+        self.trashed.lock().unwrap().push(path.to_path_buf());
         Ok(())
     }
 

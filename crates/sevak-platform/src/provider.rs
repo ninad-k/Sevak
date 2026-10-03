@@ -1,6 +1,6 @@
 //! The OS abstraction the rest of Sevak programs against.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use sevak_core::{AppEntry, IconData, IconSource, LaunchTarget, ShellConfig};
 
@@ -75,6 +75,18 @@ pub trait PlatformProvider: Send + Sync {
     /// Replaces the clipboard's contents with `text`.
     fn set_clipboard_text(&self, text: &str) -> Result<()> {
         crate::clipboard::set_text(text)
+    }
+
+    /// Puts the files and folders on the clipboard as a file list, so pasting
+    /// in Explorer, Finder or a Linux file manager copies them.
+    fn set_clipboard_files(&self, paths: &[PathBuf]) -> Result<()> {
+        crate::clipboard::set_files(paths)
+    }
+
+    /// Moves a file or folder to the system trash (never deletes it for good;
+    /// it fails where the item cannot be trashed). `path` must be absolute.
+    fn move_to_trash(&self, path: &Path) -> Result<()> {
+        crate::trash::move_to_trash(path)
     }
 
     /// The power and session commands that can work on this system right now
