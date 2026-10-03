@@ -145,6 +145,35 @@ Releases are automatic: every push to `main` that changes more than docs
    (`scripts/updater-manifest.mjs`), adds `SHA256SUMS.txt` and publishes the
    release, which creates the `vX.Y.Z` tag on the released commit.
 
+### Package managers
+
+After publishing, the `distribute` job renders the manifests in `packaging/`
+for the new version (`scripts/package-manifests.mjs`, which fills in versions,
+file names and SHA-256 hashes from `SHA256SUMS.txt`) and publishes them. Each
+channel runs only when its secret is set, and a failure there never fails the
+release:
+
+| Channel | Where | Secret |
+|---|---|---|
+| Homebrew | `Casks/sevak.rb` in [ninad-k/homebrew-tap](https://github.com/ninad-k/homebrew-tap) | `PACKAGING_TOKEN` |
+| Scoop | `bucket/sevak.json` in [ninad-k/scoop-bucket](https://github.com/ninad-k/scoop-bucket) | `PACKAGING_TOKEN` |
+| AUR | [`sevak-bin`](https://aur.archlinux.org/packages/sevak-bin), from `packaging/aur/PKGBUILD` | `AUR_SSH_PRIVATE_KEY` |
+| winget | a pull request to [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) for `NinadKulkarni.Sevak` | `WINGET_TOKEN` |
+
+- `PACKAGING_TOKEN`: a fine-grained personal access token with **Contents:
+  read and write** on `ninad-k/homebrew-tap` and `ninad-k/scoop-bucket` only.
+- `AUR_SSH_PRIVATE_KEY`: the private half of an SSH key whose public half is
+  added to the AUR account that owns `sevak-bin`.
+- `WINGET_TOKEN`: a classic personal access token with the `public_repo` scope,
+  from an account with a fork of `microsoft/winget-pkgs`. winget only accepts
+  automated updates for packages that already exist, so the first version is
+  submitted once by hand from the rendered `packaging/winget` manifests.
+
+Scoop and AUR packages write a `package-manager` marker (next to `sevak.exe`,
+or `/usr/share/sevak/package-manager`) that turns Sevak's self-update off; see
+`ManagedBy` in `src-tauri/src/updater.rs`. Preview the manifests for any
+release with `node scripts/package-manifests.mjs <version> SHA256SUMS.txt out`.
+
 ### Auto-update and the signing key
 
 Installed copies poll

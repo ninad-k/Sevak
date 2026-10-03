@@ -8,6 +8,8 @@ name: Release
 #               updater, and attach them
 #   3. publish  add latest.json (the update manifest installed copies poll) and
 #               SHA256SUMS.txt, then publish the release, which creates the tag
+#   4. distribute  update winget, Scoop, Homebrew and the AUR (each only when
+#               its secret is set)
 # A failed build leaves only a draft (no tag), which the next run replaces.
 # Docs-only pushes don't release; nor does a head commit containing [skip release].
 
@@ -183,14 +185,14 @@ jobs:
 
       - name: Download the release assets
         run: |
-          mkdir assets
+          mkdir release-assets # not "assets": the repository has an assets/ folder
           gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets" --paginate \
             --jq '.[] | [.id, .name] | @tsv' |
           while IFS=$'\t' read -r id name; do
             gh api -H "Accept: application/octet-stream" \
-              "repos/$GITHUB_REPOSITORY/releases/assets/$id" > "assets/$name"
+              "repos/$GITHUB_REPOSITORY/releases/assets/$id" > "release-assets/$name"
           done
-          ls -l assets
+          ls -l release-assets
 
       - name: Add latest.json and SHA256SUMS.txt
         run: |
@@ -200,10 +202,10 @@ jobs:
               --jq .browser_download_url
           }
           gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" --jq .body > notes.md
-          node scripts/updater-manifest.mjs assets "$VERSION" \
+          node scripts/updater-manifest.mjs release-assets "$VERSION" \
             "https://github.com/$GITHUB_REPOSITORY/releases/download/v$VERSION" notes.md
-          upload assets/latest.json application/json
-          (cd assets && sha256sum -- * > ../SHA256SUMS.txt)
+          upload release-assets/latest.json application/json
+          (cd release-assets && sha256sum -- * > ../SHA256SUMS.txt)
           cat SHA256SUMS.txt
           upload SHA256SUMS.txt text/plain
 
@@ -211,3 +213,73 @@ jobs:
         run: |
           gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
             -F draft=false -f make_latest=true --jq .html_url
+
+  distribute:
+    name: Update package managers
+    needs: [plan, publish]
+    runs-on: ubuntu-latest
+    # The release is already out; a package manager that fails to update must
+    # not mark it as failed. Each channel is skipped while its secret is unset
+    # (see docs/development.md, "Package managers").
+    continue-on-error: true
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.plan.outputs.version }}
+      PACKAGING_TOKEN: ${{ secrets.PACKAGING_TOKEN }}
+      WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+      AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Render the manifests
+        run: |
+          gh release download "v$VERSION" --pattern SHA256SUMS.txt
+          node scripts/package-manifests.mjs "$VERSION" SHA256SUMS.txt dist
+
+      - name: Homebrew tap and Scoop bucket
+        if: env.PACKAGING_TOKEN != ''
+        run: |
+          publish() { # <repo> <rendered file> <path in repo>
+            rm -rf repo
+            git clone --depth 1 "https://x-access-token:${PACKAGING_TOKEN}@github.com/$1.git" repo
+            mkdir -p "repo/$(dirname "$3")"
+            cp "$2" "repo/$3"
+            cd repo
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add "$3"
+            if git diff --cached --quiet; then
+              echo "$1 is already at $VERSION"
+            else
+              git commit -m "sevak $VERSION"
+              git push
+            fi
+            cd ..
+          }
+          publish ninad-k/homebrew-tap dist/homebrew/Casks/sevak.rb Casks/sevak.rb
+          publish ninad-k/scoop-bucket dist/scoop/sevak.json bucket/sevak.json
+
+      - name: AUR (sevak-bin)
+        if: env.AUR_SSH_PRIVATE_KEY != ''
+        uses: KSXGitHub/github-actions-deploy-aur@v4.2.0
+        with:
+          pkgname: sevak-bin
+          pkgbuild: dist/aur/PKGBUILD
+          commit_username: Ninad Kulkarni
+          commit_email: 47207171+ninad-k@users.noreply.github.com
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: sevak ${{ needs.plan.outputs.version }}
+
+      - name: winget (NinadKulkarni.Sevak)
+        if: env.WINGET_TOKEN != ''
+        uses: vedantmgoyal9/winget-releaser@v2
+        with:
+          identifier: NinadKulkarni.Sevak
+          version: ${{ needs.plan.outputs.version }}
+          release-tag: v${{ needs.plan.outputs.version }}
+          installers-regex: '_x64-setup\.exe$'
+          token: ${{ secrets.WINGET_TOKEN }}

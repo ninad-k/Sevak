@@ -1,0 +1,23 @@
+# Maintainer: Ninad Kulkarni <https://github.com/ninad-k>
+# Generated from packaging/aur/PKGBUILD in https://github.com/ninad-k/Sevak
+# and published by its release workflow; edit it there, not in the AUR.
+
+pkgname=sevak-bin
+pkgver={{version}}
+pkgrel=1
+pkgdesc="Keyboard-first quick launcher: apps, calculator, web and file search"
+arch=('x86_64')
+url="https://github.com/ninad-k/Sevak"
+license=('Apache-2.0')
+depends=('webkit2gtk-4.1' 'gtk3' 'glib2' 'libayatana-appindicator')
+provides=('sevak')
+conflicts=('sevak')
+source_x86_64=("https://github.com/ninad-k/Sevak/releases/download/v${pkgver}/Sevak_${pkgver}_amd64.deb")
+sha256sums_x86_64=('{{sha256:deb}}')
+
+package() {
+  bsdtar -xf data.tar.gz -C "${pkgdir}"
+  # Tells Sevak that pacman owns updates, so its built-in updater stays off.
+  printf 'AUR (sevak-bin)\nyay -Syu sevak-bin\n' |
+    install -Dm644 /dev/stdin "${pkgdir}/usr/share/sevak/package-manager"
+}
