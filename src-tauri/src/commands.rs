@@ -3,7 +3,7 @@
 use std::time::Instant;
 
 use serde::Serialize;
-use sevak_core::{Action, Modifier, ResultItem};
+use sevak_core::{Action, Modifier, PluginError, ResultItem};
 use tauri::{AppHandle, LogicalSize, Manager, State, WebviewWindow};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
@@ -186,10 +186,17 @@ pub async fn copy_result(app: AppHandle, id: String, ticket: u64) -> Result<(), 
     let Some((item, _query)) = state.search.result(ticket, &id) else {
         return Err("result expired".to_owned());
     };
-    let Some(text) = item.copy_text() else {
-        return Err("nothing to copy for this result".to_owned());
-    };
-    sevak_platform::clipboard::set_text(&text).map_err(|err| err.to_string())?;
+    // Through the plugin, so a snippet copies its expanded text; a plugin that
+    // only knows its own actions gets the text put on the clipboard directly.
+    match state.search.engine().copy(&item) {
+        Ok(true) => {}
+        Ok(false) => return Err("nothing to copy for this result".to_owned()),
+        Err(PluginError::Unsupported(_)) => {
+            let text = item.copy_text().unwrap_or_default();
+            sevak_platform::clipboard::set_text(&text).map_err(|err| err.to_string())?;
+        }
+        Err(err) => return Err(err.to_string()),
+    }
     window::hide(&app);
     Ok(())
 }

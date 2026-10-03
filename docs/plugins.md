@@ -78,7 +78,9 @@ secondary action.)
 - **Copy text.** `ResultItem::copy_text()` is what `Ctrl+C` copies: the text
   of a `CopyText` or `PasteText` action, the URL of an `OpenUrl`, the path of
   `OpenPath`, `RevealPath` or a launch target. Nothing is copied for `Custom`
-  actions or packaged apps.
+  actions or packaged apps. The copy goes through the plugin
+  (`SearchEngine::copy` runs `execute` with a `CopyText` of that text), so a
+  plugin whose rows carry a template, like snippets, copies the expanded text.
 - **Platform provider** (`PlatformProvider`) is the only OS-specific layer
   (Windows Start Menu / packaged apps, Linux `.desktop` entries). It also
   gatekeeps URLs: `open_url` accepts only `http://`, `https://` and `mailto:`.

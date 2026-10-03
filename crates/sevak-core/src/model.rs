@@ -191,7 +191,10 @@ pub enum Action {
 
 impl Action {
     /// The text most worth copying for this action; see [`ResultItem::copy_text`].
-    /// For `PasteText` that is the text it would paste.
+    /// For `PasteText` that is the text it would paste. A plugin may carry a
+    /// template there (snippets expand `{date}` when run), so copy through the
+    /// plugin ([`crate::SearchEngine::copy`]) rather than putting this text on
+    /// the clipboard directly.
     pub fn copy_text(&self) -> Option<String> {
         match self {
             Self::CopyText { text } | Self::PasteText { text, .. } => Some(text.clone()),

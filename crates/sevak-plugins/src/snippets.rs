@@ -572,6 +572,24 @@ mod tests {
     }
 
     #[test]
+    fn ctrl_c_copies_the_expansion_not_the_template() {
+        // What `SearchEngine::copy` hands the plugin: the row with a `CopyText`
+        // of its `copy_text()`, which is the template.
+        let platform = MockPlatform::empty();
+        *platform.clipboard_now.lock().unwrap() = Some("x".into());
+        let snippets = vec![snippet("Reply", None, "Re: {clipboard}")];
+        let plugin = plugin(&platform, &snippets);
+        let mut row = plugin.query("reply").remove(0);
+        assert_eq!(row.copy_text().as_deref(), Some("Re: {clipboard}"));
+        row.action = Action::CopyText {
+            text: row.copy_text().unwrap(),
+        };
+        plugin.execute(&row).unwrap();
+        assert_eq!(*platform.clipboard.lock().unwrap(), ["Re: x"]);
+        assert!(platform.pasted.lock().unwrap().is_empty());
+    }
+
+    #[test]
     fn enter_pastes_todays_date() {
         let platform = MockPlatform::empty();
         let plugin = plugin(&platform, &sample());

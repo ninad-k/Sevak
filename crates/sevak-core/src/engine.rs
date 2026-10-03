@@ -439,6 +439,28 @@ impl SearchEngine {
         Ok(())
     }
 
+    /// Copies `item`'s [`ResultItem::copy_text`] (Ctrl+C) through its plugin:
+    /// the plugin's `execute` sees the item with an [`Action::CopyText`] of that
+    /// text, so a plugin whose rows carry a template (snippets) copies the
+    /// expanded text, as Enter would. Nothing is recorded: copying is not
+    /// picking. `Ok(false)` when the item has nothing to copy;
+    /// [`PluginError::Unsupported`] when the plugin does not take `CopyText`.
+    ///
+    /// [`Action::CopyText`]: crate::Action::CopyText
+    pub fn copy(&self, item: &ResultItem) -> PluginResult<bool> {
+        let Some(text) = item.copy_text() else {
+            return Ok(false);
+        };
+        let plugin = self
+            .plugin(&item.plugin_id)
+            .ok_or_else(|| PluginError::Unsupported(item.id.clone()))?;
+        let mut derived = item.clone();
+        derived.action = crate::Action::CopyText { text };
+        derived.secondary.clear();
+        guarded(plugin.as_ref(), "execute", || plugin.execute(&derived))??;
+        Ok(true)
+    }
+
     /// Like [`SearchEngine::execute`], but runs the item's `index`th secondary
     /// action instead of its primary one. The owning plugin sees the item with
     /// that action as its `action` (and no secondary actions), so plugins need
@@ -1092,6 +1114,41 @@ mod tests {
         assert_eq!(e.usage_snapshot().get("ok:a").unwrap().count, 1);
         // And the query is remembered for recall, as for the primary action.
         assert_eq!(e.history(), vec!["Foo"]);
+    }
+
+    #[test]
+    fn copy_runs_the_plugin_with_copy_text_and_records_nothing() {
+        let ok = Mock::fixed("ok", &[("a", "A", 1.0)]).arc();
+        let e = engine(vec![ok.clone()], 8, &[]);
+        let paste = ResultItem::new(
+            "ok",
+            "a",
+            "A",
+            Action::PasteText {
+                text: "{date}".into(),
+                restore_clipboard: false,
+            },
+        );
+        assert!(e.copy(&paste).unwrap());
+        assert_eq!(
+            *ok.actions.lock().unwrap(),
+            vec![Action::CopyText {
+                text: "{date}".into()
+            }]
+        );
+        assert!(e.usage_snapshot().is_empty());
+        assert!(e.history().is_empty());
+
+        let custom = ResultItem::new(
+            "ok",
+            "b",
+            "B",
+            Action::Custom {
+                payload: "x".into(),
+            },
+        );
+        assert!(!e.copy(&custom).unwrap());
+        assert_eq!(ok.executed.load(AtomicOrdering::SeqCst), 1);
     }
 
     #[test]
