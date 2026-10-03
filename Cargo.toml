@@ -1,0 +1,38 @@
+[workspace]
+resolver = "2"
+members = ["crates/*", "src-tauri"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+authors = ["Ninad Kulkarni"]
+rust-version = "1.90"
+
+[workspace.dependencies]
+sevak-core = { path = "crates/sevak-core" }
+sevak-platform = { path = "crates/sevak-platform" }
+
+anyhow = "1"
+dirs = "6"
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+toml = "0.9"
+tracing = "0.1"
+tracing-appender = "0.2"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+windows = "0.62"
+
+tauri = "2"
+tauri-build = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-single-instance = "2"
+
+tempfile = "3"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true
