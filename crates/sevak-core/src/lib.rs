@@ -10,9 +10,13 @@ pub mod engine;
 pub mod fuzzy;
 pub mod model;
 pub mod plugin;
+pub mod theme;
 pub mod usage;
 
-pub use config::{Config, ConfigError, ConfigOrigin, GeneralConfig, LinuxConfig, WindowConfig};
+pub use config::{
+    Config, ConfigError, ConfigOrigin, GeneralConfig, HotkeyBinding, HotkeyTarget, LinuxConfig,
+    WindowConfig,
+};
 pub use engine::{EngineOptions, SearchEngine};
 pub use fuzzy::FuzzyQuery;
 pub use model::{Action, AppEntry, IconData, IconSource, LaunchTarget, ResultItem};

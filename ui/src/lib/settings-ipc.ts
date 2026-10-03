@@ -10,6 +10,23 @@ export interface WebSearchEngine {
   url: string;
 }
 
+/** One `[[hotkey]]` entry: set `query` (open with text) or `run` (a result id), not both. */
+export interface HotkeyBinding {
+  key: string;
+  query?: string | null;
+  run?: string | null;
+}
+
+export interface Appearance {
+  theme: ThemeSetting;
+  accent: string;
+  font_size: number;
+  font_family: string;
+  opacity: number;
+  radius: number;
+  custom_css: string;
+}
+
 /** Mirrors `sevak_core::Config` (serde defaults make every field present). */
 export interface Config {
   general: {
@@ -21,7 +38,7 @@ export interface Config {
   window: { width: number };
   linux: { wayland_use_xwayland: boolean };
   search: { max_results: number; fallback_web_search: string };
-  appearance: { theme: ThemeSetting };
+  appearance: Appearance;
   plugins: { disabled: string[] };
   files: {
     directories: string[];
@@ -31,6 +48,7 @@ export interface Config {
     global: boolean;
   };
   web_search: WebSearchEngine[];
+  hotkey: HotkeyBinding[];
 }
 
 export interface PluginInfo {

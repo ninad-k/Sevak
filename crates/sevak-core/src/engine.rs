@@ -289,6 +289,24 @@ impl SearchEngine {
         results
     }
 
+    /// Finds the result with id `id` (`<plugin id>:<key>`) through its owning
+    /// plugin, for running it without a query. `None` if no plugin owns the id
+    /// or the plugin cannot rebuild it (not indexed yet, uninstalled, ...).
+    pub fn resolve(&self, id: &str) -> Option<ResultItem> {
+        // Plugin ids may contain a colon themselves (`web:g`), so match prefixes.
+        self.plugins
+            .iter()
+            .filter(|p| {
+                id.strip_prefix(p.id())
+                    .is_some_and(|rest| rest.starts_with(':'))
+            })
+            .find_map(|p| {
+                guarded(p.as_ref(), "resolve", || p.resolve(id))
+                    .ok()
+                    .flatten()
+            })
+    }
+
     /// Executes `item` through its plugin and, on success, records the launch.
     /// `query` is the text the user had typed (the whole input, keyword
     /// included, so it matches what [`SearchEngine::query`] later receives).
@@ -430,6 +448,9 @@ mod tests {
             let _ = item;
             self.executed.fetch_add(1, AtomicOrdering::SeqCst);
             Ok(())
+        }
+        fn resolve(&self, id: &str) -> Option<ResultItem> {
+            (self.query_fn)("").into_iter().find(|item| item.id == id)
         }
         fn refresh(&self) -> PluginResult<()> {
             match &self.refresh_error {
@@ -811,6 +832,26 @@ mod tests {
         assert!(e.plugin("app").is_some());
         assert!(e.plugin("nope").is_none());
         assert_eq!(e.plugins().len(), 1);
+    }
+
+    #[test]
+    fn resolve_asks_the_plugin_that_owns_the_id() {
+        let e = engine(
+            vec![
+                Mock::fixed("apps", &[("a.desktop", "A", 1.0)]).arc(),
+                // A plugin id containing a colon, like the web engines.
+                Mock::fixed("web:g", &[("home", "Google", 1.0)]).arc(),
+                Mock::fixed("apps2", &[("a.desktop", "Other", 1.0)]).arc(),
+            ],
+            8,
+            &[],
+        );
+        assert_eq!(e.resolve("apps:a.desktop").unwrap().title, "A");
+        assert_eq!(e.resolve("web:g:home").unwrap().title, "Google");
+        assert_eq!(e.resolve("apps2:a.desktop").unwrap().title, "Other");
+        assert!(e.resolve("apps:missing").is_none());
+        assert!(e.resolve("apps").is_none());
+        assert!(e.resolve("nope:a.desktop").is_none());
     }
 
     #[test]

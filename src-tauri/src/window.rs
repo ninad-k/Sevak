@@ -7,6 +7,7 @@ use tauri::{
     WindowEvent,
 };
 
+use crate::direct::{self, ShowPayload};
 use crate::state::{lock, AppState};
 
 pub const MAIN_LABEL: &str = "main";
@@ -28,6 +29,11 @@ const TOP_OFFSET_FRACTION: f64 = 0.25;
 const DEFAULT_HEIGHT: f64 = 92.0;
 
 pub fn show(app: &AppHandle) {
+    show_with(app, ShowPayload::default());
+}
+
+/// Shows the window; `payload` can prefill the query or carry an error line.
+pub fn show_with(app: &AppHandle, payload: ShowPayload) {
     let Some(window) = app.get_webview_window(MAIN_LABEL) else {
         tracing::warn!("show: main window not found");
         return;
@@ -35,8 +41,11 @@ pub fn show(app: &AppHandle) {
 
     tracing::info!("showing window");
     // Before showing, so the UI clears its query and is ready to focus.
-    if let Err(err) = app.emit_to(MAIN_LABEL, EVENT_SHOW, ()) {
-        tracing::warn!("show: could not emit {EVENT_SHOW}: {err}");
+    // Until the UI has loaded it cannot hear this; it asks for what it missed.
+    if let Some(payload) = direct::deliver(payload) {
+        if let Err(err) = app.emit_to(MAIN_LABEL, EVENT_SHOW, payload) {
+            tracing::warn!("show: could not emit {EVENT_SHOW}: {err}");
+        }
     }
 
     position(app, &window);

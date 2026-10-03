@@ -60,6 +60,14 @@ pub trait Plugin: Send + Sync {
     /// Performs a result previously returned by [`Plugin::query`].
     fn execute(&self, item: &ResultItem) -> PluginResult<()>;
 
+    /// Rebuilds the result with id `id` (the full id, `<plugin id>:<key>`)
+    /// without a query, so a `[[hotkey]] run = "<id>"` can execute it directly.
+    /// Plugins whose results can be named by a stable id implement this; the
+    /// default says "not resolvable". Same cost rules as [`Plugin::query`].
+    fn resolve(&self, _id: &str) -> Option<ResultItem> {
+        None
+    }
+
     /// Rebuilds any index the plugin keeps. Called on a background thread at
     /// startup, on demand and periodically. May be slow.
     fn refresh(&self) -> PluginResult<()> {

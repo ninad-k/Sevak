@@ -111,31 +111,32 @@ impl FilesPlugin {
 
         scored
             .into_iter()
-            .map(|(score, i)| {
-                let entry = &index[i];
-                let path_string = entry.path.to_string_lossy().into_owned();
-                let icon = if cfg!(windows) {
-                    IconSource::Shell {
-                        parsing_name: path_string.clone(),
-                    }
-                } else if entry.is_dir {
-                    IconSource::builtin("folder")
-                } else {
-                    IconSource::builtin("file")
-                };
-                ResultItem::new(
-                    "files",
-                    &path_string,
-                    &entry.name,
-                    Action::OpenPath {
-                        path: entry.path.clone(),
-                    },
-                )
-                .with_subtitle(subtitle(&entry.path, self.home.as_deref()))
-                .with_icon(icon)
-                .with_score(score)
-            })
+            .map(|(score, i)| self.result_item(&index[i], score))
             .collect()
+    }
+
+    fn result_item(&self, entry: &FileEntry, score: f64) -> ResultItem {
+        let path_string = entry.path.to_string_lossy().into_owned();
+        let icon = if cfg!(windows) {
+            IconSource::Shell {
+                parsing_name: path_string.clone(),
+            }
+        } else if entry.is_dir {
+            IconSource::builtin("folder")
+        } else {
+            IconSource::builtin("file")
+        };
+        ResultItem::new(
+            "files",
+            &path_string,
+            &entry.name,
+            Action::OpenPath {
+                path: entry.path.clone(),
+            },
+        )
+        .with_subtitle(subtitle(&entry.path, self.home.as_deref()))
+        .with_icon(icon)
+        .with_score(score)
     }
 }
 
@@ -275,6 +276,20 @@ impl Plugin for FilesPlugin {
 
     fn execute(&self, item: &ResultItem) -> PluginResult<()> {
         execute_action(self.platform.as_ref(), &item.action)
+    }
+
+    /// `files:<full path>` for any path that still exists, indexed or not: a
+    /// hotkey bound to a file should keep working outside the search depth.
+    fn resolve(&self, id: &str) -> Option<ResultItem> {
+        let path = PathBuf::from(id.strip_prefix("files:")?);
+        let metadata = std::fs::metadata(&path).ok()?;
+        let name = path.file_name()?.to_string_lossy().into_owned();
+        let entry = FileEntry {
+            name,
+            path,
+            is_dir: metadata.is_dir(),
+        };
+        Some(self.result_item(&entry, 0.0))
     }
 
     fn refresh(&self) -> PluginResult<()> {
@@ -628,6 +643,33 @@ mod tests {
         let results = plugin.query("open_me");
         plugin.execute(&results[0]).unwrap();
         assert_eq!(*platform.opened_paths.lock().unwrap(), vec![file]);
+    }
+
+    #[test]
+    fn resolve_rebuilds_a_result_from_its_id() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("notes.txt");
+        touch(&file);
+        let platform = MockPlatform::empty();
+        // Not indexed: the file is outside the configured directories.
+        let plugin = FilesPlugin::with_home(FilesConfig::default(), platform.clone(), None);
+
+        let id = format!("files:{}", file.display());
+        let item = plugin.resolve(&id).expect("existing file");
+        assert_eq!(item.id, id);
+        assert_eq!(item.title, "notes.txt");
+        plugin.execute(&item).unwrap();
+        assert_eq!(*platform.opened_paths.lock().unwrap(), vec![file]);
+
+        let dir_item = plugin
+            .resolve(&format!("files:{}", dir.path().display()))
+            .expect("existing folder");
+        assert!(matches!(dir_item.action, Action::OpenPath { .. }));
+
+        assert!(plugin
+            .resolve(&format!("files:{}", dir.path().join("gone").display()))
+            .is_none());
+        assert!(plugin.resolve("apps:notes.txt").is_none());
     }
 
     #[test]

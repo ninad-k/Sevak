@@ -68,6 +68,31 @@ fn name_bonus(name_lower: &str, query_lower: &str) -> f64 {
     }
 }
 
+fn result_item(entry: &AppEntry, score: f64) -> ResultItem {
+    ResultItem::new(
+        "apps",
+        &entry.id,
+        &entry.name,
+        Action::Launch {
+            target: entry.target.clone(),
+        },
+    )
+    .with_subtitle(
+        entry
+            .description
+            .as_deref()
+            .filter(|d| !d.trim().is_empty())
+            .unwrap_or("Application"),
+    )
+    .with_icon(
+        entry
+            .icon
+            .clone()
+            .unwrap_or_else(|| IconSource::builtin("app")),
+    )
+    .with_score(score)
+}
+
 impl Plugin for AppsPlugin {
     fn id(&self) -> &str {
         "apps"
@@ -123,32 +148,15 @@ impl Plugin for AppsPlugin {
 
         scored
             .into_iter()
-            .map(|(score, app)| {
-                let entry = &app.entry;
-                ResultItem::new(
-                    "apps",
-                    &entry.id,
-                    &entry.name,
-                    Action::Launch {
-                        target: entry.target.clone(),
-                    },
-                )
-                .with_subtitle(
-                    entry
-                        .description
-                        .as_deref()
-                        .filter(|d| !d.trim().is_empty())
-                        .unwrap_or("Application"),
-                )
-                .with_icon(
-                    entry
-                        .icon
-                        .clone()
-                        .unwrap_or_else(|| IconSource::builtin("app")),
-                )
-                .with_score(score)
-            })
+            .map(|(score, app)| result_item(&app.entry, score))
             .collect()
+    }
+
+    fn resolve(&self, id: &str) -> Option<ResultItem> {
+        let key = id.strip_prefix("apps:")?;
+        let index = self.snapshot();
+        let app = index.iter().find(|app| app.entry.id == key)?;
+        Some(result_item(&app.entry, 0.0))
     }
 
     fn execute(&self, item: &ResultItem) -> PluginResult<()> {
@@ -231,6 +239,20 @@ mod tests {
         let platform = MockPlatform::with_apps(fixture());
         let plugin = AppsPlugin::new(platform);
         assert!(plugin.query("fir").is_empty());
+    }
+
+    #[test]
+    fn resolve_finds_an_indexed_app_by_its_result_id() {
+        let (plugin, platform) = plugin_with(fixture());
+        let item = plugin.resolve("apps:firefox").expect("indexed app");
+        assert_eq!(item.title, "Firefox");
+        assert_eq!(item.id, "apps:firefox");
+        plugin.execute(&item).unwrap();
+        assert_eq!(platform.launched.lock().unwrap().len(), 1);
+
+        assert!(plugin.resolve("apps:nope").is_none());
+        assert!(plugin.resolve("files:firefox").is_none());
+        assert!(plugin.resolve("firefox").is_none());
     }
 
     #[test]

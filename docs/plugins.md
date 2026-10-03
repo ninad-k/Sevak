@@ -110,6 +110,14 @@ process, so plugins must never panic.
   volatile data (a random UUID, a timestamp), or the history fills with ids that
   never come back.
 - Plugins with several instances use `family:instance` ids (`web:g`, `web:yt`).
+- **Running a result by id.** A `[[hotkey]] run = "<id>"` entry (and
+  `sevak --run <id>`) executes a result without a query. The engine asks the
+  plugin that owns the id prefix to rebuild the result through
+  `Plugin::resolve(id)`. The default returns `None` ("not resolvable"); implement
+  it when your keys name something that can be found again without a query, as
+  `apps` (looks the key up in its index) and `files` (checks the path exists)
+  do. Plugins that only exist as answers to a typed query (calculator, web
+  search, uuid) leave it alone.
 
 ### Registry and enabling/disabling
 

@@ -5,6 +5,7 @@ use std::time::Instant;
 
 use serde::Serialize;
 use sevak_core::config::Theme;
+use sevak_core::theme::{self, ResolvedAppearance};
 use sevak_core::Config;
 use sevak_platform::{AppPaths, DisplayServer};
 
@@ -26,14 +27,27 @@ pub struct HotkeyStatus {
     pub error: Option<String>,
 }
 
+/// How one `[[hotkey]]` entry fared, in the order of the config.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CustomHotkeyStatus {
+    pub key: String,
+    /// What the key does, e.g. `Run apps:firefox.desktop`.
+    pub description: String,
+    /// Why it is not active (bad key, taken by another app, duplicate).
+    pub error: Option<String>,
+}
+
 /// Snapshot sent to the frontend (`get_status` and `sevak:status`).
 #[derive(Debug, Clone, Serialize)]
 pub struct Status {
     pub version: String,
     pub display: String,
     pub hotkey: HotkeyStatus,
+    pub custom_hotkeys: Vec<CustomHotkeyStatus>,
     /// The configured theme; the frontend resolves `system` itself.
     pub theme: Theme,
+    /// The CSS for the accent, font, radius and custom stylesheet.
+    pub appearance: ResolvedAppearance,
     /// The search index is being (re)built.
     pub indexing: bool,
 }
@@ -44,6 +58,8 @@ pub struct AppState {
     pub config: RwLock<Config>,
     pub search: Search,
     pub hotkey: RwLock<HotkeyStatus>,
+    pub custom_hotkeys: RwLock<Vec<CustomHotkeyStatus>>,
+    pub appearance: RwLock<ResolvedAppearance>,
     /// When the window was last shown.
     pub last_shown: Mutex<Option<Instant>>,
     /// When the window last hid itself because it lost focus.
@@ -58,12 +74,15 @@ impl AppState {
             error: None,
         };
         let search = Search::new(&paths, &config);
+        let appearance = theme::resolve(&config.appearance, &paths.config_dir);
         Self {
             paths,
             display,
             search,
             config: RwLock::new(config),
             hotkey: RwLock::new(hotkey),
+            custom_hotkeys: RwLock::new(Vec::new()),
+            appearance: RwLock::new(appearance),
             last_shown: Mutex::new(None),
             last_blur_hide: Mutex::new(None),
         }
@@ -77,6 +96,16 @@ impl AppState {
             .clone()
     }
 
+    /// Re-validates the appearance settings and re-reads the custom stylesheet
+    /// (after a config reload).
+    pub fn refresh_appearance(&self) {
+        let resolved = theme::resolve(&self.config().appearance, &self.paths.config_dir);
+        *self
+            .appearance
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = resolved;
+    }
+
     pub fn status(&self) -> Status {
         let hotkey = self
             .hotkey
@@ -87,7 +116,17 @@ impl AppState {
             version: env!("CARGO_PKG_VERSION").to_owned(),
             display: self.display.as_str().to_owned(),
             hotkey,
+            custom_hotkeys: self
+                .custom_hotkeys
+                .read()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .clone(),
             theme: self.config().appearance.theme,
+            appearance: self
+                .appearance
+                .read()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .clone(),
             indexing: self.search.is_indexing(),
         }
     }

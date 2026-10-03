@@ -13,7 +13,7 @@ use thiserror::Error;
 
 /// The file written on first run. It mirrors [`Config::default`] (enforced by a
 /// unit test) but carries comments, which `toml::to_string` cannot produce.
-pub const DEFAULT_CONFIG_TOML: &str = r#"# Sevak configuration
+pub const DEFAULT_CONFIG_TOML: &str = r##"# Sevak configuration
 #
 # Created with default values on first run. Edit it, then choose "Reload index"
 # from the tray menu (or restart Sevak) to apply changes.
@@ -55,6 +55,19 @@ fallback_web_search = "g"
 [appearance]
 # "system", "light" or "dark".
 theme = "system"
+# Accent color as "#rrggbb", "#rgb" or "rgb(r, g, b)". "" keeps the theme's own.
+accent = ""
+# Size of the result titles in pixels (12-22); the rest of the bar scales with it.
+font_size = 15
+# Font for the search bar, e.g. "Fira Sans, sans-serif". "" uses the system font.
+font_family = ""
+# How opaque the search bar's background is, in percent (30-100).
+opacity = 100
+# Corner radius of the search bar in pixels (0-32).
+radius = 14
+# A stylesheet inside this config folder that overrides the theme's CSS variables
+# (see docs/themes.md), for example "theme.css". "" loads none.
+custom_css = ""
 
 [plugins]
 # Ids of built-in plugins to turn off: "apps", "calculator", "files", "web:<keyword>".
@@ -88,7 +101,21 @@ url = "https://www.youtube.com/results?search_query={query}"
 keyword = "gh"
 name = "GitHub"
 url = "https://github.com/search?q={query}"
-"#;
+
+# Extra global hotkeys. Each [[hotkey]] has a "key" and exactly one of:
+#   query = "..."  open Sevak with this text already typed
+#   run = "..."    run a result directly, without showing Sevak; the value is a
+#                  result id such as "apps:firefox.desktop" or "files:<full path>"
+# On Linux Wayland, `sevak --setup-hotkey` binds these in GNOME as well.
+#
+# [[hotkey]]
+# key = "Ctrl+Alt+T"
+# query = "> "
+#
+# [[hotkey]]
+# key = "Ctrl+Alt+F"
+# run = "apps:firefox.desktop"
+"##;
 
 pub const MIN_WINDOW_WIDTH: u32 = 400;
 pub const MAX_WINDOW_WIDTH: u32 = 1600;
@@ -105,6 +132,9 @@ pub struct Config {
     pub plugins: PluginsConfig,
     pub files: FilesConfig,
     pub web_search: Vec<WebSearchEngine>,
+    /// Extra global hotkeys (`[[hotkey]]` tables).
+    #[serde(rename = "hotkey")]
+    pub hotkeys: Vec<HotkeyBinding>,
 }
 
 impl Default for Config {
@@ -118,6 +148,7 @@ impl Default for Config {
             plugins: PluginsConfig::default(),
             files: FilesConfig::default(),
             web_search: WebSearchEngine::defaults(),
+            hotkeys: Vec::new(),
         }
     }
 }
@@ -199,10 +230,84 @@ pub enum Theme {
     Dark,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+/// Appearance settings. Values are stored as written; [`crate::theme::resolve`]
+/// validates them (falling back to the defaults) when they are applied, so a typo
+/// never costs the user the rest of the file.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppearanceConfig {
     pub theme: Theme,
+    /// `#rgb`, `#rrggbb` or `rgb(r, g, b)`; empty keeps the theme's accent.
+    pub accent: String,
+    /// Pixel size of result titles.
+    pub font_size: u32,
+    /// Comma-separated font families; empty uses the system font.
+    pub font_family: String,
+    /// Background opacity of the search bar, in percent.
+    pub opacity: u32,
+    /// Corner radius of the search bar, in pixels.
+    pub radius: u32,
+    /// Stylesheet inside the config directory; empty loads none.
+    pub custom_css: String,
+}
+
+impl Default for AppearanceConfig {
+    fn default() -> Self {
+        Self {
+            theme: Theme::default(),
+            accent: String::new(),
+            font_size: crate::theme::DEFAULT_FONT_SIZE,
+            font_family: String::new(),
+            opacity: crate::theme::MAX_OPACITY,
+            radius: crate::theme::DEFAULT_RADIUS,
+            custom_css: String::new(),
+        }
+    }
+}
+
+/// One `[[hotkey]]` entry: a global key bound to a query or a result.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HotkeyBinding {
+    /// Accelerator string, parsed like `general.hotkey`.
+    pub key: String,
+    /// Open Sevak with this text typed in.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub query: Option<String>,
+    /// Run the result with this id without showing Sevak.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run: Option<String>,
+}
+
+/// What a [`HotkeyBinding`] does when its key is pressed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HotkeyTarget {
+    Query(String),
+    Run(String),
+}
+
+impl HotkeyBinding {
+    /// The binding's action, or why it has none (both or neither of `query`
+    /// and `run` given, or an empty `run`).
+    pub fn target(&self) -> Result<HotkeyTarget, &'static str> {
+        match (&self.query, &self.run) {
+            (Some(_), Some(_)) => Err("set either \"query\" or \"run\", not both"),
+            (None, None) => Err("set \"query\" or \"run\""),
+            (Some(query), None) => Ok(HotkeyTarget::Query(query.clone())),
+            (None, Some(run)) if run.trim().is_empty() => Err("\"run\" is empty"),
+            (None, Some(run)) => Ok(HotkeyTarget::Run(run.trim().to_owned())),
+        }
+    }
+
+    /// Short description for logs and the settings window.
+    pub fn describe(&self) -> String {
+        match self.target() {
+            Ok(HotkeyTarget::Query(query)) if query.is_empty() => "Open Sevak".to_owned(),
+            Ok(HotkeyTarget::Query(query)) => format!("Open Sevak with \"{query}\""),
+            Ok(HotkeyTarget::Run(id)) => format!("Run {id}"),
+            Err(reason) => format!("Invalid ({reason})"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -410,12 +515,18 @@ impl Config {
         } else {
             hotkey.to_owned()
         };
+        // An entry without a key cannot be reported against anything.
+        for binding in &mut self.hotkeys {
+            binding.key = binding.key.trim().to_owned();
+        }
+        self.hotkeys.retain(|binding| !binding.key.is_empty());
         self
     }
 }
 
-/// Key of the one array of tables in the schema.
+/// Keys of the arrays of tables in the schema.
 const WEB_SEARCH_KEY: &str = "web_search";
+const HOTKEY_KEY: &str = "hotkey";
 
 /// Applies `updated` (a freshly serialized config) onto `document`.
 fn merge_document(document: &mut toml_edit::DocumentMut, updated: &toml_edit::DocumentMut) {
@@ -423,7 +534,12 @@ fn merge_document(document: &mut toml_edit::DocumentMut, updated: &toml_edit::Do
 
     for (key, new_item) in updated.as_table() {
         if key == WEB_SEARCH_KEY {
-            merge_web_search(document.as_table_mut(), new_item);
+            // The defaults come back when the key is absent, so "none" is written out.
+            merge_table_list(document.as_table_mut(), key, new_item, true);
+            continue;
+        }
+        if key == HOTKEY_KEY {
+            merge_table_list(document.as_table_mut(), key, new_item, false);
             continue;
         }
         // The serializer emits sections as inline tables; edit them as tables.
@@ -479,7 +595,14 @@ fn merge_item(table: &mut toml_edit::Table, key: &str, new_item: &toml_edit::Ite
     }
 }
 
-fn merge_web_search(root: &mut toml_edit::Table, new_item: &toml_edit::Item) {
+/// Replaces the array of tables `key` as a whole. An empty list is written as
+/// `key = []` when `keep_empty` is set, and removed otherwise.
+fn merge_table_list(
+    root: &mut toml_edit::Table,
+    key: &str,
+    new_item: &toml_edit::Item,
+    keep_empty: bool,
+) {
     use toml_edit::Item;
 
     let mut new_engines = match new_item {
@@ -490,7 +613,7 @@ fn merge_web_search(root: &mut toml_edit::Table, new_item: &toml_edit::Item) {
             .unwrap_or_else(|_| toml_edit::ArrayOfTables::new()),
     };
 
-    let unchanged = match root.get(WEB_SEARCH_KEY) {
+    let unchanged = match root.get(key) {
         Some(Item::ArrayOfTables(old)) => {
             old.len() == new_engines.len()
                 && old
@@ -499,31 +622,39 @@ fn merge_web_search(root: &mut toml_edit::Table, new_item: &toml_edit::Item) {
                     .all(|(a, b)| tables_equal(a, b))
         }
         Some(Item::Value(toml_edit::Value::Array(old))) => old.is_empty() && new_engines.is_empty(),
+        None => new_engines.is_empty() && !keep_empty,
         _ => false,
     };
     if unchanged {
         return;
     }
 
-    // An empty list cannot be written as `[[web_search]]` tables, and omitting
-    // the key would bring the default engines back on the next load.
+    // An empty list cannot be written as `[[...]]` tables.
     if new_engines.is_empty() {
-        root.insert(
-            WEB_SEARCH_KEY,
-            Item::Value(toml_edit::Value::Array(toml_edit::Array::new())),
-        );
+        if keep_empty {
+            // Omitting the key would bring the defaults back on the next load.
+            root.insert(
+                key,
+                Item::Value(toml_edit::Value::Array(toml_edit::Array::new())),
+            );
+        } else {
+            root.remove(key);
+        }
         return;
     }
 
-    // The comment block above the first `[[web_search]]` belongs to the list.
-    let leading_decor = match root.get(WEB_SEARCH_KEY) {
+    // The comment block above the first `[[...]]` belongs to the list.
+    let leading_decor = match root.get(key) {
         Some(Item::ArrayOfTables(old)) => old.iter().next().map(|t| t.decor().clone()),
         _ => None,
     };
-    if let (Some(decor), Some(first)) = (leading_decor, new_engines.iter_mut().next()) {
-        *first.decor_mut() = decor;
+    match (leading_decor, new_engines.iter_mut().next()) {
+        (Some(decor), Some(first)) => *first.decor_mut() = decor,
+        // A list new to the file: set it apart from what precedes it.
+        (None, Some(first)) => first.decor_mut().set_prefix("\n"),
+        _ => {}
     }
-    root.insert(WEB_SEARCH_KEY, Item::ArrayOfTables(new_engines));
+    root.insert(key, Item::ArrayOfTables(new_engines));
 }
 
 fn tables_equal(a: &toml_edit::Table, b: &toml_edit::Table) -> bool {
@@ -838,5 +969,115 @@ thing = true
         let text = saved(Some(&existing), &config);
         assert!(text.contains("# Sevak configuration\r\n"), "{text:?}");
         assert_eq!(Config::from_toml_str(&text).unwrap(), config);
+    }
+
+    fn binding(key: &str, query: Option<&str>, run: Option<&str>) -> HotkeyBinding {
+        HotkeyBinding {
+            key: key.to_owned(),
+            query: query.map(str::to_owned),
+            run: run.map(str::to_owned),
+        }
+    }
+
+    #[test]
+    fn hotkey_entries_parse() {
+        let config = Config::from_toml_str(
+            r#"
+[[hotkey]]
+key = " Ctrl+Alt+T "
+query = "> "
+
+[[hotkey]]
+key = "Ctrl+Alt+F"
+run = "apps:firefox.desktop"
+
+[[hotkey]]
+query = "no key, dropped"
+"#,
+        )
+        .unwrap();
+        assert_eq!(
+            config.hotkeys,
+            vec![
+                binding("Ctrl+Alt+T", Some("> "), None),
+                binding("Ctrl+Alt+F", None, Some("apps:firefox.desktop")),
+            ]
+        );
+    }
+
+    #[test]
+    fn hotkey_targets() {
+        assert_eq!(
+            binding("K", Some("> "), None).target(),
+            Ok(HotkeyTarget::Query("> ".to_owned()))
+        );
+        assert_eq!(
+            binding("K", None, Some(" apps:x ")).target(),
+            Ok(HotkeyTarget::Run("apps:x".to_owned()))
+        );
+        assert!(binding("K", Some("a"), Some("b")).target().is_err());
+        assert!(binding("K", None, None).target().is_err());
+        assert!(binding("K", None, Some("  ")).target().is_err());
+        assert_eq!(binding("K", Some(""), None).describe(), "Open Sevak");
+        assert_eq!(
+            binding("K", Some("> "), None).describe(),
+            "Open Sevak with \"> \""
+        );
+    }
+
+    #[test]
+    fn hotkey_entries_are_written_and_removed_again() {
+        let mut config = Config {
+            hotkeys: vec![
+                binding("Ctrl+Alt+T", Some("> "), None),
+                binding("Ctrl+Alt+F", None, Some("apps:firefox.desktop")),
+            ],
+            ..Config::default()
+        };
+        let text = saved(Some(DEFAULT_CONFIG_TOML), &config);
+        assert_eq!(text.matches("\n[[hotkey]]\n").count(), 2, "{text}");
+        assert!(text.contains("# Extra global hotkeys."));
+        assert!(text.contains("# [[hotkey]]"));
+        assert_eq!(Config::from_toml_str(&text).unwrap(), config);
+
+        // An unchanged list leaves the file alone.
+        assert_eq!(saved(Some(&text), &config), text);
+
+        config.hotkeys.remove(0);
+        let text = saved(Some(&text), &config);
+        assert_eq!(text.matches("\n[[hotkey]]\n").count(), 1, "{text}");
+        assert_eq!(Config::from_toml_str(&text).unwrap(), config);
+
+        let text = saved(Some(&text), &Config::default());
+        assert!(!text.contains("\n[[hotkey]]\n"), "{text}");
+        assert_eq!(text, DEFAULT_CONFIG_TOML);
+    }
+
+    #[test]
+    fn appearance_options_roundtrip_and_keep_comments() {
+        let mut config = Config::default();
+        config.appearance.accent = "#7c3aed".to_owned();
+        config.appearance.font_size = 18;
+        config.appearance.font_family = "Fira Sans, sans-serif".to_owned();
+        config.appearance.opacity = 85;
+        config.appearance.radius = 4;
+        config.appearance.custom_css = "theme.css".to_owned();
+        let text = saved(Some(DEFAULT_CONFIG_TOML), &config);
+        assert!(text.contains("# Corner radius of the search bar in pixels (0-32)."));
+        assert_eq!(Config::from_toml_str(&text).unwrap(), config);
+    }
+
+    #[test]
+    fn older_files_without_the_new_options_load_with_defaults() {
+        let config = Config::from_toml_str("[appearance]\ntheme = \"dark\"\n").unwrap();
+        assert_eq!(config.appearance.theme, Theme::Dark);
+        assert_eq!(
+            AppearanceConfig {
+                theme: Theme::Dark,
+                ..AppearanceConfig::default()
+            },
+            config.appearance
+        );
+        assert!(config.hotkeys.is_empty());
     }
 }
