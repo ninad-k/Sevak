@@ -92,6 +92,11 @@ pub fn open_with_query(app: &AppHandle, query: String) {
 /// Runs result `id` in the background. If it cannot be found or fails, the
 /// launcher opens with the reason instead, so the key never seems dead.
 pub fn run_result(app: &AppHandle, id: String) {
+    // Now, while the user's app still has focus: a snippet or clipboard entry
+    // bound to a key pastes into it.
+    if let Some(state) = app.try_state::<AppState>() {
+        state.search.platform.remember_foreground_app();
+    }
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || match try_run(&app, &id) {
         Ok(()) => {
@@ -130,6 +135,13 @@ fn try_run(app: &AppHandle, id: &str) -> Result<(), String> {
     let item = engine.resolve(id).ok_or_else(|| {
         format!("Cannot run \"{id}\": no such result (is the plugin on and the item installed?)")
     })?;
+    // A key bound to a destructive command (shut down) still asks first.
+    if let Some(question) = engine.confirmation(&item) {
+        if !crate::commands::confirmed(app, &item.title, question) {
+            tracing::info!(id, "run: declined at the confirmation");
+            return Ok(());
+        }
+    }
     // No query was typed, so the usage statistics get none either.
     engine.execute(&item, "").map_err(|err| err.to_string())?;
     search.saver.poke();

@@ -219,7 +219,7 @@ fn hands_over(action: &Action) -> bool {
 /// OK button carries the action's name. Blocks, so only call it off the main
 /// thread. Anything but an explicit OK (Cancel, closing the dialog, no dialog
 /// available) declines: a destructive action never runs by accident.
-fn confirmed(app: &AppHandle, action: &str, question: String) -> bool {
+pub(crate) fn confirmed(app: &AppHandle, action: &str, question: String) -> bool {
     app.dialog()
         .message(question)
         .title("Sevak")
