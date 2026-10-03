@@ -185,3 +185,22 @@ fn message(app: &AppHandle, text: &str, kind: MessageDialogKind) {
         .buttons(MessageDialogButtons::Ok)
         .show(|_| {});
 }
+
+#[cfg(test)]
+mod tests {
+    /// The plugin parses this section at startup and Sevak cannot start if it
+    /// is invalid, so catch mistakes here rather than in a release.
+    #[test]
+    fn updater_config_in_tauri_conf_is_valid() {
+        let conf: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let updater: tauri_plugin_updater::Config =
+            serde_json::from_value(conf["plugins"]["updater"].clone()).unwrap();
+        assert_eq!(
+            updater.endpoints[0].as_str(),
+            "https://github.com/ninad-k/Sevak/releases/latest/download/latest.json"
+        );
+        assert!(!updater.pubkey.is_empty());
+        assert!(!updater.dangerous_insecure_transport_protocol);
+    }
+}
