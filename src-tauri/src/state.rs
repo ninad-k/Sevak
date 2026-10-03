@@ -44,6 +44,8 @@ pub struct Status {
     pub display: String,
     pub hotkey: HotkeyStatus,
     pub custom_hotkeys: Vec<CustomHotkeyStatus>,
+    /// The Universal Actions key; `None` when `actions_hotkey` is empty.
+    pub actions_hotkey: Option<CustomHotkeyStatus>,
     /// The configured theme; the frontend resolves `system` itself.
     pub theme: Theme,
     /// The CSS for the accent, font, radius and custom stylesheet.
@@ -59,6 +61,7 @@ pub struct AppState {
     pub search: Search,
     pub hotkey: RwLock<HotkeyStatus>,
     pub custom_hotkeys: RwLock<Vec<CustomHotkeyStatus>>,
+    pub actions_hotkey: RwLock<Option<CustomHotkeyStatus>>,
     pub appearance: RwLock<ResolvedAppearance>,
     /// When the window was last shown.
     pub last_shown: Mutex<Option<Instant>>,
@@ -82,6 +85,7 @@ impl AppState {
             config: RwLock::new(config),
             hotkey: RwLock::new(hotkey),
             custom_hotkeys: RwLock::new(Vec::new()),
+            actions_hotkey: RwLock::new(None),
             appearance: RwLock::new(appearance),
             last_shown: Mutex::new(None),
             last_blur_hide: Mutex::new(None),
@@ -118,6 +122,11 @@ impl AppState {
             hotkey,
             custom_hotkeys: self
                 .custom_hotkeys
+                .read()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .clone(),
+            actions_hotkey: self
+                .actions_hotkey
                 .read()
                 .unwrap_or_else(|poisoned| poisoned.into_inner())
                 .clone(),

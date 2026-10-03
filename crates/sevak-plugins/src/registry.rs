@@ -29,8 +29,8 @@ use sevak_platform::PlatformProvider;
 
 use crate::clipboard_history::default_history_path;
 use crate::{
-    AppsPlugin, BookmarksPlugin, CalculatorPlugin, ClipboardPlugin, FilesPlugin, ShellPlugin,
-    SnippetsPlugin, SystemPlugin, UuidPlugin, WebSearchPlugin,
+    AppsPlugin, BookmarksPlugin, CalculatorPlugin, ClipboardPlugin, FilesPlugin, SelectionPlugin,
+    ShellPlugin, SnippetsPlugin, SystemPlugin, UuidPlugin, WebSearchPlugin,
 };
 
 /// Builds the instances of one plugin family.
@@ -108,7 +108,8 @@ impl PluginRegistry {
     }
 
     /// Apps, calculator, web search, files, bookmarks, system commands, shell,
-    /// clipboard history, snippets and the example UUID plugin, in that order.
+    /// clipboard history, snippets, Universal Actions and the example UUID
+    /// plugin, in that order.
     /// Order matters only for tie-breaking and logging.
     pub fn builtin() -> Self {
         let mut registry = Self::new();
@@ -206,6 +207,12 @@ impl PluginRegistry {
                     platform.clone(),
                 ))]
             },
+        ));
+        registry.register(PluginDescriptor::new(
+            "selection",
+            "Universal Actions",
+            "Offers actions (search, transform, copy, open) for text, URLs or files you selected in another app; see actions_hotkey.",
+            |config, platform| vec![Arc::new(SelectionPlugin::new(config, platform.clone()))],
         ));
         registry.register(PluginDescriptor::new(
             "uuid",
@@ -324,6 +331,7 @@ mod tests {
                 "shell",
                 "clipboard",
                 "snippets",
+                "selection",
                 "uuid"
             ]
         );
@@ -345,6 +353,7 @@ mod tests {
                 "shell",
                 "clipboard",
                 "snippets",
+                "selection",
                 "uuid"
             ]
         );
@@ -364,6 +373,7 @@ mod tests {
                 "shell",
                 "clipboard",
                 "snippets",
+                "selection",
                 "uuid"
             ]
         );
@@ -383,7 +393,8 @@ mod tests {
                 "bookmarks",
                 "shell",
                 "clipboard",
-                "snippets"
+                "snippets",
+                "selection"
             ]
         );
     }
@@ -391,7 +402,7 @@ mod tests {
     #[test]
     fn unknown_disabled_ids_are_ignored() {
         let config = config_disabling(&["nope"]);
-        assert_eq!(ids(&PluginRegistry::builtin(), &config).len(), 12);
+        assert_eq!(ids(&PluginRegistry::builtin(), &config).len(), 13);
     }
 
     #[test]
@@ -413,6 +424,7 @@ mod tests {
                 ("shell", true),
                 ("clipboard", true),
                 ("snippets", true),
+                ("selection", true),
                 ("uuid", true),
             ]
         );

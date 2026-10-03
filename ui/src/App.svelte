@@ -8,6 +8,7 @@
     copyResult,
     execute,
     getStatus,
+    hasTauri,
     hideWindow,
     onHidden,
     onIndex,
@@ -21,8 +22,11 @@
     takePendingShow,
     type Modifier,
     type ResultDto,
+    type SelectionActionDto,
+    type SelectionPayload,
     type ShowPayload,
     type Status,
+    type WindowAction,
   } from "./lib/ipc";
 
   let query = $state("");
@@ -42,6 +46,12 @@
   /** The action panel (Right arrow / Ctrl+K): all actions of the selected row. */
   let panelOpen = $state(false);
   let panelIndex = $state(0);
+  let panelEl: HTMLElement | undefined = $state();
+  /**
+   * Universal Actions: the actions for what was selected in another app. While
+   * it is set the panel lists them instead of a row's actions (and is open).
+   */
+  let selection = $state<SelectionPayload | null>(null);
   /** Large Type: the text shown huge, or `null` when it is not showing. */
   let largeText = $state<string | null>(null);
   /** The window was stretched over the screen (else the text shows inside the launcher). */
@@ -54,20 +64,41 @@
 
   interface PanelEntry {
     label: string;
+    /** Muted text after the label: a preview of what the action produces. */
+    detail?: string;
     modifier: Modifier | null;
     /** Index into the row's secondary actions; `null` is the primary action. */
     index: number | null;
+    /** What Enter does, as a word (Universal Actions). */
+    verb?: string;
+    /** The other modifier + Enter shortcuts of the action (Universal Actions). */
+    extras?: { modifier: Modifier; label: string }[];
   }
 
   const current = $derived<ResultDto | undefined>(results[selected]);
   const mac = $derived(status?.display === "macos");
   const panelEntries = $derived<PanelEntry[]>(
-    current
-      ? [
-          { label: verb(current), modifier: null, index: null },
-          ...current.secondary.map((s, index) => ({ label: s.label, modifier: s.modifier, index })),
-        ]
-      : [],
+    selection
+      ? selection.actions.map((action) => ({
+          label: action.title,
+          detail: action.subtitle,
+          modifier: null,
+          index: null,
+          verb: selectionVerb(action),
+          extras: action.secondary.flatMap((s) =>
+            s.modifier ? [{ modifier: s.modifier, label: s.label }] : [],
+          ),
+        }))
+      : current
+        ? [
+            { label: verb(current), modifier: null, index: null },
+            ...current.secondary.map((s, index) => ({
+              label: s.label,
+              modifier: s.modifier,
+              index,
+            })),
+          ]
+        : [],
   );
   const modifierHints = $derived(current?.secondary.filter((s) => s.modifier !== null) ?? []);
 
@@ -113,6 +144,7 @@
   function reset() {
     searchSeq++; // drop any search still in flight
     panelOpen = false;
+    selection = null;
     closeLargeType();
     historyPos = -1;
     query = "";
@@ -125,19 +157,49 @@
   /** The window is being shown; `payload` can prefill the query or carry an error. */
   function applyShow(payload: ShowPayload | null) {
     reset();
+    if (payload?.selection) {
+      openSelection(payload.selection);
+      return;
+    }
     if (payload?.error) error = payload.error;
     if (payload?.query) {
-      const text = payload.query;
-      query = text;
-      void runSearch(text);
-      // Caret at the end, so typing continues after the prefilled text.
-      void tick().then(() => {
-        focusInput();
-        input?.setSelectionRange(text.length, text.length);
-      });
+      prefill(payload.query);
       return;
     }
     focusInput(true);
+  }
+
+  /** Puts `text` in the search box and searches for it, caret at the end. */
+  function prefill(text: string) {
+    query = text;
+    void runSearch(text);
+    // Caret at the end, so typing continues after the prefilled text.
+    void tick().then(() => {
+      focusInput();
+      input?.setSelectionRange(text.length, text.length);
+    });
+  }
+
+  /** Shows the actions for the selection that was captured in another app. */
+  function openSelection(payload: SelectionPayload) {
+    selection = payload;
+    panelIndex = 0;
+    panelOpen = true;
+    focusInput(true);
+  }
+
+  /** Back to ordinary searching: the selection's actions are gone. */
+  function leaveSelection() {
+    selection = null;
+    panelOpen = false;
+  }
+
+  /** What Enter does for a Universal Actions entry, as one word. */
+  function selectionVerb(action: SelectionActionDto): string {
+    if (action.window?.kind === "large_type") return "Show";
+    if (action.window?.kind === "search") return "Browse";
+    if (action.action === "paste_text") return "Replace";
+    return verb(action);
   }
 
   async function runSearch(text: string) {
@@ -266,11 +328,47 @@
     panelOpen = true;
   }
 
-  function runPanelEntry(k: number) {
+  /** `modifier` (Universal Actions only) picks the entry's alternative action. */
+  function runPanelEntry(k: number, modifier: Modifier | null = null) {
     const entry = panelEntries[k];
     if (!entry) return;
+    if (selection) {
+      void runSelection(selection.actions[k], modifier);
+      return;
+    }
     panelOpen = false;
     void run(selected, entry.index ?? undefined);
+  }
+
+  /** Runs a Universal Actions entry: the window's own, or the shell's. */
+  async function runSelection(action: SelectionActionDto | undefined, modifier: Modifier | null) {
+    const set = selection;
+    if (!action || !set || executing) return;
+    let alternative: number | undefined;
+    if (modifier !== null) {
+      // An action without that alternative does nothing for the key.
+      alternative = action.secondary.findIndex((s) => s.modifier === modifier);
+      if (alternative < 0) return;
+    } else if (action.window) {
+      runWindowAction(action.window);
+      return;
+    }
+    executing = true;
+    try {
+      const message = await execute(action.id, set.ticket, alternative);
+      if (message !== null) error = message;
+    } finally {
+      executing = false;
+    }
+  }
+
+  function runWindowAction(action: WindowAction) {
+    if (action.kind === "large_type") {
+      void openLargeType(action.text);
+    } else {
+      leaveSelection();
+      prefill(action.query);
+    }
   }
 
   function onPanelMove(e: MouseEvent, k: number) {
@@ -293,7 +391,8 @@
 
   async function openLargeType(text: string) {
     const mine = ++largeSeq;
-    panelOpen = false;
+    // The selection's actions come back when Large Type is dismissed.
+    if (!selection) panelOpen = false;
     largeText = text;
     const full = await setLargeType(true);
     // The webview learns its new size a moment after the window has it.
@@ -386,9 +485,14 @@
 
     if (panelOpen) {
       const n = panelEntries.length;
-      if (key === "Escape" || key === "ArrowLeft" || (ctrl && lower === "k")) {
+      if (key === "Escape" && selection) {
+        // Nothing else is behind the actions: Esc dismisses the launcher.
         e.preventDefault();
-        panelOpen = false;
+        void hideWindow();
+        return;
+      } else if (key === "Escape" || key === "ArrowLeft" || (ctrl && lower === "k")) {
+        e.preventDefault();
+        leaveSelection();
         return;
       } else if (key === "ArrowDown" || (ctrl && lower === "n")) {
         e.preventDefault();
@@ -400,13 +504,17 @@
         return;
       } else if (key === "Enter") {
         e.preventDefault();
-        runPanelEntry(panelIndex);
+        runPanelEntry(panelIndex, selection ? modifierOf(e) : null);
+        return;
+      } else if (selection && ctrl && /^[1-9]$/.test(key)) {
+        e.preventDefault();
+        runPanelEntry(Number(key) - 1);
         return;
       } else if (["Control", "Shift", "Alt", "Meta"].includes(key)) {
         return;
       }
       // Anything else (typing, Ctrl+1, ...) closes the panel and acts as usual.
-      panelOpen = false;
+      leaveSelection();
     }
 
     if (key === "Escape") {
@@ -512,6 +620,16 @@
     return item.action === "launch" ? "app" : "file";
   }
 
+  // Keep the entry the arrow keys moved to in view (the selection's list scrolls).
+  $effect(() => {
+    void panelIndex;
+    if (!panelOpen || !panelEl) return;
+    const panel = panelEl;
+    void tick().then(() =>
+      panel.querySelector<HTMLElement>(".action.selected")?.scrollIntoView({ block: "nearest" }),
+    );
+  });
+
   onMount(() => {
     focusInput(true);
 
@@ -542,6 +660,11 @@
       }),
       onResultsUpdated(() => void refreshResults()),
     ];
+
+    // Browser preview only: `/#selection` shows the Universal Actions panel.
+    if (import.meta.env.DEV && !hasTauri() && location.hash === "#selection") {
+      void import("./lib/mock").then(({ mockSelection }) => openSelection(mockSelection()));
+    }
 
     // A query sent while the window was still loading (`sevak --query` at startup).
     void Promise.all(unlisteners)
@@ -649,9 +772,21 @@
       {/each}
     </div>
 
-    {#if panelOpen && current}
-      <div class="panel" role="menu" aria-label="Actions for {current.title}">
-        <div class="panel-title">Actions for {current.title}</div>
+    {#if panelOpen && largeText === null && (selection || current)}
+      <div
+        class="panel"
+        class:scroll={!!selection}
+        role="menu"
+        aria-label="Actions for {selection ? selection.title : current?.title}"
+        bind:this={panelEl}
+      >
+        <div class="panel-title">
+          {#if selection}
+            {selection.title}{#if selection.subtitle}: <span class="quote">{selection.subtitle}</span>{/if}
+          {:else}
+            Actions for {current?.title}
+          {/if}
+        </div>
         {#each panelEntries as entry, k (k)}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <div
@@ -664,7 +799,15 @@
             onclick={() => runPanelEntry(k)}
           >
             <span class="label">{entry.label}</span>
-            <kbd>{entry.modifier ? combo(entry.modifier) : "↵"}</kbd>
+            {#if entry.detail}<span class="detail">{entry.detail}</span>{/if}
+            <span class="keys">
+              {#each entry.extras ?? [] as extra (extra.modifier)}
+                <span class="chip"><kbd>{combo(extra.modifier)}</kbd>{extra.label}</span>
+              {/each}
+              <span class="chip"
+                ><kbd>{entry.modifier ? combo(entry.modifier) : "↵"}</kbd>{entry.verb ?? ""}</span
+              >
+            </span>
           </div>
         {/each}
       </div>
@@ -947,6 +1090,45 @@
 
   .action.selected {
     background: var(--selected);
+  }
+
+  .action .label {
+    flex: none;
+    max-width: 60%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  /* A preview of what the action produces. */
+  .action .detail {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--muted);
+    font-size: calc(12px * var(--font-scale, 1));
+  }
+
+  .action .keys {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--muted);
+    font-size: calc(11.5px * var(--font-scale, 1));
+  }
+
+  /* Universal Actions can list a couple of dozen entries. */
+  .panel.scroll {
+    max-height: calc(max(34px, calc(34px * var(--font-scale, 1))) * 8.5 + 40px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .panel-title .quote {
+    color: var(--fg);
   }
 
   /* Large Type. `full`: the window covers the screen and only this shows. */

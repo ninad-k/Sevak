@@ -9,6 +9,7 @@ plugins without rebuilding Sevak by dropping in a script.
 
 - [Architecture](#architecture)
 - [Writing a built-in plugin](#writing-a-built-in-plugin)
+- [Universal Actions](#universal-actions): offering actions for what the user selected in another app
 - [External plugins](#external-plugins): script plugins in Python, PowerShell, Node or anything else, including Alfred Script Filter scripts
 
 Code map:
@@ -25,6 +26,7 @@ Code map:
 | Typed-path browsing (files plugin) | `crates/sevak-plugins/src/path_browse.rs` |
 | Script plugins (external) | `crates/sevak-plugins/src/script/` |
 | Standard action execution | `crates/sevak-plugins/src/actions.rs` |
+| Universal Actions (selection) | `crates/sevak-core/src/selection.rs`, `crates/sevak-plugins/src/selection/`, `crates/sevak-platform/src/capture.rs`, `src-tauri/src/selection.rs` |
 | OS access (`PlatformProvider`) | `crates/sevak-platform/src/provider.rs` |
 
 ## Architecture
@@ -204,6 +206,7 @@ process, so plugins must never panic.
 | `shell` | `shell` | `> command` runs in a terminal; see below |
 | `clipboard` | `clipboard` | `cb`, clipboard history; opt-in through `[clipboard] enabled` (see below) |
 | `snippets` | `snippets` | `s`, `[[snippet]]` entries pasted with placeholders expanded |
+| `selection` | `selection` | Universal Actions for the text, URL or files selected in another app; no keyword ([below](#universal-actions)) |
 | `uuid` | `uuid` | example plugin, keyword-only |
 
 - `PluginRegistry::builtin()` is the stock set; `register(descriptor)` adds (or
@@ -468,6 +471,63 @@ expands the placeholders (`{time}`, `{clipboard}`, ...) at the moment of
 pasting, looking the snippet up by its result id so a config reload between
 query and Enter uses the new text. Expansion is the pure function
 `snippets::expand`, tested without a platform.
+
+## Universal Actions
+
+The `selection` plugin (`crates/sevak-plugins/src/selection/`) answers the
+Universal Actions hotkey. It has no keyword and never answers typed queries; it
+implements two optional methods of `Plugin` instead:
+
+```rust
+/// Actions for what the user selected in another app, in listing order.
+fn selection_actions(&self, selection: &Selection) -> Vec<ResultItem> { Vec::new() }
+
+/// False keeps this plugin's results out of usage.json and the search history.
+fn tracks_usage(&self) -> bool { true }
+```
+
+The flow is: the shell (`src-tauri/src/selection.rs`) calls
+`PlatformProvider::capture_selection`, builds a `Selection` (text *or* files,
+never serialized, `Debug` leaves the content out), asks
+`SearchEngine::selection_actions` to collect every plugin's rows, stores them
+under a search ticket and shows them in the action panel. Picking one goes
+through the ordinary `execute` command, so a row is a normal `ResultItem` whose
+`Action` the plugin's `execute` understands: `OpenUrl`, `OpenPath`,
+`RevealPath`, `CopyText`, `PasteText`, `RunAsAdmin`, or a `Custom` payload for
+"open in terminal". Two `Custom` payloads are carried out by the launcher window
+itself rather than the shell (Large Type and "send to Sevak"); see
+`selection::ui_request`.
+
+Rules for a plugin that offers selection actions:
+
+- Build every row from the selection when `selection_actions` is called: a
+  transform carries its finished result (`PasteText { text: "HELLO" }`), so
+  `execute` needs no copy of the selection.
+- Keep the selection out of result ids (`selection:search:g`, not
+  `selection:search:rust traits`): ids are stable keys and the selection is
+  private. Return `false` from `tracks_usage` so running a row records nothing.
+- Prefer `PasteText` with a `Ctrl` secondary `CopyText`, and check
+  `paste_support()` first: the selection is still highlighted in the app, so the
+  paste replaces it. Where pasting is unavailable use `CopyText`.
+- Do not log the selection or put it in an error message.
+
+Capturing lives in `sevak-platform` (`capture.rs` holds the order of operations
+and its fake-driven tests; `windows/`, `macos/` and `linux/capture.rs` hold the
+key presses and modifier handling). `PlatformProvider::capture_selection`
+returns `Selected`, `Nothing` or `Unavailable(reason)`.
+
+**Script plugins and Universal Actions: design only.** Script plugins do not
+receive the selection yet. The plan, so the manifest can stay stable: a script
+plugin would declare `accepts = ["text", "url", "file"]` in `plugin.toml`; when a
+selection of one of those kinds is captured, the host would send the persistent
+script a request `{"selection": {"kind": "text", "text": "..."}}` (or `"url"`,
+`"files": [...]`) and show the Alfred-style items it answers with after the
+built-in actions, running them with the same `Action` mapping as query results.
+The open questions are the wait (scripts are normally answered asynchronously,
+but this panel is built once, so a deadline of about 300 ms would apply) and
+telling the user, in the approval dialog, that the plugin will see their
+selection. Until then a script plugin cannot read it, and a selection is never
+passed to any script.
 
 ## External plugins
 

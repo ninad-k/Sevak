@@ -32,9 +32,16 @@
   } from "./lib/validate";
 
   const emptyConfig = (): Config => ({
-    general: { hotkey: "", hide_on_blur: true, launch_at_login: false, check_for_updates: true },
+    general: {
+      hotkey: "",
+      actions_hotkey: "",
+      hide_on_blur: true,
+      launch_at_login: false,
+      check_for_updates: true,
+    },
     window: { width: 720 },
     linux: { wayland_use_xwayland: true },
+    actions: { use_primary_selection: true, use_clipboard_fallback: false },
     search: { max_results: 8, fallback_web_search: "", query_history: true },
     appearance: {
       theme: "system",
@@ -69,6 +76,7 @@
 
   let active = $state<SectionId>("general");
   let hotkeyError = $state<string | null>(null);
+  let actionsHotkeyError = $state<string | null>(null);
   let saving = $state(false);
   let saveError = $state<string | null>(null);
   let toastVisible = $state(false);
@@ -85,7 +93,10 @@
   const dirty = $derived(ready && JSON.stringify(draft) !== baseline);
   const problems = $derived(validate(draft));
   const problemCount = $derived(
-    totalProblems(problems) + (hotkeyError ? 1 : 0) + hotkeyParseProblems,
+    totalProblems(problems) +
+      (hotkeyError ? 1 : 0) +
+      (actionsHotkeyError ? 1 : 0) +
+      hotkeyParseProblems,
   );
   const canSave = $derived(ready && dirty && problemCount === 0 && !saving);
 
@@ -106,6 +117,7 @@
       problems:
         problems.count[section.id] +
         (section.id === "general" && hotkeyError ? 1 : 0) +
+        (section.id === "general" && actionsHotkeyError ? 1 : 0) +
         (section.id === "hotkeys" ? hotkeyParseProblems : 0),
     })),
   );
@@ -214,6 +226,23 @@
     return () => clearTimeout(timer);
   });
 
+  // The Universal Actions shortcut may be empty (off); otherwise the same parser applies.
+  let actionsSeq = 0;
+  $effect(() => {
+    const value = draft.general.actions_hotkey.trim();
+    if (!ready) return;
+    const mine = ++actionsSeq;
+    if (value === "") {
+      actionsHotkeyError = null;
+      return;
+    }
+    const timer = setTimeout(async () => {
+      const error = await validateHotkey(value);
+      if (mine === actionsSeq) actionsHotkeyError = error;
+    }, 150);
+    return () => clearTimeout(timer);
+  });
+
   // Preview the theme while choosing it; saving makes it stick for every window.
   $effect(() => {
     if (ready) applyTheme(draft.appearance.theme);
@@ -227,6 +256,14 @@
       status?.hotkey.error &&
       status.hotkey.accelerator === draft.general.hotkey.trim()
       ? status.hotkey.error
+      : null,
+  );
+
+  const actionsRegistrationWarning = $derived(
+    !isWayland &&
+      status?.actions_hotkey?.error &&
+      status.actions_hotkey.key === draft.general.actions_hotkey.trim()
+      ? status.actions_hotkey.error
       : null,
   );
 
@@ -254,6 +291,7 @@
     saveError = null;
     const payload = clone($state.snapshot(draft)) as Config;
     payload.general.hotkey = payload.general.hotkey.trim();
+    payload.general.actions_hotkey = payload.general.actions_hotkey.trim();
     payload.files.keyword = payload.files.keyword.trim();
     payload.files.directories = payload.files.directories.map((dir) => dir.trim());
     payload.search.fallback_web_search = Array.isArray(payload.search.fallback_web_search)
@@ -448,6 +486,43 @@
                   <pre class="result" class:fail={!waylandResult.ok} role="status">{waylandResult.text}</pre>
                 {/if}
               {/if}
+            </div>
+
+            <div class="field">
+              <label class="name" for="actions-hotkey">Universal Actions shortcut</label>
+              <p class="hint">
+                Acts on what you have selected in the app you are using: text, a link or files.
+                Sevak copies the selection, shows what you can do with it and puts your clipboard
+                back. Leave empty to turn it off.
+                {#if isWayland}
+                  On Wayland, set it up with the button above (it binds
+                  <code>sevak --actions</code>).
+                {/if}
+              </p>
+              <HotkeyField
+                id="actions-hotkey"
+                bind:value={draft.general.actions_hotkey}
+                error={actionsHotkeyError}
+              />
+              {#if actionsRegistrationWarning}
+                <p class="msg warn" role="status">
+                  This shortcut could not be registered: {actionsRegistrationWarning}
+                </p>
+              {/if}
+            </div>
+
+            <div class="row">
+              <div class="label">
+                <span class="name">Use the clipboard if the selection can't be read</span>
+                <span class="hint">
+                  Wayland, terminal windows and apps Sevak may not control: act on what is on the
+                  clipboard instead.
+                </span>
+              </div>
+              <Toggle
+                bind:checked={draft.actions.use_clipboard_fallback}
+                label="Use the clipboard if the selection can't be read"
+              />
             </div>
 
             <div class="row">

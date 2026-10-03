@@ -242,6 +242,53 @@ or list several (`fallback_web_search = ["g", "yt"]`).
 Typing just a keyword (`g`) offers a row that **Tab** completes to `g `.
 [Add a custom web keyword](configuration.md#add-a-web-search-keyword).
 
+## Universal Actions
+
+Select something in any app (text, a link, files in a file manager), press
+`Ctrl+Alt+Space` (`general.actions_hotkey`; empty turns it off) and Sevak shows
+what you can do with it. Nothing runs by itself: you always pick an action, with
+`Up` / `Down` and `Enter`, or `Ctrl+1` ... `Ctrl+9`. `Esc` closes it.
+
+| You selected | Actions |
+|---|---|
+| Text | Search with each web engine in `[[web_search]]` (`Search Google for "..."`), show as Large Type, copy, paste as plain text, calculate it if it is a calculation or conversion (`2*(3+4)`, `10 km in mi`), and transform it: Uppercase, Lowercase, Title Case, Trim whitespace, URL-encode, URL-decode, Base64 encode, Base64 decode, Pretty-print JSON, Minify JSON (each only when it applies and changes the text) |
+| One or more URLs (`http://`, `https://`, `mailto:`, `www.`) | Open, copy, Large Type |
+| Files and folders | Open, show in folder, copy path(s), open in terminal (a folder), run as administrator (a Windows program), send to Sevak (fills the search box with the path so you can browse from there) |
+| A path written as text, such as `C:\Users\me\Documents` | The file actions above, then the text actions |
+
+Transformations and the calculator **replace the selection** in the app (Sevak
+pastes over it) where pasting works; `Ctrl+Enter` copies the result instead.
+Where pasting is not possible (Wayland, or macOS without the Accessibility
+permission) they copy. `Shift+Enter` on a web search copies its URL. Each row
+shows what its keys do.
+
+How the selection is read: Sevak remembers the app you are in, saves the
+clipboard, presses `Ctrl+C` (`Cmd+C` on macOS) in that app, waits up to about
+0.3 seconds for the copy, reads the text or the list of files, and puts the
+clipboard back (plain text, HTML and files are restored; an image on the
+clipboard is not). The hotkey's own `Ctrl` / `Alt` keys are waited out first so
+the app sees a plain copy. Sevak's clipboard history does not record this copy.
+The app itself makes the copy, though, so an operating system clipboard history
+(Windows `Win+V`) or another clipboard manager can see it; and a few editors
+copy the whole current line when nothing is selected.
+
+| System | What happens |
+|---|---|
+| Windows | Works in every app except windows running as administrator (Windows blocks key presses sent to them). |
+| macOS | Needs *System Settings > Privacy & Security > Accessibility > Sevak*, the same permission pasting uses. Files in Finder and text both work. |
+| Linux, X11 | The text you have highlighted (the `PRIMARY` selection) is used first, with no key pressed ([`[actions] use_primary_selection`](configuration.md#universal-actions)). The catch: it is whatever was highlighted last, even if the highlight is gone. Turn the option off to always press `Ctrl+C` instead. Files in the file manager are read from the clipboard. |
+| Linux, Wayland | Applications cannot read another app's selection or press keys, so nothing can be captured. Sevak says so; bind `sevak --actions` with `sevak --setup-hotkey`, copy the text yourself, and set `[actions] use_clipboard_fallback = true` to act on the clipboard. |
+
+Two safeguards. Terminal windows (Windows Terminal, `cmd`, PowerShell, `xterm`,
+`gnome-terminal`, `konsole`, `alacritty`, ...) never receive `Ctrl+C` on Windows
+and Linux because it would interrupt the program running there; select with the
+mouse and use the clipboard fallback instead (or on X11 the `PRIMARY` selection
+already has it). Selections over 256 kB are refused.
+
+Switch it off with `actions_hotkey = ""` or by disabling the `selection`
+plugin; see [configuration](configuration.md#universal-actions). Details for
+plugin authors are in [plugins.md](plugins.md#universal-actions).
+
 ## Search history
 
 On an empty search bar, `↑` and `↓` step through the last 50 searches you
@@ -313,6 +360,7 @@ sevak                       # Open the launcher
 sevak --toggle              # Toggle the launcher
 sevak --query "> "          # Open the launcher with text already typed
 sevak --run system:lock     # Run a result by id without showing the launcher
+sevak --actions             # Universal Actions for the current selection
 sevak --background          # Start without showing the launcher
 sevak --settings            # Open Settings
 sevak --quit                # Quit the running instance

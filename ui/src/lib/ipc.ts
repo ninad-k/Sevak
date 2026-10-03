@@ -36,6 +36,8 @@ export interface Status {
   display: "windows" | "macos" | "x11" | "wayland" | "unknown";
   hotkey: HotkeyStatus;
   custom_hotkeys: CustomHotkeyStatus[];
+  /** The Universal Actions shortcut; `null` when it is switched off. */
+  actions_hotkey: CustomHotkeyStatus | null;
   appearance: AppearanceCss;
   /** The configured theme; `system` follows `prefers-color-scheme`. */
   theme: ThemeSetting;
@@ -221,12 +223,35 @@ async function safeListen<T>(event: string, cb: (payload: T) => void): Promise<U
   }
 }
 
+/** An action the launcher window carries out itself instead of the shell. */
+export type WindowAction =
+  | { kind: "large_type"; text: string }
+  | { kind: "search"; query: string };
+
+/** One Universal Actions entry: a result row, and what the window does for it, if anything. */
+export interface SelectionActionDto extends ResultDto {
+  window: WindowAction | null;
+}
+
+/** The actions for what was selected in another app (Universal Actions). */
+export interface SelectionPayload {
+  /** Names the set when executing one of the actions. */
+  ticket: number;
+  /** "Selected text", "2 selected files and folders", ... */
+  title: string;
+  /** A short preview of the selection. */
+  subtitle: string;
+  actions: SelectionActionDto[];
+}
+
 /** What the launcher is asked to show with (`sevak --query`, hotkey entries, errors). */
 export interface ShowPayload {
   /** Text to put in the search field. */
   query: string | null;
   /** A message to show instead of results. */
   error: string | null;
+  /** Actions for the selection captured by Universal Actions. */
+  selection?: SelectionPayload | null;
 }
 
 /** Window is being shown: clear the query, focus the input, apply the payload. */

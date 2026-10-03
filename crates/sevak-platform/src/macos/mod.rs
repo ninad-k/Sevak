@@ -1,6 +1,7 @@
 //! macOS implementation of [`crate::PlatformProvider`]: `.app` bundles from the
 //! standard application folders, launched and opened through `/usr/bin/open`.
 
+mod capture;
 mod paste;
 
 use std::collections::HashSet;
@@ -11,6 +12,7 @@ use std::time::Instant;
 
 use sevak_core::{AppEntry, IconData, IconSource, LaunchTarget};
 
+use crate::capture::{CaptureOptions, SelectionCapture};
 use crate::error::{PlatformError, Result};
 use crate::icon_file;
 use crate::paste::{ClipboardRead, ForegroundApp, PasteOutcome, PasteSupport};
@@ -88,6 +90,10 @@ impl PlatformProvider for MacProvider {
 
     fn paste_text(&self, text: &str, restore_clipboard: bool) -> Result<PasteOutcome> {
         paste::paste_text(text, restore_clipboard)
+    }
+
+    fn capture_selection(&self, options: &CaptureOptions) -> SelectionCapture {
+        capture::capture_selection(options)
     }
 
     fn clipboard_sequence(&self) -> Option<u64> {

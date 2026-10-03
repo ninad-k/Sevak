@@ -70,6 +70,7 @@ They show the workflow rather than measured search or launch times.
 | Convert units | `10 km in mi`, `72°F to C` | Copies the converted value |
 | Open a bookmark | `b github` | Opens it in your browser |
 | Browse a folder | `~/Documents/` then `Tab` | Opens the entry; `Tab` drills down |
+| Act on selected text or files in any app | select, then `Ctrl+Alt+Space` | Searches, transforms, opens or copies it — you pick |
 | Lock, sleep, restart… | `lock`, `restart`, `bluetooth` | Runs the system command (restart, shut down, log out and empty trash ask first) |
 | Run a terminal command | `> git status` | Opens your terminal and runs it |
 | Paste earlier clipboard text | `cb invoice` | Pastes into the app you were using (opt-in) |
@@ -82,6 +83,10 @@ keyword to activate it (`>` is the exception: `>ls` works too).
 
 Sevak also includes:
 
+- **Universal Actions** — select text, a link or files in any app, press
+  `Ctrl+Alt+Space`, and pick: web search, Large Type, transform (case,
+  Base64, URL encoding, JSON) and paste back, calculate, open, show in folder,
+  open in a terminal. [How it works →](docs/usage.md#universal-actions)
 - **Result actions** — `Ctrl+Enter` shows a file or app in its folder,
   `Shift+Enter` copies its path or URL, `Alt+Enter` runs an app as
   administrator (Windows); `→` or `Ctrl+K` lists every action. `Ctrl+C` copies
@@ -151,6 +156,7 @@ After installing, follow [Your first five minutes with Sevak](docs/quickstart.md
 | `Tab` / `Shift+Tab` | Complete the input to the selected result / go up one folder |
 | `↑` / `↓` on an empty bar | Recall earlier searches |
 | `Ctrl+C` / `Ctrl+L` | Copy the selected result / show it as Large Type |
+| `Ctrl+Alt+Space` (in any app) | Universal Actions for what you have selected; configurable |
 | `Ctrl+1` … `Ctrl+9` | Run the corresponding result when available |
 | `Esc` | Hide the launcher |
 
@@ -177,6 +183,10 @@ There are explicit network uses:
 - Currency conversion, if you turn it on (`[calculator] currency`, off by
   default), downloads the European Central Bank's daily reference rates at
   most once a day. Unit conversion is always offline.
+- Universal Actions reads your selection only when you press its shortcut, by
+  briefly borrowing the clipboard and restoring it. The selection is never
+  written to disk, logged or sent anywhere (web search actions open your browser
+  with the text, like any web search).
 - Script plugins you install and allow run with your permissions; what they do
   on the network is up to them. Sevak never downloads plugins itself.
 

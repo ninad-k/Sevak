@@ -2,6 +2,8 @@
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -58,20 +60,159 @@ pub fn get_text() -> Result<Option<String>> {
 }
 
 pub(crate) fn read_text() -> Result<Option<String>> {
+    read_with(|clipboard| clipboard.get_text())
+}
+
+/// Runs a read on the reading handle. "The clipboard holds something else"
+/// is `None`; any other failure drops the handle (it is made again next time).
+fn read_with<T>(
+    read: impl FnOnce(&mut Clipboard) -> std::result::Result<T, arboard::Error>,
+) -> Result<Option<T>> {
     let slot = READER.get_or_init(|| Mutex::new(None));
     let mut guard = slot.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     if guard.is_none() {
         *guard = Some(Clipboard::new().map_err(clipboard_error)?);
     }
     let clipboard = guard.as_mut().expect("initialized above");
-    match clipboard.get_text() {
-        Ok(text) => Ok(Some(text)),
+    match read(clipboard) {
+        Ok(value) => Ok(Some(value)),
         Err(arboard::Error::ContentNotAvailable) => Ok(None),
         Err(err) => {
             *guard = None;
             Err(clipboard_error(err))
         }
     }
+}
+
+/// The files and folders on the clipboard (a file manager's copy); empty if it
+/// holds something else.
+pub fn get_files() -> Result<Vec<PathBuf>> {
+    Ok(read_with(|clipboard| clipboard.get().file_list())?.unwrap_or_default())
+}
+
+/// The X11 PRIMARY selection: the text highlighted in the app that owns it,
+/// without anything having been copied. `None` if there is none.
+#[cfg(target_os = "linux")]
+pub fn get_primary_text() -> Result<Option<String>> {
+    use arboard::{GetExtLinux, LinuxClipboardKind};
+    read_with(|clipboard| {
+        clipboard
+            .get()
+            .clipboard(LinuxClipboardKind::Primary)
+            .text()
+    })
+}
+
+/// Empties the clipboard.
+pub fn clear() -> Result<()> {
+    with_handle(&CLIPBOARD, |clipboard| clipboard.clear())
+}
+
+/// What was on the clipboard, as far as Sevak can put it back: plain text,
+/// HTML (with its plain-text form) and files. Images and other formats are not
+/// kept.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ClipboardSnapshot {
+    pub text: Option<String>,
+    pub html: Option<String>,
+    pub files: Vec<PathBuf>,
+}
+
+impl ClipboardSnapshot {
+    pub fn is_empty(&self) -> bool {
+        self.text.is_none() && self.html.is_none() && self.files.is_empty()
+    }
+}
+
+/// Reads the clipboard for [`restore`]. Best effort: a format that cannot be
+/// read is simply missing from the snapshot.
+pub fn snapshot() -> ClipboardSnapshot {
+    ClipboardSnapshot {
+        files: get_files().unwrap_or_default(),
+        text: read_text().ok().flatten(),
+        html: read_with(|clipboard| clipboard.get().html()).ok().flatten(),
+    }
+}
+
+/// Puts a [`snapshot`] back (or empties the clipboard if it was empty). Written
+/// so the OS history and cloud sync skip it, and so Sevak's clipboard history
+/// does not record it again: it was on the clipboard before.
+pub fn restore(snapshot: &ClipboardSnapshot) -> Result<()> {
+    if let Some(text) = &snapshot.text {
+        note_own_write(text);
+    }
+    if snapshot.is_empty() {
+        return clear();
+    }
+    with_handle(&CLIPBOARD, |clipboard| {
+        if !snapshot.files.is_empty() {
+            private_setter(clipboard).file_list(&snapshot.files)
+        } else if let Some(html) = &snapshot.html {
+            private_setter(clipboard).html(html.clone(), snapshot.text.clone())
+        } else {
+            private_setter(clipboard).text(snapshot.text.clone().unwrap_or_default())
+        }
+    })
+}
+
+/// A setter that asks the OS to keep what it writes out of its own history.
+fn private_setter(clipboard: &mut Clipboard) -> arboard::Set<'_> {
+    let setter = clipboard.set();
+    #[cfg(windows)]
+    let setter = arboard::SetExtWindows::exclude_from_monitoring(setter);
+    #[cfg(target_os = "macos")]
+    let setter = arboard::SetExtApple::exclude_from_history(setter);
+    #[cfg(target_os = "linux")]
+    let setter = arboard::SetExtLinux::exclude_from_history(setter);
+    setter
+}
+
+/// A count of things in flight.
+struct InFlight(AtomicUsize);
+
+impl InFlight {
+    const fn new() -> Self {
+        Self(AtomicUsize::new(0))
+    }
+
+    fn enter(&self) {
+        self.0.fetch_add(1, Ordering::SeqCst);
+    }
+
+    fn leave(&self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
+
+    fn any(&self) -> bool {
+        self.0.load(Ordering::SeqCst) > 0
+    }
+}
+
+/// The synthetic copies (Universal Actions) in flight.
+static SYNTHETIC_COPIES: InFlight = InFlight::new();
+
+/// While a value of this type exists, Sevak is borrowing the clipboard for a
+/// synthetic copy of the user's selection: the clipboard history must not
+/// record what is on it. Counted, so overlapping captures cannot end each
+/// other's protection early.
+pub struct SyntheticCopy(());
+
+impl SyntheticCopy {
+    pub fn begin() -> Self {
+        SYNTHETIC_COPIES.enter();
+        Self(())
+    }
+}
+
+impl Drop for SyntheticCopy {
+    fn drop(&mut self) {
+        SYNTHETIC_COPIES.leave();
+    }
+}
+
+/// True while a [`SyntheticCopy`] is alive.
+pub fn synthetic_copy_in_progress() -> bool {
+    SYNTHETIC_COPIES.any()
 }
 
 fn with_handle(
@@ -142,6 +283,29 @@ pub fn take_own_write(text: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn overlapping_borrows_are_counted() {
+        let count = InFlight::new();
+        assert!(!count.any());
+        count.enter();
+        count.enter();
+        assert!(count.any());
+        count.leave();
+        assert!(count.any());
+        count.leave();
+        assert!(!count.any());
+    }
+
+    #[test]
+    fn empty_snapshots_are_empty() {
+        assert!(ClipboardSnapshot::default().is_empty());
+        let text = ClipboardSnapshot {
+            text: Some("x".into()),
+            ..ClipboardSnapshot::default()
+        };
+        assert!(!text.is_empty());
+    }
 
     #[test]
     fn own_writes_are_recognised_once() {

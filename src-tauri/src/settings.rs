@@ -200,9 +200,23 @@ fn key_identity(accelerator: &str, strategy: HotkeyStrategy) -> String {
     }
 }
 
-/// The `[[hotkey]]` entries: a usable key, one action, no key used twice.
+/// The Universal Actions key (empty turns it off), the `[[hotkey]]` entries: a
+/// usable key, one action, no key used twice.
 fn validate_hotkeys(config: &Config, strategy: HotkeyStrategy) -> Result<(), String> {
     let mut seen = vec![key_identity(config.general.hotkey.trim(), strategy)];
+    let actions = config.general.actions_hotkey.trim();
+    if !actions.is_empty() {
+        if strategy == HotkeyStrategy::InApp {
+            check_accelerator(actions)?;
+        }
+        let identity = key_identity(actions, strategy);
+        if seen.contains(&identity) {
+            return Err(format!(
+                "The Universal Actions shortcut \"{actions}\" is the same as the main shortcut."
+            ));
+        }
+        seen.push(identity);
+    }
     for binding in &config.hotkeys {
         let key = binding.key.trim();
         if key.is_empty() {
@@ -475,6 +489,34 @@ mod tests {
                 "{entry:?}"
             );
         }
+    }
+
+    #[test]
+    fn the_actions_key_is_optional_but_must_be_a_usable_key() {
+        let mut config = Config::default();
+        assert_eq!(check(&config), Ok(()));
+        config.general.actions_hotkey = String::new();
+        assert_eq!(check(&config), Ok(()));
+        config.general.actions_hotkey = "  ".to_owned();
+        assert_eq!(check(&config), Ok(()));
+        config.general.actions_hotkey = "Ctrl+Shift+A".to_owned();
+        assert_eq!(check(&config), Ok(()));
+        config.general.actions_hotkey = "Banana+K".to_owned();
+        assert!(check(&config).is_err());
+        // Wayland leaves parsing to the desktop.
+        assert_eq!(validate(&config, HotkeyStrategy::External), Ok(()));
+    }
+
+    #[test]
+    fn the_actions_key_cannot_clash_with_other_keys() {
+        let mut config = Config::default();
+        config.general.actions_hotkey = "alt+space".to_owned();
+        assert!(check(&config).unwrap_err().contains("same as the main"));
+
+        let mut config = with_entries(vec![entry("ctrl + alt + space", Some("x"), None)]);
+        assert!(check(&config).unwrap_err().contains("more than once"));
+        config.general.actions_hotkey = String::new();
+        assert_eq!(check(&config), Ok(()));
     }
 
     #[test]

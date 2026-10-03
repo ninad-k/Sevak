@@ -99,6 +99,10 @@ runs the command it was set up from.
   or `sevak --run <id>`; see the README's "Custom hotkeys"). On
   other desktops (KDE, Sway, ...) bind a key to `sevak --toggle` yourself in
   the desktop's keyboard settings.
+- The same command also binds the Universal Actions key
+  (`general.actions_hotkey`, default `Ctrl+Alt+Space`) to `sevak --actions`. On
+  Wayland that command cannot read another app's selection; see the README's
+  "Universal Actions" for the clipboard fallback.
 - **GNOME binds `Alt+Space` to the window menu.** `--setup-hotkey` warns when a
   GNOME shortcut already uses the key. Either free it:
 

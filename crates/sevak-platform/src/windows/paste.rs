@@ -39,11 +39,11 @@ static REMEMBERED: Mutex<Option<isize>> = Mutex::new(None);
 /// How long to wait for the previous window to come back to the foreground.
 const FOCUS_TIMEOUT: Duration = Duration::from_millis(500);
 
-fn hwnd_to_int(hwnd: HWND) -> isize {
+pub(super) fn hwnd_to_int(hwnd: HWND) -> isize {
     hwnd.0 as isize
 }
 
-fn int_to_hwnd(value: isize) -> HWND {
+pub(super) fn int_to_hwnd(value: isize) -> HWND {
     HWND(value as *mut c_void)
 }
 
@@ -145,30 +145,35 @@ impl PasteDriver for WindowsDriver {
     }
 
     fn press_paste(&self) -> Result<()> {
-        let inputs = [
+        send_inputs(&[
             key_input(VK_CONTROL, false),
             key_input(VK_V, false),
             key_input(VK_V, true),
             key_input(VK_CONTROL, true),
-        ];
-        // SAFETY: `inputs` is a valid slice of fully initialized INPUT structs
-        // and the size passed is that of one element.
-        let sent = unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
-        if sent as usize == inputs.len() {
-            Ok(())
-        } else {
-            Err(PlatformError::Os {
-                operation: "SendInput",
-                message: format!(
-                    "only {sent} of {} key events were accepted (is the window running as administrator?)",
-                    inputs.len()
-                ),
-            })
-        }
+        ])
     }
 }
 
-fn key_input(key: VIRTUAL_KEY, up: bool) -> INPUT {
+/// Sends key events to the focused window, all or nothing as far as the OS
+/// reports it.
+pub(super) fn send_inputs(inputs: &[INPUT]) -> Result<()> {
+    // SAFETY: `inputs` is a valid slice of fully initialized INPUT structs
+    // and the size passed is that of one element.
+    let sent = unsafe { SendInput(inputs, std::mem::size_of::<INPUT>() as i32) };
+    if sent as usize == inputs.len() {
+        Ok(())
+    } else {
+        Err(PlatformError::Os {
+            operation: "SendInput",
+            message: format!(
+                "only {sent} of {} key events were accepted (is the window running as administrator?)",
+                inputs.len()
+            ),
+        })
+    }
+}
+
+pub(super) fn key_input(key: VIRTUAL_KEY, up: bool) -> INPUT {
     INPUT {
         r#type: INPUT_KEYBOARD,
         Anonymous: INPUT_0 {
@@ -189,7 +194,7 @@ fn key_input(key: VIRTUAL_KEY, up: bool) -> INPUT {
 
 /// Brings `target` to the foreground and waits until it (or another window of
 /// its process, such as a dialog it owns) is there.
-fn focus(target: HWND) -> std::result::Result<(), String> {
+pub(super) fn focus(target: HWND) -> std::result::Result<(), String> {
     // SAFETY: only plain Win32 calls on window handles; a stale handle makes
     // them fail, not misbehave.
     unsafe {

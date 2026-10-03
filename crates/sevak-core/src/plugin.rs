@@ -11,6 +11,7 @@ use std::sync::Arc;
 use thiserror::Error;
 
 use crate::model::ResultItem;
+use crate::selection::Selection;
 
 pub type PluginResult<T> = Result<T, PluginError>;
 
@@ -80,6 +81,24 @@ pub trait Plugin: Send + Sync {
     /// Cheap and side-effect free; the shell calls it once per activation.
     fn confirmation(&self, _item: &ResultItem) -> Option<String> {
         None
+    }
+
+    /// Whether running this plugin's results is recorded in the usage
+    /// statistics and the search history. True by default; a plugin whose
+    /// results contain what the user typed or selected elsewhere (Universal
+    /// Actions) returns false, so none of it reaches `usage.json`.
+    fn tracks_usage(&self) -> bool {
+        true
+    }
+
+    /// Actions this plugin offers for what the user selected in another app
+    /// (the Universal Actions hotkey), in the order they are listed. The
+    /// engine collects them from every plugin. Each result must be handled by
+    /// this plugin's own [`Plugin::execute`], and must not put the selection in
+    /// its `id` (ids are stable keys, the selection is private). Empty by
+    /// default. Same cost rules as [`Plugin::query`].
+    fn selection_actions(&self, _selection: &Selection) -> Vec<ResultItem> {
+        Vec::new()
     }
 
     /// Hands the plugin the keys (the part of a result id after `<plugin id>:`)

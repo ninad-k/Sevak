@@ -25,6 +25,11 @@ pub const DEFAULT_CONFIG_TOML: &str = r##"# Sevak configuration
 # `sevak --setup-hotkey` to bind this key to `sevak --toggle` in GNOME instead.
 hotkey = "Alt+Space"
 
+# Shortcut for Universal Actions: it copies what you have selected in the app
+# you are using (text, a URL, files) and offers actions for it. "" turns it off.
+# On Wayland run `sevak --setup-hotkey` to bind it to `sevak --actions`. See [actions].
+actions_hotkey = "Ctrl+Alt+Space"
+
 # Hide the window when it loses focus.
 hide_on_blur = true
 
@@ -75,7 +80,8 @@ custom_css = ""
 
 [plugins]
 # Ids of built-in plugins to turn off: "apps", "calculator", "files",
-# "bookmarks", "system", "shell", "clipboard", "snippets", "web:<keyword>".
+# "bookmarks", "system", "shell", "clipboard", "snippets", "selection"
+# (Universal Actions), "web:<keyword>".
 disabled = []
 
 [calculator]
@@ -135,6 +141,18 @@ keep_open = true
 # Clipboard history and snippets paste into the app you were using before Sevak
 # opened. With this on, the clipboard's previous text is put back afterwards.
 restore_clipboard = false
+
+[actions]
+# Universal Actions (see actions_hotkey under [general]). Sevak presses Ctrl+C
+# (Cmd+C) in the app you were using, reads the result and puts your clipboard
+# back. The selection is never stored or logged. Terminal windows are skipped
+# on Windows and Linux because Ctrl+C would interrupt the running program.
+# Linux (X11): read the PRIMARY selection (text you just highlighted) first,
+# without pressing a key.
+use_primary_selection = true
+# When the selection cannot be captured (Wayland, a terminal, missing macOS
+# Accessibility permission), act on the current clipboard contents instead.
+use_clipboard_fallback = false
 
 [clipboard]
 # Clipboard history ("cb <text>"). Off by default: turning it on makes Sevak
@@ -211,6 +229,7 @@ pub struct Config {
     pub system: SystemConfig,
     pub shell: ShellConfig,
     pub paste: PasteConfig,
+    pub actions: ActionsConfig,
     pub clipboard: ClipboardConfig,
     /// `[[snippet]]` entries. Edited by hand only: saves from the settings
     /// window leave them untouched (see `merge_document`).
@@ -236,6 +255,7 @@ impl Default for Config {
             system: SystemConfig::default(),
             shell: ShellConfig::default(),
             paste: PasteConfig::default(),
+            actions: ActionsConfig::default(),
             clipboard: ClipboardConfig::default(),
             snippet: Vec::new(),
             web_search: WebSearchEngine::defaults(),
@@ -250,6 +270,8 @@ pub struct GeneralConfig {
     /// Accelerator string, e.g. `"Alt+Space"`. Parsed by the shell, because the
     /// accepted key names depend on the hotkey backend.
     pub hotkey: String,
+    /// Accelerator for Universal Actions; empty turns the feature off.
+    pub actions_hotkey: String,
     pub hide_on_blur: bool,
     pub launch_at_login: bool,
     /// Look for a new release at startup and daily (asks before installing).
@@ -260,6 +282,7 @@ impl Default for GeneralConfig {
     fn default() -> Self {
         Self {
             hotkey: "Alt+Space".to_owned(),
+            actions_hotkey: "Ctrl+Alt+Space".to_owned(),
             hide_on_blur: true,
             launch_at_login: false,
             check_for_updates: true,
@@ -561,6 +584,26 @@ pub struct PasteConfig {
     pub restore_clipboard: bool,
 }
 
+/// Universal Actions: how the selection in another app is captured.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ActionsConfig {
+    /// Linux (X11): read the PRIMARY selection (highlighted text) first,
+    /// without pressing a key.
+    pub use_primary_selection: bool,
+    /// Act on the clipboard's contents when the selection cannot be captured.
+    pub use_clipboard_fallback: bool,
+}
+
+impl Default for ActionsConfig {
+    fn default() -> Self {
+        Self {
+            use_primary_selection: true,
+            use_clipboard_fallback: false,
+        }
+    }
+}
+
 /// The clipboard history plugin (`cb`). Opt-in: nothing is watched or stored
 /// unless `enabled` is set.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -827,6 +870,7 @@ impl Config {
         } else {
             hotkey.to_owned()
         };
+        self.general.actions_hotkey = self.general.actions_hotkey.trim().to_owned();
         // An entry without a key cannot be reported against anything.
         for binding in &mut self.hotkeys {
             binding.key = binding.key.trim().to_owned();
@@ -1151,6 +1195,40 @@ url = "https://example.com"
             MAX_CLIPBOARD_ITEM_BYTES_LIMIT
         );
         assert_eq!(config.clipboard.ignore_apps, ["KeePassXC"]);
+    }
+
+    #[test]
+    fn universal_actions_default_to_a_hotkey_and_no_clipboard_fallback() {
+        let config = Config::default();
+        assert_eq!(config.general.actions_hotkey, "Ctrl+Alt+Space");
+        assert_ne!(config.general.actions_hotkey, config.general.hotkey);
+        assert!(config.actions.use_primary_selection);
+        assert!(!config.actions.use_clipboard_fallback);
+    }
+
+    #[test]
+    fn actions_settings_parse_and_an_empty_hotkey_stays_off() {
+        let config = Config::from_toml_str(
+            "[general]
+actions_hotkey = \"  \"
+[actions]
+use_clipboard_fallback = true
+             use_primary_selection = false
+",
+        )
+        .unwrap();
+        // Unlike the main hotkey, empty is a valid choice and is not replaced.
+        assert_eq!(config.general.actions_hotkey, "");
+        assert!(config.actions.use_clipboard_fallback);
+        assert!(!config.actions.use_primary_selection);
+
+        let trimmed = Config::from_toml_str(
+            "[general]
+actions_hotkey = \" F9 \"
+",
+        )
+        .unwrap();
+        assert_eq!(trimmed.general.actions_hotkey, "F9");
     }
 
     #[test]

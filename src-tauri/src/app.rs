@@ -9,7 +9,9 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent};
 
 use crate::cli::{self, Launch};
 use crate::state::AppState;
-use crate::{autostart, commands, direct, hotkey, icons, search, settings, tray, updater, window};
+use crate::{
+    autostart, commands, direct, hotkey, icons, search, selection, settings, tray, updater, window,
+};
 
 pub fn run(
     paths: AppPaths,
@@ -31,6 +33,7 @@ pub fn run(
                 Launch::Toggle => window::toggle(app),
                 Launch::Query(query) => direct::open_with_query(app, query),
                 Launch::Run(id) => direct::run_result(app, id),
+                Launch::Actions => selection::trigger(app),
                 Launch::Settings => settings::open(app),
                 Launch::Background => {}
                 Launch::Quit => quit(app),
@@ -93,6 +96,7 @@ pub fn run(
                 Launch::Show | Launch::Toggle => window::show(handle),
                 Launch::Query(query) => direct::open_with_query(handle, query),
                 Launch::Run(id) => direct::run_result(handle, id),
+                Launch::Actions => selection::trigger(handle),
                 Launch::Settings => settings::open(handle),
                 Launch::Background => {}
                 Launch::Quit => quit(handle),

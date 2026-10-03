@@ -52,7 +52,7 @@ pub fn set_large_type(app: AppHandle, on: bool) -> Result<(), String> {
 }
 
 /// One row of search results as the UI sees it.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ResultDto {
     pub id: String,
     pub title: String,
@@ -71,7 +71,7 @@ pub struct ResultDto {
 }
 
 /// A secondary action as the UI sees it; its payload stays in the shell.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SecondaryDto {
     pub label: String,
     pub modifier: Option<Modifier>,
@@ -91,7 +91,7 @@ fn action_kind(action: &Action) -> &'static str {
     }
 }
 
-fn to_dtos(icons: Vec<Option<IconDto>>, items: &[ResultItem]) -> Vec<ResultDto> {
+pub(crate) fn to_dtos(icons: Vec<Option<IconDto>>, items: &[ResultItem]) -> Vec<ResultDto> {
     items
         .iter()
         .zip(icons)

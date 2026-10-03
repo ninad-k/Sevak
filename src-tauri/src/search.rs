@@ -159,6 +159,11 @@ impl Latest {
         let set = self.sets.iter().find(|set| set.ticket == ticket)?;
         Some((set.items.get(id)?.clone(), set.query.clone()))
     }
+
+    /// Drops the set of `ticket`, if it is still kept.
+    fn forget(&mut self, ticket: u64) {
+        self.sets.retain(|set| set.ticket != ticket);
+    }
 }
 
 /// Debounced, serialized persistence of the usage statistics.
@@ -221,6 +226,8 @@ pub struct Search {
     engine: RwLock<Arc<SearchEngine>>,
     latest: Mutex<Latest>,
     next_ticket: AtomicU64,
+    /// The ticket of the Universal Actions results on screen; 0 for none.
+    selection_ticket: AtomicU64,
     pub icons: IconStore,
     pub saver: UsageSaver,
     /// Indexing runs in flight that the UI should hear about.
@@ -246,6 +253,7 @@ impl Search {
             engine: RwLock::new(Arc::new(engine)),
             latest: Mutex::new(Latest::default()),
             next_ticket: AtomicU64::new(1),
+            selection_ticket: AtomicU64::new(0),
             saver: UsageSaver::new(paths.usage_file.clone()),
             indexing: AtomicUsize::new(0),
             reload_generation: AtomicU64::new(0),
@@ -271,6 +279,23 @@ impl Search {
     /// Remembers the results of search `ticket` for `execute`.
     pub fn store_results(&self, ticket: u64, query: String, items: Vec<ResultItem>) {
         lock(&self.latest).store(ticket, query, items);
+    }
+
+    /// Remembers the Universal Actions for a selection under `ticket`. They
+    /// hold the selected text, so they are dropped as soon as the launcher hides
+    /// ([`Search::forget_selection`]) and replace any earlier ones.
+    pub fn store_selection(&self, ticket: u64, items: Vec<ResultItem>) {
+        self.forget_selection();
+        self.selection_ticket.store(ticket, Ordering::SeqCst);
+        self.store_results(ticket, String::new(), items);
+    }
+
+    /// Drops the stored Universal Actions, if any.
+    pub fn forget_selection(&self) {
+        let ticket = self.selection_ticket.swap(0, Ordering::SeqCst);
+        if ticket != 0 {
+            lock(&self.latest).forget(ticket);
+        }
     }
 
     /// The result `id` of search `ticket` (the set the UI is showing) and the
@@ -482,6 +507,19 @@ mod tests {
         assert_eq!(query, "2+2");
         assert_eq!(latest.get(2, "calc:r").unwrap().0.title, "25");
         assert!(latest.get(2, "calc:missing").is_none());
+    }
+
+    #[test]
+    fn a_forgotten_set_cannot_be_executed_any_more() {
+        let mut latest = Latest::default();
+        latest.store(1, "a".into(), vec![item("r", "A")]);
+        latest.store(2, String::new(), vec![item("r", "private")]);
+        latest.forget(2);
+        assert!(latest.get(2, "calc:r").is_none());
+        assert!(latest.get(1, "calc:r").is_some());
+        // Forgetting what is not there is fine.
+        latest.forget(9);
+        assert_eq!(latest.sets.len(), 1);
     }
 
     #[test]
