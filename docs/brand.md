@@ -45,6 +45,9 @@ documentation and larger placements.
 
 - [Application icon source](../assets/sevak-icon.png)
 - [Logo and wordmark](../assets/brand/sevak-logo-concept.png)
+- [Social preview](../assets/brand/social-preview.png) (1280×640, the
+  repository's link preview; upload changes under Settings → Social preview,
+  as GitHub has no API for it)
 - [Documentation images and reel](media/README.md)
 - [Original design notes](../assets/brand/design-notes.txt)
 

@@ -12,6 +12,9 @@ are all welcome.
 - **New features and plugins:** open an issue first so we can agree on the
   approach before you spend time on it. Built-in plugins should be useful to
   most people, fast (they run on every keystroke) and work offline.
+- **Questions and early ideas:** ask in
+  [Discussions](https://github.com/ninad-k/Sevak/discussions) (Q&A for "how
+  do I...?", Ideas for anything not yet concrete enough for a feature request).
 - **Security problems:** do not open a public issue. See [SECURITY.md](SECURITY.md).
 
 Please follow the [Code of Conduct](CODE_OF_CONDUCT.md).
