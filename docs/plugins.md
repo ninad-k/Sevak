@@ -175,9 +175,12 @@ process, so plugins must never panic.
   plugin that owns the id prefix to rebuild the result through
   `Plugin::resolve(id)`. The default returns `None` ("not resolvable"); implement
   it when your keys name something that can be found again without a query, as
-  `apps` (looks the key up in its index) and `files` (checks the path exists)
-  do. Plugins that only exist as answers to a typed query (calculator, web
-  search, uuid) leave it alone.
+  `apps` (looks the key up in its index), `files` (checks the path exists),
+  `bookmarks` (the URL hash in its index), `system` (a command or settings page
+  that is available here), `snippets` (the snippet's key) and `shell` (the key
+  is the command) do. Plugins that only exist as answers to a typed query
+  (calculator, web search, uuid) leave it alone; so does the clipboard history,
+  whose entries come and go.
 
 ### Registry and enabling/disabling
 

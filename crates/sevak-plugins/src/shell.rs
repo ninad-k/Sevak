@@ -72,6 +72,20 @@ impl ShellPlugin {
         .with_icon(IconSource::builtin("terminal"))
         .with_score(score)
     }
+
+    fn open_terminal_row(&self) -> ResultItem {
+        ResultItem::new(
+            self.id(),
+            "",
+            "Open terminal",
+            Action::Custom {
+                payload: String::new(),
+            },
+        )
+        .with_subtitle("Type a command to run it")
+        .with_icon(IconSource::builtin("terminal"))
+        .with_score(score::KEYWORD)
+    }
 }
 
 impl Plugin for ShellPlugin {
@@ -122,21 +136,20 @@ impl Plugin for ShellPlugin {
             ));
         }
         if typed.is_empty() {
-            items.push(
-                ResultItem::new(
-                    self.id(),
-                    "",
-                    "Open terminal",
-                    Action::Custom {
-                        payload: String::new(),
-                    },
-                )
-                .with_subtitle("Type a command to run it")
-                .with_icon(IconSource::builtin("terminal"))
-                .with_score(score::KEYWORD),
-            );
+            items.push(self.open_terminal_row());
         }
         items
+    }
+
+    /// `shell:<command>` runs that command, `shell:` opens a terminal: the key
+    /// is the command, so any command can be bound to a hotkey.
+    fn resolve(&self, id: &str) -> Option<ResultItem> {
+        let command = clean(id.strip_prefix("shell:")?);
+        Some(if command.is_empty() {
+            self.open_terminal_row()
+        } else {
+            self.row(&command, score::KEYWORD, "Runs only when you press Enter")
+        })
     }
 
     fn execute(&self, item: &ResultItem) -> PluginResult<()> {
@@ -322,6 +335,19 @@ mod tests {
         let items = plugin.query("echo a\r\necho b\u{7}");
         assert_eq!(items[0].id, "shell:echo a  echo b");
         assert_eq!(clean("\n\t x \n"), "x");
+    }
+
+    #[test]
+    fn resolve_rebuilds_a_command_from_its_id() {
+        let (plugin, platform) = plugin();
+        let item = plugin.resolve("shell:git status").unwrap();
+        assert_eq!(item.id, "shell:git status");
+        plugin.execute(&item).unwrap();
+        assert_eq!(platform.terminal_runs.lock().unwrap()[0].0, "git status");
+
+        let open = plugin.resolve("shell:").unwrap();
+        assert_eq!(open.title, "Open terminal");
+        assert!(plugin.resolve("apps:git").is_none());
     }
 
     #[test]

@@ -260,22 +260,23 @@ impl BookmarksPlugin {
 
         scored
             .into_iter()
-            .map(|(score, i)| {
-                let entry = &index[i];
-                ResultItem::new(
-                    "bookmarks",
-                    &entry.key,
-                    &entry.title,
-                    Action::OpenUrl {
-                        url: entry.url.clone(),
-                    },
-                )
-                .with_subtitle(entry.subtitle())
-                .with_icon(IconSource::builtin("web"))
-                .with_score(score)
-            })
+            .map(|(score, i)| result_item(&index[i], score))
             .collect()
     }
+}
+
+fn result_item(entry: &Entry, score: f64) -> ResultItem {
+    ResultItem::new(
+        "bookmarks",
+        &entry.key,
+        &entry.title,
+        Action::OpenUrl {
+            url: entry.url.clone(),
+        },
+    )
+    .with_subtitle(entry.subtitle())
+    .with_icon(IconSource::builtin("web"))
+    .with_score(score)
 }
 
 /// Bonus for a title or domain that starts with, or contains, the (lowercased)
@@ -407,6 +408,14 @@ impl Plugin for BookmarksPlugin {
 
     fn query(&self, input: &str) -> Vec<ResultItem> {
         self.search(input)
+    }
+
+    /// `bookmarks:<url hash>`, while a browser still has that URL bookmarked.
+    fn resolve(&self, id: &str) -> Option<ResultItem> {
+        let key = id.strip_prefix("bookmarks:")?;
+        let index = self.snapshot();
+        let entry = index.iter().find(|entry| entry.key == key)?;
+        Some(result_item(entry, 0.0))
     }
 
     fn execute(&self, item: &ResultItem) -> PluginResult<()> {
@@ -707,6 +716,22 @@ mod tests {
             plugin.global(),
             "without a keyword the plugin must be global"
         );
+    }
+
+    #[test]
+    fn resolve_finds_a_bookmark_by_its_result_id() {
+        let plugin = plugin_with(&[(
+            "Chrome",
+            vec![raw("Rust", "https://www.rust-lang.org/", "Dev")],
+        )]);
+        let found = plugin.query("rust").remove(0);
+        let item = plugin.resolve(&found.id).expect("indexed bookmark");
+        assert_eq!(item.id, found.id);
+        assert_eq!(item.action, found.action);
+        assert!(plugin.resolve("bookmarks:0000").is_none());
+        assert!(plugin
+            .resolve(&found.id.replace("bookmarks:", "files:"))
+            .is_none());
     }
 
     #[test]

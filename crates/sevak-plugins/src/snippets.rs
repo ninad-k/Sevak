@@ -309,6 +309,13 @@ impl Plugin for SnippetsPlugin {
         rows
     }
 
+    /// `snippets:<name>` (the snippet's key) for a snippet in the config.
+    fn resolve(&self, id: &str) -> Option<ResultItem> {
+        let key = id.strip_prefix("snippets:")?;
+        let entry = self.entries.iter().find(|entry| entry.key == key)?;
+        Some(self.row(entry, &self.platform.paste_support()))
+    }
+
     fn execute(&self, item: &ResultItem) -> PluginResult<()> {
         let (template, paste) = match &item.action {
             Action::Custom { .. } => return Ok(()),
@@ -587,6 +594,20 @@ mod tests {
         plugin.execute(&row).unwrap();
         assert_eq!(*platform.clipboard.lock().unwrap(), ["Re: x"]);
         assert!(platform.pasted.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn resolve_finds_a_snippet_by_its_result_id() {
+        let platform = MockPlatform::empty();
+        let snippets = vec![snippet("Reply", None, "Re: {{x}}")];
+        let plugin = plugin(&platform, &snippets);
+        let found = plugin.query("reply").remove(0);
+        let item = plugin.resolve(&found.id).expect("configured snippet");
+        assert_eq!(item.id, "snippets:Reply");
+        plugin.execute(&item).unwrap();
+        assert_eq!(platform.pasted.lock().unwrap()[0].0, "Re: {x}");
+        assert!(plugin.resolve("snippets:Nope").is_none());
+        assert!(plugin.resolve("apps:Reply").is_none());
     }
 
     #[test]

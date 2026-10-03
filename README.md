@@ -399,9 +399,13 @@ run = "apps:firefox.desktop"      # run this result, Sevak stays hidden
 - `run` takes a result id (hover over a result for a moment to see its id):
   `<plugin id>:<key>`, as in `apps:firefox.desktop`
   (the desktop-file id on Linux), `apps:<Start Menu path or AppUserModelID>` on
-  Windows, or `files:<full path>` for a file or folder. Plugins whose results
-  are not named by a stable id cannot be run this way. If the id cannot be
-  found, Sevak opens and says so instead of doing nothing.
+  Windows, `files:<full path>` for a file or folder, `system:lock` or
+  `system:settings:bluetooth` for a system command, `snippets:<name>` to paste a
+  snippet into the app you are in, `shell:<command>` to run a command in a
+  terminal, or a bookmark's id. Restart, shut down, log out and empty trash
+  still ask first. Plugins whose results are not named by a stable id
+  (calculator, web search, clipboard history) cannot be run this way. If the id
+  cannot be found, Sevak opens and says so instead of doing nothing.
 - Keys that cannot be registered (invalid, already taken by another program,
   repeated) are skipped, logged, and listed with the reason under Settings,
   Hotkeys; the other keys keep working.

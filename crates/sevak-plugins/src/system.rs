@@ -235,6 +235,20 @@ fn settings_entry(page: SettingsPage) -> Entry {
     }
 }
 
+fn result_item(entry: &Entry, score: f64) -> ResultItem {
+    ResultItem::new(
+        "system",
+        entry.target.key(),
+        &entry.title,
+        Action::Custom {
+            payload: entry.target.payload(),
+        },
+    )
+    .with_subtitle(&entry.subtitle)
+    .with_icon(IconSource::builtin(entry.icon))
+    .with_score(score)
+}
+
 /// The question asked before a destructive command runs.
 fn confirmation_text(command: SystemCommand) -> &'static str {
     match command {
@@ -304,20 +318,18 @@ impl Plugin for SystemPlugin {
         scored.sort_by(|a, b| b.0.total_cmp(&a.0));
         scored
             .into_iter()
-            .map(|(score, entry)| {
-                ResultItem::new(
-                    "system",
-                    entry.target.key(),
-                    &entry.title,
-                    Action::Custom {
-                        payload: entry.target.payload(),
-                    },
-                )
-                .with_subtitle(&entry.subtitle)
-                .with_icon(IconSource::builtin(entry.icon))
-                .with_score(score)
-            })
+            .map(|(score, entry)| result_item(entry, score))
             .collect()
+    }
+
+    /// `system:<key>` (`system:lock`, `system:settings:bluetooth`) for an entry
+    /// this machine offers and `[system] disabled` does not hide. A hotkey bound
+    /// to a destructive command is still confirmed by the shell.
+    fn resolve(&self, id: &str) -> Option<ResultItem> {
+        let key = id.strip_prefix("system:")?;
+        let entries = self.snapshot();
+        let entry = entries.iter().find(|entry| entry.target.key() == key)?;
+        Some(result_item(entry, 0.0))
     }
 
     fn confirmation(&self, item: &ResultItem) -> Option<String> {
@@ -549,6 +561,39 @@ mod tests {
             let item = first(&plugin, query);
             assert_eq!(plugin.confirmation(&item).is_some(), asks, "{query}");
         }
+    }
+
+    #[test]
+    fn resolve_finds_offered_entries_by_id() {
+        let platform = platform(&[SystemCommand::Lock, SystemCommand::Restart], &[]);
+        let config = SystemConfig {
+            confirm: true,
+            disabled: vec!["restart".into()],
+        };
+        let plugin = plugin(config, &platform);
+
+        let lock = plugin.resolve("system:lock").expect("offered command");
+        assert_eq!(lock.id, first(&plugin, "lock").id);
+        assert_eq!(lock.action, first(&plugin, "lock").action);
+        plugin.execute(&lock).unwrap();
+        assert_eq!(
+            *platform.ran_commands.lock().unwrap(),
+            [SystemCommand::Lock]
+        );
+
+        // Hidden by config, not supported here, unknown, or someone else's id.
+        assert!(plugin.resolve("system:restart").is_none());
+        assert!(plugin.resolve("system:sleep").is_none());
+        assert!(plugin.resolve("system:nope").is_none());
+        assert!(plugin.resolve("apps:lock").is_none());
+
+        // Settings pages resolve too, and destructive commands still confirm.
+        let plugin = super::SystemPlugin::new(SystemConfig::default(), everything());
+        plugin.refresh().unwrap();
+        let page = plugin.resolve("system:settings:bluetooth").unwrap();
+        assert!(matches!(page.action, Action::Custom { .. }));
+        let shutdown = plugin.resolve("system:shutdown").unwrap();
+        assert!(plugin.confirmation(&shutdown).is_some());
     }
 
     #[test]
