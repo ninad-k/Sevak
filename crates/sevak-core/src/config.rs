@@ -32,7 +32,8 @@ hide_on_blur = true
 launch_at_login = false
 
 # Check GitHub for a new version at startup and once a day. Updates are only
-# installed after you agree. This is the only request Sevak makes on its own.
+# installed after you agree. Apart from the optional currency rates (see
+# [calculator]), this is the only request Sevak makes on its own.
 check_for_updates = true
 
 [window]
@@ -63,6 +64,13 @@ theme = "system"
 # Ids of built-in plugins to turn off: "apps", "calculator", "files",
 # "bookmarks", "system", "shell", "web:<keyword>".
 disabled = []
+
+[calculator]
+# Convert currencies ("100 usd in eur"). Off by default because it needs the
+# network: when on, Sevak downloads the European Central Bank's daily reference
+# rates (a small XML file, no account or key) in the background at most once a
+# day and keeps them on disk. Unit conversion ("10 km in mi") never needs it.
+currency = false
 
 [files]
 # Folders whose files and subfolders are searchable. "~" is your home folder.
@@ -141,6 +149,7 @@ pub struct Config {
     pub search: SearchConfig,
     pub appearance: AppearanceConfig,
     pub plugins: PluginsConfig,
+    pub calculator: CalculatorConfig,
     pub files: FilesConfig,
     pub bookmarks: BookmarksConfig,
     pub system: SystemConfig,
@@ -157,6 +166,7 @@ impl Default for Config {
             search: SearchConfig::default(),
             appearance: AppearanceConfig::default(),
             plugins: PluginsConfig::default(),
+            calculator: CalculatorConfig::default(),
             files: FilesConfig::default(),
             bookmarks: BookmarksConfig::default(),
             system: SystemConfig::default(),
@@ -338,6 +348,14 @@ impl PluginsConfig {
     pub fn is_enabled(&self, plugin_id: &str) -> bool {
         !self.disabled.iter().any(|id| id == plugin_id)
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CalculatorConfig {
+    /// Convert fiat currencies with the ECB's daily reference rates. Off by
+    /// default: it is the one calculator feature that uses the network.
+    pub currency: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -862,6 +880,13 @@ url = "https://example.com"
     }
 
     #[test]
+    fn currency_conversion_is_off_unless_enabled() {
+        assert!(!Config::default().calculator.currency);
+        let config = Config::from_toml_str("[calculator]\ncurrency = true\n").unwrap();
+        assert!(config.calculator.currency);
+    }
+
+    #[test]
     fn unknown_keys_are_ignored() {
         let config = Config::from_toml_str("[future]\nthing = 1\n[general]\nnew_key = true\n");
         assert_eq!(config.unwrap(), Config::default());
@@ -1055,6 +1080,19 @@ url = "https://example.com"
         assert!(Config::from_toml_str(old).unwrap().search.query_history);
         let text = saved(Some(old), &Config::default());
         assert!(text.contains("query_history = true"), "{text}");
+    }
+
+    #[test]
+    fn currency_setting_is_added_to_a_config_written_by_an_older_version() {
+        let mut config = Config::default();
+        config.calculator.currency = true;
+        let text = saved(Some("[general]\nhotkey = \"Alt+Space\"\n"), &config);
+        assert!(text.contains("[calculator]") && text.contains("currency = true"));
+        assert_eq!(Config::from_toml_str(&text).unwrap(), config);
+
+        let text = saved(Some(DEFAULT_CONFIG_TOML), &config);
+        assert!(text.contains("# Convert currencies"));
+        assert_eq!(Config::from_toml_str(&text).unwrap(), config);
     }
 
     #[test]

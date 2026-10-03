@@ -18,6 +18,10 @@ Built with Rust, [Tauri](https://tauri.app) v2 and Svelte 5. Licensed under
   packaged apps on Windows, `.app` bundles on macOS, `.desktop` entries on Linux).
 - **Calculator**: type an expression such as `2^10 / 3` or `sqrt(2) * 5` and press Enter
   to copy the result.
+- **Unit and currency conversion**: `10 km in mi`, `72°F to C`, `5 GB in MiB`,
+  `2 h 30 min in min`, all offline. Currencies (`100 usd in eur`) are opt-in
+  and use the European Central Bank's daily rates. See
+  [Conversions](#conversions).
 - **Web search keywords**: `g`, `yt` and `gh` search Google, YouTube and GitHub
   (`g rust traits`). Add your own engines in the config.
 - **File search**: `f <name>` searches files and folders under the folders you
@@ -144,12 +148,12 @@ Keywords (type the keyword, then a space):
 | `uuid`, `uuid 5`, `uuid upper` | Generate random UUIDs and copy one (example plugin) |
 
 Anything else searches apps and system commands (and files and bookmarks, if
-`files.global` / `bookmarks.global` are on); an expression like `12*7` shows
-the calculator. A path starting with `~/`, `/`, a
-drive (`C:\`) or `\\server\share\` browses that folder (for plain queries this
-needs `files.global`; after `f ` it always works). Typing just a keyword (`g`)
-offers a row you can complete with `Tab`. When nothing matches, the fallback
-web search (`g` by default; several can be listed) is offered.
+`files.global` / `bookmarks.global` are on); an expression like `12*7` or a
+conversion like `10 km in mi` shows the calculator. A path starting with `~/`,
+`/`, a drive (`C:\`) or `\\server\share\` browses that folder (for plain
+queries this needs `files.global`; after `f ` it always works). Typing just a
+keyword (`g`) offers a row you can complete with `Tab`. When nothing matches,
+the fallback web search (`g` by default; several can be listed) is offered.
 
 The tray menu has Show, Settings (opens the settings window), Reload index
 (re-reads the config and rescans apps, files and bookmarks) and Quit.
@@ -175,6 +179,54 @@ On macOS the first use asks permission to control System Events or Finder, and
 Lock needs "Require password after screen saver begins or display is turned off"
 (the default) to actually lock. Turn confirmation off or hide commands in the
 `[system]` section of the config (below).
+
+### Conversions
+
+The calculator converts `<amount> <unit> (in|to|as|=) <unit>`. The amount can
+be any expression (`(2+3) km in m`), and the result is copied with its unit on
+Enter. Separators are case-insensitive; `in` also works when you mean inches
+(`12 in in cm`).
+
+| Category | Examples |
+|---|---|
+| Length | `10 km in mi`, `5'11" to cm`, `3 ft 4 in to cm` (also m, cm, mm, yd, nmi, ly, au) |
+| Mass | `1 kg in lb`, `8 oz to g`, `1 ton in kg` |
+| Temperature | `100 f to c`, `72°F in C`, `0 c to k` |
+| Volume | `3.5 cups to ml`, `1 gal in L`, `1 tbsp in tsp`, `1 imp gal in L`, `2 m3 in L` |
+| Area | `1 acre in m2`, `500 sq ft to m²`, `1 ha in acres` |
+| Speed | `60 mph in km/h`, `10 m/s to knots`, `miles per hour` |
+| Data | `5 GB in MiB`, `100 Mbit to MB`, `1 TiB in GB` |
+| Time | `2 h 30 min in min`, `90 min to h`, `1 yr in days` |
+| Pressure | `1 atm in psi`, `1 bar in kPa`, `760 torr in atm` |
+| Energy | `1 kcal in kJ`, `1 kWh in MJ` |
+| Angle | `180 deg in rad`, `1 turn in deg` |
+
+Spelling rules, where case matters or a word is ambiguous:
+
+- Names, plurals and abbreviations are case-insensitive (`km`, `Km`,
+  `kilometers`), except data units: `MB` is a megabyte and `Mb` a megabit,
+  `B` a byte and `b` a bit. All-lowercase `kb`, `mb`, `gb`, ... mean bytes.
+  `KB`/`kB`/`MB`/`GB` are SI (powers of 1000); `KiB`/`MiB`/`GiB` are binary
+  (powers of 1024).
+- `oz` is a mass ounce, `fl oz` a fluid ounce. `pt`, `qt`, `gal` and `cup` are
+  US customary; use `imp pt` / `imp gal` for imperial. `ton` is the US short
+  ton, `tonne` or `t` the metric one.
+- `m` is meters and `min` minutes. A month is a twelfth of a Julian year
+  (365.25 days).
+- `cal` is the small calorie, `Cal` the food Calorie (1 kcal).
+- `°` and `deg` alone are angles; before a letter they are temperatures
+  (`°F`, `deg C`).
+- Results keep up to 10 significant digits (`10 km in mi` is `6.213711922 mi`).
+
+**Currency** conversion is off by default. Turn it on in Settings (Plugins) or
+set `[calculator] currency = true`, then reload. Sevak downloads the ECB's
+daily euro reference rates (the 30 currencies the ECB publishes; no cryptocurrencies) on a
+background thread, never while you type, at most once a day, and keeps them in
+`currency-rates.json` in the data folder. Until the first download finishes the
+result row says "Fetching exchange rates…". The result's subtitle shows the
+rate and the ECB's publication date. Use ISO codes (`usd`, `eur`, `gbp`,
+`jpy`, `cad`, ...), signs (`€`, `$`, `£`, `¥`; `$` is the US dollar and `¥` the
+yen) or words (`euros`): `50 € to $`, `$100 in eur`.
 
 ## Configuration
 
@@ -212,6 +264,9 @@ theme = "system"       # "system", "light" or "dark"
 [plugins]
 disabled = []          # "apps", "calculator", "files", "bookmarks", "system", "shell",
                        # "web:<keyword>"
+
+[calculator]
+currency = false       # true: convert currencies with the ECB's daily rates (network)
 
 [files]
 directories = ["~/Desktop", "~/Documents", "~/Downloads"]
@@ -294,6 +349,15 @@ only installed after you agree.
 The bookmarks plugin reads your browsers' bookmark files from disk (Firefox's
 database is read from a temporary copy that is deleted again) and never writes
 to them or sends them anywhere.
+
+If you turn on currency conversion (`[calculator] currency`, off by default),
+Sevak also downloads
+`https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml` (the European
+Central Bank's daily reference rates) in the background, at most once a day
+and only when the saved rates are over a day old (the ECB sees your IP address,
+nothing else is sent; no cookies, no identifiers). The rates are kept in
+`currency-rates.json` in the data folder. With the option off, no such request
+is ever made. Unit conversion is always offline.
 
 Otherwise, the only network traffic is your browser opening a web search URL
 when you pick a web search result. (On Windows, the installer may download the

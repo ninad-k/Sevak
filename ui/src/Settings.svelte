@@ -35,6 +35,7 @@
     search: { max_results: 8, fallback_web_search: "", query_history: true },
     appearance: { theme: "system" },
     plugins: { disabled: [] },
+    calculator: { currency: false },
     files: { directories: [], max_depth: 4, include_hidden: false, keyword: "", global: true },
     bookmarks: { browsers: [], keyword: "", global: true },
     shell: { terminal: "", shell: "", keep_open: true },
@@ -568,6 +569,17 @@
                 />
               </div>
             {/each}
+
+            <div class="row">
+              <div class="label">
+                <span class="name">Currency conversion</span>
+                <span class="hint">
+                  Calculator: “100 usd in eur”. Downloads the European Central Bank’s daily
+                  rates in the background, at most once a day. Off keeps Sevak offline.
+                </span>
+              </div>
+              <Toggle bind:checked={draft.calculator.currency} label="Convert currencies" />
+            </div>
           </section>
           <p class="note">
             Web search engines are edited under “Web search”. Changes apply when you save.

@@ -28,6 +28,7 @@ export interface Config {
   };
   appearance: { theme: ThemeSetting };
   plugins: { disabled: string[] };
+  calculator: { currency: boolean };
   files: {
     directories: string[];
     max_depth: number;

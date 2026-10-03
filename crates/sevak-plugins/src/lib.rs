@@ -24,12 +24,14 @@ pub mod actions;
 pub mod apps;
 pub mod bookmarks;
 pub mod calculator;
+pub mod currency;
 pub mod example_uuid;
 pub mod files;
 pub mod path_browse;
 pub mod registry;
 pub mod shell;
 pub mod system;
+pub mod units;
 pub mod web_search;
 
 #[cfg(test)]

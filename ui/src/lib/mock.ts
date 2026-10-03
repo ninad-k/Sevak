@@ -43,6 +43,7 @@ export function mockSettings(): SettingsDto {
       search: { max_results: 8, fallback_web_search: "g", query_history: true },
       appearance: { theme: "system" },
       plugins: { disabled: ["uuid"] },
+      calculator: { currency: false },
       files: {
         directories: ["~/Desktop", "~/Documents", "~/Downloads"],
         max_depth: 4,
@@ -60,7 +61,7 @@ export function mockSettings(): SettingsDto {
     },
     catalog: [
       { id: "apps", name: "Applications", description: "Launches installed applications.", keyword: null, enabled: true },
-      { id: "calculator", name: "Calculator", description: "Evaluates math expressions as you type; Enter copies the result.", keyword: null, enabled: true },
+      { id: "calculator", name: "Calculator", description: "Evaluates math expressions and converts units (and currencies, if enabled) as you type; Enter copies the result.", keyword: null, enabled: true },
       { id: "files", name: "Files", description: "Finds files and folders in your configured directories.", keyword: "f", enabled: true },
       { id: "bookmarks", name: "Bookmarks", description: "Finds bookmarks in your browsers (read from disk; nothing is sent anywhere).", keyword: "b", enabled: true },
       { id: "shell", name: "Terminal commands", description: "Type `> command` to run it in a terminal; recent commands are offered again.", keyword: ">", enabled: true },

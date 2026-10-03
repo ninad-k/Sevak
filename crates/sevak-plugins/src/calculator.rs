@@ -13,15 +13,21 @@
 //!
 //! Unary minus binds looser than `^`, so `-2^2 = -4`, while the exponent may
 //! itself be signed (`2^-2 = 0.25`).
+//!
+//! The plugin also answers conversions: units offline (`10 km in mi`, see
+//! [`crate::units`]) and, when `[calculator] currency = true`, fiat currencies
+//! (`100 usd in eur`, see [`crate::currency`]).
 
 use std::fmt;
 use std::sync::Arc;
 
 use sevak_core::model::score;
-use sevak_core::{Action, IconSource, Plugin, PluginResult, ResultItem};
-use sevak_platform::PlatformProvider;
+use sevak_core::{Action, Config, IconSource, Plugin, PluginResult, ResultItem};
+use sevak_platform::{AppPaths, PlatformProvider};
 
 use crate::actions::execute_action;
+use crate::currency::{self, RateService};
+use crate::units;
 
 const MAX_NESTING: usize = 64;
 const SIGNIFICANT_DIGITS: i32 = 12;
@@ -678,14 +684,90 @@ pub fn format_number(value: f64) -> String {
     }
 }
 
-/// Answers math-like queries and copies the result on activation.
+/// Payload of the status rows ("Fetching exchange rates…") that do nothing
+/// when activated.
+const STATUS_PAYLOAD: &str = "status";
+
+/// Answers math-like queries and conversions, and copies the result on
+/// activation.
 pub struct CalculatorPlugin {
     platform: Arc<dyn PlatformProvider>,
+    /// Present only when currency conversion is switched on.
+    currency: Option<Arc<RateService>>,
 }
 
 impl CalculatorPlugin {
+    /// Math and unit conversion only; never touches the network.
     pub fn new(platform: Arc<dyn PlatformProvider>) -> Self {
-        Self { platform }
+        Self {
+            platform,
+            currency: None,
+        }
+    }
+
+    /// Also converts currencies, with rates from `rates`.
+    pub fn with_currency(platform: Arc<dyn PlatformProvider>, rates: Arc<RateService>) -> Self {
+        Self {
+            platform,
+            currency: Some(rates),
+        }
+    }
+
+    /// Currency conversion is on when `[calculator] currency` is true; its
+    /// rates are cached in the data directory.
+    pub fn from_config(config: &Config, platform: Arc<dyn PlatformProvider>) -> Self {
+        if !config.calculator.currency {
+            return Self::new(platform);
+        }
+        match AppPaths::resolve() {
+            Ok(paths) => Self::with_currency(
+                platform,
+                RateService::new(paths.data_dir.join(currency::CACHE_FILE)),
+            ),
+            Err(err) => {
+                tracing::warn!("currency conversion is off: no data directory ({err})");
+                Self::new(platform)
+            }
+        }
+    }
+
+    /// A unit or currency conversion for `input`, if it is one.
+    fn conversion(&self, input: &str) -> Option<ResultItem> {
+        let input = strip_prefix(input);
+        if let Some(conversion) = units::answer(input) {
+            return Some(Self::copyable(&conversion.text, &conversion.input));
+        }
+        let rates = self.currency.as_ref()?;
+        let answer = currency::answer(input, &rates.availability())?;
+        Some(if answer.copyable {
+            Self::copyable(&answer.title, &answer.subtitle)
+        } else {
+            ResultItem::new(
+                "calculator",
+                "result",
+                answer.title,
+                Action::Custom {
+                    payload: STATUS_PAYLOAD.to_owned(),
+                },
+            )
+            .with_subtitle(answer.subtitle)
+            .with_icon(IconSource::builtin("calculator"))
+            .with_score(score::EXACT_ANSWER)
+        })
+    }
+
+    fn copyable(text: &str, detail: &str) -> ResultItem {
+        ResultItem::new(
+            "calculator",
+            "result",
+            text,
+            Action::CopyText {
+                text: text.to_owned(),
+            },
+        )
+        .with_subtitle(format!("{detail} · Enter to copy"))
+        .with_icon(IconSource::builtin("calculator"))
+        .with_score(score::EXACT_ANSWER)
     }
 }
 
@@ -699,7 +781,7 @@ impl Plugin for CalculatorPlugin {
     }
 
     fn description(&self) -> &str {
-        "Evaluates math expressions as you type; Enter copies the result."
+        "Evaluates math expressions and converts units (and currencies, if enabled) as you type; Enter copies the result."
     }
 
     fn keyword(&self) -> Option<&str> {
@@ -707,23 +789,29 @@ impl Plugin for CalculatorPlugin {
     }
 
     fn query(&self, input: &str) -> Vec<ResultItem> {
+        if let Some(item) = self.conversion(input) {
+            return vec![item];
+        }
         let Some((expression, value)) = answer(input) else {
             return Vec::new();
         };
-        let text = format_number(value);
-        vec![ResultItem::new(
-            "calculator",
-            "result",
-            &text,
-            Action::CopyText { text: text.clone() },
-        )
-        .with_subtitle(format!("{expression} · Enter to copy"))
-        .with_icon(IconSource::builtin("calculator"))
-        .with_score(score::EXACT_ANSWER)]
+        vec![Self::copyable(&format_number(value), &expression)]
     }
 
     fn execute(&self, item: &ResultItem) -> PluginResult<()> {
-        execute_action(self.platform.as_ref(), &item.action)
+        match &item.action {
+            Action::Custom { payload } if payload == STATUS_PAYLOAD => Ok(()),
+            action => execute_action(self.platform.as_ref(), action),
+        }
+    }
+
+    /// Loads the cached exchange rates and, if they are over a day old (or
+    /// missing), downloads new ones on a background thread. Returns at once.
+    fn refresh(&self) -> PluginResult<()> {
+        if let Some(rates) = &self.currency {
+            rates.refresh();
+        }
+        Ok(())
     }
 }
 
@@ -1112,5 +1200,138 @@ mod tests {
         let results = plugin.query("sqrt(16)");
         plugin.execute(&results[0]).unwrap();
         assert_eq!(*platform.clipboard.lock().unwrap(), vec!["4".to_owned()]);
+    }
+
+    #[test]
+    fn unit_conversion_row_shape() {
+        let platform = MockPlatform::empty();
+        let plugin = CalculatorPlugin::new(platform.clone());
+        let results = plugin.query("10 km in mi");
+        assert_eq!(results.len(), 1);
+        let item = &results[0];
+        assert_eq!(item.id, "calculator:result");
+        assert_eq!(item.title, "6.213711922 mi");
+        assert_eq!(item.subtitle, "10 km → mi · Enter to copy");
+        assert_eq!(item.icon, Some(IconSource::builtin("calculator")));
+        assert_eq!(item.score, score::EXACT_ANSWER);
+        assert_eq!(
+            item.action,
+            Action::CopyText {
+                text: "6.213711922 mi".into()
+            }
+        );
+        plugin.execute(item).unwrap();
+        assert_eq!(
+            *platform.clipboard.lock().unwrap(),
+            vec!["6.213711922 mi".to_owned()]
+        );
+    }
+
+    #[test]
+    fn unit_conversion_accepts_a_leading_equals_sign() {
+        let plugin = CalculatorPlugin::new(MockPlatform::empty());
+        assert_eq!(plugin.query("= 100 f to c")[0].title, "37.77777778 °C");
+    }
+
+    #[test]
+    fn math_still_works_next_to_conversions() {
+        let plugin = CalculatorPlugin::new(MockPlatform::empty());
+        assert_eq!(plugin.query("2+2*3")[0].title, "8");
+        assert!(plugin.query("10 km").is_empty());
+        assert!(plugin.query("10 km in kg").is_empty());
+        assert!(plugin.query("go to the shop").is_empty());
+    }
+
+    const RATES_XML: &str = "<Cube><Cube time='2026-10-02'>\
+        <Cube currency='USD' rate='1.1225'/><Cube currency='GBP' rate='0.85033'/>\
+        </Cube></Cube>";
+
+    fn currency_plugin(
+        platform: Arc<MockPlatform>,
+        dir: &tempfile::TempDir,
+    ) -> (CalculatorPlugin, Arc<RateService>) {
+        let service = RateService::with_fetcher(
+            dir.path().join(currency::CACHE_FILE),
+            Box::new(|| Ok(RATES_XML.to_owned())),
+        );
+        (
+            CalculatorPlugin::with_currency(platform, service.clone()),
+            service,
+        )
+    }
+
+    #[test]
+    fn currency_is_ignored_unless_enabled() {
+        let plugin = CalculatorPlugin::new(MockPlatform::empty());
+        assert!(plugin.query("100 usd in eur").is_empty());
+        let off = CalculatorPlugin::from_config(&Config::default(), MockPlatform::empty());
+        assert!(off.query("100 usd in eur").is_empty());
+    }
+
+    #[test]
+    fn currency_row_shows_the_rate_date_and_copies() {
+        let platform = MockPlatform::empty();
+        let dir = tempfile::tempdir().unwrap();
+        let (plugin, service) = currency_plugin(platform.clone(), &dir);
+
+        // Before any rates exist: a status row that does nothing.
+        let waiting = plugin.query("100 usd in eur");
+        assert_eq!(waiting.len(), 1);
+        assert_eq!(waiting[0].title, "Fetching exchange rates…");
+        assert_eq!(waiting[0].score, score::EXACT_ANSWER);
+        plugin.execute(&waiting[0]).unwrap();
+        assert!(platform.clipboard.lock().unwrap().is_empty());
+
+        service.refresh_blocking(1_000);
+        let rows = plugin.query("100 usd in eur");
+        assert_eq!(rows[0].title, "89.09 EUR");
+        assert_eq!(
+            rows[0].subtitle,
+            "100 usd → eur · 1 USD = 0.890869 EUR · ECB 2026-10-02 · Enter to copy"
+        );
+        plugin.execute(&rows[0]).unwrap();
+        assert_eq!(
+            *platform.clipboard.lock().unwrap(),
+            vec!["89.09 EUR".to_owned()]
+        );
+        // Units still win for unit queries, and math is unaffected.
+        assert_eq!(plugin.query("1 km in m")[0].title, "1000 m");
+        assert_eq!(plugin.query("2+2")[0].title, "4");
+        assert!(plugin.query("firefox").is_empty());
+    }
+
+    #[test]
+    fn refresh_downloads_only_when_currency_is_on() {
+        let dir = tempfile::tempdir().unwrap();
+        let (plugin, service) = currency_plugin(MockPlatform::empty(), &dir);
+        // `refresh` hands the download to a background thread.
+        plugin.refresh().unwrap();
+        for _ in 0..200 {
+            if matches!(service.availability(), currency::Availability::Ready(_)) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+        assert!(matches!(
+            service.availability(),
+            currency::Availability::Ready(_)
+        ));
+        assert!(CalculatorPlugin::new(MockPlatform::empty())
+            .refresh()
+            .is_ok());
+    }
+
+    #[test]
+    fn status_rows_are_not_unsupported_actions() {
+        let plugin = CalculatorPlugin::new(MockPlatform::empty());
+        let item = ResultItem::new(
+            "calculator",
+            "result",
+            "x",
+            Action::Custom {
+                payload: "somebody else's".into(),
+            },
+        );
+        assert!(plugin.execute(&item).is_err());
     }
 }
