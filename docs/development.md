@@ -12,7 +12,7 @@ crates/sevak-platform   OS access: launching, icons, app scanning, clipboard, pa
                         previous app, capturing the selection (Universal Actions), paths, terminal launching, hotkey strategy, GNOME
                         shortcut setup (Windows, macOS and Linux backends)
 crates/sevak-plugins    built-in plugins: apps, calculator (+ units, currency), files, bookmarks,
-                        web search, system commands, shell, clipboard history, snippets,
+                        web search, system commands, automation tasks, media controls, shell, clipboard history, snippets,
                         uuid example; the script plugin host (external plugins)
 src-tauri               the Tauri shell: window, hotkeys (main, Universal Actions + [[hotkey]] entries), tray, CLI,
                         --query / --run handling (direct.rs), script plugin approval, IPC

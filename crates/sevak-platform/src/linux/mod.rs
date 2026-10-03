@@ -5,6 +5,7 @@ mod capture;
 mod launch;
 mod paste;
 mod scan;
+pub(crate) mod tasks;
 mod xdg;
 
 use std::io::Read;

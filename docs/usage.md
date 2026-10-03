@@ -173,6 +173,88 @@ macOS the first use asks permission to control System Events or Finder, and
 Lock only locks when "Require password" is set to immediately (the default).
 Turn confirmation off or hide commands in [`[system]`](configuration.md#system-commands).
 
+## Automation tasks
+
+Ready-made actions for the operating system. Type a task's name as you would an
+app (two or more letters), or type `t ` to list them all. Only the tasks that
+work on your machine are offered, and they are matched by name even without the
+`t`.
+
+| Task (try typing) | Windows | macOS | Linux |
+|---|---|---|---|
+| Toggle dark mode (`dark mode`, `theme`) | app and system theme in the registry, then a settings broadcast | System Events appearance | GNOME `color-scheme` (`gsettings`), GNOME only |
+| Show desktop (`desktop`) | `Win+D` | `F11` through System Events | `wmctrl -k`, if installed (X11) |
+| Hide other apps (`hide others`) | `Win+Home` (minimizes all but the front window) | `Option+Command+H` | not offered |
+| Minimize all windows | `Win+M` | not offered | not offered |
+| Take a screenshot (`screenshot`, `snip`) | `ms-screenclip:` (Snipping Tool) | the Screenshot app | `gnome-screenshot -i`, else `spectacle`, `flameshot gui`, `xfce4-screenshooter` |
+| Open Downloads folder (`downloads`) | your Downloads folder | your Downloads folder | your Downloads folder |
+| Open recent files (`recent`) | `shell:recent` | not offered | `gio open recent:///` |
+| Flush DNS cache (`flush dns`) | not offered (needs administrator rights) | not offered (needs root) | `resolvectl flush-caches`; may ask through polkit |
+| Restart Explorer / Finder | ends `explorer.exe` (Windows starts it again) | `killall Finder` | not offered |
+| Empty clipboard (`clear clipboard`) | yes | yes | yes |
+| Mute / Unmute / Volume up / Volume down | the default output device (Core Audio) | Apple events (`set volume`) | `wpctl`, else `pactl`, else `amixer` |
+| Toggle Wi-Fi (`wifi`) | Windows radio API, if the PC has a Wi-Fi radio | `networksetup -setairportpower` | `nmcli radio wifi`, else `rfkill toggle wifi` |
+| Toggle Bluetooth (`bluetooth on`) | Windows radio API, if the PC has a Bluetooth radio | `blueutil --power toggle`, if [blueutil](https://github.com/toy/blueutil) is installed | `rfkill toggle bluetooth`, else `bluetoothctl power` |
+| Keep awake (`caffeinate`, `stay awake`) | a power request held for the time | `caffeinate -d -i -t` | `systemd-inhibit` |
+| Stop keeping awake | releases it | stops `caffeinate` | stops `systemd-inhibit` |
+
+Some tasks take what you type after them:
+
+| Type | Lists or does |
+|---|---|
+| `quit` / `quit sla` | the apps that have a window; Enter asks the app to quit, `Shift+Enter` force quits it |
+| `force quit sla` (or `fq sla`) | the same list; Enter force quits after asking |
+| `kill chrome` | the running processes with that name, grouped, with their CPU and memory; Enter ends them all after asking |
+| `eject` / `eject usb` | the removable drives (USB sticks, SD cards, optical drives); Enter ejects or unmounts |
+| `vol 30`, `volume 30%` | sets the volume (0 to 100); `vol up`, `vol down`, `vol mute`, `vol unmute` also work, and a bare `vol` offers presets |
+| `awake 45`, `awake 2h`, `awake 1.5 hours` | keeps the computer awake for that long (one minute to 24 hours); a bare `awake` offers presets |
+
+The list of apps, processes and drives is read from the system in the
+background, so the first keystroke after a pause may show the list a moment
+later; typing never waits for it.
+
+Force quit, kill and restarting Explorer or Finder ask for confirmation first,
+and the system's own processes (`csrss`, `launchd`, `systemd`…) and Sevak itself
+are never offered. Turn confirmation off or hide tasks in
+[`[tasks]`](configuration.md#automation-tasks). Tasks can be bound to a hotkey
+with `run = "tasks:dark_mode"`, `"tasks:volume:30"`, `"tasks:keep_awake:45"` or
+`"tasks:kill:chrome.exe"` (see [Custom hotkeys](configuration.md#custom-hotkeys)).
+
+Notes by system:
+
+- **Windows**: Toggling Wi-Fi or Bluetooth needs *Settings → Privacy & security
+  → Radios* to allow desktop apps. The window-shortcut tasks wait a moment so
+  they act on the app you were using, not on Sevak. Quitting an app posts the
+  same close request as its close button, so it may ask to save.
+- **macOS**: the first use of dark mode, volume, quit or hide-others asks for
+  permission to control System Events; hide-others and show-desktop press keys
+  and need *Privacy & Security → Accessibility* as well. Homebrew tools such as
+  `blueutil` are found in `/opt/homebrew/bin` and `/usr/local/bin`.
+- **Linux**: tasks that need a helper (`wmctrl`, `playerctl`, `blueutil`…) are
+  simply not listed when it is not installed. Quit lists X11 windows (also
+  XWayland); on a pure Wayland session it lists programs started with a
+  display, minus a few desktop helpers.
+
+## Media controls
+
+Type `play`, `pause`, `next` or `skip`, `previous` or `back`, or `stop` to press
+the media button of the player you are listening to, whichever app it is: a
+music app, a browser tab, a video player. Type `play ` (with the trailing space)
+or `music` to see the buttons together with a **now playing** row: *title —
+artist*, and the app. Enter on that row plays or pauses; `Shift+Enter` skips to
+the next track and `Alt+Enter` goes back.
+
+| | Windows | macOS | Linux |
+|---|---|---|---|
+| Buttons | the system media session (the one in the volume flyout), else the media keys | the media keys (play/pause, next, previous); stop is sent to Music or Spotify | [`playerctl`](https://github.com/altdesktop/playerctl) (MPRIS) |
+| Now playing | the system media session | Music and Spotify (through Apple events, only if they are running) | `playerctl metadata` |
+
+On Linux the buttons are not offered until `playerctl` is installed. On macOS
+the system's own now-playing service is private, so only Music and Spotify are
+asked for the track. The track is read when you search for it, never stored or
+sent anywhere; set `now_playing = false` under [`[media]`](configuration.md#media-controls)
+to turn the row off.
+
 ## Terminal commands
 
 `> git status` (or `>git status`, no space needed) shows "Run `git status` in

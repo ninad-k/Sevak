@@ -65,6 +65,43 @@
   {:else if name === "terminal"}
     <rect x="3" y="4.5" width="18" height="15" rx="2.4" />
     <path d="m7.5 10 3 2.5-3 2.5M13 15h3.5" />
+  {:else if name === "theme"}
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="M12 3.5a8.5 8.5 0 0 1 0 17Z" fill="currentColor" />
+  {:else if name === "desktop"}
+    <rect x="3" y="4.5" width="18" height="12" rx="2.2" />
+    <path d="M8.5 20h7M12 16.5V20" />
+  {:else if name === "camera"}
+    <path d="M4 8.5A2.5 2.5 0 0 1 6.5 6H8l1.3-2h5.4L16 6h1.5A2.5 2.5 0 0 1 20 8.5v8a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 16.5Z" />
+    <circle cx="12" cy="12.5" r="3.3" />
+  {:else if name === "volume"}
+    <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4Z" />
+    <path d="M15.5 9a4.5 4.5 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11" />
+  {:else if name === "wifi"}
+    <path d="M3.5 9.5a12 12 0 0 1 17 0M6.5 12.8a7.7 7.7 0 0 1 11 0M9.5 16a3.4 3.4 0 0 1 5 0" />
+    <path d="M12 19.2h.01" />
+  {:else if name === "bluetooth"}
+    <path d="m7 7.5 10 9-5 4.5v-18l5 4.5-10 9" />
+  {:else if name === "eject"}
+    <path d="M12 5 5 14h14Z" />
+    <path d="M5 18.5h14" />
+  {:else if name === "bolt"}
+    <path d="M13 3 5.5 13.5H11L10 21l7.5-10.5H12Z" />
+  {:else if name === "kill"}
+    <circle cx="12" cy="12" r="9" />
+    <path d="m9 9 6 6M15 9l-6 6" />
+  {:else if name === "play"}
+    <path d="M8 5.5v13l10.5-6.5Z" />
+  {:else if name === "next"}
+    <path d="M6 6v12l9-6ZM18 6v12" />
+  {:else if name === "previous"}
+    <path d="M18 6v12l-9-6ZM6 6v12" />
+  {:else if name === "stop"}
+    <rect x="6.5" y="6.5" width="11" height="11" rx="1.8" />
+  {:else if name === "note"}
+    <path d="M9 17.5V6l10-2v11.5" />
+    <circle cx="6.5" cy="17.5" r="2.5" />
+    <circle cx="16.5" cy="15.5" r="2.5" />
   {:else}
     <path d="M9 3v4M15 3v4" />
     <path d="M6 7h12v4.5a6 6 0 0 1-12 0Z" />

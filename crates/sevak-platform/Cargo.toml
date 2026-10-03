@@ -12,16 +12,26 @@ sevak-core.workspace = true
 
 arboard.workspace = true
 dirs.workspace = true
+# Process list (name, CPU, memory) for the `kill` task; nothing else of it is used.
+sysinfo = { version = "0.38", default-features = false, features = ["system"] }
 thiserror.workspace = true
 tracing.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 png = "0.18"
 windows = { workspace = true, features = [
+    "Devices_Radios",
+    "Foundation",
+    "Foundation_Collections",
+    "Media_Control",
     "Win32_Foundation",
+    "Win32_Graphics_Dwm",
     "Win32_Graphics_Gdi",
+    "Win32_Media_Audio",
+    "Win32_Media_Audio_Endpoints",
     "Win32_Storage_FileSystem",
     "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
     "Win32_System_Console",
     "Win32_System_DataExchange",
     "Win32_System_Memory",
@@ -29,6 +39,7 @@ windows = { workspace = true, features = [
     "Win32_System_Registry",
     "Win32_System_Shutdown",
     "Win32_System_Threading",
+    "Win32_System_Variant",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",
     "Win32_UI_Shell_Common",
@@ -48,10 +59,15 @@ objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = [
     "std",
     "libc",
+    "NSEvent",
+    "NSGraphicsContext",
     "NSPasteboard",
     "NSRunningApplication",
     "NSWorkspace",
+    "objc2-core-graphics",
 ] }
+# NSPoint for the media key events.
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSGeometry"] }
 objc2-core-graphics = { version = "0.3", default-features = false, features = [
     "std",
     "CGEvent",

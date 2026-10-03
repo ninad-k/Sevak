@@ -29,8 +29,9 @@ use sevak_platform::PlatformProvider;
 
 use crate::clipboard_history::default_history_path;
 use crate::{
-    AppsPlugin, BookmarksPlugin, CalculatorPlugin, ClipboardPlugin, FilesPlugin, SelectionPlugin,
-    ShellPlugin, SnippetsPlugin, SystemPlugin, UuidPlugin, WebSearchPlugin,
+    AppsPlugin, BookmarksPlugin, CalculatorPlugin, ClipboardPlugin, FilesPlugin, MediaPlugin,
+    SelectionPlugin, ShellPlugin, SnippetsPlugin, SystemPlugin, TasksPlugin, UuidPlugin,
+    WebSearchPlugin,
 };
 
 /// Builds the instances of one plugin family.
@@ -107,9 +108,9 @@ impl PluginRegistry {
         Self::default()
     }
 
-    /// Apps, calculator, web search, files, bookmarks, system commands, shell,
-    /// clipboard history, snippets, Universal Actions and the example UUID
-    /// plugin, in that order.
+    /// Apps, calculator, web search, files, bookmarks, system commands,
+    /// automation tasks, media controls, shell, clipboard history, snippets,
+    /// Universal Actions and the example UUID plugin, in that order.
     /// Order matters only for tie-breaking and logging.
     pub fn builtin() -> Self {
         let mut registry = Self::new();
@@ -168,6 +169,28 @@ impl PluginRegistry {
             |config, platform| {
                 vec![Arc::new(SystemPlugin::new(
                     config.system.clone(),
+                    platform.clone(),
+                ))]
+            },
+        ));
+        registry.register(PluginDescriptor::new(
+            "tasks",
+            "Automation tasks",
+            "Dark mode, volume, screenshot, quit an app, kill a process, eject, keep awake and more; type `t` to list them.",
+            |config, platform| {
+                vec![Arc::new(TasksPlugin::new(
+                    config.tasks.clone(),
+                    platform.clone(),
+                ))]
+            },
+        ));
+        registry.register(PluginDescriptor::new(
+            "media",
+            "Media controls",
+            "Play/pause, next, previous and stop, and the track that is playing; type `play`.",
+            |config, platform| {
+                vec![Arc::new(MediaPlugin::new(
+                    config.media.clone(),
                     platform.clone(),
                 ))]
             },
@@ -328,6 +351,8 @@ mod tests {
                 "files",
                 "bookmarks",
                 "system",
+                "tasks",
+                "media",
                 "shell",
                 "clipboard",
                 "snippets",
@@ -350,6 +375,8 @@ mod tests {
                 "files",
                 "bookmarks",
                 "system",
+                "tasks",
+                "media",
                 "shell",
                 "clipboard",
                 "snippets",
@@ -370,6 +397,8 @@ mod tests {
                 "files",
                 "bookmarks",
                 "system",
+                "tasks",
+                "media",
                 "shell",
                 "clipboard",
                 "snippets",
@@ -391,6 +420,8 @@ mod tests {
                 "web:gh",
                 "files",
                 "bookmarks",
+                "tasks",
+                "media",
                 "shell",
                 "clipboard",
                 "snippets",
@@ -402,7 +433,7 @@ mod tests {
     #[test]
     fn unknown_disabled_ids_are_ignored() {
         let config = config_disabling(&["nope"]);
-        assert_eq!(ids(&PluginRegistry::builtin(), &config).len(), 13);
+        assert_eq!(ids(&PluginRegistry::builtin(), &config).len(), 15);
     }
 
     #[test]
@@ -421,6 +452,8 @@ mod tests {
                 ("files", false),
                 ("bookmarks", true),
                 ("system", true),
+                ("tasks", true),
+                ("media", true),
                 ("shell", true),
                 ("clipboard", true),
                 ("snippets", true),

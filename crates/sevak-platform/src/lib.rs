@@ -13,6 +13,7 @@ pub mod error;
 pub mod gnome;
 pub mod icon_file;
 pub mod icon_theme;
+pub mod media;
 pub mod open;
 pub mod paste;
 pub mod paths;
@@ -21,6 +22,7 @@ pub mod process;
 pub mod provider;
 pub mod session;
 pub mod system;
+pub mod tasks;
 pub mod terminal;
 
 #[cfg(target_os = "linux")]
@@ -36,11 +38,13 @@ compile_error!("Sevak supports Windows, macOS and Linux only");
 pub use browsers::{BrowserFamily, BrowserRoot};
 pub use capture::{CaptureOptions, SelectionCapture};
 pub use error::{PlatformError, Result};
+pub use media::{MediaCommand, NowPlaying};
 pub use paste::{ClipboardRead, ForegroundApp, PasteOutcome, PasteSupport};
 pub use paths::AppPaths;
 pub use provider::PlatformProvider;
 pub use session::{DisplayServer, HotkeyStrategy};
 pub use system::{SettingsPage, SystemCommand};
+pub use tasks::{Drive, ProcessInfo, RunningApp, Task, TaskKind};
 
 /// The [`PlatformProvider`] for the operating system Sevak was built for.
 pub fn native_provider() -> Box<dyn PlatformProvider> {
