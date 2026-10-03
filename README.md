@@ -1,7 +1,7 @@
 # Sevak
 
 Sevak (Sanskrit/Hindi *sevak*, "one who serves") is a keyboard-first quick
-launcher for Windows and Linux. Press a hotkey, type a few letters, press
+launcher for Windows, macOS and Linux. Press a hotkey, type a few letters, press
 Enter. Everything runs locally, there is no telemetry, and the whole thing is
 configured from one TOML file.
 
@@ -11,7 +11,7 @@ Built with Rust, [Tauri](https://tauri.app) v2 and Svelte 5. Licensed under
 ## Features
 
 - **App search**: fuzzy search over installed applications (Start Menu and
-  packaged apps on Windows, `.desktop` entries on Linux).
+  packaged apps on Windows, `.app` bundles on macOS, `.desktop` entries on Linux).
 - **Calculator**: type an expression such as `2^10 / 3` or `sqrt(2) * 5` and press Enter
   to copy the result.
 - **Web search keywords**: `g`, `yt` and `gh` search Google, YouTube and GitHub
@@ -35,6 +35,7 @@ Download the installer for your platform from the
 | Platform | Package |
 |---|---|
 | Windows 10/11 | `Sevak_<version>_x64-setup.exe` (per-user, no admin needed) or `.msi` |
+| macOS 11+ (Apple silicon and Intel) | `Sevak_<version>_universal.dmg` |
 | Ubuntu 22.04+ / Debian | `.deb` (`sudo apt install ./Sevak_<version>_amd64.deb`) |
 | Fedora 39+ | `.rpm` (`sudo dnf install ./Sevak-<version>-1.x86_64.rpm`) |
 | Other Linux | `.AppImage` |

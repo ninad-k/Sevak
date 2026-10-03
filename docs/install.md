@@ -18,6 +18,21 @@ Release builds are currently **unsigned**.
 - Uninstall from Settings, Apps. Your config and usage data in
   `%APPDATA%\sevak\` are kept; delete the folder to remove them.
 
+## macOS 11+
+
+Download `Sevak_<version>_universal.dmg` (runs natively on Apple silicon and
+Intel), open it and drag Sevak into Applications.
+
+- The app is not notarized by Apple yet, so the first launch is blocked with
+  "Apple could not verify Sevak". Open **System Settings → Privacy & Security**,
+  scroll down and click **Open Anyway** (or run
+  `xattr -dr com.apple.quarantine /Applications/Sevak.app`).
+- Sevak lives in the menu bar (no Dock icon). The default hotkey is
+  `Alt+Space` (Option+Space); change it in Settings.
+- File search asks for permission the first time it indexes Desktop, Documents
+  or Downloads. Decline and remove those folders in Settings if you don't use it.
+- Config and usage data: `~/Library/Application Support/sevak/`.
+
 ## Ubuntu 22.04+ / Debian
 
 ```sh
