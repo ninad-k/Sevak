@@ -53,8 +53,9 @@
 //! # Grid view
 //!
 //! An image row carries its thumbnail as an [`IconSource::File`], which is what
-//! the list shows. A grid view of the history would use the same thumbnails
-//! (`thumb_path`) and the `PasteClip` action of the row.
+//! the list shows, and asks to be a Grid View tile ([`ResultItem::as_tile`]):
+//! when every row of a search is an image (`cb image`) the UI draws them as a
+//! grid of thumbnails, and the preview pane shows the full PNG.
 
 use std::borrow::Cow;
 use std::collections::HashSet;
@@ -70,7 +71,7 @@ use sevak_core::config::{ClipboardConfig, PasteConfig};
 use sevak_core::model::score;
 use sevak_core::{
     Action, ClipContent, FuzzyQuery, IconSource, Modifier, Plugin, PluginError, PluginResult,
-    ResultItem,
+    PreviewHint, ResultItem,
 };
 use sevak_platform::media::{self, files_hash, ClipboardImage};
 use sevak_platform::{
@@ -1111,9 +1112,8 @@ impl ClipboardPlugin {
         support: &PasteSupport,
         mut parts: Vec<String>,
     ) -> ResultItem {
-        let content = ClipContent::Image {
-            path: store.png_path(image.hash),
-        };
+        let png = store.png_path(image.hash);
+        let content = ClipContent::Image { path: png.clone() };
         let (action, hint) = self.clip_action(content.clone(), support);
         parts.push(human_size(image.bytes));
         parts.push(hint);
@@ -1127,7 +1127,11 @@ impl ClipboardPlugin {
         .with_subtitle(parts.join(" · "))
         .with_icon(IconSource::File {
             path: store.thumb_path(image.hash),
-        });
+        })
+        // The thumbnail is the tile's picture when every row is an image
+        // (`cb image`), and the preview pane shows the full PNG.
+        .as_tile(None)
+        .with_preview(PreviewHint::Path { path: png });
         if support.is_available() {
             row = row.with_secondary(
                 "Copy image",
@@ -2317,6 +2321,14 @@ mod tests {
         assert_eq!(
             row.subtitle,
             format!("just now · {} · Enter to paste", human_size(stored.bytes))
+        );
+        // A Grid View tile (its icon is the picture), previewing the full PNG.
+        assert!(row.is_tile());
+        assert_eq!(
+            row.preview,
+            Some(PreviewHint::Path {
+                path: rig.store().png_path(stored.hash)
+            })
         );
     }
 

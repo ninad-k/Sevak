@@ -169,7 +169,7 @@ Sevak). It shows:
 | Applications | Kind, path or launch command, and the version when it is cheap to read (macOS apps) |
 | Web results and bookmarks | The address, title and site. Nothing is fetched from the network |
 | Snippets | The text as Enter would paste it, with `{date}` and the other placeholders filled in |
-| Clipboard history entries | The copied text |
+| Clipboard history entries | The copied text, the full image, or the copied file (several files: their paths) |
 | Calculator and conversions | The result and the calculation |
 | Emoji | The emoji large, with its name, keywords and code points |
 
@@ -197,6 +197,9 @@ selected tile, `Ctrl+K` opens its actions, and the preview pane (`Shift` or
   emoji are bundled, found by name and keywords, offline. Skin-tone variants
   are not listed: apps apply their own tone setting. Turn it off by adding
   `"emoji"` to `[plugins] disabled`.
+- **Clipboard images.** `cb image` (with the history on) finds copied images;
+  when only images match they show as a grid of thumbnails, and the preview
+  pane shows the full picture.
 - Script plugins can request tiles too: see [plugins.md](plugins.md#views-text-and-grid).
 
 ## System commands
@@ -258,7 +261,8 @@ you opened Sevak: Sevak hides, brings that window back and presses Ctrl+V
 | An image (a screenshot, "Copy image" in a browser) | A thumbnail, `Image 1920 × 1080` and the file size | Pastes the image | `Ctrl+Enter` copies it without pasting; `Shift+Enter` **Save image as…** writes a PNG to the Desktop (else Downloads) as `Clipboard image <date> <time>.png`, never over an existing file, and shows it in the file manager |
 | Files or folders (a file manager's copy) | The file names and how many | Pastes the files, as a file manager's paste would | `Ctrl+Enter` shows the first one in the file manager; `Shift+Enter` copies the files without pasting; `Ctrl+C` copies their paths as text |
 
-Typing after `cb` filters by text, file name, or the word `image` (`cb image`).
+Typing after `cb` filters by text, file name, or the word `image` (`cb image`,
+shown as a [grid of thumbnails](#preview-text-view-and-grid-view)).
 Copying the same text, picture or files again moves the existing entry to the
 top instead of adding another. Files are only recorded by their path: if one has
 been moved or deleted by the time you paste, the rest are pasted, and if none is
