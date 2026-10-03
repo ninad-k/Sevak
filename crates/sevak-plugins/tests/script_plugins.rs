@@ -16,7 +16,9 @@ use sevak_core::{
 use sevak_platform::{PlatformError, PlatformProvider, Result as PlatformResult};
 use sevak_plugins::ScriptPluginHost;
 
-const WAIT: Duration = Duration::from_secs(10);
+/// Generous because CI runners cold-start the example interpreters while the
+/// tests in this file run in parallel; 10 s timed out intermittently there.
+const WAIT: Duration = Duration::from_secs(30);
 
 #[derive(Default)]
 struct RecordingPlatform {
