@@ -40,6 +40,16 @@ fi
 # shellcheck disable=SC1091
 . "$HOME/.cargo/env"
 
+# With a system C compiler (scripts/wsl-setup.sh --system installs one) the
+# Zig bootstrap below is unnecessary.
+if command -v cc >/dev/null; then
+    log "using the system C compiler"
+    cd "$REPO"
+    [ "$#" -eq 0 ] && set -- test -p sevak-platform
+    log "cargo $* (target dir: $CARGO_TARGET_DIR)"
+    exec cargo "$@"
+fi
+
 # --- Zig ----------------------------------------------------------------
 if [ ! -x "$ZIG_DIR/zig" ]; then
     log "installing Zig $ZIG_VERSION into $ZIG_DIR"
