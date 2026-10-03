@@ -170,9 +170,13 @@ impl OwnedBitmap {
 /// legacy icons carry no alpha channel at all (every alpha byte is zero while
 /// the colors are not); those are treated as fully opaque.
 pub(crate) fn bgra_premultiplied_to_rgba(pixels: &mut [u8]) {
-    let has_alpha = pixels.chunks_exact(4).any(|p| p[3] != 0);
-    let has_color = pixels.chunks_exact(4).any(|p| p[0] | p[1] | p[2] != 0);
-    for px in pixels.chunks_exact_mut(4) {
+    let has_alpha = pixels.as_chunks::<4>().0.iter().any(|p| p[3] != 0);
+    let has_color = pixels
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .any(|p| p[0] | p[1] | p[2] != 0);
+    for px in pixels.as_chunks_mut::<4>().0 {
         let (b, g, r, a) = (px[0], px[1], px[2], px[3]);
         let (r, g, b, a) = if has_alpha {
             match a {
