@@ -126,6 +126,7 @@ use Fedora/Ubuntu. "EL10 with EPEL" is the realistic enterprise-Linux target.
 
 - **Nothing happens when I press the hotkey on Linux**: you are probably on
   Wayland. Run `sevak --setup-hotkey`.
-- **Logs**: `%APPDATA%\sevak\logs\` (Windows), `~/.local/share/sevak/logs/` (Linux).
+- **Logs**: `%APPDATA%\sevak\logs\` (Windows),
+  `~/Library/Application Support/sevak/logs/` (macOS), `~/.local/share/sevak/logs/` (Linux).
 - **Start in the background at login**: set `general.launch_at_login = true`, or
   add `sevak --background` to your session's autostart.

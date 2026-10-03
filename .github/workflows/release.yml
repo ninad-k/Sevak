@@ -18,6 +18,7 @@ on:
       - "LICENSE"
       - ".github/ISSUE_TEMPLATE/**"
       - ".github/*.md"
+      - ".github/dependabot.yml"
   workflow_dispatch:
 
 concurrency:
