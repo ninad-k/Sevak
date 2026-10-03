@@ -1,0 +1,25 @@
+Sevak logo design
+
+Repository understanding
+Sevak is a keyboard-first desktop launcher using a Rust workspace, Tauri 2, and Svelte 5. The resident shell provides an Alt+Space shortcut, a search window, and tray actions. The core contains fuzzy matching, plugin routing, result ranking, and usage history. Built-in plugin code covers installed apps, files, calculations, and keyword web search.
+
+Design direction
+The original icon (preserved as sevak-icon-original.svg here) uses an amber lamp on indigo, and the tray tooltip says "Sevak - at your service". The new logo evolves that established motif into a flowing flame with an S-shaped opening above a shallow lamp bowl. The warm mark communicates helpfulness; its rising tip suggests quick action. The primary logo pairs it with the Sevak name in dark rounded sans-serif lettering.
+
+Deliverables
+- sevak-app-icon-concept.png: square, opaque indigo background, amber symbol.
+- sevak-logo-concept.png: horizontal logo with the Sevak name, opaque near-white background.
+- generation-prompts.txt: exact initial and final prompts, generated with the built-in image_gen tool.
+
+Application integration
+The approved app icon is installed as assets/sevak-icon.png, the canonical source for icon generation. Run npm run icons to regenerate the desktop PNG, ICO, ICNS, and Windows Store assets in src-tauri/icons, plus ui/public/sevak-icon.png for the search bar and favicon. Tauri uses the packaged app icon for the system tray as well. Rebuild and restart the desktop app after changing these assets.
+
+The concept PNGs remain here as the original design deliverables. The wide wordmark is intended for branding and documentation; the compact launcher uses the symbol-only app icon.
+
+Palette references from the repository
+Amber: #F59E0B
+Deep indigo: #1E1B4B
+Text: #1C1B2E
+Near-white: #FCFCFD
+These are the requested palette targets, not a claim that every generated raster pixel equals a palette color.
+
