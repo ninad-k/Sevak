@@ -15,10 +15,28 @@ export interface HotkeyStatus {
 
 export type ThemeSetting = "system" | "light" | "dark";
 
+/** How one `[[hotkey]]` entry of the config fared, in config order. */
+export interface CustomHotkeyStatus {
+  key: string;
+  description: string;
+  /** Why it is not active, if it is not. */
+  error: string | null;
+}
+
+/** The validated appearance settings as CSS (see `appearance.ts`). */
+export interface AppearanceCss {
+  css: string;
+  custom_css: string;
+  /** Why a setting was ignored. */
+  warnings: string[];
+}
+
 export interface Status {
   version: string;
   display: "windows" | "macos" | "x11" | "wayland" | "unknown";
   hotkey: HotkeyStatus;
+  custom_hotkeys: CustomHotkeyStatus[];
+  appearance: AppearanceCss;
   /** The configured theme; `system` follows `prefers-color-scheme`. */
   theme: ThemeSetting;
   /** The search index is being (re)built. */
@@ -202,9 +220,30 @@ async function safeListen<T>(event: string, cb: (payload: T) => void): Promise<U
   }
 }
 
-/** Window is being shown: clear the query, focus and select the input. */
-export function onShow(cb: () => void): Promise<UnlistenFn> {
-  return safeListen<void>(EVENT_SHOW, () => cb());
+/** What the launcher is asked to show with (`sevak --query`, hotkey entries, errors). */
+export interface ShowPayload {
+  /** Text to put in the search field. */
+  query: string | null;
+  /** A message to show instead of results. */
+  error: string | null;
+}
+
+/** Window is being shown: clear the query, focus the input, apply the payload. */
+export function onShow(cb: (payload: ShowPayload | null) => void): Promise<UnlistenFn> {
+  return safeListen<ShowPayload | null>(EVENT_SHOW, cb);
+}
+
+/**
+ * Asks for a show request that arrived before this page was listening. Also
+ * tells Rust the page is ready to hear later ones directly.
+ */
+export async function takePendingShow(): Promise<ShowPayload | null> {
+  try {
+    return await invoke<ShowPayload | null>("take_pending_show");
+  } catch (err) {
+    console.warn("[ipc] take_pending_show failed:", err);
+    return null;
+  }
 }
 
 /** Window was hidden: clear the query. */

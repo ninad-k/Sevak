@@ -358,6 +358,15 @@ impl Plugin for FilesPlugin {
         execute_action(self.platform.as_ref(), &item.action)
     }
 
+    /// `files:<full path>` for any path that still exists, indexed or not: a
+    /// hotkey bound to a file should keep working outside the search depth.
+    fn resolve(&self, id: &str) -> Option<ResultItem> {
+        let path = PathBuf::from(id.strip_prefix("files:")?);
+        let metadata = std::fs::metadata(&path).ok()?;
+        let name = path.file_name()?.to_string_lossy().into_owned();
+        Some(self.row(&name, path, metadata.is_dir(), 0.0))
+    }
+
     fn refresh(&self) -> PluginResult<()> {
         let started = Instant::now();
         let mut roots = Vec::new();
@@ -751,6 +760,33 @@ mod tests {
         let results = plugin.query("open_me");
         plugin.execute(&results[0]).unwrap();
         assert_eq!(*platform.opened_paths.lock().unwrap(), vec![file]);
+    }
+
+    #[test]
+    fn resolve_rebuilds_a_result_from_its_id() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("notes.txt");
+        touch(&file);
+        let platform = MockPlatform::empty();
+        // Not indexed: the file is outside the configured directories.
+        let plugin = FilesPlugin::with_home(FilesConfig::default(), platform.clone(), None);
+
+        let id = format!("files:{}", file.display());
+        let item = plugin.resolve(&id).expect("existing file");
+        assert_eq!(item.id, id);
+        assert_eq!(item.title, "notes.txt");
+        plugin.execute(&item).unwrap();
+        assert_eq!(*platform.opened_paths.lock().unwrap(), vec![file]);
+
+        let dir_item = plugin
+            .resolve(&format!("files:{}", dir.path().display()))
+            .expect("existing folder");
+        assert!(matches!(dir_item.action, Action::OpenPath { .. }));
+
+        assert!(plugin
+            .resolve(&format!("files:{}", dir.path().join("gone").display()))
+            .is_none());
+        assert!(plugin.resolve("apps:notes.txt").is_none());
     }
 
     #[test]

@@ -61,9 +61,15 @@ Built with Rust, [Tauri](https://tauri.app) v2 and Svelte 5. Licensed under
   (`uuid`) and a guide to writing your own in [docs/plugins.md](docs/plugins.md).
 - **Automatic updates**: Sevak checks for a new release daily and installs it
   after you agree (signed updates; can be turned off).
+- **Per-command hotkeys**: bind extra global keys that open Sevak with text
+  already typed (`> `, `g `) or run a result directly without showing the
+  window (see [Custom hotkeys](#custom-hotkeys)).
+- **Themes**: light, dark or system, plus your own accent color, font, corner
+  radius, opacity and a custom stylesheet ([docs/themes.md](docs/themes.md)).
 - **Settings window** (tray menu or `sevak --settings`), tray icon, hide-on-blur,
-  launch at login, light/dark theme, and a plain-text config file whose comments
-  survive saves from the settings window.
+  launch at login, and a plain-text config file whose comments survive saves
+  from the settings window. The config folder can live anywhere, for example a
+  synced folder ([Config location](#config-location)).
 
 ## Install
 
@@ -102,7 +108,9 @@ Details, Wayland hotkey setup and troubleshooting are in
   sevak --setup-hotkey Super+Space  # or pick a key
   ```
 
-  This registers a GNOME custom shortcut that runs `sevak --toggle`.
+  This registers a GNOME custom shortcut that runs `sevak --toggle`, and one per
+  `[[hotkey]]` entry in your config that runs `sevak --query ...` or
+  `sevak --run ...`.
 - **GNOME's `Alt+Space` conflict**: GNOME binds `Alt+Space` to the window menu.
   `--setup-hotkey` reports conflicts; to free the key, run
   `gsettings set org.gnome.desktop.wm.keybindings activate-window-menu "[]"`,
@@ -258,6 +266,33 @@ enabled) in `clipboard-history.json`, the exchange rates (if currency
 conversion is on) in `currency-rates.json`, and logs in `logs/`, all under
 `%APPDATA%\sevak\` (Windows) or `~/.local/share/sevak/` (Linux).
 
+### Config location
+
+To keep the config in a folder you sync (Dropbox, iCloud Drive, OneDrive, a git
+repository), point Sevak at it:
+
+| How | Example |
+|---|---|
+| `SEVAK_CONFIG_DIR` environment variable | `SEVAK_CONFIG_DIR=~/Dropbox/sevak` |
+| `--config <path>` command-line option (wins over the variable) | `sevak --config ~/Dropbox/sevak` |
+
+The path is the config *folder*: `config.toml` and anything else Sevak reads
+from the config folder (such as a theme's `custom_css` file) live there.
+A path ending in `.toml` names the config file itself instead, and its folder is
+the config folder. The folder is created with a default `config.toml` when it
+does not exist. Relative paths are relative to the current directory and `~` is
+expanded.
+
+Usage statistics and logs stay in the data folder (`usage.json` changes on
+every launch, so it is better left out of a synced folder). `SEVAK_DATA_DIR`
+moves that folder too.
+
+Only one Sevak runs at a time, and `--config` only matters for the process that
+starts it. Running `sevak --config <other> --toggle` while Sevak is already
+running forwards `--toggle` to the running instance, which keeps the config it
+started with (a warning is written to the log). To switch configs, quit with
+`sevak --quit` and start Sevak again with the new path.
+
 Key options (all optional; defaults shown):
 
 ```toml
@@ -277,6 +312,12 @@ query_history = true       # Up/Down on an empty search bar recalls past searche
 
 [appearance]
 theme = "system"       # "system", "light" or "dark"
+accent = ""            # "#7c3aed", "#fa0" or "rgb(124, 58, 237)"; "" = the theme's
+font_size = 15         # 12-22 px (result titles; the bar scales with it)
+font_family = ""       # "Fira Sans, sans-serif"; "" = the system font
+opacity = 100          # 30-100 (% opacity of the bar's background)
+radius = 14            # 0-32 px
+custom_css = ""        # "theme.css", a stylesheet in the config folder
 
 [plugins]
 disabled = []          # "apps", "calculator", "files", "bookmarks", "system", "shell",
@@ -332,6 +373,45 @@ text = "Best regards,\nNinad\n{date}"
 
 Defining any `[[web_search]]` entry replaces the default list. After editing,
 choose "Reload index" from the tray menu or restart Sevak.
+
+Invalid appearance values fall back to their defaults and a warning is written
+to the log (and shown in Settings, Appearance). The themes guide lists the CSS
+variables a custom stylesheet can override: [docs/themes.md](docs/themes.md).
+
+### Custom hotkeys
+
+Besides `general.hotkey` you can bind more global keys. Each `[[hotkey]]` has a
+`key` and exactly one of `query` or `run`:
+
+```toml
+[[hotkey]]
+key = "Ctrl+Alt+T"
+query = "> "                      # open Sevak with this text typed in
+
+[[hotkey]]
+key = "Ctrl+Alt+F"
+run = "apps:firefox.desktop"      # run this result, Sevak stays hidden
+```
+
+- `query` opens the search bar with the text already in the field and the caret
+  after it, so `g ` is "web search" and `f ` is "find a file". An empty `query`
+  just opens Sevak.
+- `run` takes a result id (hover over a result for a moment to see its id):
+  `<plugin id>:<key>`, as in `apps:firefox.desktop`
+  (the desktop-file id on Linux), `apps:<Start Menu path or AppUserModelID>` on
+  Windows, or `files:<full path>` for a file or folder. Plugins whose results
+  are not named by a stable id cannot be run this way. If the id cannot be
+  found, Sevak opens and says so instead of doing nothing.
+- Keys that cannot be registered (invalid, already taken by another program,
+  repeated) are skipped, logged, and listed with the reason under Settings,
+  Hotkeys; the other keys keep working.
+- Settings has a Hotkeys page to edit the list. Changes apply on save and on
+  "Reload index".
+- On Linux Wayland the desktop owns global keys: `sevak --setup-hotkey` creates a
+  GNOME shortcut for each entry that runs `sevak --query '<text>'` or
+  `sevak --run <id>` (other desktops: bind those commands yourself; the command
+  is printed). After you remove an entry, delete its shortcut in GNOME's
+  keyboard settings.
 
 ### Terminal commands
 
@@ -410,10 +490,14 @@ is not implemented.
 ```
 sevak                     Start Sevak and show the search bar
 sevak --toggle            Show the search bar, or hide it if visible
+sevak --query TEXT        Show the search bar with TEXT already typed in
+sevak --run ID            Run the result with this id, without showing the window
 sevak --background        Start without showing the window
 sevak --settings          Open the settings window
 sevak --quit              Quit the running instance
-sevak --setup-hotkey [KEY]  Bind KEY (default: config hotkey) to `sevak --toggle` in GNOME
+sevak --setup-hotkey [KEY]  Bind KEY (default: config hotkey) to `sevak --toggle` in GNOME,
+                          and the [[hotkey]] entries to --query / --run
+sevak --config PATH       Use PATH as the config folder (combine with any option above)
 sevak -h, --help          Print help
 sevak -V, --version       Print the version
 ```
@@ -482,6 +566,7 @@ release process.
 ## Documentation
 
 - [docs/install.md](docs/install.md): installation, Wayland, tray, RHEL notes, uninstall
+- [docs/themes.md](docs/themes.md): accent, fonts, opacity and custom stylesheets
 - [docs/plugins.md](docs/plugins.md): how plugins work and how to write one
 - [docs/development.md](docs/development.md): architecture, testing, releasing
 

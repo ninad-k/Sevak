@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
+  import AppearanceExtras from "./lib/AppearanceExtras.svelte";
   import HotkeyField from "./lib/HotkeyField.svelte";
+  import HotkeyList from "./lib/HotkeyList.svelte";
   import Toggle from "./lib/Toggle.svelte";
   import { getStatus, onStatus, type Status } from "./lib/ipc";
   import {
@@ -18,6 +20,7 @@
     type PluginInfo,
     type SettingsDto,
   } from "./lib/settings-ipc";
+  import { applyAppearance } from "./lib/appearance";
   import { applyTheme } from "./lib/theme";
   import {
     MAX_DEPTH,
@@ -33,13 +36,22 @@
     window: { width: 720 },
     linux: { wayland_use_xwayland: true },
     search: { max_results: 8, fallback_web_search: "", query_history: true },
-    appearance: { theme: "system" },
+    appearance: {
+      theme: "system",
+      accent: "",
+      font_size: 15,
+      font_family: "",
+      opacity: 100,
+      radius: 14,
+      custom_css: "",
+    },
     plugins: { disabled: [] },
     calculator: { currency: false },
     files: { directories: [], max_depth: 4, include_hidden: false, keyword: "", global: true },
     bookmarks: { browsers: [], keyword: "", global: true },
     shell: { terminal: "", shell: "", keep_open: true },
     web_search: [],
+    hotkey: [],
   });
 
   const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
@@ -52,6 +64,8 @@
   /** `linux.wayland_use_xwayland` as it was when this window opened. */
   let xwaylandAtOpen = $state<boolean | null>(null);
   let status = $state<Status | null>(null);
+  /** Hotkey entries whose key Rust cannot parse (reported by the list). */
+  let hotkeyParseProblems = $state(0);
 
   let active = $state<SectionId>("general");
   let hotkeyError = $state<string | null>(null);
@@ -70,13 +84,16 @@
   const showLinux = $derived(display === "x11" || display === "wayland");
   const dirty = $derived(ready && JSON.stringify(draft) !== baseline);
   const problems = $derived(validate(draft));
-  const problemCount = $derived(totalProblems(problems) + (hotkeyError ? 1 : 0));
+  const problemCount = $derived(
+    totalProblems(problems) + (hotkeyError ? 1 : 0) + hotkeyParseProblems,
+  );
   const canSave = $derived(ready && dirty && problemCount === 0 && !saving);
 
   const sections = $derived(
     (
       [
         { id: "general", label: "General" },
+        { id: "hotkeys", label: "Hotkeys" },
         { id: "appearance", label: "Appearance" },
         { id: "search", label: "Search" },
         { id: "plugins", label: "Plugins" },
@@ -86,7 +103,10 @@
       ] as { id: SectionId; label: string }[]
     ).map((section) => ({
       ...section,
-      problems: problems.count[section.id] + (section.id === "general" && hotkeyError ? 1 : 0),
+      problems:
+        problems.count[section.id] +
+        (section.id === "general" && hotkeyError ? 1 : 0) +
+        (section.id === "hotkeys" ? hotkeyParseProblems : 0),
     })),
   );
 
@@ -199,6 +219,9 @@
     if (ready) applyTheme(draft.appearance.theme);
   });
 
+  // The rest of the appearance (accent, fonts, custom stylesheet) follows the saved config.
+  $effect(() => applyAppearance(status?.appearance));
+
   const registrationWarning = $derived(
     !isWayland &&
       status?.hotkey.error &&
@@ -236,6 +259,14 @@
     payload.search.fallback_web_search = Array.isArray(payload.search.fallback_web_search)
       ? payload.search.fallback_web_search.map((k) => k.trim())
       : payload.search.fallback_web_search.trim();
+    payload.appearance.accent = payload.appearance.accent.trim();
+    payload.appearance.font_family = payload.appearance.font_family.trim();
+    payload.appearance.custom_css = payload.appearance.custom_css.trim();
+    payload.hotkey = payload.hotkey.map((binding) =>
+      binding.run != null
+        ? { key: binding.key.trim(), run: binding.run.trim() }
+        : { key: binding.key.trim(), query: binding.query ?? "" },
+    );
     payload.web_search = payload.web_search.map((engine) => ({
       keyword: engine.keyword.trim(),
       name: engine.name.trim(),
@@ -443,6 +474,15 @@
               <Toggle bind:checked={draft.general.check_for_updates} label="Check for updates" />
             </div>
           </section>
+        {:else if active === "hotkeys"}
+          <h1>Hotkeys</h1>
+          <HotkeyList
+            bind:bindings={draft.hotkey}
+            bind:parseProblems={hotkeyParseProblems}
+            errors={problems.hotkeys}
+            statuses={status?.custom_hotkeys ?? []}
+            wayland={isWayland}
+          />
         {:else if active === "appearance"}
           <h1>Appearance</h1>
 
@@ -485,6 +525,12 @@
               </div>
             </div>
           </section>
+
+          <AppearanceExtras
+            bind:appearance={draft.appearance}
+            errors={problems.appearance}
+            warnings={status?.appearance.warnings ?? []}
+          />
         {:else if active === "search"}
           <h1>Search</h1>
 

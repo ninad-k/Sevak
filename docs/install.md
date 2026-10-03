@@ -94,7 +94,9 @@ runs the command it was set up from.
   sevak --setup-hotkey Ctrl+Space   # or choose another
   ```
 
-  It adds a GNOME custom keyboard shortcut that runs `sevak --toggle`. On
+  It adds a GNOME custom keyboard shortcut that runs `sevak --toggle`, plus one
+  for every `[[hotkey]]` entry in `config.toml` (running `sevak --query '<text>'`
+  or `sevak --run <id>`; see the README's "Custom hotkeys"). On
   other desktops (KDE, Sway, ...) bind a key to `sevak --toggle` yourself in
   the desktop's keyboard settings.
 - **GNOME binds `Alt+Space` to the window menu.** `--setup-hotkey` warns when a

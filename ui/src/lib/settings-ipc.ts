@@ -10,6 +10,23 @@ export interface WebSearchEngine {
   url: string;
 }
 
+/** One `[[hotkey]]` entry: set `query` (open with text) or `run` (a result id), not both. */
+export interface HotkeyBinding {
+  key: string;
+  query?: string | null;
+  run?: string | null;
+}
+
+export interface Appearance {
+  theme: ThemeSetting;
+  accent: string;
+  font_size: number;
+  font_family: string;
+  opacity: number;
+  radius: number;
+  custom_css: string;
+}
+
 /** Mirrors `sevak_core::Config` (serde defaults make every field present). */
 export interface Config {
   general: {
@@ -26,7 +43,7 @@ export interface Config {
     fallback_web_search: string | string[];
     query_history: boolean;
   };
-  appearance: { theme: ThemeSetting };
+  appearance: Appearance;
   plugins: { disabled: string[] };
   calculator: { currency: boolean };
   files: {
@@ -40,6 +57,7 @@ export interface Config {
   /** Edited in the config file; kept here so saving the form round-trips it. */
   shell: { terminal: string; shell: string; keep_open: boolean };
   web_search: WebSearchEngine[];
+  hotkey: HotkeyBinding[];
 }
 
 export interface PluginInfo {

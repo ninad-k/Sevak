@@ -1,5 +1,7 @@
 //! Tauri builder wiring.
 
+use std::path::Path;
+
 use anyhow::Context;
 use sevak_core::Config;
 use sevak_platform::{AppPaths, DisplayServer};
@@ -7,7 +9,7 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent};
 
 use crate::cli::{self, Launch};
 use crate::state::AppState;
-use crate::{autostart, commands, hotkey, icons, search, settings, tray, updater, window};
+use crate::{autostart, commands, direct, hotkey, icons, search, settings, tray, updater, window};
 
 pub fn run(
     paths: AppPaths,
@@ -20,12 +22,15 @@ pub fn run(
 
     let mut builder = tauri::Builder::default()
         // Must be first so a second instance exits before anything else starts.
-        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            let launch = cli::parse_remote(&argv);
-            tracing::info!(?launch, "command forwarded from another instance");
-            match launch {
+        .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
+            let remote = cli::parse_remote(&argv);
+            tracing::info!(launch = ?remote.launch, "command forwarded from another instance");
+            note_ignored_config(app, remote.config.as_deref(), &cwd);
+            match remote.launch {
                 Launch::Show => window::show(app),
                 Launch::Toggle => window::toggle(app),
+                Launch::Query(query) => direct::open_with_query(app, query),
+                Launch::Run(id) => direct::run_result(app, id),
                 Launch::Settings => settings::open(app),
                 Launch::Background => {}
                 Launch::Quit => quit(app),
@@ -56,6 +61,7 @@ pub fn run(
             commands::copy_result,
             commands::set_large_type,
             commands::query_history,
+            direct::take_pending_show,
             settings::get_settings,
             settings::save_settings,
             settings::validate_hotkey,
@@ -85,6 +91,8 @@ pub fn run(
 
             match launch {
                 Launch::Show | Launch::Toggle => window::show(handle),
+                Launch::Query(query) => direct::open_with_query(handle, query),
+                Launch::Run(id) => direct::run_result(handle, id),
                 Launch::Settings => settings::open(handle),
                 Launch::Background => {}
                 Launch::Quit => quit(handle),
@@ -116,6 +124,7 @@ pub fn reload(app: &AppHandle) {
                 .config
                 .write()
                 .unwrap_or_else(|poisoned| poisoned.into_inner()) = config;
+            state.refresh_appearance();
         }
         Err(err) => tracing::warn!("keeping the current configuration: {err}"),
     }
@@ -130,6 +139,21 @@ pub fn reload(app: &AppHandle) {
     // Both the launcher and the settings window follow the status.
     if let Err(err) = app.emit(window::EVENT_STATUS, state.status()) {
         tracing::warn!("could not emit {}: {err}", window::EVENT_STATUS);
+    }
+}
+
+/// A second `sevak --config PATH` only forwards its request: the running
+/// instance keeps the config it started with. Say so when the paths differ.
+fn note_ignored_config(app: &AppHandle, requested: Option<&Path>, cwd: &str) {
+    let Some(requested) = requested else { return };
+    let (_, file) = AppPaths::config_location(requested, Path::new(cwd), None);
+    let running = &app.state::<AppState>().paths.config_file;
+    if file != *running {
+        tracing::warn!(
+            requested = %file.display(),
+            running = %running.display(),
+            "ignoring --config: Sevak is already running with another config; quit it (sevak --quit) to start with the requested one"
+        );
     }
 }
 

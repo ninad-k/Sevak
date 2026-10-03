@@ -170,6 +170,15 @@ process, so plugins must never panic.
   recent commands again. Results run in this session are tracked by the plugin
   itself. Empty keys are never passed.
 
+- **Running a result by id.** A `[[hotkey]] run = "<id>"` entry (and
+  `sevak --run <id>`) executes a result without a query. The engine asks the
+  plugin that owns the id prefix to rebuild the result through
+  `Plugin::resolve(id)`. The default returns `None` ("not resolvable"); implement
+  it when your keys name something that can be found again without a query, as
+  `apps` (looks the key up in its index) and `files` (checks the path exists)
+  do. Plugins that only exist as answers to a typed query (calculator, web
+  search, uuid) leave it alone.
+
 ### Registry and enabling/disabling
 
 `sevak_plugins::PluginRegistry` holds `PluginDescriptor`s, one per plugin

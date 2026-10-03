@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import Glyph from "./lib/Glyph.svelte";
+  import { applyAppearance } from "./lib/appearance";
   import { parentPath } from "./lib/path";
   import { applyTheme } from "./lib/theme";
   import {
@@ -16,8 +17,10 @@
     search,
     setContentHeight,
     setLargeType,
+    takePendingShow,
     type Modifier,
     type ResultDto,
+    type ShowPayload,
     type Status,
   } from "./lib/ipc";
 
@@ -116,6 +119,24 @@
     selected = 0;
     error = null;
     brokenIcons = {};
+  }
+
+  /** The window is being shown; `payload` can prefill the query or carry an error. */
+  function applyShow(payload: ShowPayload | null) {
+    reset();
+    if (payload?.error) error = payload.error;
+    if (payload?.query) {
+      const text = payload.query;
+      query = text;
+      void runSearch(text);
+      // Caret at the end, so typing continues after the prefilled text.
+      void tick().then(() => {
+        focusInput();
+        input?.setSelectionRange(text.length, text.length);
+      });
+      return;
+    }
+    focusInput(true);
   }
 
   async function runSearch(text: string) {
@@ -476,24 +497,30 @@
         status = s;
         indexing = s.indexing;
         applyTheme(s.theme);
+        applyAppearance(s.appearance);
       }
     });
 
     const unlisteners = [
-      onShow(() => {
-        reset();
-        focusInput(true);
-      }),
+      onShow(applyShow),
       onHidden(reset),
       onStatus((s) => {
         status = s;
         indexing = s.indexing;
         applyTheme(s.theme);
+        applyAppearance(s.appearance);
       }),
       onIndex((state) => {
         indexing = state === "indexing";
       }),
     ];
+
+    // A query sent while the window was still loading (`sevak --query` at startup).
+    void Promise.all(unlisteners)
+      .then(() => takePendingShow())
+      .then((payload) => {
+        if (payload) applyShow(payload);
+      });
 
     return () => {
       resizeObserver.disconnect();
@@ -559,6 +586,7 @@
           role="option"
           aria-selected={i === selected}
           tabindex="-1"
+          title={item.id}
           onmousemove={(e) => onRowMove(e, i)}
           onmousedown={(e) => e.preventDefault()}
           onclick={() => void run(i)}
@@ -660,18 +688,32 @@
   }
 
   .card {
-    background: var(--bg);
+    position: relative;
+    isolation: isolate;
     border: 1px solid var(--border);
-    border-radius: 14px;
+    border-radius: var(--radius, 14px);
     box-shadow: var(--shadow);
     overflow: hidden;
+  }
+
+  /* The background is its own layer so `opacity` fades it, not the content. */
+  .card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: -1;
+    background: var(--bg);
+    opacity: var(--card-opacity, 1);
   }
 
   .bar {
     display: flex;
     align-items: center;
     gap: 12px;
-    height: 56px;
+    height: max(56px, calc(56px * var(--font-scale, 1)));
     padding: 0 18px;
   }
 
@@ -691,7 +733,7 @@
     color: var(--fg);
     caret-color: var(--accent);
     font: inherit;
-    font-size: 22px;
+    font-size: calc(22px * var(--font-scale, 1));
     padding: 0;
   }
 
@@ -704,12 +746,12 @@
     padding: 9px 18px 11px;
     border-top: 1px solid var(--border);
     color: var(--warn);
-    font-size: 12.5px;
+    font-size: calc(12.5px * var(--font-scale, 1));
     line-height: 1.45;
   }
 
   .results {
-    --row-height: 48px;
+    --row-height: max(48px, calc(48px * var(--font-scale, 1)));
     position: relative;
     max-height: calc(var(--row-height) * 8.5 + 12px);
     padding: 6px;
@@ -775,12 +817,12 @@
   }
 
   .title {
-    font-size: 15px;
+    font-size: var(--font-size, 15px);
     line-height: 1.3;
   }
 
   .subtitle {
-    font-size: 12px;
+    font-size: calc(12px * var(--font-scale, 1));
     line-height: 1.3;
     color: var(--muted);
   }
@@ -790,7 +832,7 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 11px;
+    font-size: calc(11px * var(--font-scale, 1));
     color: var(--muted);
   }
 
@@ -800,7 +842,7 @@
     border-radius: 5px;
     background: var(--kbd-bg);
     font-family: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
-    font-size: 11px;
+    font-size: calc(11px * var(--font-scale, 1));
     line-height: 1.5;
     color: var(--muted);
   }
@@ -809,7 +851,7 @@
     padding: 9px 18px 11px;
     border-top: 1px solid var(--border);
     color: var(--error);
-    font-size: 12.5px;
+    font-size: calc(12.5px * var(--font-scale, 1));
     line-height: 1.45;
   }
 
@@ -817,7 +859,7 @@
     padding: 9px 18px 11px;
     border-top: 1px solid var(--border);
     color: var(--muted);
-    font-size: 12px;
+    font-size: calc(12px * var(--font-scale, 1));
   }
 
   /* Modifier shortcuts of the selected row, and the way into the action panel. */
@@ -828,7 +870,7 @@
     padding: 7px 18px 8px;
     border-top: 1px solid var(--border);
     color: var(--muted);
-    font-size: 11.5px;
+    font-size: calc(11.5px * var(--font-scale, 1));
     white-space: nowrap;
   }
 
@@ -861,7 +903,7 @@
     white-space: nowrap;
     text-overflow: ellipsis;
     color: var(--muted);
-    font-size: 11.5px;
+    font-size: calc(11.5px * var(--font-scale, 1));
   }
 
   .action {
@@ -869,10 +911,10 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    height: 34px;
+    height: max(34px, calc(34px * var(--font-scale, 1)));
     padding: 0 10px;
     border-radius: 8px;
-    font-size: 14px;
+    font-size: calc(14px * var(--font-scale, 1));
   }
 
   .action.selected {

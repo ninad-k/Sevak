@@ -41,7 +41,15 @@ export function mockSettings(): SettingsDto {
       window: { width: 720 },
       linux: { wayland_use_xwayland: true },
       search: { max_results: 8, fallback_web_search: "g", query_history: true },
-      appearance: { theme: "system" },
+      appearance: {
+        theme: "system",
+        accent: "",
+        font_size: 15,
+        font_family: "",
+        opacity: 100,
+        radius: 14,
+        custom_css: "",
+      },
       plugins: { disabled: ["uuid"] },
       calculator: { currency: false },
       files: {
@@ -57,6 +65,10 @@ export function mockSettings(): SettingsDto {
         { keyword: "g", name: "Google", url: "https://www.google.com/search?q={query}" },
         { keyword: "yt", name: "YouTube", url: "https://www.youtube.com/results?search_query={query}" },
         { keyword: "gh", name: "GitHub", url: "https://github.com/search?q={query}" },
+      ],
+      hotkey: [
+        { key: "Ctrl+Alt+T", query: "> " },
+        { key: "Ctrl+Alt+F", run: "apps:firefox.desktop" },
       ],
     },
     catalog: [

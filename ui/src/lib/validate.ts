@@ -2,9 +2,23 @@
 // the Rust shell, which re-checks everything on save; the shortcut itself is
 // parsed by Rust only (see `validateHotkey`).
 
-import { fallbackList, type Config, type WebSearchEngine } from "./settings-ipc";
+import {
+  fallbackList,
+  type Appearance,
+  type Config,
+  type HotkeyBinding,
+  type WebSearchEngine,
+} from "./settings-ipc";
 
-export type SectionId = "general" | "appearance" | "search" | "plugins" | "web" | "files" | "linux";
+export type SectionId =
+  | "general"
+  | "hotkeys"
+  | "appearance"
+  | "search"
+  | "plugins"
+  | "web"
+  | "files"
+  | "linux";
 
 export interface EngineErrors {
   keyword?: string;
@@ -12,8 +26,21 @@ export interface EngineErrors {
   url?: string;
 }
 
+export interface HotkeyErrors {
+  key?: string;
+  value?: string;
+}
+
+export interface AppearanceErrors {
+  accent?: string;
+  fontFamily?: string;
+  customCss?: string;
+}
+
 export interface Problems {
   engines: EngineErrors[];
+  hotkeys: HotkeyErrors[];
+  appearance: AppearanceErrors;
   fallback?: string;
   filesKeyword?: string;
   filesDepth?: string;
@@ -24,6 +51,51 @@ export interface Problems {
 export const MIN_WIDTH = 400;
 export const MAX_WIDTH = 1600;
 export const MAX_DEPTH = 32;
+export const MIN_FONT_SIZE = 12;
+export const MAX_FONT_SIZE = 22;
+export const MIN_OPACITY = 30;
+export const MAX_OPACITY = 100;
+export const MAX_RADIUS = 32;
+
+/** A color Rust accepts: `#rgb`, `#rrggbb` or `rgb(r, g, b)`. */
+export function isColor(text: string): boolean {
+  const value = text.trim();
+  if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(value)) return true;
+  const match = /^rgb\(\s*(\d{1,3})[\s,]+(\d{1,3})[\s,]+(\d{1,3})\s*\)$/i.exec(value);
+  return match !== null && match.slice(1).every((channel) => Number(channel) <= 255);
+}
+
+/** Spellings of one key that Sevak treats as the same shortcut. */
+const keyId = (key: string) => key.replace(/\s+/g, "").toLowerCase();
+
+export function hotkeyErrors(
+  binding: HotkeyBinding,
+  all: HotkeyBinding[],
+  mainKey: string,
+): HotkeyErrors {
+  const errors: HotkeyErrors = {};
+  const key = keyId(binding.key);
+  if (key === "") errors.key = "Required";
+  else if (key === keyId(mainKey)) errors.key = "Same as the main shortcut";
+  else if (all.filter((other) => keyId(other.key) === key).length > 1) errors.key = "Already used";
+  if (binding.run != null && binding.run.trim() === "") errors.value = "Enter a result id";
+  return errors;
+}
+
+export function appearanceErrors(appearance: Appearance): AppearanceErrors {
+  const errors: AppearanceErrors = {};
+  const accent = appearance.accent.trim();
+  if (accent !== "" && !isColor(accent)) errors.accent = "Use #rrggbb, #rgb or rgb(r, g, b)";
+  const family = appearance.font_family.trim();
+  if (family !== "" && !/^[\p{L}\p{N} ,._'"-]+$/u.test(family)) {
+    errors.fontFamily = "Only letters, digits, spaces and , . _ - are allowed";
+  }
+  const css = appearance.custom_css.trim();
+  if (css !== "" && (/^[\\/]|^[A-Za-z]:|(^|[\\/])\.\.([\\/]|$)/.test(css))) {
+    errors.customCss = "Must be a path inside the config folder";
+  }
+  return errors;
+}
 
 export function engineErrors(engine: WebSearchEngine, all: WebSearchEngine[]): EngineErrors {
   const errors: EngineErrors = {};
@@ -43,6 +115,7 @@ export function engineErrors(engine: WebSearchEngine, all: WebSearchEngine[]): E
 export function validate(config: Config): Problems {
   const count: Record<SectionId, number> = {
     general: 0,
+    hotkeys: 0,
     appearance: 0,
     search: 0,
     plugins: 0,
@@ -54,8 +127,16 @@ export function validate(config: Config): Problems {
   const engines = config.web_search.map((engine) => engineErrors(engine, config.web_search));
   for (const errors of engines) count.web += Object.keys(errors).length;
 
+  const hotkeys = config.hotkey.map((binding) =>
+    hotkeyErrors(binding, config.hotkey, config.general.hotkey),
+  );
+  for (const errors of hotkeys) count.hotkeys += Object.keys(errors).length;
+
+  const appearance = appearanceErrors(config.appearance);
+  count.appearance += Object.keys(appearance).length;
+
   const keywords = new Set(config.web_search.map((engine) => engine.keyword.trim().toLowerCase()));
-  const problems: Problems = { engines, count };
+  const problems: Problems = { engines, hotkeys, appearance, count };
 
   const missing = fallbackList(config.search.fallback_web_search).find(
     (keyword) => !keywords.has(keyword.toLowerCase()),
