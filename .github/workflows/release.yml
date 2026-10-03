@@ -185,14 +185,14 @@ jobs:
 
       - name: Download the release assets
         run: |
-          mkdir assets
+          mkdir release-assets # not "assets": the repository has an assets/ folder
           gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets" --paginate \
             --jq '.[] | [.id, .name] | @tsv' |
           while IFS=$'\t' read -r id name; do
             gh api -H "Accept: application/octet-stream" \
-              "repos/$GITHUB_REPOSITORY/releases/assets/$id" > "assets/$name"
+              "repos/$GITHUB_REPOSITORY/releases/assets/$id" > "release-assets/$name"
           done
-          ls -l assets
+          ls -l release-assets
 
       - name: Add latest.json and SHA256SUMS.txt
         run: |
@@ -202,10 +202,10 @@ jobs:
               --jq .browser_download_url
           }
           gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" --jq .body > notes.md
-          node scripts/updater-manifest.mjs assets "$VERSION" \
+          node scripts/updater-manifest.mjs release-assets "$VERSION" \
             "https://github.com/$GITHUB_REPOSITORY/releases/download/v$VERSION" notes.md
-          upload assets/latest.json application/json
-          (cd assets && sha256sum -- * > ../SHA256SUMS.txt)
+          upload release-assets/latest.json application/json
+          (cd release-assets && sha256sum -- * > ../SHA256SUMS.txt)
           cat SHA256SUMS.txt
           upload SHA256SUMS.txt text/plain
 
