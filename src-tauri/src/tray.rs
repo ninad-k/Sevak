@@ -43,7 +43,7 @@ fn build(app: &AppHandle) -> tauri::Result<()> {
             "show" => window::show(app),
             "settings" => open_settings(app),
             "reload" => app::reload(app),
-            "quit" => app.exit(0),
+            "quit" => app::quit(app),
             other => tracing::debug!("unhandled tray menu item {other}"),
         })
         .on_tray_icon_event(|tray, event| {

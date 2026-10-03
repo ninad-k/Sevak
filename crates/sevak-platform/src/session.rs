@@ -1,6 +1,7 @@
 //! Display-server detection and the hotkey strategy that follows from it.
 
 use std::env;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// The windowing system Sevak is running under.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -66,6 +67,20 @@ impl DisplayServer {
     }
 }
 
+/// Set once [`prefer_xwayland`] has put `GDK_BACKEND=x11` into Sevak's own
+/// environment (as opposed to the user having set it).
+static XWAYLAND_FORCED: AtomicBool = AtomicBool::new(false);
+
+/// Whether Sevak itself set `GDK_BACKEND=x11` to run under XWayland.
+///
+/// Children must not inherit that variable, or every application launched from
+/// Sevak would be pushed onto XWayland too. The spawn helpers in
+/// [`crate::process`] remove it when this returns true. A `GDK_BACKEND` the user
+/// exported themselves is left alone.
+pub fn xwayland_forced() -> bool {
+    XWAYLAND_FORCED.load(Ordering::Relaxed)
+}
+
 /// On Wayland, asks GTK to use its X11 backend (XWayland) unless the user has
 /// already chosen a backend via `GDK_BACKEND`.
 ///
@@ -84,6 +99,7 @@ pub fn prefer_xwayland(display: DisplayServer, enabled: bool) -> Option<&'static
         return None;
     }
     env::set_var("GDK_BACKEND", "x11");
+    XWAYLAND_FORCED.store(true, Ordering::Relaxed);
     Some("x11")
 }
 

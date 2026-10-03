@@ -12,8 +12,12 @@ rust-version = "1.90"
 [workspace.dependencies]
 sevak-core = { path = "crates/sevak-core" }
 sevak-platform = { path = "crates/sevak-platform" }
+sevak-plugins = { path = "crates/sevak-plugins" }
 
 anyhow = "1"
+arboard = { version = "3", default-features = false }
+nucleo-matcher = "0.3"
+serde_json = "1"
 dirs = "6"
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
@@ -36,3 +40,7 @@ lto = true
 opt-level = 3
 panic = "abort"
 strip = true
+
+# Fuzzy matching runs per keystroke; keep it fast in debug builds too.
+[profile.dev.package.nucleo-matcher]
+opt-level = 3

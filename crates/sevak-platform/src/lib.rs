@@ -1,19 +1,40 @@
 //! Operating-system integration for Sevak.
 //!
 //! Everything that touches the OS lives here, behind small cross-platform
-//! functions. Platform-specific implementations are selected with
-//! `#[cfg(target_os = ...)]` inside each module so callers never need cfg gates.
+//! functions and the [`PlatformProvider`] trait. Platform-specific
+//! implementations are selected with `#[cfg(target_os = ...)]` so callers never
+//! need cfg gates.
 
+pub mod clipboard;
+pub mod desktop_entry;
 pub mod error;
 pub mod gnome;
+pub mod icon_file;
+pub mod icon_theme;
 pub mod open;
 pub mod paths;
 pub mod process;
+pub mod provider;
 pub mod session;
 
+#[cfg(target_os = "linux")]
+mod linux;
 #[cfg(windows)]
 mod windows;
 
 pub use error::{PlatformError, Result};
 pub use paths::AppPaths;
+pub use provider::PlatformProvider;
 pub use session::{DisplayServer, HotkeyStrategy};
+
+/// The [`PlatformProvider`] for the operating system Sevak was built for.
+pub fn native_provider() -> Box<dyn PlatformProvider> {
+    #[cfg(windows)]
+    {
+        Box::new(windows::WindowsProvider::new())
+    }
+    #[cfg(target_os = "linux")]
+    {
+        Box::new(linux::LinuxProvider::new())
+    }
+}
