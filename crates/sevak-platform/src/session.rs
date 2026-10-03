@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DisplayServer {
     Windows,
+    MacOS,
     X11,
     Wayland,
     /// Linux without a recognizable graphical session (e.g. started from a TTY).
@@ -16,7 +17,8 @@ pub enum DisplayServer {
 /// How the show/hide shortcut is delivered to Sevak.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HotkeyStrategy {
-    /// Sevak grabs the key itself (Windows `RegisterHotKey`, X11 `XGrabKey`).
+    /// Sevak grabs the key itself (Windows `RegisterHotKey`, macOS Carbon
+    /// hotkeys, X11 `XGrabKey`).
     InApp,
     /// The desktop environment owns the key and runs `sevak --toggle`.
     External,
@@ -27,6 +29,9 @@ impl DisplayServer {
     pub fn detect() -> Self {
         if cfg!(windows) {
             return Self::Windows;
+        }
+        if cfg!(target_os = "macos") {
+            return Self::MacOS;
         }
         let session_type = env::var("XDG_SESSION_TYPE").ok();
         Self::classify(
@@ -53,13 +58,14 @@ impl DisplayServer {
         match self {
             Self::Wayland => HotkeyStrategy::External,
             // Unknown: attempt an in-app grab; failure is logged, not fatal.
-            Self::Windows | Self::X11 | Self::Unknown => HotkeyStrategy::InApp,
+            Self::Windows | Self::MacOS | Self::X11 | Self::Unknown => HotkeyStrategy::InApp,
         }
     }
 
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Windows => "windows",
+            Self::MacOS => "macos",
             Self::X11 => "x11",
             Self::Wayland => "wayland",
             Self::Unknown => "unknown",
@@ -171,6 +177,7 @@ mod tests {
         );
         for display in [
             DisplayServer::Windows,
+            DisplayServer::MacOS,
             DisplayServer::X11,
             DisplayServer::Unknown,
         ] {

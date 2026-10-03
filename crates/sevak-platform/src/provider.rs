@@ -8,8 +8,9 @@ use crate::error::Result;
 
 /// Everything Sevak needs from the operating system to find and start things.
 ///
-/// Implementations: `WindowsProvider` (Start Menu shortcuts + packaged apps)
-/// and `LinuxProvider` (freedesktop `.desktop` entries). Obtain the one for the
+/// Implementations: `WindowsProvider` (Start Menu shortcuts + packaged apps),
+/// `MacProvider` (`.app` bundles) and `LinuxProvider` (freedesktop `.desktop`
+/// entries). Obtain the one for the
 /// current OS with [`crate::native_provider`].
 pub trait PlatformProvider: Send + Sync {
     /// Enumerates installed, user-visible applications. Slow (file system and

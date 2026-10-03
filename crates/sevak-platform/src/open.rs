@@ -48,7 +48,13 @@ pub fn open_in_editor(path: &Path) -> Result<()> {
             Err(err) => Err(err.into()),
         }
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        // `-t`: the default text editor, whatever `.toml` is associated with.
+        let args: [&OsStr; 2] = [OsStr::new("-t"), path.as_os_str()];
+        crate::process::spawn_detached(crate::macos::OPEN, &args)
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         // shared-mime-info maps `.toml` to text/plain, so the default handler
         // is a text editor.
@@ -77,7 +83,14 @@ fn open_target(target: &OsStr) -> Result<()> {
     Ok(())
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+fn open_target(target: &OsStr) -> Result<()> {
+    crate::process::spawn_detached(crate::macos::OPEN, &[target])?;
+    tracing::debug!(target = %target.to_string_lossy(), "opened via open(1)");
+    Ok(())
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 fn open_target(target: &OsStr) -> Result<()> {
     use crate::process::{find_in_path, spawn_detached};
 

@@ -11,6 +11,7 @@
     "frontendDist": "../ui/dist"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
         "label": "main",
@@ -36,7 +37,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi", "deb", "rpm", "appimage"],
+    "targets": "all",
     "publisher": "Ninad Kulkarni",
     "copyright": "Copyright © 2026 Ninad Kulkarni. Licensed under the Apache License 2.0.",
     "category": "Utility",
@@ -61,6 +62,10 @@
       "wix": {
         "upgradeCode": "16b13fde-6fa0-4bf2-836a-9af38755bfec"
       }
+    },
+    "macOS": {
+      "minimumSystemVersion": "11.0",
+      "signingIdentity": "-"
     },
     "linux": {
       "appimage": {

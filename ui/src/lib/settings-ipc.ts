@@ -43,7 +43,7 @@ export interface SettingsDto {
   is_gnome: boolean;
   config_path: string;
   log_dir: string;
-  platform: "windows" | "linux";
+  platform: "windows" | "macos" | "linux";
 }
 
 function errorText(err: unknown): string {

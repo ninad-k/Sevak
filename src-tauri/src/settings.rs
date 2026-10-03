@@ -21,6 +21,8 @@ const WINDOW_URL: &str = "index.html#settings";
 /// The launcher steps aside first so it does not sit on top of it.
 pub fn open(app: &AppHandle) {
     window::hide(app);
+    // macOS: hiding the launcher hid the whole app; Settings must be visible.
+    window::unhide_app(app);
 
     if let Some(existing) = app.get_webview_window(window::SETTINGS_LABEL) {
         tracing::info!("settings window already open; focusing it");
@@ -64,12 +66,12 @@ pub fn open(app: &AppHandle) {
 pub struct SettingsDto {
     pub config: Config,
     pub catalog: Vec<PluginInfo>,
-    /// `windows`, `x11`, `wayland` or `unknown`.
+    /// `windows`, `macos`, `x11`, `wayland` or `unknown`.
     pub display: &'static str,
     pub is_gnome: bool,
     pub config_path: String,
     pub log_dir: String,
-    /// `windows` or `linux`.
+    /// `windows`, `macos` or `linux`.
     pub platform: &'static str,
 }
 
@@ -85,7 +87,13 @@ pub async fn get_settings(app: AppHandle) -> SettingsDto {
         is_gnome: session::is_gnome(),
         config_path: state.paths.config_file.display().to_string(),
         log_dir: state.paths.log_dir.display().to_string(),
-        platform: if cfg!(windows) { "windows" } else { "linux" },
+        platform: if cfg!(windows) {
+            "windows"
+        } else if cfg!(target_os = "macos") {
+            "macos"
+        } else {
+            "linux"
+        },
     }
 }
 

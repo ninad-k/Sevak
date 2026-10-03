@@ -1,10 +1,10 @@
 //! Well-known Sevak directories.
 //!
-//! | Purpose | Windows                         | Linux                          |
-//! |---------|---------------------------------|--------------------------------|
-//! | config  | `%APPDATA%\sevak\config.toml`   | `~/.config/sevak/config.toml`  |
-//! | data    | `%APPDATA%\sevak\`              | `~/.local/share/sevak/`        |
-//! | logs    | `<data>\logs\`                  | `<data>/logs/`                 |
+//! | Purpose | Windows                         | macOS                                            | Linux                          |
+//! |---------|---------------------------------|--------------------------------------------------|--------------------------------|
+//! | config  | `%APPDATA%\sevak\config.toml`   | `~/Library/Application Support/sevak/config.toml` | `~/.config/sevak/config.toml`  |
+//! | data    | `%APPDATA%\sevak\`              | `~/Library/Application Support/sevak/`            | `~/.local/share/sevak/`        |
+//! | logs    | `<data>\logs\`                  | `<data>/logs/`                                   | `<data>/logs/`                 |
 
 use std::path::PathBuf;
 

@@ -17,7 +17,7 @@ export type ThemeSetting = "system" | "light" | "dark";
 
 export interface Status {
   version: string;
-  display: "windows" | "x11" | "wayland" | "unknown";
+  display: "windows" | "macos" | "x11" | "wayland" | "unknown";
   hotkey: HotkeyStatus;
   /** The configured theme; `system` follows `prefers-color-scheme`. */
   theme: ThemeSetting;
