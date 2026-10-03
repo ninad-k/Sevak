@@ -762,13 +762,12 @@ fn accept(
             return None;
         }
         CapturedContent::Text(text)
-    } else if let Some(image) = media.image {
+    } else {
+        let image = media.image?;
         if sevak_platform::clipboard::take_own_image(&image) {
             return None;
         }
         CapturedContent::Image(image)
-    } else {
-        return None;
     };
     let app = platform.foreground_app();
     if app

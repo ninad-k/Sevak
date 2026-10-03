@@ -132,14 +132,12 @@ fn placeholder(
     let filters: Vec<&str> = parts.map(str::trim).collect();
     let value = if source == "query" {
         scope.query
-    } else if let Some(name) = source.strip_prefix("var:") {
-        let name = name.trim();
+    } else {
+        let name = source.strip_prefix("var:")?.trim();
         if !super::validate::valid_variable_name(name) {
             return None;
         }
         scope.vars.get(name).map_or("", String::as_str)
-    } else {
-        return None;
     };
     if filters.iter().any(|filter| !is_filter(filter)) {
         return None;
