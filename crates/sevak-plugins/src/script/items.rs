@@ -126,6 +126,20 @@ pub fn convert_items(ctx: ItemContext<'_>, values: &[Value]) -> Vec<ResultItem> 
                     );
                     continue;
                 }
+                // Not part of the script protocol: elevating, typing into
+                // another app and file-manager reveals stay with built-ins.
+                Ok(
+                    Action::RunAsAdmin { .. }
+                    | Action::PasteText { .. }
+                    | Action::RevealPath { .. },
+                ) => {
+                    tracing::warn!(
+                        plugin = ctx.plugin_id,
+                        index,
+                        "skipping an item with an action script plugins cannot use"
+                    );
+                    continue;
+                }
                 Ok(action) => absolutize(action, ctx.dir),
                 Err(err) => {
                     tracing::warn!(plugin = ctx.plugin_id, index, %err, "skipping an item with an invalid action");
@@ -231,6 +245,18 @@ mod tests {
             }
         );
         assert_eq!(item.score, 42.0);
+    }
+
+    #[test]
+    fn actions_outside_the_protocol_are_skipped() {
+        let items = convert(json!([
+            {"title": "admin", "action": {"type": "run_as_admin", "target": {"kind": "shortcut", "path": "x.lnk"}}},
+            {"title": "paste", "action": {"type": "paste_text", "text": "x", "restore_clipboard": false}},
+            {"title": "reveal", "action": {"type": "reveal_path", "path": "/tmp"}},
+            {"title": "ok", "action": {"type": "copy_text", "text": "ok"}}
+        ]));
+        let titles: Vec<&str> = items.iter().map(|i| i.title.as_str()).collect();
+        assert_eq!(titles, ["ok"]);
     }
 
     #[test]
