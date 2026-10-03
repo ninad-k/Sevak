@@ -13,6 +13,9 @@
 //! | `snippets`       | [`SnippetsPlugin`]                      | `s`     | no     |
 //! | `uuid`           | [`UuidPlugin`] (a tutorial example)     | `uuid`  | no     |
 //!
+//! Script plugins (`script:<name>`, from `<config dir>/plugins/`) are loaded by
+//! [`ScriptPluginHost`]; see [`script`].
+//!
 //! [`PluginRegistry`] knows these families; [`builtin_plugins`] builds the set
 //! for a [`Config`], honouring `[plugins] disabled`, and
 //! [`PluginRegistry::catalog`] lists them for settings. See `docs/plugins.md`.
@@ -32,6 +35,7 @@ pub mod example_uuid;
 pub mod files;
 pub mod path_browse;
 pub mod registry;
+pub mod script;
 pub mod shell;
 pub mod snippets;
 pub mod system;
@@ -49,6 +53,7 @@ pub use clipboard_history::ClipboardPlugin;
 pub use example_uuid::UuidPlugin;
 pub use files::FilesPlugin;
 pub use registry::{PluginDescriptor, PluginFactory, PluginInfo, PluginRegistry};
+pub use script::{ScriptPlugin, ScriptPluginHost};
 pub use shell::ShellPlugin;
 pub use snippets::SnippetsPlugin;
 pub use system::SystemPlugin;

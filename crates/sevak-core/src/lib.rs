@@ -22,5 +22,5 @@ pub use fuzzy::FuzzyQuery;
 pub use model::{
     Action, AppEntry, IconData, IconSource, LaunchTarget, Modifier, ResultItem, SecondaryAction,
 };
-pub use plugin::{Plugin, PluginError, PluginResult};
+pub use plugin::{Plugin, PluginError, PluginResult, ResultsNotifier};
 pub use usage::{UsageEntry, UsageError, UsageStore};

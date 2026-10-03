@@ -11,6 +11,7 @@
     hideWindow,
     onHidden,
     onIndex,
+    onResultsUpdated,
     onShow,
     onStatus,
     queryHistory,
@@ -153,6 +154,23 @@
     selected = 0;
     panelOpen = false;
     if (list) list.scrollTop = 0;
+  }
+
+  /**
+   * A script plugin answered after its query returned: run the query on screen
+   * again. Unlike a fresh search this keeps the selected row if it is still there.
+   */
+  async function refreshResults() {
+    const text = query;
+    if (text.trim() === "") return;
+    const mine = ++searchSeq;
+    const found = await search(text);
+    if (mine !== searchSeq || found === null) return;
+    const keep = results[selected]?.id;
+    results = found.results;
+    resultsTicket = found.ticket;
+    const at = keep === undefined ? -1 : results.findIndex((result) => result.id === keep);
+    selected = at >= 0 ? at : 0;
   }
 
   function onInput(e: Event) {
@@ -513,6 +531,7 @@
       onIndex((state) => {
         indexing = state === "indexing";
       }),
+      onResultsUpdated(() => void refreshResults()),
     ];
 
     // A query sent while the window was still loading (`sevak --query` at startup).

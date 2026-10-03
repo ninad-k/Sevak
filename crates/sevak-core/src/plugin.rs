@@ -6,12 +6,18 @@
 //! back to its plugin's [`Plugin::execute`].
 
 use std::error::Error as StdError;
+use std::sync::Arc;
 
 use thiserror::Error;
 
 use crate::model::ResultItem;
 
 pub type PluginResult<T> = Result<T, PluginError>;
+
+/// Tells the shell that the plugin with the given id has results that arrived
+/// after its [`Plugin::query`] returned, so the current query should run again.
+/// See [`Plugin::attach_notifier`].
+pub type ResultsNotifier = Arc<dyn Fn(&str) + Send + Sync>;
 
 #[derive(Debug, Error)]
 pub enum PluginError {
@@ -96,4 +102,16 @@ pub trait Plugin: Send + Sync {
     fn refresh(&self) -> PluginResult<()> {
         Ok(())
     }
+
+    /// Receives the shell's "results updated" callback. Only plugins that answer
+    /// slowly (script plugins) use it: when a late answer is ready for the query
+    /// they last served, they call it with their id and the shell re-runs the
+    /// current query, which then finds the answer in the plugin's cache. Called
+    /// once per plugin instance, before the first query.
+    fn attach_notifier(&self, _notifier: ResultsNotifier) {}
+
+    /// Stops background work (child processes, threads). Called when Sevak
+    /// quits; plugins are also dropped when the config reloads, so anything
+    /// that must not outlive the instance should be stopped in `Drop` too.
+    fn shutdown(&self) {}
 }

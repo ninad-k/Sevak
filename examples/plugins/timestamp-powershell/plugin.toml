@@ -1,0 +1,16 @@
+# A one-shot plugin written in PowerShell: Sevak runs timestamp.ps1 for every
+# query with the query as its argument and reads one JSON document from stdout.
+#   ts                  the current time in several formats
+#   ts 1700000000       a Unix timestamp (seconds or milliseconds) as a date
+#
+# Works with Windows PowerShell 5.1 and PowerShell 7 (pwsh, also on Linux/macOS).
+protocol    = 1
+id          = "script:timestamp"
+name        = "Timestamps (PowerShell)"
+description = "Shows the time in common formats and converts Unix timestamps."
+keyword     = "ts"
+mode        = "oneshot"
+script      = "timestamp.ps1"
+
+# PowerShell starts slowly; give it room before Sevak gives up on it.
+hard_timeout_ms = 8000

@@ -59,6 +59,10 @@ Built with Rust, [Tauri](https://tauri.app) v2 and Svelte 5. Licensed under
   to the top, per query.
 - **Plugin system**: every result source is a plugin; there is a worked example
   (`uuid`) and a guide to writing your own in [docs/plugins.md](docs/plugins.md).
+- **External plugins**: drop a folder with a script (Python, PowerShell, Node,
+  anything) into the plugins folder to add a keyword, without rebuilding Sevak.
+  Many Alfred Script Filter scripts run unchanged. See
+  [External plugins](#external-plugins).
 - **Automatic updates**: Sevak checks for a new release daily and installs it
   after you agree (signed updates; can be turned off).
 - **Per-command hotkeys**: bind extra global keys that open Sevak with text
@@ -263,7 +267,9 @@ Sevak creates a commented config file on first run:
 Usage statistics (including your last 50 searches, see `query_history`, and
 the `>` commands you ran) are in `usage.json`, the clipboard history (if
 enabled) in `clipboard-history.json`, the exchange rates (if currency
-conversion is on) in `currency-rates.json`, and logs in `logs/`, all under
+conversion is on) in `currency-rates.json`, the script plugins you allowed in
+`script-plugin-approvals.json` (and each script plugin's own files under
+`plugins/`), and logs in `logs/`, all under
 `%APPDATA%\sevak\` (Windows) or `~/.local/share/sevak/` (Linux).
 
 ### Config location
@@ -321,7 +327,7 @@ custom_css = ""        # "theme.css", a stylesheet in the config folder
 
 [plugins]
 disabled = []          # "apps", "calculator", "files", "bookmarks", "system", "shell",
-                       # "clipboard", "snippets", "web:<keyword>"
+                       # "clipboard", "snippets", "web:<keyword>", "script:<name>"
 
 [calculator]
 currency = false       # true: convert currencies with the ECB's daily rates (network)
@@ -509,6 +515,41 @@ sevak -V, --version       Print the version
 Only one instance runs at a time; running `sevak` again forwards the request
 to the running instance.
 
+## External plugins
+
+Sevak can run plugins written as scripts, so you can add your own keywords
+without building anything. A plugin is a folder with a `plugin.toml` and a
+script, placed in the `plugins` folder next to `config.toml`
+(`%APPDATA%\sevak\plugins` on Windows, `~/.config/sevak/plugins` on Linux,
+`~/Library/Application Support/sevak/plugins` on macOS):
+
+```toml
+# plugins/hello/plugin.toml
+protocol = 1
+keyword  = "hello"
+script   = "main.py"       # or: command = ["node", "main.js"]
+```
+
+Choose "Reload index" in the tray menu and Sevak asks once whether to allow the
+new plugin; then type `hello ` and your script answers. Three working examples
+(Python, PowerShell and Node) are in [`examples/plugins/`](examples/plugins).
+
+- Scripts either stay running and talk JSON over stdin/stdout (`persistent`,
+  the default) or are started per query with the query as an argument
+  (`mode = "oneshot"`). A one-shot script that prints
+  [Alfred Script Filter JSON](https://www.alfredapp.com/help/workflows/inputs/script-filter/json/)
+  (`format = "alfred"`) lets many existing Alfred scripts that are not
+  macOS-specific work in Sevak.
+- A slow script never delays typing: its answer shows up as soon as it arrives,
+  and answers for text you have already typed past are discarded.
+- Scripts run with your account's permissions and are not sandboxed. A new
+  plugin does nothing until you allow it, and Sevak asks again if its command
+  changes. Install only plugins you trust. Disable one with
+  `[plugins] disabled = ["script:hello"]`, or all with `"script"`.
+
+The full guide (manifest, protocol, Alfred mapping, security model) is in
+[docs/plugins.md](docs/plugins.md#external-plugins).
+
 ## Privacy
 
 Sevak has no telemetry or analytics. Config, usage statistics and logs stay on
@@ -546,7 +587,9 @@ apps to `ignore_apps` and clear the history when in doubt.
 
 Otherwise, the only network traffic is your browser opening a web search URL
 when you pick a web search result. (On Windows, the installer may download the
-Microsoft WebView2 runtime if it is missing.)
+Microsoft WebView2 runtime if it is missing.) Sevak itself never downloads or
+updates script plugins; what a plugin you installed does on its own, including
+any network access, is up to that plugin.
 
 ## Build from source
 
@@ -571,7 +614,7 @@ release process.
 
 - [docs/install.md](docs/install.md): installation, Wayland, tray, RHEL notes, uninstall
 - [docs/themes.md](docs/themes.md): accent, fonts, opacity and custom stylesheets
-- [docs/plugins.md](docs/plugins.md): how plugins work and how to write one
+- [docs/plugins.md](docs/plugins.md): how plugins work and how to write one, including script plugins
 - [docs/development.md](docs/development.md): architecture, testing, releasing
 
 ## Contributing

@@ -2,12 +2,12 @@
 
 Everything Sevak shows in its result list comes from a plugin: installed apps,
 the calculator, web search, files. This document explains how a query flows
-through them, how to write and register a built-in plugin, and sketches how
-script-based external plugins could work in the future.
+through them, how to write and register a built-in plugin, and how to add
+plugins without rebuilding Sevak by dropping in a script.
 
 - [Architecture](#architecture)
 - [Writing a built-in plugin](#writing-a-built-in-plugin)
-- [Toward script-based external plugins](#toward-script-based-external-plugins) (design only, **not implemented**)
+- [External plugins](#external-plugins): script plugins in Python, PowerShell, Node or anything else, including Alfred Script Filter scripts
 
 Code map:
 
@@ -21,6 +21,7 @@ Code map:
 | Config (`[plugins] disabled`) | `crates/sevak-core/src/config.rs` |
 | Built-in plugins, registry | `crates/sevak-plugins/src/` |
 | Typed-path browsing (files plugin) | `crates/sevak-plugins/src/path_browse.rs` |
+| Script plugins (external) | `crates/sevak-plugins/src/script/` |
 | Standard action execution | `crates/sevak-plugins/src/actions.rs` |
 | OS access (`PlatformProvider`) | `crates/sevak-platform/src/provider.rs` |
 
@@ -55,7 +56,10 @@ secondary action.)
 - **Engine** (`SearchEngine`) owns the plugins (`Vec<Arc<dyn Plugin>>`) and the
   usage store. It never interprets results; it only routes and ranks them.
 - **Plugins** answer queries from in-memory data and describe what should
-  happen as an `Action`. They do not touch the OS directly.
+  happen as an `Action`. They do not touch the OS directly. Script plugins (see
+  [External plugins](#external-plugins)) are the exception to "in-memory": they ask
+  a child process, so they answer within a small time budget and deliver late
+  answers through `Plugin::attach_notifier`.
 - **Actions** (`Action`) are a closed vocabulary: `Launch`, `OpenPath`,
   `OpenUrl`, `CopyText`, `PasteText` (copy, return to the app that was focused
   before Sevak opened, press Ctrl+V / Cmd+V), `RevealPath` (show in the file
@@ -463,182 +467,409 @@ pasting, looking the snippet up by its result id so a config reload between
 query and Enter uses the new text. Expansion is the pure function
 `snippets::expand`, tested without a platform.
 
-## Toward script-based external plugins
+## External plugins
 
-> **Status: design only. None of this is implemented.** Today plugins are Rust
-> code compiled into Sevak. This section records the intended direction so the
-> built-in contract stays compatible with it.
+You can add a keyword plugin without building Sevak: drop a folder with a
+`plugin.toml` and a script into the plugins folder and Sevak runs the script to
+answer queries. Scripts can be written in anything that reads and writes text
+(Python, PowerShell, Node, a shell script, a compiled program), and a one-shot
+mode runs many existing **Alfred Script Filter** scripts unchanged.
 
-Goal: let a user drop a folder with a script into the config directory and get a
-keyword plugin, without building Sevak.
+- [Quick start](#quick-start)
+- [The manifest](#the-manifest-plugintoml)
+- [Starting the script](#starting-the-script)
+- [Persistent plugins: the protocol](#persistent-plugins-the-protocol)
+- [One-shot plugins](#one-shot-plugins)
+- [Alfred Script Filter scripts](#alfred-script-filter-scripts)
+- [Speed: queries never wait for scripts](#speed-queries-never-wait-for-scripts)
+- [Lifecycle, crashes and restarts](#lifecycle-crashes-and-restarts)
+- [Security](#security)
+- [Tips for plugin authors](#tips-for-plugin-authors)
+- [Design decisions](#design-decisions)
+- [For contributors](#for-contributors)
 
-### Discovery and manifest
+### Quick start
 
-Each plugin lives in `<config dir>/sevak/plugins/<name>/` and contains a
-`plugin.toml` plus whatever the script needs. Sevak scans the directory at
-startup and on "Reload index".
+1. Copy a folder from [`examples/plugins/`](../examples/plugins) into the
+   plugins folder, which sits next to `config.toml`:
+
+   | OS | Plugins folder |
+   |---|---|
+   | Windows | `%APPDATA%\sevak\plugins` |
+   | macOS | `~/Library/Application Support/sevak/plugins` |
+   | Linux | `~/.config/sevak/plugins` |
+
+2. Choose **Reload index** in the tray menu (or restart Sevak).
+3. Sevak shows a dialog naming the plugin and the exact command it will run.
+   Choose **Allow**. (Nothing runs before that; see [Security](#security).)
+4. Open Sevak and type the plugin's keyword and a space: `hello Ada`.
+
+The examples:
+
+| Folder | Mode | Language | Keyword |
+|---|---|---|---|
+| `hello-python` | persistent | Python | `hello` |
+| `timestamp-powershell` | one-shot | PowerShell | `ts` |
+| `case-converter-node` | one-shot, Alfred format | Node.js | `case` |
+
+### The manifest (`plugin.toml`)
+
+Each plugin is a folder `<plugins folder>/<name>/` containing `plugin.toml` and
+whatever the script needs. Sevak scans the folder at startup and on **Reload
+index**. Folders starting with `.` and folders without a `plugin.toml` are
+ignored.
 
 ```toml
-# <config dir>/sevak/plugins/hello/plugin.toml
-protocol    = 1                  # protocol version the script speaks
-id          = "script:hello"     # stable; must be unique; prefix avoids clashing with built-ins
-name        = "Hello"
+protocol    = 1                  # required: the protocol version the plugin speaks
+keyword     = "hello"            # required: type "hello " to use it (no spaces)
+script      = "main.py"          # how to run it: `script` or `command`, not both
+# command   = ["python3", "main.py"]
+
+id          = "script:hello"     # default: "script:" + the folder name; must start with "script:"
+name        = "Hello"            # default: the folder name
 description = "Greets whoever you type."
-keyword     = "hello"
-global      = false              # also answer queries without the keyword?
-command     = "python"           # resolved via PATH or relative to the plugin folder
-args        = ["main.py"]
-timeout_ms  = 50                 # soft per-query budget
+
+mode        = "persistent"       # "persistent" (default) or "oneshot"
+format      = "sevak"            # one-shot output: "sevak" (default) or "alfred"
+
+timeout_ms        = 50           # how long a query waits for the script (10-1000)
+hard_timeout_ms   = 3000         # unanswered this long = hung, restart it (500-60000)
+idle_timeout_secs = 300          # persistent: stop after this much inactivity (0 = never)
 ```
 
-`[plugins] disabled` and `catalog()` apply as for built-ins (the manifest `id`
-is the instance id).
+- `id` is **stable forever**, like every plugin id: it is part of result ids and
+  usage statistics and is what `[plugins] disabled` lists. Ids must be unique;
+  when two folders claim one id the first (by folder name) wins.
+- Keywords are matched case-insensitively. A keyword that another plugin (built-in
+  or script) also uses queries both and merges their results, so pick one
+  that is not taken (`g`, `yt`, `gh`, `f`, `b`, `>`, `cb`, `s` and `uuid` are by
+  default).
+- Unknown keys are ignored, so a manifest written for a newer Sevak still loads.
+- A `plugin.toml` that is invalid is skipped with a message in the log and shown
+  in Settings > Plugins as "Not loaded: ...".
+- `global = true` is accepted and ignored: script plugins only answer their
+  keyword, because a global script would be asked on every keystroke.
+- `protocol` must be a version this Sevak speaks (currently `1`); otherwise the
+  plugin is not loaded and says so.
 
-### Process model and protocol
+Disable a plugin with its id, or all of them with the family id:
 
-A **long-lived child process** per plugin, started lazily on first use (or at
-startup), with its working directory set to the plugin folder. Sevak and the
-script exchange **newline-delimited JSON** messages over stdin/stdout, one
-object per line, in a JSON-RPC-like shape. The script's stderr is captured and
-written to Sevak's log, tagged with the plugin id. Messages:
+```toml
+[plugins]
+disabled = ["script:hello"]    # one plugin
+# disabled = ["script"]        # every script plugin
+```
+
+### Starting the script
+
+Sevak never uses a shell. Pick one of two ways to say what to run:
+
+- `command = ["program", "arg", ...]`: runs exactly this. The program is looked
+  up on `PATH` unless it contains a path separator or starts with `.`, in which
+  case it is a path relative to the plugin folder (absolute paths are used as
+  they are). Relative paths may not contain `..`.
+- `script = "file"`: a file in the plugin folder. Sevak picks the interpreter
+  from the extension:
+
+  | Extension | Runs as |
+  |---|---|
+  | `.py` | `py -3 -u file` on Windows (`python -u`, `python3 -u` as fallbacks); `python3 -u file`, then `python -u file` elsewhere |
+  | `.ps1` | `pwsh -NoProfile -NonInteractive -File file`; on Windows also `powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File file` |
+  | `.js`, `.mjs`, `.cjs` | `node file` |
+  | `.sh` | `sh file` (Linux and macOS) |
+  | anything else | the file itself: an executable, a `.cmd`/`.bat` on Windows, a script with a `#!` line and the executable bit on Linux and macOS |
+
+  If the interpreter is not installed the plugin loads but cannot start, and the
+  log says which programs it looked for.
+
+On Windows, `python` and `python3` can be Microsoft Store stubs that open the
+Store instead of running Python, which is why `.py` prefers the `py` launcher.
+Use `command = ["C:\\Path\\to\\python.exe", "main.py"]` to pin an interpreter.
+
+The script runs with the **plugin folder as its working directory** and these
+environment variables (on top of Sevak's own environment):
+
+| Variable | Value |
+|---|---|
+| `SEVAK_PLUGIN_ID` | the plugin id |
+| `SEVAK_PLUGIN_DIR` | the plugin folder |
+| `SEVAK_PLUGIN_DATA` | a folder for the script's own files (created on demand, `<data dir>/plugins/<folder>`) |
+| `SEVAK_VERSION` | Sevak's version |
+| `alfred_workflow_bundleid`, `alfred_workflow_name`, `alfred_workflow_data`, `alfred_workflow_cache` | only with `format = "alfred"`, the Alfred equivalents |
+
+On Windows the script gets no console window.
+
+### Persistent plugins: the protocol
+
+The default mode. Sevak starts **one long-lived process** the first time the
+keyword is used and talks to it with **newline-delimited JSON**: one object per
+line on stdin (Sevak to script) and on stdout (script to Sevak), UTF-8. stdout
+is for the protocol only; **stderr is captured into Sevak's log** tagged with
+the plugin id (the first 200 lines per process).
 
 ```jsonc
 // Sevak -> script
-{"type":"initialize","protocol":1,"sevak_version":"0.1.0"}
+{"type":"initialize","protocol":1,"sevak_version":"0.1.0","plugin_id":"script:hello"}
 {"type":"query","request_id":42,"input":"world"}
-{"type":"execute","key":"greeting"}
+{"type":"execute","key":"remember","payload":"world"}
 {"type":"shutdown"}
 
 // script -> Sevak
-{"type":"ready"}                                      // reply to initialize
+{"type":"ready"}                                   // optional reply to initialize
 {"type":"results","request_id":42,"items":[
   {"key":"greeting","title":"Hello, world!","subtitle":"Enter to copy",
    "icon":{"kind":"builtin","name":"copy"},
-   "action":{"type":"copy_text","text":"Hello, world!"}}
+   "action":{"type":"copy_text","text":"Hello, world!"},
+   "score":100}
 ]}
-{"type":"error","request_id":42,"message":"..."}      // optional
+{"type":"error","request_id":42,"message":"..."}   // logged; the query gets no results
 ```
 
-- `items[].key` becomes the result id suffix: `<manifest id>:<key>`, so the
-  stability rules for keys apply to scripts too.
-- `action` is restricted to the **same `Action` enum** the built-ins use
-  (`launch`, `open_path`, `open_url`, `copy_text`; plus `custom`, which Sevak
-  routes back to the script as `execute`). The JSON shape is the existing serde
-  encoding of `Action`, so the schema is already defined by `model.rs`.
-- `execute {key}` is only needed for `custom` actions; for standard actions Sevak
-  performs the action itself through `execute_action`, so scripts never get to
-  run arbitrary OS calls on Sevak's behalf.
-- The script may add a `"score"` per item; Sevak clamps it into a sane range
-  (for example never above `score::KEYWORD`) so scripts cannot dominate ranking.
+Messages Sevak sends never contain raw non-ASCII characters (they are written
+as JSON `\uXXXX` escapes), so a script that reads its pipe with the wrong
+encoding, as Windows consoles do by default, still sees the right text.
 
-### Latency: never stall typing
+- `initialize` is sent first. Replying `ready` is optional; Sevak does not wait
+  for it, and queries may follow immediately.
+- `query` carries the text after the keyword (`hello Ada` sends `"Ada"`; `hello `
+  sends `""`) and a `request_id`. Reply with a `results` message **using the same
+  `request_id`**. Answers to older requests are dropped (see
+  [Speed](#speed-queries-never-wait-for-scripts)). Scripts may notice a newer
+  `query` already waiting on stdin and skip the work for the old one; Sevak never
+  kills a script to cancel a query.
+- `execute` is sent when the user picks an item whose action is `custom`. `key`
+  is the item's key, `payload` the action's payload. There is no reply.
+- `shutdown` asks the script to exit. It then has half a second before it is
+  killed. Closing stdin means the same.
+- Unknown message types and unknown fields are ignored in both directions.
+  A stdout line that is not a JSON message is ignored too (the first few are
+  logged as a hint to print debugging output to stderr).
 
-`Plugin::query` is synchronous and must be fast, but a script is arbitrary
-code. The adapter therefore decouples the two:
+#### Items
 
-- `query()` sends `query {request_id, input}`, then waits **up to the soft
-  budget** (`timeout_ms`, default 50 ms) for a `results` message with the
-  matching `request_id`.
-- Inside the budget: return the items. After it: return the **last cached
-  results** (or nothing) immediately, and keep reading. When the late answer
-  arrives, store it and ask the shell to re-run the current query (an engine
-  "results changed" notification, which does not exist yet; see open questions).
-  Results for a superseded `request_id` are dropped.
-- **Cancellation:** every `query` carries a fresh `request_id`; a newer query
-  makes older ids stale. Scripts may check for new input between steps. Sevak
-  does not kill the process to cancel.
-- A hard timeout (for example 2 s without any reply) counts as a failure.
+| Field | | |
+|---|---|---|
+| `title` | required | shown in the list (200 characters) |
+| `key` | | stable id of this row within the plugin; the result id is `<plugin id>:<key>`. Defaults to the title. Duplicate keys in one answer get `#2`, `#3`... |
+| `subtitle` | | 300 characters |
+| `icon` | | `{"kind":"builtin","name":"copy"}` (a UI glyph: `app`, `calculator`, `web`, `file`, `folder`, `copy`, `plugin`) or `{"kind":"file","path":"icon.png"}` |
+| `action` | | what Enter does; defaults to copying the title |
+| `score` | | a number; see below |
 
-### Crash and restart policy
+At most 50 items per answer are kept. An item that is malformed is skipped, the
+rest of the answer is used, and the log says why.
 
-- If the process exits or breaks the protocol, mark the plugin unhealthy, return
-  no results and restart with exponential backoff (for example 0.5 s, 1 s, 2 s,
-  ... up to 60 s).
-- After N consecutive failed starts (say 5), disable the plugin until the next
-  reload and log a clear message.
-- On exit Sevak sends `shutdown`, waits briefly, then kills the process.
+**Keys** follow the same rule as built-in plugins: identify what the thing *is*
+(`greeting`, `project-sevak`), not volatile data, because usage statistics are
+keyed by result id.
 
-### Security model
+**Actions** use the same JSON as Sevak's `Action` type:
 
-- Scripts run **with the user's privileges**, like any program the user starts.
-  Sevak provides no sandbox.
-- Only plugins the user installed into their own config directory are loaded;
-  Sevak does not download or update them.
-- Every `open_url` action still passes the platform provider's allow-list
-  (`http`, `https`, `mailto`); a script cannot make Sevak open `file:` or custom
-  schemes. Launching executables is limited to the `Launch` targets Sevak
-  already understands.
-- Sevak itself makes no network requests for plugins; whatever the script does
-  on its own is outside Sevak's control and should be documented by its author.
-- Show enabled script plugins (with command path) in settings so the user can
-  see what runs.
+| `action` | Enter does |
+|---|---|
+| `{"type":"copy_text","text":"..."}` | copies text |
+| `{"type":"open_url","url":"https://..."}` | opens a web or `mailto:` link (other schemes are refused by Sevak) |
+| `{"type":"open_path","path":"..."}` | opens a file or folder with its default program; a relative path is relative to the plugin folder |
+| `{"type":"launch","target":{...}}` | starts an application (the `LaunchTarget` shapes in `model.rs`) |
+| `{"type":"custom","payload":"..."}` | sends `execute` back to the script (persistent mode only) |
 
-### The `ScriptPlugin` adapter
+Sevak itself performs every standard action; a script cannot make Sevak call
+anything beyond this list. A `custom` action is the way to do work in the
+script, such as saving a note.
 
-A `ScriptPlugin` implements `Plugin` on top of the child process:
+**Scores.** Scores are optional. Without one, an item keeps the order the script
+gave it (the gap between rows is wide enough that usage statistics do not
+reshuffle them). A given score is clamped into `0` to `4999`, just below the
+score Sevak reserves for its own keyword rows, so a script can order its rows
+but never outrank built-in answers. Give rows close scores if you want Sevak to
+reorder them by how often you pick them.
 
-- `id/name/description/keyword/global` come from `plugin.toml`.
-- `query(input)` as above: send, wait up to the budget, else serve the cache.
-  The cache is a `Mutex<Option<(String /*input*/, Vec<ResultItem>)>>`, written by
-  a reader thread that owns the child's stdout.
-- `execute(item)`: standard actions go to `execute_action`; `Custom` sends
-  `execute {key}` to the script.
-- `refresh()`: (re)start the process if it is down, resending `initialize`.
-- A `ScriptPluginHost` scans the plugins directory and registers one
-  `PluginDescriptor` per manifest with the `PluginRegistry`, so scripts reuse
-  `instantiate`, `catalog` and the disable list unchanged.
+**Icons.** A `file` icon is a path **inside the plugin folder** (`png`, `svg`,
+`ico`, `jpg`, `webp`). Absolute paths, `..`, and symlinks that lead outside the
+folder are rejected, and the row shows the default glyph instead.
 
-### Versioning
+### One-shot plugins
 
-- `protocol` is an integer in the manifest and in `initialize`. Sevak refuses to
-  start a plugin that asks for a version it does not support and says so in the
-  log and in settings.
-- Within a version, only additive changes (new optional fields, new message
-  types that scripts may ignore). Unknown fields must be ignored by both sides.
+`mode = "oneshot"` runs the script **once per query** with the query appended
+as the last argument, and reads one JSON document from stdout:
 
-### Minimal example
-
-`plugin.toml` as above, with `main.py`:
-
-```python
-import json, sys
-
-for line in sys.stdin:
-    msg = json.loads(line)
-    kind = msg["type"]
-    if kind == "initialize":
-        print(json.dumps({"type": "ready"}), flush=True)
-    elif kind == "query":
-        text = f"Hello, {msg['input'] or 'world'}!"
-        item = {
-            "key": "greeting",
-            "title": text,
-            "subtitle": "Enter to copy",
-            "icon": {"kind": "builtin", "name": "copy"},
-            "action": {"type": "copy_text", "text": text},
-        }
-        print(json.dumps({"type": "results", "request_id": msg["request_id"],
-                          "items": [item]}), flush=True)
-    elif kind == "shutdown":
-        break
+```json
+{"items":[{"key":"iso","title":"2023-11-14T22:13:20Z","action":{"type":"copy_text","text":"2023-11-14T22:13:20Z"}}]}
 ```
 
-### Open questions
+The items are the same as in the persistent protocol (a bare array of items also
+works), except that `custom` actions are not available because no process stays
+alive. This is the simplest way to write a plugin: no loop, no protocol. The cost
+is a process start per query, so Sevak waits 30 ms before starting one (to let a
+burst of typing settle) and kills a run as soon as a newer query exists.
+`hard_timeout_ms` is the longest a run may take (default 3 s; raise it for slow
+starters such as PowerShell). The exit code is ignored; output that is not valid
+JSON is logged and shows no results.
 
-- **Async result delivery.** `Plugin::query` is synchronous and the engine has no
-  "results changed" channel. Late script answers need one (engine callback or an
-  event to the shell), or scripts only ever get one chance per keystroke.
-- **Windows command resolution** (`python` vs `py`, `.cmd` shims, quoting) and
-  Linux shebang handling.
-- **Scores:** should scripts supply scores at all, or only order? Clamping rules.
-- **Icons:** allow `file` icons relative to the plugin folder? Resolution and
-  path-escape rules.
-- **Startup cost:** start lazily on first keyword use vs eagerly; idle shutdown
-  of unused processes.
-- **Permissions UX:** first-run confirmation when a new plugin appears.
-- **`global` scripts:** how to bound their cost per keystroke, since every
-  global query would hit every script; probably forbid or heavily throttle.
-- **Distribution:** only manual installation for now; signing/registry is out of
-  scope.
-- **Alternatives:** WASM components would give real sandboxing at the cost of a
-  much heavier runtime and authoring story.
+### Alfred Script Filter scripts
+
+`mode = "oneshot"` with `format = "alfred"` reads
+[Alfred's Script Filter JSON](https://www.alfredapp.com/help/workflows/inputs/script-filter/json/).
+Many existing Alfred workflow scripts that are not specific to macOS can be
+dropped into a folder with a four-line manifest:
+
+```toml
+protocol = 1
+keyword  = "gh"
+mode     = "oneshot"
+format   = "alfred"
+command  = ["python3", "script_filter.py"]
+```
+
+Alfred runs a Script Filter with the query as argument, as Sevak does in this
+mode. Mapping:
+
+| Alfred item field | In Sevak |
+|---|---|
+| `title`, `subtitle` | the same |
+| `uid` | the result key (stable ids for usage learning); without it the title is used |
+| `arg` (the first one, if an array) | the action, by shape: an `http://`, `https://` or `mailto:` address opens; an existing absolute path (or `~/...`) opens with its default program; anything else is copied |
+| `type` of `file` or `file:skipcheck` | `arg` is a path to open even if it does not exist |
+| `icon.path` | an icon, if the file is inside the plugin folder |
+| `valid: false`, or no `arg` | the row is shown; Enter copies its title |
+| item order | kept (Sevak's scores follow the order) |
+
+Ignored: `autocomplete`, `quicklookurl`, `mods`, `variables`, `text`, `match`,
+`icon.type` (`fileicon` and `filetype` ask macOS for a file's icon), and the
+top-level `rerun`, `variables` and `cache`. A scheme other than web or mail in
+`arg` (`slack://`, `obsidian://`) is copied rather than opened because Sevak
+does not open arbitrary schemes. Scripts that call `osascript`, read
+`~/Library`, or expect an Alfred preferences file need changes to run elsewhere.
+Only Script Filters are supported, not whole `.alfredworkflow` packages with
+their other node types.
+
+### Speed: queries never wait for scripts
+
+`Plugin::query` runs on every keystroke and must be quick, but a script is
+arbitrary code. A script plugin therefore treats `timeout_ms` (default 50 ms) as
+a **budget, not a deadline**:
+
+1. Every query is numbered with a *request id*, the query generation.
+2. The plugin sends the request and waits up to the budget for the answer.
+3. **In time:** the results are returned like any other plugin's.
+4. **Too late:** the list is shown without them, or, if the previous answer
+   was for a related text (the user typed one more letter or deleted one), with
+   the previous answer so the list does not flash empty. Nothing else waits.
+5. When the late answer arrives and it is **still for the newest request**, Sevak
+   emits `sevak:results` and the launcher runs its current query again; the plugin
+   now finds the answer cached for exactly that text (kept for two seconds) and
+   returns it at once, so the selection stays where the user left it.
+6. An answer for a request that is no longer the newest is **dropped**: the user
+   has already typed past it.
+
+The engine side of this is `Plugin::attach_notifier`: a plugin that can answer
+late is handed a callback (`ResultsNotifier`) and calls it with its id. Built-in
+plugins never use it.
+
+### Lifecycle, crashes and restarts
+
+- **Lazy start.** A persistent script starts when its keyword is first used, not
+  at startup, so unused plugins cost nothing.
+- **Idle stop.** After `idle_timeout_secs` without queries (default five
+  minutes; `0` disables) Sevak sends `shutdown`, closes stdin and, after half a
+  second, kills the process. The next query starts a new one.
+- **Crashes and protocol errors.** If the process exits or Sevak has to stop it
+  (a line over 1 MiB), the plugin returns nothing and restarts on a later
+  query after a growing delay: 0.5 s, 1 s, 2 s, 4 s. A good answer resets the
+  count. After **five failures in a row** the plugin stays off until the next
+  reload ("Reload index" in the tray), and the log says so.
+- **Hung scripts.** If a query stays unanswered for `hard_timeout_ms` (default
+  3 s) the process is killed and counts as a failure. A slow but alive script
+  that answers other queries in time is not affected.
+- **Quitting and reloading.** Sevak sends `shutdown` to every script when it
+  quits, and when a reload replaces the plugin instances.
+- Everything is in Sevak's log (`Open log folder` in Settings), tagged with the
+  plugin id.
+
+### Security
+
+- Scripts run **with your user account's privileges**, exactly like any program
+  you start. Sevak does not sandbox them. Install only plugins you trust.
+- A new plugin does **not run until you allow it**. Sevak asks once per plugin,
+  in a native dialog that shows the name, the folder and the exact command. The
+  answer is stored in `<data dir>/script-plugin-approvals.json`, bound to the
+  plugin id **and** its command line, mode and format: if `plugin.toml` changes
+  what runs, Sevak asks again. (Editing the script file itself is not detected;
+  the manifest is what you approve.) "Not now" asks again at the next start.
+  Disabled plugins are never asked about.
+- Only folders in your own config directory are loaded. Sevak does not download,
+  update or install plugins, and makes no network requests for them. What a
+  script does on its own is outside Sevak's control and should be stated by its
+  author.
+- Scripts cannot make Sevak do more than the fixed list of actions. `open_url`
+  still passes the platform allow-list (`http`, `https`, `mailto`), so a script
+  cannot open `file:` or custom schemes. Icons are restricted to the plugin folder.
+- Everything a script sends is validated: sizes are capped, scores clamped,
+  malformed items skipped. A misbehaving script cannot crash Sevak or stall typing.
+- The settings window lists script plugins (waiting ones marked as such) so you
+  can see what is installed and switch each off.
+
+### Tips for plugin authors
+
+- **Print protocol messages with a flush** (`print(..., flush=True)` in Python,
+  `[Console]::Out.Flush()` in PowerShell). A buffered reply looks like a hung script.
+  Sevak starts `.py` scripts with `-u` for this reason.
+- **Keep stdout clean**; use stderr for debugging.
+- **Answer the newest query first.** If several queries are queued on stdin,
+  skip to the last one.
+- **Do slow work off the query path.** Cache what you can; a script that needs
+  the network should answer from a local cache and refresh in the background.
+- **Make keys stable** and scores either absent or consistent.
+- **One-shot output is read as UTF-8.** In Windows PowerShell set
+  `[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)`
+  (see `timestamp.ps1`).
+- Test a persistent plugin by hand:
+  `echo '{"type":"query","request_id":1,"input":"x"}' | python3 main.py`.
+
+### Design decisions
+
+These settle what an earlier design draft left open.
+
+| Question | Decision |
+|---|---|
+| Async results | Query generations plus a shell notification (`Plugin::attach_notifier`, the `sevak:results` event); late answers for stale generations are dropped. |
+| Windows command resolution | Explicit `command` array, no shell; `script` with interpreter shims by extension (`py -3`, `pwsh`/`powershell`, `node`). |
+| Scores | Optional, clamped below the keyword score; default is the script's order. |
+| Icons | `file` icons relative to the plugin folder, with path-escape and symlink checks. |
+| Startup cost | Lazy start on first use; idle shutdown after five minutes by default. |
+| Permissions UX | A native dialog on first sight of a plugin or a changed command; approvals in a state file, not in `config.toml`. |
+| `global` scripts | Not allowed. Script plugins are keyword-only. |
+| Registry | A `ScriptPluginHost` next to the registry rather than one descriptor per manifest, because descriptor factories are plain function pointers with no access to the config directory. It honours `[plugins] disabled` itself and feeds the settings catalog. |
+| Manifest | `command` is one array (not `command` plus `args`) so the whole command line is explicit and approvable. |
+| Alfred | Supported as a one-shot output format, not as a separate plugin type. |
+| Distribution | Manual installation only; signing or a registry is out of scope. |
+| Sandboxing | None. WASM components would give real isolation at the price of a much heavier runtime and authoring story; that is a possible future *additional* plugin type. |
+
+Versioning: `protocol` is an integer in the manifest and in `initialize`. Within
+a version only additive changes happen (new optional fields, new message types
+scripts may ignore). Unknown fields must be ignored by both sides.
+
+### For contributors
+
+| Concern | Where |
+|---|---|
+| Manifest, command resolution | `crates/sevak-plugins/src/script/manifest.rs` |
+| Wire messages | `.../script/protocol.rs` |
+| Items to results, scores, icons | `.../script/items.rs` |
+| Alfred mapping | `.../script/alfred.rs` |
+| Query generations and late answers | `.../script/delivery.rs` |
+| Process lifecycle | `.../script/runner.rs` (persistent), `.../script/oneshot.rs` |
+| `ScriptPlugin` | `.../script/plugin.rs` |
+| Discovery, disabled list, approvals | `.../script/host.rs`, `.../script/approvals.rs` |
+| Approval dialog, wiring into the engine | `src-tauri/src/script_plugins.rs`, `src-tauri/src/search.rs` |
+| Interpreter choice, console-less spawn | `crates/sevak-platform/src/process.rs` |
+| End-to-end tests | `crates/sevak-plugins/tests/script_plugins.rs` with the helper `tests/fixtures/script_fixture.rs` |
+
+The integration tests start real processes through the real search engine. The
+script is a small Rust binary (`sevak-script-fixture`) so the tests run the same
+on Windows, macOS and Linux without Python or Node. A last test runs the
+bundled examples wherever their interpreter is installed.
+
+```
+cargo test -p sevak-plugins
+```
