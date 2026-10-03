@@ -84,6 +84,7 @@ They show the workflow rather than measured search or launch times.
 | Look up a person | `c ada` or `@ada` | Copies the e-mail; the action panel writes, calls or opens the card (opt-in) |
 | Find a 1Password login | `1p github` | Opens its website; never reads passwords (opt-in, needs `op`) |
 | Define or spell-check a word | `define serendipity`, `spell recieve` | Copies the definition / pastes the right spelling, offline |
+| Expand a snippet as you type | `;sig` in any app | Replaces it with the snippet (opt-in; watches keystrokes while on) |
 | Generate a UUID | `uuid ` or `uuid 5` | Copies a UUID when the plugin is enabled |
 | Pick an emoji | `:heart` or `emoji thumbs up` | Pastes the selected emoji from a grid |
 
@@ -239,6 +240,12 @@ There are explicit network uses:
   downloads that one theme file, and Sevak saves it only if its SHA-256 matches
   the one in the list. The built-in themes and importing or exporting a theme
   file work offline.
+- Expanding snippets as you type (`[snippets] auto_expand`, off by default)
+  watches your keystrokes while it is on, to notice a snippet keyword. Only the
+  last 64 characters are kept, in memory, and are wiped constantly; they are never
+  stored, logged or sent anywhere, and Sevak's own windows, terminals, apps you
+  list in `ignore_apps` and detectable password boxes are skipped.
+  [Details →](docs/usage.md#expand-snippets-as-you-type)
 - Script plugins you install and allow run with your permissions; what they do
   on the network is up to them. Sevak never downloads plugins itself.
 

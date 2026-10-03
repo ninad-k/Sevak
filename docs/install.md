@@ -55,6 +55,9 @@ Intel), open it and drag Sevak into Applications.
 - The optional contacts plugin (`[contacts] enabled = true`) asks for access to
   your contacts the first time you press Enter on its "Allow" row; nothing is
   asked at startup. Change the answer under **Privacy & Security → Contacts**.
+- Expanding snippets as you type (opt-in, `[snippets] auto_expand`) also needs
+  **Input Monitoring** to see the keys; macOS asks the first time, and Sevak
+  must be restarted after you allow it.
 
 ## Ubuntu 22.04+ / Debian
 

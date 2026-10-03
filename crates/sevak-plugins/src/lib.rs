@@ -57,6 +57,7 @@ pub mod registry;
 pub mod script;
 pub mod selection;
 pub mod shell;
+pub mod snippet_expansion;
 pub mod snippets;
 pub mod system;
 pub mod tasks;

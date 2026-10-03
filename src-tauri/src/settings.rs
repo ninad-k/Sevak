@@ -214,6 +214,10 @@ pub fn validate(config: &Config, strategy: HotkeyStrategy) -> Result<(), String>
     {
         return Err("A files directory is empty.".to_owned());
     }
+    let prefix = config.snippets.prefix.trim();
+    if prefix.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return Err("The snippet prefix cannot contain spaces.".to_owned());
+    }
     Ok(())
 }
 
@@ -410,6 +414,19 @@ mod tests {
     #[test]
     fn defaults_are_valid() {
         assert_eq!(check(&Config::default()), Ok(()));
+    }
+
+    #[test]
+    fn the_snippet_prefix_is_one_word() {
+        let mut config = Config::default();
+        for good in ["", ";", ";;", "//", " ; "] {
+            config.snippets.prefix = good.to_owned();
+            assert_eq!(check(&config), Ok(()), "{good:?}");
+        }
+        for bad in ["; ;", "a b", ";\tx"] {
+            config.snippets.prefix = bad.to_owned();
+            assert!(check(&config).is_err(), "{bad:?} should be rejected");
+        }
     }
 
     #[test]

@@ -66,6 +66,14 @@
       index_keyword: "ff",
       content_keyword: "in",
     },
+    snippets: {
+      auto_expand: false,
+      prefix: "",
+      expand_on: "immediate",
+      case_sensitive: true,
+      ignore_apps: [],
+      expand_in_terminals: false,
+    },
     bookmarks: { browsers: [], keyword: "", global: true },
     shell: { terminal: "", shell: "", keep_open: true },
     web_search: [],
@@ -717,6 +725,66 @@
               </div>
               <Toggle bind:checked={draft.calculator.currency} label="Convert currencies" />
             </div>
+
+            <div class="row">
+              <div class="label">
+                <span class="name">Expand snippets as you type</span>
+                <span class="hint">
+                  Typing a snippet’s keyword in any app replaces it with the snippet’s text.
+                  While this is on, Sevak watches your keystrokes for the keyword: the last few
+                  characters are kept in memory only, never saved, logged or sent anywhere, and
+                  ignored in Sevak’s own windows, terminals and password boxes it can detect.
+                  Needs a keyword on at least one <code>[[snippet]]</code>; not available on
+                  Wayland.
+                </span>
+                {#if status?.snippet_expansion.problem}
+                  <span class="msg warn" role="status">{status.snippet_expansion.problem}</span>
+                {/if}
+              </div>
+              <Toggle
+                bind:checked={draft.snippets.auto_expand}
+                label="Expand snippets as you type"
+              />
+            </div>
+
+            {#if draft.snippets.auto_expand}
+              <div class="row">
+                <div class="label">
+                  <label class="name" for="snippets-prefix">Keyword prefix</label>
+                  <span class="hint">
+                    Typed before every keyword, such as <code>;</code> so that
+                    <code>;sig</code> expands and a plain <code>sig</code> does not. Empty
+                    expands bare keywords at the start of a word.
+                  </span>
+                </div>
+                <input
+                  id="snippets-prefix"
+                  class="input number"
+                  type="text"
+                  bind:value={draft.snippets.prefix}
+                  spellcheck="false"
+                  autocomplete="off"
+                />
+              </div>
+
+              <div class="row">
+                <div class="label">
+                  <label class="name" for="snippets-expand-on">Expand</label>
+                  <span class="hint">
+                    Right away, or once a space or punctuation mark follows the keyword (which is
+                    kept).
+                  </span>
+                </div>
+                <select
+                  id="snippets-expand-on"
+                  class="input select"
+                  bind:value={draft.snippets.expand_on}
+                >
+                  <option value="immediate">As soon as it is typed</option>
+                  <option value="delimiter">After a space or punctuation</option>
+                </select>
+              </div>
+            {/if}
           </section>
           <p class="note">
             Web search engines are edited under “Web search”. Changes apply when you save.

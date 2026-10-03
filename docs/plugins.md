@@ -612,7 +612,8 @@ only every fourth poll while the clipboard holds no text.
 
 A history row for an image uses its thumbnail as `IconSource::File` (the shell
 serves it through the `sevak-icon` scheme, so the webview never gets a file
-path) and the `PasteClip` action; a grid view would use the same two. The history
+path) and the `PasteClip` action, and is a Grid View tile (`as_tile(None)`) with a
+`PreviewHint::Path` of the full PNG, so `cb image` shows a grid. The history
 file is version 2: entries gain optional `image` (hash, size) and `files`; `text`
 is always written so version 1 readers still load the file.
 
@@ -627,6 +628,35 @@ expands the placeholders (`{time}`, `{clipboard}`, ...) at the moment of
 pasting, looking the snippet up by its result id so a config reload between
 query and Enter uses the new text. Expansion is the pure function
 `snippets::expand`, tested without a platform.
+
+### Expanding snippets as you type
+
+Not a plugin, but it reads the same `[[snippet]]` entries:
+`sevak_plugins::snippet_expansion` (started by `src-tauri/src/expansion.rs`
+only while `[snippets] auto_expand` is on). Three layers, so most of it is
+testable without an OS:
+
+- `PlatformProvider::start_key_listener` reports `KeyEvent::{Char, Backspace,
+  Reset}` (never key codes) from a low-level keyboard hook (Windows,
+  `windows/keyhook_expand.rs`), a listen-only event tap (macOS) or the X11
+  RECORD extension (Linux). Listeners translate with the focused app's layout,
+  ignore events Sevak injects, and turn everything that is not plain typing
+  (shortcuts, caret keys, clicks, focus changes) into `Reset`. `KeyEvent`'s
+  `Debug` output hides the character; keep it that way, and never log, store or
+  forward what a listener reports.
+- `Matcher` is pure: it holds the last 64 characters, finds the longest keyword
+  they end with (prefix, case, word-boundary and delimiter rules) and says how
+  many Backspaces to press. Its buffer is wiped on `reset` and on drop.
+- The worker asks `PlatformProvider::typing_target` (app, own window, password
+  box) before buffering and again before acting, then calls
+  `PlatformProvider::replace_typed_text(delete, text)`, which runs the shared
+  flow in `sevak-platform/src/expand.rs` (save clipboard, set text privately,
+  Backspaces, paste, restore) with an OS-specific key driver.
+
+To test expansion without a keyboard, implement `start_key_listener` on a fake
+provider and call the sink yourself, as the tests in `snippet_expansion.rs` do.
+`cargo test -p sevak-platform keyhook -- --ignored --nocapture` has two manual
+tests for the real Windows hook.
 
 ## Previews and views
 

@@ -93,34 +93,40 @@ fn held(x: &X) -> Vec<(KeyButMask, [u32; 2])> {
         .collect()
 }
 
+/// Waits for the user to let go of Shift, Ctrl, Alt and Super, and if they are
+/// still down after [`MODIFIER_TIMEOUT`], lets go of them for the app.
+pub(super) fn wait_for_modifier_release() {
+    let Ok(x) = X::connect() else { return };
+    let deadline = Instant::now() + MODIFIER_TIMEOUT;
+    loop {
+        let down = held(&x);
+        if down.is_empty() {
+            return;
+        }
+        if Instant::now() >= deadline {
+            // Still held: let go of them for the app, or it would see
+            // Ctrl+Alt+C.
+            for (_, keysyms) in down {
+                for keysym in keysyms {
+                    if let Some(keycode) = x.keycode_for(keysym) {
+                        let _ = x.fake_key(keycode, false);
+                    }
+                }
+            }
+            let _ = x.conn.flush();
+            return;
+        }
+        sleep(Duration::from_millis(10));
+    }
+}
+
 impl CaptureDriver for X11Capture {
     fn foreground_app(&self) -> Option<ForegroundApp> {
         paste::foreground_app()
     }
 
     fn release_modifiers(&self) {
-        let Ok(x) = X::connect() else { return };
-        let deadline = Instant::now() + MODIFIER_TIMEOUT;
-        loop {
-            let down = held(&x);
-            if down.is_empty() {
-                return;
-            }
-            if Instant::now() >= deadline {
-                // Still held: let go of them for the app, or it would see
-                // Ctrl+Alt+C.
-                for (_, keysyms) in down {
-                    for keysym in keysyms {
-                        if let Some(keycode) = x.keycode_for(keysym) {
-                            let _ = x.fake_key(keycode, false);
-                        }
-                    }
-                }
-                let _ = x.conn.flush();
-                return;
-            }
-            sleep(Duration::from_millis(10));
-        }
+        wait_for_modifier_release();
     }
 
     fn press_copy(&self) -> Result<()> {

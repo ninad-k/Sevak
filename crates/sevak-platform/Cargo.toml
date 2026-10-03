@@ -37,6 +37,7 @@ windows = { workspace = true, features = [
     "Win32_System_Com_StructuredStorage",
     "Win32_System_Console",
     "Win32_System_DataExchange",
+    "Win32_System_LibraryLoader",
     "Win32_System_Memory",
     "Win32_System_Ole",
     "Win32_System_Power",
@@ -52,8 +53,8 @@ windows = { workspace = true, features = [
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # Pure-Rust X11 client (already pulled in by arboard): active window and the
-# XTest extension for the paste keystroke.
-x11rb = { version = "0.13", features = ["xtest"] }
+# XTest extension for the paste keystroke, RECORD to watch typed keywords.
+x11rb = { version = "0.13", features = ["record", "xtest"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 plist = "1"
@@ -80,6 +81,12 @@ objc2-core-graphics = { version = "0.3", default-features = false, features = [
     "CGEventSource",
     "CGEventTypes",
     "CGRemoteOperation",
+] }
+# The run loop an event tap (snippet expansion) is served from.
+objc2-core-foundation = { version = "0.3", default-features = false, features = [
+    "std",
+    "CFMachPort",
+    "CFRunLoop",
 ] }
 
 # Contacts framework (CNContactStore) for the contacts plugin.

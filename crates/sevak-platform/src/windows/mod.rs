@@ -2,7 +2,9 @@
 
 mod capture;
 mod com;
+mod expand;
 mod icons;
+mod keyhook_expand;
 pub(crate) mod media;
 pub(crate) mod os_search;
 mod packaged;

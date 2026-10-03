@@ -16,7 +16,7 @@ the running app then reloads the saved configuration.
 | Hotkeys | Extra global keys that type a query or run a result |
 | Appearance | Theme, launcher width, accent color, font, size, opacity, radius, custom stylesheet, theme editor and gallery |
 | Search | Result limit, fallback web engines, search history |
-| Plugins | Available result sources (including script plugins) and currency conversion |
+| Plugins | Available result sources (including script plugins), currency conversion and snippet expansion as you type |
 | Web search | Keywords, provider names and URL templates |
 | Files | Indexed folders, depth, dot-files, global file results and whole-disk (`ff`, `in`) search |
 | Linux | Wayland-related options when applicable |
@@ -259,6 +259,26 @@ text = "Best regards,\nNinad\n{date}"
 Settings never reformats hand-written `[[snippet]]` entries.
 [Placeholders](usage.md#paste-clipboard-history-and-snippets).
 
+To expand a snippet's `keyword` as you type in any app, turn on
+`[snippets] auto_expand`. It is **off by default** because it makes Sevak watch
+your keystrokes (in memory only; see
+[what is kept](usage.md#expand-snippets-as-you-type)):
+
+```toml
+[snippets]
+auto_expand = false        # true: watch typing for snippet keywords
+prefix = ""                # typed before every keyword, e.g. ";" (no spaces)
+expand_on = "immediate"    # "immediate", or "delimiter" (a space or punctuation follows)
+case_sensitive = true      # false: "SIG" and "sig" both expand
+ignore_apps = []           # never watch these apps, e.g. ["KeePassXC", "Firefox"]
+expand_in_terminals = false
+```
+
+`ignore_apps` matches the program or app name case-insensitively, like
+[`[clipboard] ignore_apps`](#clipboard-history-and-pasting). An unknown
+`expand_on` value is treated as `"delimiter"`. Reloading applies changes; the
+hook is removed when `auto_expand` is turned off.
+
 ### Currency conversion
 
 ```toml
@@ -400,6 +420,9 @@ available in the tray menu. Update installation requires your agreement.
 | `contacts.enabled` / `keyword` / `use_system` | `false` / `"c"` / `true` | Contacts are opt-in; `vcard_files` defaults to `[]` |
 | `onepassword.enabled` / `keyword` | `false` / `"1p"` | 1Password logins through `op`, opt-in; `cache_minutes` defaults to `10` |
 | `dictionary.define_keyword` / `spell_keyword` / `use_system` | `"define"` / `"spell"` / `true` | Offline dictionary and spelling |
+| `snippets.auto_expand` | `false` | Expand snippet keywords as you type; watches keystrokes |
+| `snippets.prefix` / `expand_on` / `case_sensitive` | `""` / `"immediate"` / `true` | Typed before keywords; when to expand; exact case |
+| `snippets.ignore_apps` / `expand_in_terminals` | `[]` / `false` | Apps never watched; also expand in terminals |
 | `files.directories` | Desktop, Documents, Downloads under `~` | Replaced when explicitly set |
 | `files.max_depth` | `4` | Settings accepts 0–32 |
 | `files.include_hidden` | `false` | Include dot-files and dot-folders |

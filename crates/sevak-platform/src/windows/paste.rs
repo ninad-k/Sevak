@@ -48,14 +48,14 @@ pub(super) fn int_to_hwnd(value: isize) -> HWND {
     HWND(value as *mut c_void)
 }
 
-fn foreground_window() -> Option<HWND> {
+pub(super) fn foreground_window() -> Option<HWND> {
     // SAFETY: plain Win32 call without arguments.
     let hwnd = unsafe { GetForegroundWindow() };
     (!hwnd.0.is_null()).then_some(hwnd)
 }
 
 /// Process id and thread id owning `hwnd`.
-fn window_owner(hwnd: HWND) -> Option<(u32, u32)> {
+pub(super) fn window_owner(hwnd: HWND) -> Option<(u32, u32)> {
     let mut pid = 0u32;
     // SAFETY: `pid` outlives the call; `hwnd` is only read.
     let thread = unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
@@ -82,7 +82,7 @@ fn process_path(pid: u32) -> Option<String> {
     }
 }
 
-fn app_of(hwnd: HWND) -> Option<ForegroundApp> {
+pub(super) fn app_of(hwnd: HWND) -> Option<ForegroundApp> {
     let (pid, _) = window_owner(hwnd)?;
     let path = process_path(pid)?;
     let path = Path::new(&path);
@@ -91,7 +91,7 @@ fn app_of(hwnd: HWND) -> Option<ForegroundApp> {
     Some(ForegroundApp::new(stem).with_identifier(file))
 }
 
-fn is_own_window(hwnd: HWND) -> bool {
+pub(super) fn is_own_window(hwnd: HWND) -> bool {
     // SAFETY: plain Win32 call without arguments.
     window_owner(hwnd).is_some_and(|(pid, _)| pid == unsafe { GetCurrentProcessId() })
 }

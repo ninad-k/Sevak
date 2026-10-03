@@ -18,9 +18,9 @@ pub mod theme_store;
 pub mod usage;
 
 pub use config::{
-    ActionsConfig, ClipboardConfig, Config, ConfigError, ConfigOrigin, FileBufferConfig,
+    ActionsConfig, ClipboardConfig, Config, ConfigError, ConfigOrigin, ExpandOn, FileBufferConfig,
     GeneralConfig, HotkeyBinding, HotkeyTarget, LinuxConfig, PasteConfig, ShellConfig, Snippet,
-    WindowConfig,
+    SnippetsConfig, WindowConfig,
 };
 pub use engine::{EngineOptions, SearchEngine};
 pub use fuzzy::FuzzyQuery;

@@ -62,6 +62,15 @@ export interface Config {
     content_keyword: string;
   };
   bookmarks: { browsers: string[]; keyword: string; global: boolean };
+  /** Expanding `[[snippet]]` keywords as you type in other apps (off by default). */
+  snippets: {
+    auto_expand: boolean;
+    prefix: string;
+    expand_on: "immediate" | "delimiter";
+    case_sensitive: boolean;
+    ignore_apps: string[];
+    expand_in_terminals: boolean;
+  };
   /** Edited in the config file; kept here so saving the form round-trips it. */
   shell: { terminal: string; shell: string; keep_open: boolean };
   web_search: WebSearchEngine[];

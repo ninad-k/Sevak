@@ -378,6 +378,14 @@ export function mockSettings(): SettingsDto {
       },
       plugins: { disabled: ["uuid"] },
       calculator: { currency: false },
+      snippets: {
+        auto_expand: false,
+        prefix: "",
+        expand_on: "immediate",
+        case_sensitive: true,
+        ignore_apps: [],
+        expand_in_terminals: false,
+      },
       files: {
         directories: ["~/Desktop", "~/Documents", "~/Downloads"],
         max_depth: 4,

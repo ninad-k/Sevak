@@ -6,6 +6,7 @@ mod autostart;
 mod cli;
 mod commands;
 mod direct;
+mod expansion;
 mod file_buffer;
 mod hotkey;
 mod icons;

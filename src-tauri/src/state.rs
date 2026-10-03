@@ -9,6 +9,7 @@ use sevak_core::theme::{self, ResolvedAppearance};
 use sevak_core::Config;
 use sevak_platform::{AppPaths, DisplayServer};
 
+use crate::expansion;
 use crate::file_buffer::BufferState;
 use crate::search::Search;
 
@@ -53,6 +54,8 @@ pub struct Status {
     pub appearance: ResolvedAppearance,
     /// The search index is being (re)built.
     pub indexing: bool,
+    /// Snippet expansion as you type: whether it is running, or why not.
+    pub snippet_expansion: expansion::ExpansionStatus,
 }
 
 pub struct AppState {
@@ -150,6 +153,7 @@ impl AppState {
                 .unwrap_or_else(|poisoned| poisoned.into_inner())
                 .clone(),
             indexing: self.search.is_indexing(),
+            snippet_expansion: expansion::status(),
         }
     }
 }
