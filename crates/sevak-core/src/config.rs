@@ -60,7 +60,8 @@ query_history = true
 theme = "system"
 
 [plugins]
-# Ids of built-in plugins to turn off: "apps", "calculator", "files", "web:<keyword>".
+# Ids of built-in plugins to turn off: "apps", "calculator", "files", "system",
+# "shell", "web:<keyword>".
 disabled = []
 
 [files]
@@ -85,6 +86,19 @@ confirm = true
 # "settings:<page>" such as "settings:bluetooth". To turn the whole plugin off,
 # add "system" to [plugins] disabled instead.
 disabled = []
+
+[shell]
+# Type "> <command>" (or ">command") to run a command in a terminal window. It
+# only runs when you press Enter; recent commands are offered again.
+# Terminal to use. "" detects one: Windows Terminal (else a console window) on
+# Windows, Terminal.app on macOS, $TERMINAL then common terminals on Linux.
+# Examples: "wt", "iterm", "kitty", "gnome-terminal", "alacritty --class sevak".
+terminal = ""
+# Shell that runs the command. "" picks pwsh, powershell, then cmd on Windows
+# and $SHELL (or sh) on Linux. Not used on macOS: your login shell runs it.
+shell = ""
+# Leave the terminal open, at a shell prompt, after the command exits.
+keep_open = true
 
 # Web search engines: type "<keyword> <terms>". "{query}" is replaced by the
 # URL-encoded terms. Defining any [[web_search]] entry replaces this list.
@@ -119,6 +133,7 @@ pub struct Config {
     pub plugins: PluginsConfig,
     pub files: FilesConfig,
     pub system: SystemConfig,
+    pub shell: ShellConfig,
     pub web_search: Vec<WebSearchEngine>,
 }
 
@@ -133,6 +148,7 @@ impl Default for Config {
             plugins: PluginsConfig::default(),
             files: FilesConfig::default(),
             system: SystemConfig::default(),
+            shell: ShellConfig::default(),
             web_search: WebSearchEngine::defaults(),
         }
     }
@@ -340,6 +356,31 @@ impl Default for FilesConfig {
     }
 }
 
+/// The `>` shell command plugin: which terminal and shell run the command.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShellConfig {
+    /// Terminal program (a name on `PATH` or a full path, optionally followed
+    /// by extra arguments) or a well-known name such as `iterm`. Empty means
+    /// auto-detect.
+    pub terminal: String,
+    /// Shell program that runs the command; empty means auto-detect. Unused on
+    /// macOS, where the terminal starts the user's login shell itself.
+    pub shell: String,
+    /// Keep the terminal open, at a shell prompt, after the command exits.
+    pub keep_open: bool,
+}
+
+impl Default for ShellConfig {
+    fn default() -> Self {
+        Self {
+            terminal: String::new(),
+            shell: String::new(),
+            keep_open: true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SystemConfig {
@@ -525,6 +566,8 @@ impl Config {
         // Engines without a keyword or a `{query}` placeholder cannot work.
         self.web_search
             .retain(|engine| !engine.keyword.trim().is_empty() && engine.url.contains("{query}"));
+        self.shell.terminal = self.shell.terminal.trim().to_owned();
+        self.shell.shell = self.shell.shell.trim().to_owned();
         let hotkey = self.general.hotkey.trim();
         self.general.hotkey = if hotkey.is_empty() {
             GeneralConfig::default().hotkey
@@ -753,6 +796,22 @@ url = "https://example.com"
         assert!(config.system.is_disabled("restart"));
         assert!(config.system.is_disabled("settings:wifi"));
         assert!(!config.system.is_disabled("shutdown"));
+    }
+
+    #[test]
+    fn shell_section_defaults_and_parses() {
+        let defaults = Config::default().shell;
+        assert_eq!(defaults.terminal, "");
+        assert_eq!(defaults.shell, "");
+        assert!(defaults.keep_open);
+
+        let config = Config::from_toml_str(
+            "[shell]\nterminal = \"  kitty --single-instance \"\nkeep_open = false\n",
+        )
+        .unwrap();
+        assert_eq!(config.shell.terminal, "kitty --single-instance");
+        assert_eq!(config.shell.shell, "");
+        assert!(!config.shell.keep_open);
     }
 
     #[test]

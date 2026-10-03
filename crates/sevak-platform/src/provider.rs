@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use sevak_core::{AppEntry, IconData, IconSource, LaunchTarget};
+use sevak_core::{AppEntry, IconData, IconSource, LaunchTarget, ShellConfig};
 
 use crate::error::Result;
 use crate::system::{SettingsPage, SystemCommand};
@@ -55,6 +55,13 @@ pub trait PlatformProvider: Send + Sync {
     /// physical pixels where the source is not already an image file.
     /// [`IconSource::Builtin`] icons are drawn by the UI and are rejected here.
     fn load_icon(&self, source: &IconSource, size: u32) -> Result<IconData>;
+
+    /// Opens a terminal window and runs `command` in it (an empty command just
+    /// opens the terminal), using the terminal and shell chosen by `config`.
+    /// The terminal is detached from Sevak. See [`crate::terminal`].
+    fn run_in_terminal(&self, command: &str, config: &ShellConfig) -> Result<()> {
+        crate::terminal::run_in_terminal(command, config)
+    }
 
     /// Replaces the clipboard's contents with `text`.
     fn set_clipboard_text(&self, text: &str) -> Result<()> {

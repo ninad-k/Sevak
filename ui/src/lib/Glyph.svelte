@@ -62,6 +62,9 @@
     <path d="M4 7h9M17 7h3M4 17h3M11 17h9" />
     <circle cx="15" cy="7" r="2" />
     <circle cx="9" cy="17" r="2" />
+  {:else if name === "terminal"}
+    <rect x="3" y="4.5" width="18" height="15" rx="2.4" />
+    <path d="m7.5 10 3 2.5-3 2.5M13 15h3.5" />
   {:else}
     <path d="M9 3v4M15 3v4" />
     <path d="M6 7h12v4.5a6 6 0 0 1-12 0Z" />

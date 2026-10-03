@@ -95,6 +95,12 @@ secondary action.)
    queried, with `rest` (leading whitespace trimmed; it may be empty, e.g.
    `"g "`). No fallback runs in this mode. The keyword needs a following space:
    a bare `g` is an ordinary global query.
+   **Symbol keywords** are the exception: a keyword made only of punctuation or
+   symbols (such as the shell plugin's `>`) needs no space, so `>ls` and `> ls`
+   both route to the plugin with `ls`, and a bare `>` routes with an empty
+   rest. When several symbol keywords match (`>` and `>>`), the longest wins.
+   Choose symbol keywords sparingly: the plugin claims every input that starts
+   with the symbol.
 3. **Global route.** Otherwise every plugin with `global() == true` is queried
    with the trimmed input. The default is `global() == keyword().is_none()`, so
    plugins with a keyword are keyword-only unless they opt in (the files plugin
@@ -151,6 +157,15 @@ process, so plugins must never panic.
   volatile data (a random UUID, a timestamp), or the history fills with ids that
   never come back.
 - Plugins with several instances use `family:instance` ids (`web:g`, `web:yt`).
+- The exception is a plugin whose results *are* user-typed text. The shell
+  plugin (`> ls -la`) uses the command text as the key (`shell:ls -la`): the
+  command is what the result is, and it is how earlier commands come back.
+- **Restoring history.** When the engine is built (startup and "Reload
+  index"), it calls `Plugin::restore_history(keys)` on every plugin with the
+  keys, most recent first (at most 50), of that plugin's results found in the
+  usage statistics. Most plugins ignore it; the shell plugin uses it to offer
+  recent commands again. Results run in this session are tracked by the plugin
+  itself. Empty keys are never passed.
 
 ### Registry and enabling/disabling
 
@@ -164,6 +179,7 @@ process, so plugins must never panic.
 | `web` | `web:<keyword>` per `[[web_search]]` engine | |
 | `files` | `files` | also browses typed paths ([below](#path-browsing-in-the-files-plugin)) |
 | `system` | `system` | lock, sleep, restart, settings pages; global |
+| `shell` | `shell` | `> command` runs in a terminal; see below |
 | `uuid` | `uuid` | example plugin, keyword-only |
 
 - `PluginRegistry::builtin()` is the stock set; `register(descriptor)` adds (or
@@ -203,6 +219,29 @@ most four such listings may be outstanding at once, and the last listing is
 reused for 1.5 s while the user types the filter). A UNC path needs both a
 server and a share before anything is read.
 
+### The shell plugin
+
+`> some command` (`crates/sevak-plugins/src/shell.rs`) shows "Run `some command`
+in terminal"; on Enter it calls `PlatformProvider::run_in_terminal(command,
+&config.shell)`. It is the reference for a plugin that
+
+- uses a symbol keyword (`>`) and `global() == false`;
+- returns `Action::Custom` and handles it itself (the command text is the
+  payload; the platform call is not one of the standard actions);
+- keeps rows at or above `score::KEYWORD` so the engine keeps its order: the
+  typed command first, then recents matching the typed prefix, newest first;
+  with nothing typed, recents followed by "Open terminal";
+- implements `restore_history` (above).
+
+Nothing runs while typing; only Enter on a row executes. The terminal and
+argument construction lives in `crates/sevak-platform/src/terminal.rs`: pure
+`plan_windows` / `plan_macos` / `plan_linux` functions build the program and
+arguments (and are unit-tested on every OS without launching anything), and
+`run_in_terminal` spawns the result through `process.rs`. PowerShell receives
+the command as `-EncodedCommand`, Windows Terminal gets `;` escaped as `\;`,
+`cmd` gets `/S /K "..."`, POSIX shells get `-c`, and macOS gets an escaped
+AppleScript string, so the command text is never re-parsed by Sevak.
+
 ## Writing a built-in plugin
 
 The worked example is `crates/sevak-plugins/src/example_uuid.rs`: type `uuid `
@@ -220,7 +259,8 @@ pub use my_plugin::MyPlugin;
 ```
 
 Implement `sevak_core::Plugin`. Required methods: `id`, `name`, `keyword`,
-`query`, `execute`. Defaulted: `description` (empty), `global`, `refresh`.
+`query`, `execute`. Defaulted: `description` (empty), `global`, `restore_history`,
+`refresh`.
 
 ```rust
 pub struct UuidPlugin { platform: Arc<dyn PlatformProvider> }
@@ -251,8 +291,8 @@ Rules of thumb (all spelled out in the example):
 - Add `with_secondary(..)` actions where they are natural (a path to reveal or
   copy, a URL to copy). Secondary actions share the primary's `execute`.
 - Icons are `IconSource::builtin(name)` (a UI glyph: `app`, `calculator`,
-  `web`, `file`, `folder`, `copy`, `plugin`, `lock`, `sleep`, `restart`,
-  `power`, `logout`, `trash`, `settings`), or `File` / `Shell` for real
+  `web`, `file`, `folder`, `copy`, `terminal`, `plugin`, `lock`, `sleep`,
+  `restart`, `power`, `logout`, `trash`, `settings`), or `File` / `Shell` for real
   images.
 - For an action that cannot be undone, override `Plugin::confirmation(item)` to
   return the question to ask. The shell shows it in a native dialog before

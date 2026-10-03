@@ -7,6 +7,7 @@
 //! | `web:<keyword>`  | [`WebSearchPlugin`] (one per engine)    | engine  | no     |
 //! | `files`          | [`FilesPlugin`]                         | config  | config |
 //! | `system`         | [`SystemPlugin`]                        | none    | yes    |
+//! | `shell`          | [`ShellPlugin`]                         | `>`     | no     |
 //! | `uuid`           | [`UuidPlugin`] (a tutorial example)     | `uuid`  | no     |
 //!
 //! [`PluginRegistry`] knows these families; [`builtin_plugins`] builds the set
@@ -25,6 +26,7 @@ pub mod example_uuid;
 pub mod files;
 pub mod path_browse;
 pub mod registry;
+pub mod shell;
 pub mod system;
 pub mod web_search;
 
@@ -37,11 +39,12 @@ pub use calculator::CalculatorPlugin;
 pub use example_uuid::UuidPlugin;
 pub use files::FilesPlugin;
 pub use registry::{PluginDescriptor, PluginFactory, PluginInfo, PluginRegistry};
+pub use shell::ShellPlugin;
 pub use system::SystemPlugin;
 pub use web_search::WebSearchPlugin;
 
 /// Instantiates every enabled built-in plugin (`apps`, `calculator`, one
-/// `web:<keyword>` per `[[web_search]]` engine, `files`, `uuid`).
+/// `web:<keyword>` per `[[web_search]]` engine, `files`, `shell`, `uuid`).
 ///
 /// Shorthand for `PluginRegistry::builtin().instantiate(config, platform)`.
 ///
@@ -78,6 +81,7 @@ mod tests {
                 "web:gh",
                 "files",
                 "system",
+                "shell",
                 "uuid"
             ]
         );
@@ -87,6 +91,9 @@ mod tests {
     fn disabled_plugins_are_skipped() {
         let mut config = Config::default();
         config.plugins.disabled = vec!["files".into(), "web:yt".into(), "calculator".into()];
-        assert_eq!(ids(&config), ["apps", "web:g", "web:gh", "system", "uuid"]);
+        assert_eq!(
+            ids(&config),
+            ["apps", "web:g", "web:gh", "system", "shell", "uuid"]
+        );
     }
 }

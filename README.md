@@ -38,6 +38,9 @@ Built with Rust, [Tauri](https://tauri.app) v2 and Svelte 5. Licensed under
   or `empty trash` (and `bluetooth`, `display`, `wifi` ... for OS settings
   pages). Restart, shut down, log out and emptying the trash ask first. See
   [System commands](#system-commands).
+- **Terminal commands**: `> git status` (or `>git status`) shows "Run `git
+  status` in terminal"; Enter opens your terminal and runs it. Recent commands
+  are offered again. Nothing runs until you press Enter.
 - **Frequency and recency ranking**: results you pick often and recently rise
   to the top, per query.
 - **Plugin system**: every result source is a plugin; there is a worked example
@@ -132,6 +135,7 @@ Keywords (type the keyword, then a space):
 | `yt <terms>` | YouTube search |
 | `gh <terms>` | GitHub search |
 | `f <name>` | Search files and folders only |
+| `> <command>` or `><command>` | Run a command in a terminal (no space needed after `>`); `> ` alone lists recent commands |
 | `uuid`, `uuid 5`, `uuid upper` | Generate random UUIDs and copy one (example plugin) |
 
 Anything else searches apps (and files, if `files.global` is on); an
@@ -200,7 +204,7 @@ query_history = true       # Up/Down on an empty search bar recalls past searche
 theme = "system"       # "system", "light" or "dark"
 
 [plugins]
-disabled = []          # "apps", "calculator", "files", "system", "web:<keyword>"
+disabled = []          # "apps", "calculator", "files", "system", "shell", "web:<keyword>"
 
 [files]
 directories = ["~/Desktop", "~/Documents", "~/Downloads"]
@@ -214,6 +218,11 @@ confirm = true         # ask before restart, shut down, log out, empty trash
 disabled = []          # "lock", "sleep", "hibernate", "restart", "shutdown",
                        # "logout", "empty_trash", "settings", "settings:<page>"
 
+[shell]
+terminal = ""          # "" = auto-detect; e.g. "wt", "iterm", "kitty", "alacritty --class sevak"
+shell = ""             # "" = pwsh/powershell/cmd on Windows, $SHELL on Linux
+keep_open = true       # leave the terminal open at a prompt after the command exits
+
 [linux]
 wayland_use_xwayland = true
 
@@ -225,6 +234,23 @@ url = "https://www.google.com/search?q={query}"
 
 Defining any `[[web_search]]` entry replaces the default list. After editing,
 choose "Reload index" from the tray menu or restart Sevak.
+
+### Terminal commands
+
+`> <command>` opens a terminal and runs the command there; `[shell]` picks the
+terminal and shell. With `terminal = ""` Sevak detects one:
+
+| OS | Terminal | Shell |
+|---|---|---|
+| Windows | Windows Terminal (`wt`), else a plain console window | `pwsh`, else `powershell`, else `cmd` |
+| macOS | Terminal.app (`terminal = "iterm"` for iTerm2) | your login shell |
+| Linux | `$TERMINAL`, then `x-terminal-emulator`, `gnome-terminal`, `konsole`, `kitty`, `alacritty`, `wezterm`, `foot`, `xterm` | `$SHELL`, else `sh` |
+
+`terminal` may include extra arguments (`"alacritty --class sevak"`), and on
+Windows `"conhost"` forces a plain console window. With `keep_open = true` the
+terminal stays open at a shell prompt after the command exits. The command runs
+in a non-interactive shell (`-c`), so shell aliases defined in `.bashrc` and
+similar are not available.
 
 ## Command line
 
@@ -256,6 +282,10 @@ only installed after you agree.
 Otherwise, the only network traffic is your browser opening a web search URL
 when you pick a web search result. (On Windows, the installer may download the
 Microsoft WebView2 runtime if it is missing.)
+
+Commands you run with `>` are remembered in the usage statistics
+(`usage.json`) so they can be offered again; delete that file to forget them.
+Sevak only hands them to your terminal.
 
 ## Build from source
 

@@ -10,7 +10,11 @@
 //!    `rest.trim_start()`. `rest` may be empty (`"g "`): the plugin decides what
 //!    to show, e.g. a "type to search Google" hint. No fallbacks run in this
 //!    mode. A keyword without a following whitespace character (`"g"`) is an
-//!    ordinary global query.
+//!    ordinary global query, except for symbol keywords: a keyword made only
+//!    of punctuation or symbols (`>`) needs no whitespace after it. `>ls` and
+//!    `> ls` both route to the plugin with `ls`, and a bare `>` routes with an
+//!    empty rest. If several symbol keywords match (`>` and `>>`), the longest
+//!    wins.
 //! 3. Otherwise every plugin with `global() == true` is queried with the
 //!    trimmed input. Results from a plugin that *has* a keyword but answered
 //!    globally (e.g. files) have their score multiplied by
@@ -53,8 +57,15 @@ use crate::model::{score, ResultItem};
 use crate::plugin::{Plugin, PluginError, PluginResult};
 use crate::usage::{normalize_query, UsageStore};
 
+/// A keyword route: the plugins the keyword selects, the rest of the input
+/// (their query) and the keyword as typed.
+type KeywordRoute<'p, 'a> = (Vec<&'p Arc<dyn Plugin>>, &'a str, &'a str);
+
 /// Score multiplier for results of keyword plugins that answer global queries.
 pub const GLOBAL_SECONDARY_WEIGHT: f64 = 0.5;
+
+/// How many previously run results per plugin [`Plugin::restore_history`] gets.
+const HISTORY_LIMIT: usize = 50;
 
 /// Time a single query should stay under to feel instantaneous.
 pub const LATENCY_BUDGET: Duration = Duration::from_millis(16);
@@ -100,6 +111,15 @@ fn split_keyword(input: &str) -> Option<(&str, &str)> {
     let input = input.trim_start();
     let idx = input.find(char::is_whitespace)?;
     Some((&input[..idx], input[idx..].trim_start()))
+}
+
+/// Whether `keyword` consists only of symbols (`>`, `!`, `?`): such keywords
+/// are recognised without a following space.
+fn is_symbol_keyword(keyword: &str) -> bool {
+    !keyword.is_empty()
+        && keyword
+            .chars()
+            .all(|c| !c.is_alphanumeric() && !c.is_whitespace() && !c.is_control())
 }
 
 /// Runs one plugin call, turning a panic into an error so a faulty plugin
@@ -155,21 +175,39 @@ fn finalize(items: Vec<ResultItem>, max_results: usize) -> Vec<ResultItem> {
 
 impl SearchEngine {
     pub fn new(plugins: Vec<Arc<dyn Plugin>>, usage: UsageStore, options: EngineOptions) -> Self {
-        Self {
+        let engine = Self {
             plugins,
             usage: Arc::new(RwLock::new(usage)),
             options,
-        }
+        };
+        engine.restore_history();
+        engine
     }
 
     /// A new engine over `plugins` that shares this engine's usage statistics
     /// (used after a config reload). A launch still finishing on the old engine
     /// is therefore recorded in the new one too, rather than lost with a copy.
     pub fn rebuild(&self, plugins: Vec<Arc<dyn Plugin>>, options: EngineOptions) -> Self {
-        Self {
+        let engine = Self {
             plugins,
             usage: Arc::clone(&self.usage),
             options,
+        };
+        engine.restore_history();
+        engine
+    }
+
+    /// Tells every plugin which of its results were run before.
+    fn restore_history(&self) {
+        let usage = self.usage_read();
+        for plugin in &self.plugins {
+            let keys = usage.recent_keys(plugin.id(), HISTORY_LIMIT);
+            if !keys.is_empty() {
+                // A panicking plugin is logged by `guarded`; nothing else to do.
+                let _ = guarded(plugin.as_ref(), "restore_history", || {
+                    plugin.restore_history(&keys)
+                });
+            }
         }
     }
 
@@ -189,6 +227,31 @@ impl SearchEngine {
 
     fn usage_write(&self) -> RwLockWriteGuard<'_, UsageStore> {
         self.usage.write().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Keyword routing for symbol keywords such as `>`, which need no space
+    /// after them (`>ls` as well as `> ls`): the plugins whose keyword is the
+    /// longest symbol keyword that `input` starts with, the rest of the input
+    /// and the keyword as typed.
+    fn symbol_keyword_route<'a>(&self, input: &'a str) -> Option<KeywordRoute<'_, 'a>> {
+        let input = input.trim_start();
+        let matches = |keyword: &str| is_symbol_keyword(keyword) && input.starts_with(keyword);
+        let longest = self
+            .plugins
+            .iter()
+            .filter_map(|p| p.keyword())
+            .filter(|k| matches(k))
+            .map(str::len)
+            .max()?;
+        let plugins = self
+            .plugins
+            .iter()
+            .filter(|p| {
+                p.keyword()
+                    .is_some_and(|k| k.len() == longest && matches(k))
+            })
+            .collect();
+        Some((plugins, input[longest..].trim_start(), &input[..longest]))
     }
 
     pub fn query(&self, input: &str) -> Vec<ResultItem> {
@@ -217,19 +280,21 @@ impl SearchEngine {
         let mut collected: Vec<ResultItem> = Vec::new();
         let mut keyword_mode = false;
 
-        let keyword_route = split_keyword(input).and_then(|(kw, rest)| {
-            let plugins: Vec<&Arc<dyn Plugin>> = self
-                .plugins
-                .iter()
-                // Case-insensitive, like the settings' duplicate check, so
-                // Caps Lock or a habitual capital does not bypass the keyword.
-                .filter(|p| {
-                    p.keyword()
-                        .is_some_and(|k| k.to_lowercase() == kw.to_lowercase())
-                })
-                .collect();
-            (!plugins.is_empty()).then_some((plugins, rest, kw))
-        });
+        let keyword_route = split_keyword(input)
+            .and_then(|(kw, rest)| {
+                let plugins: Vec<&Arc<dyn Plugin>> = self
+                    .plugins
+                    .iter()
+                    // Case-insensitive, like the settings' duplicate check, so
+                    // Caps Lock or a habitual capital does not bypass the keyword.
+                    .filter(|p| {
+                        p.keyword()
+                            .is_some_and(|k| k.to_lowercase() == kw.to_lowercase())
+                    })
+                    .collect();
+                (!plugins.is_empty()).then_some((plugins, rest, kw))
+            })
+            .or_else(|| self.symbol_keyword_route(input));
 
         let mut hints: Vec<ResultItem> = Vec::new();
         if let Some((keyword_plugins, rest, kw)) = keyword_route {
@@ -1086,6 +1151,156 @@ mod tests {
         assert!(e.plugin("app").is_some());
         assert!(e.plugin("nope").is_none());
         assert_eq!(e.plugins().len(), 1);
+    }
+
+    #[test]
+    fn symbol_keyword_needs_no_space() {
+        let app = Mock::fixed("app", &[("a", "App", 50.0)]).arc();
+        let shell = Mock::fixed("shell", &[("run", "Run", score::KEYWORD)])
+            .keyword(">")
+            .arc();
+        let e = engine(vec![app.clone(), shell.clone()], 8, &[]);
+
+        for (input, rest) in [
+            ("> ls -la", "ls -la"),
+            (">ls -la", "ls -la"),
+            ("  >   ls", "ls"),
+            ("> ", ""),
+            (">", ""),
+            (">> x", "> x"),
+        ] {
+            shell.inputs.lock().unwrap().clear();
+            assert_eq!(ids(&e.query_at(input, T0)), vec!["shell:run"], "{input:?}");
+            assert_eq!(*shell.inputs.lock().unwrap(), vec![rest.to_owned()]);
+        }
+        assert!(app.inputs.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn symbol_keyword_rows_get_the_keyword_prefixed_to_autocomplete() {
+        let shell = Mock::new("shell", |input| {
+            vec![item("shell", "x", input, score::KEYWORD).with_autocomplete(format!("{input}-la"))]
+        })
+        .keyword(">")
+        .arc();
+        let e = engine(vec![shell], 8, &[]);
+        assert_eq!(
+            e.query_at(">ls ", T0)[0].autocomplete.as_deref(),
+            Some("> ls -la")
+        );
+    }
+
+    #[test]
+    fn symbol_keyword_does_not_hijack_other_queries() {
+        let app = Mock::fixed("app", &[("a", "App", 50.0)]).arc();
+        let shell = Mock::fixed("shell", &[("run", "Run", score::KEYWORD)])
+            .keyword(">")
+            .arc();
+        let e = engine(vec![app.clone(), shell.clone()], 8, &[]);
+
+        assert_eq!(ids(&e.query_at("a>b", T0)), vec!["app:a"]);
+        assert!(shell.inputs.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn longest_symbol_keyword_wins_and_letter_keywords_still_need_a_space() {
+        let one = Mock::fixed("one", &[("x", "One", score::KEYWORD)])
+            .keyword(">")
+            .arc();
+        let two = Mock::fixed("two", &[("x", "Two", score::KEYWORD)])
+            .keyword(">>")
+            .arc();
+        let web = Mock::fixed("web:g", &[("q", "Search", score::KEYWORD)])
+            .keyword("g")
+            .arc();
+        let e = engine(vec![one.clone(), two.clone(), web.clone()], 8, &[]);
+
+        assert_eq!(ids(&e.query_at(">>ls", T0)), vec!["two:x"]);
+        assert_eq!(*two.inputs.lock().unwrap(), vec!["ls".to_owned()]);
+        assert_eq!(ids(&e.query_at(">ls", T0)), vec!["one:x"]);
+        assert!(web.inputs.lock().unwrap().is_empty());
+        assert!(e.query_at("grust", T0).is_empty());
+    }
+
+    #[test]
+    fn symbol_keyword_detection() {
+        assert!(is_symbol_keyword(">"));
+        assert!(is_symbol_keyword(">>"));
+        assert!(is_symbol_keyword("!"));
+        assert!(!is_symbol_keyword(""));
+        assert!(!is_symbol_keyword("g"));
+        assert!(!is_symbol_keyword("g>"));
+        assert!(!is_symbol_keyword("> "));
+    }
+
+    /// Records what `restore_history` was given.
+    struct HistoryProbe {
+        restored: Mutex<Vec<Vec<String>>>,
+    }
+
+    impl Plugin for HistoryProbe {
+        fn id(&self) -> &str {
+            "shell"
+        }
+        fn name(&self) -> &str {
+            "shell"
+        }
+        fn keyword(&self) -> Option<&str> {
+            Some(">")
+        }
+        fn query(&self, _input: &str) -> Vec<ResultItem> {
+            Vec::new()
+        }
+        fn execute(&self, _item: &ResultItem) -> PluginResult<()> {
+            Ok(())
+        }
+        fn restore_history(&self, keys: &[String]) {
+            self.restored.lock().unwrap().push(keys.to_vec());
+        }
+    }
+
+    #[test]
+    fn plugins_get_their_history_when_the_engine_is_built_or_rebuilt() {
+        let mut usage = UsageStore::default();
+        usage.record("shell:ls", "> ls", T0);
+        usage.record("shell:pwd", "> pwd", T0 + 5);
+        usage.record("app:fx", "", T0 + 9);
+
+        let first = Arc::new(HistoryProbe {
+            restored: Mutex::new(Vec::new()),
+        });
+        let e = SearchEngine::new(
+            vec![first.clone() as Arc<dyn Plugin>],
+            usage,
+            EngineOptions::default(),
+        );
+        assert_eq!(*first.restored.lock().unwrap(), vec![vec!["pwd", "ls"]]);
+
+        // A reload builds new plugin instances over the same statistics.
+        let second = Arc::new(HistoryProbe {
+            restored: Mutex::new(Vec::new()),
+        });
+        e.execute_at(
+            &ResultItem::new(
+                "shell",
+                "date",
+                "date",
+                Action::Custom {
+                    payload: "date".into(),
+                },
+            ),
+            "> date",
+            T0 + 20,
+        )
+        .unwrap();
+        let _rebuilt = e.rebuild(
+            vec![second.clone() as Arc<dyn Plugin>],
+            EngineOptions::default(),
+        );
+        assert_eq!(
+            *second.restored.lock().unwrap(),
+            vec![vec!["date", "pwd", "ls"]]
+        );
     }
 
     #[test]
