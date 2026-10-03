@@ -1,0 +1,604 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sevak: a keyboard-first launcher for Windows, macOS and Linux</title>
+  <meta name="description" content="Sevak is a free, open-source, keyboard-first launcher. Press Alt+Space, type a few letters, press Enter: open apps and files, calculate, convert units, search the web, paste snippets and run commands.">
+  <link rel="canonical" href="https://ninad-k.github.io/Sevak/">
+  <meta name="theme-color" content="#111020">
+  <link rel="icon" type="image/png" href="assets/sevak-icon.png">
+
+  <!-- Link previews (LinkedIn, Slack, X, ...) -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Sevak">
+  <meta property="og:url" content="https://ninad-k.github.io/Sevak/">
+  <meta property="og:title" content="Sevak: your desktop, at your service">
+  <meta property="og:description" content="A free, open-source launcher for Windows, macOS and Linux. One shortcut for apps, files, calculations, web search, snippets and more.">
+  <meta property="og:image" content="https://ninad-k.github.io/Sevak/assets/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="627">
+  <meta property="og:image:alt" content="Sevak's search bar with app results, next to the tagline Your desktop. At your service.">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <style>
+    :root {
+      --bg: #0f0e1d;
+      --bg-2: #15132a;
+      --panel: #1b1932;
+      --panel-2: #221f3d;
+      --ink: #f3f0ff;
+      --muted: #aaa6c3;
+      --faint: #7d7999;
+      --border: #37334f;
+      --amber: #f5b52c;
+      --amber-soft: rgba(245, 181, 44, 0.14);
+      --indigo: #6c5ce7;
+      --radius: 16px;
+      --max: 1120px;
+      --mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 17px/1.6 "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Ubuntu, Cantarell, "Noto Sans", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--amber); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    img { max-width: 100%; height: auto; display: block; }
+    .wrap { width: min(var(--max), 100% - 40px); margin-inline: auto; }
+    kbd {
+      font: 600 0.82em var(--mono);
+      padding: 0.18em 0.5em;
+      border: 1px solid var(--border);
+      border-bottom-width: 3px;
+      border-radius: 7px;
+      background: var(--panel);
+      color: var(--ink);
+      white-space: nowrap;
+    }
+    code {
+      font: 0.88em var(--mono);
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.08em 0.4em;
+      color: #ffe2a1;
+    }
+
+    /* Navigation */
+    .nav {
+      position: sticky; top: 0; z-index: 10;
+      backdrop-filter: blur(12px);
+      background: rgba(15, 14, 29, 0.78);
+      border-bottom: 1px solid rgba(55, 51, 79, 0.6);
+    }
+    .nav .wrap { display: flex; align-items: center; gap: 28px; height: 64px; }
+    .brand { display: flex; align-items: center; gap: 10px; color: var(--ink); font-weight: 700; font-size: 20px; }
+    .brand:hover { text-decoration: none; }
+    .brand img { width: 32px; height: 32px; border-radius: 8px; }
+    .nav-links { display: flex; gap: 22px; margin-left: auto; align-items: center; }
+    .nav-links a { color: var(--muted); font-size: 15px; }
+    .nav-links a:hover { color: var(--ink); text-decoration: none; }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 22px; border-radius: 12px;
+      font-weight: 650; font-size: 16px; border: 1px solid transparent;
+      transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+    }
+    .btn:hover { text-decoration: none; transform: translateY(-1px); }
+    .btn-primary { background: var(--amber); color: #1a1405; }
+    .btn-primary:hover { background: #ffc54a; }
+    .btn-ghost { border-color: var(--border); color: var(--ink); background: rgba(27, 25, 50, 0.6); }
+    .btn-ghost:hover { border-color: #57517a; }
+    .nav .btn { padding: 8px 16px; font-size: 15px; }
+    .nav-links a.btn-primary, .nav-links a.btn-primary:hover { color: #1a1405; }
+
+    /* Hero */
+    .hero {
+      position: relative; overflow: hidden;
+      padding: 88px 0 72px;
+      background:
+        radial-gradient(ellipse 720px 420px at 75% 30%, rgba(245, 181, 44, 0.13), transparent 70%),
+        radial-gradient(ellipse 900px 520px at 10% 110%, rgba(108, 92, 231, 0.22), transparent 70%);
+    }
+    .hero .wrap { display: grid; grid-template-columns: 1.02fr 1fr; gap: 56px; align-items: center; }
+    .eyebrow {
+      display: inline-flex; gap: 10px; align-items: center; flex-wrap: wrap;
+      font-size: 14px; color: var(--muted); margin-bottom: 18px;
+    }
+    .pill { border: 1px solid var(--border); background: var(--panel); border-radius: 999px; padding: 4px 12px; }
+    .pill.hot { border-color: rgba(245, 181, 44, 0.5); color: var(--amber); background: var(--amber-soft); }
+    h1 { font-size: clamp(40px, 5.4vw, 64px); line-height: 1.05; letter-spacing: -1.5px; margin: 0 0 20px; }
+    h1 .accent { color: var(--amber); }
+    .lede { font-size: 19px; color: #d6d2ee; margin: 0 0 30px; max-width: 34em; }
+    .cta { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+    .fineprint { margin-top: 16px; font-size: 14px; color: var(--faint); }
+
+    /* Live demo: a recreation of the launcher, driven by real example queries */
+    .demo {
+      background: #17152b;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+      overflow: hidden;
+      font-family: "Segoe UI", system-ui, sans-serif;
+    }
+    .demo-bar { display: flex; align-items: center; gap: 14px; padding: 16px 18px; border-bottom: 1px solid var(--border); }
+    .demo-bar img { width: 34px; height: 34px; border-radius: 9px; }
+    .demo-input { font-size: 24px; color: var(--ink); min-height: 34px; display: flex; align-items: center; }
+    .caret { display: inline-block; width: 2px; height: 26px; background: var(--amber); margin-left: 2px; animation: blink 1s steps(1) infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
+    .demo-rows { padding: 8px; min-height: 236px; }
+    .row { display: flex; align-items: center; gap: 14px; padding: 10px 12px; border-radius: 12px; transition: background 0.2s; }
+    .row.sel { background: rgba(245, 181, 44, 0.16); }
+    .ico {
+      width: 40px; height: 40px; border-radius: 10px; flex: none;
+      display: grid; place-items: center;
+      background: var(--panel-2); color: var(--muted);
+    }
+    .row.sel .ico { color: var(--amber); }
+    .ico svg { width: 22px; height: 22px; }
+    .row-text { min-width: 0; flex: 1; }
+    .row-title { font-size: 17px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .row-sub { font-size: 13.5px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .hint { font: 12px var(--mono); color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 2px 7px; flex: none; }
+    .row.sel .hint { color: var(--ink); border-color: rgba(245, 181, 44, 0.5); }
+    .demo-caption { text-align: center; color: var(--faint); font-size: 14px; margin-top: 14px; }
+    .demo-caption b { color: var(--muted); font-weight: 600; }
+
+    /* Sections */
+    section { padding: 88px 0; }
+    .section-alt { background: var(--bg-2); border-block: 1px solid rgba(55, 51, 79, 0.5); }
+    .kicker { color: var(--amber); font-weight: 700; font-size: 14px; letter-spacing: 1.6px; text-transform: uppercase; margin-bottom: 10px; }
+    h2 { font-size: clamp(30px, 3.6vw, 42px); line-height: 1.15; letter-spacing: -0.8px; margin: 0 0 14px; }
+    .section-lede { color: var(--muted); font-size: 18px; max-width: 40em; margin: 0 0 44px; }
+
+    /* Steps */
+    .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+    .step { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 26px; }
+    .step-num { width: 34px; height: 34px; border-radius: 50%; background: var(--amber-soft); color: var(--amber); display: grid; place-items: center; font-weight: 700; margin-bottom: 14px; }
+    .step h3 { margin: 0 0 8px; font-size: 20px; }
+    .step p { margin: 0; color: var(--muted); }
+
+    /* Features */
+    .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    .feature {
+      background: linear-gradient(180deg, var(--panel), #18162e);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 24px; transition: border-color 0.2s, transform 0.2s;
+    }
+    .feature:hover { border-color: #57517a; transform: translateY(-2px); }
+    .feature .ico { margin-bottom: 14px; background: var(--amber-soft); color: var(--amber); }
+    .feature h3 { margin: 0 0 6px; font-size: 18.5px; }
+    .feature p { margin: 0 0 12px; color: var(--muted); font-size: 15.5px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chips code { font-size: 13px; }
+
+    /* Why */
+    .why { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+    .why-card { display: flex; gap: 18px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 26px; }
+    .why-card .ico { width: 48px; height: 48px; background: var(--amber-soft); color: var(--amber); }
+    .why-card h3 { margin: 0 0 6px; font-size: 19px; }
+    .why-card p { margin: 0; color: var(--muted); font-size: 15.5px; }
+
+    /* Showcase */
+    .shots { display: grid; grid-template-columns: 1fr 1.05fr; gap: 28px; align-items: center; }
+    .shot-stack { display: grid; gap: 18px; }
+    figure { margin: 0; }
+    .shot img { border-radius: 14px; box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--border); }
+    .shot figcaption { margin-top: 10px; color: var(--muted); font-size: 14.5px; }
+    .shot figcaption b { color: var(--ink); font-weight: 600; }
+
+    /* Name */
+    .name { display: grid; grid-template-columns: auto 1fr; gap: 48px; align-items: center; }
+    .devanagari { font-size: clamp(72px, 10vw, 120px); line-height: 1; color: var(--amber); font-weight: 600; font-family: "Nirmala UI", "Noto Sans Devanagari", "Kohinoor Devanagari", "Mangal", serif; }
+    .name blockquote { margin: 0; font-size: 21px; color: #d6d2ee; }
+    .name p { color: var(--muted); }
+
+    /* Download */
+    .platforms { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+    .platform { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px; display: flex; flex-direction: column; }
+    .platform h3 { margin: 0 0 4px; font-size: 22px; }
+    .platform .req { color: var(--faint); font-size: 14.5px; margin-bottom: 16px; }
+    .platform ul { margin: 0 0 22px; padding-left: 18px; color: var(--muted); font-size: 15.5px; }
+    .platform .btn { margin-top: auto; justify-content: center; }
+    .note { margin-top: 22px; color: var(--faint); font-size: 14.5px; text-align: center; }
+
+    /* Closing CTA */
+    .closing { text-align: center; padding: 96px 0; background: radial-gradient(ellipse 700px 300px at 50% 0%, rgba(245, 181, 44, 0.12), transparent 70%); }
+    .closing .cta { justify-content: center; }
+    .closing p { color: var(--muted); font-size: 18px; margin: 0 auto 30px; max-width: 36em; }
+
+    footer { border-top: 1px solid var(--border); padding: 32px 0; color: var(--faint); font-size: 14.5px; }
+    footer .wrap { display: flex; flex-wrap: wrap; gap: 16px 28px; align-items: center; justify-content: space-between; }
+    footer nav { display: flex; gap: 22px; flex-wrap: wrap; }
+    footer a { color: var(--muted); }
+
+    @media (max-width: 960px) {
+      .hero .wrap, .shots, .name { grid-template-columns: 1fr; }
+      .features { grid-template-columns: repeat(2, 1fr); }
+      .name { gap: 18px; }
+    }
+    @media (max-width: 720px) {
+      body { font-size: 16px; }
+      .nav-links a:not(.btn) { display: none; }
+      .hero { padding: 56px 0 48px; }
+      section { padding: 64px 0; }
+      .steps, .features, .why, .platforms { grid-template-columns: 1fr; }
+      .demo-input { font-size: 20px; }
+      .hint { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .caret { animation: none; }
+      .btn, .feature { transition: none; }
+    }
+  </style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="#top"><img src="assets/sevak-icon.png" alt="">Sevak</a>
+    <nav class="nav-links" aria-label="Main">
+      <a href="#features">Features</a>
+      <a href="#why">Why Sevak</a>
+      <a href="#download">Download</a>
+      <a href="docs/">Docs</a>
+      <a href="https://github.com/ninad-k/Sevak">GitHub</a>
+      <a class="btn btn-primary" href="https://github.com/ninad-k/Sevak/releases/latest">Download</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="wrap">
+      <div>
+        <div class="eyebrow">
+          <span class="pill hot">Free &amp; open source</span>
+          <span class="pill">Windows</span><span class="pill">macOS</span><span class="pill">Linux</span>
+        </div>
+        <h1>Your desktop.<br><span class="accent">At your service.</span></h1>
+        <p class="lede">
+          Sevak is a keyboard-first launcher. Press <kbd>Alt</kbd> <kbd>Space</kbd>, type a few
+          letters and press <kbd>Enter</kbd>: open apps and files, calculate, convert units,
+          search the web, paste snippets and run commands, without reaching for the mouse.
+        </p>
+        <div class="cta">
+          <a class="btn btn-primary" href="https://github.com/ninad-k/Sevak/releases/latest">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M5 21h14"/></svg>
+            Download for free
+          </a>
+          <a class="btn btn-ghost" href="docs/quickstart/">Take the 5-minute tour</a>
+        </div>
+        <p class="fineprint">Apache-2.0 licensed · No account · No telemetry</p>
+      </div>
+
+      <div>
+        <div class="demo" role="img" aria-label="A recreation of Sevak's search bar cycling through example searches: finding an app, a calculation, a unit conversion, a web search and a snippet.">
+          <div class="demo-bar">
+            <img src="assets/sevak-icon.png" alt="">
+            <div class="demo-input"><span id="demo-text">fire</span><span class="caret"></span></div>
+          </div>
+          <div class="demo-rows" id="demo-rows"></div>
+        </div>
+        <p class="demo-caption" id="demo-caption"><b>Apps:</b> type a few letters, press Enter</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- How it works -->
+  <section id="how">
+    <div class="wrap">
+      <div class="kicker">How it works</div>
+      <h2>Three keystrokes between you and anything</h2>
+      <p class="section-lede">Sevak waits quietly in the background and appears where you are working the moment you call it.</p>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <h3>Call it</h3>
+          <p>Press <kbd>Alt</kbd> <kbd>Space</kbd> (or your own shortcut). The search bar opens on the screen you're using.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <h3>Type</h3>
+          <p>A few letters of an app or file, a sum like <code>12*7</code>, or a keyword such as <code>g</code> for Google.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <h3>Act</h3>
+          <p><kbd>Enter</kbd> launches, opens or copies. <kbd>Ctrl</kbd> <kbd>K</kbd> shows every action. Sevak hides and you keep working.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section id="features" class="section-alt">
+    <div class="wrap">
+      <div class="kicker">Features</div>
+      <h2>Everything, one shortcut away</h2>
+      <p class="section-lede">Built-in features cover the everyday jobs. Each one is a plugin you can switch off, and you can add your own.</p>
+      <div class="features">
+        <article class="feature">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></div>
+          <h3>Apps</h3>
+          <p>Every installed app: Start Menu and Store apps, macOS apps, Linux desktop entries including Flatpak and Snap.</p>
+          <div class="chips"><code>fire</code><code>code</code><code>calc</code></div>
+        </article>
+        <article class="feature">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="2.5" width="14" height="19" rx="2"/><path d="M8 7h8M8 12h2m4 0h2M8 16h2m4 0h2"/></svg></div>
+          <h3>Calculator &amp; conversions</h3>
+          <p>Answers as you type, and <kbd>Enter</kbd> copies them. Units of length, weight, temperature, data and more. Currency rates are optional.</p>
+          <div class="chips"><code>12*7</code><code>5 km in mi</code><code>72°F to C</code></div>
+        </article>
+        <article class="feature">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.8 3 2.8 15 0 18M12 3c-2.8 3-2.8 15 0 18"/></svg></div>
+          <h3>Web search</h3>
+          <p>Short keywords for Google, YouTube and GitHub. Add any site with a <code>{query}</code> URL.</p>
+          <div class="chips"><code>g rust traits</code><code>yt</code><code>gh</code></div>
+        </article>
+        <article class="feature">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
+          <h3>Files &amp; folders</h3>
+          <p>Finds files in the folders you choose, and browses any path as you type, with <kbd>Tab</kbd> to complete.</p>
+          <div class="chips"><code>f report</code><code>~/Downloads/</code></div>
+        </article>
+        <article class="feature">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z"/></svg></div>
+          <h3>Browser bookmarks</h3>
+          <p>Chrome, Edge, Brave, Vivaldi, Opera, Firefox and more, merged across browsers and profiles.</p>
+          <div class="chips"><code>b recipes</code></div>
+        </article>
+        <article class="feature">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3h6v1M9 10h6M9 14h6"/></svg></div>
+          <h3>Clipboard history</h3>
+          <p>Search and paste anything you copied earlier. Off until you turn it on, and stored only on your computer.</p>
+          <div class="chips"><code>cb</code></div>
+        </article>
+        <article class="feature">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 6 3 12l5 6M16 6l5 6-5 6"/></svg></div>
+          <h3>Snippets</h3>
+          <p>Paste saved text such as signatures and replies, with placeholders like <code>{date}</code> and <code>{clipboard}</code>.</p>
+          <div class="chips"><code>s sig</code></div>
+        </article>
+        <article class="feature">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v9"/><path d="M6.5 6.5a8 8 0 1 0 11 0"/></svg></div>
+          <h3>System &amp; shell</h3>
+          <p>Lock, sleep, restart or empty the trash, with a confirmation for anything destructive. Run commands in your terminal.</p>
+          <div class="chips"><code>lock</code><code>sleep</code><code>&gt; git status</code></div>
+        </article>
+        <article class="feature">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 12h10M4 17h7"/><path d="m16 15 2 2 4-4"/></svg></div>
+          <h3>Universal Actions</h3>
+          <p>Select text in any app and press <kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>Space</kbd>: search it, change its case, encode or decode it, or show it in Large Type.</p>
+        </article>
+        <article class="feature">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 4h6v6M20 4l-8 8"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></div>
+          <h3>Script plugins</h3>
+          <p>Extend Sevak with Python, Node.js or PowerShell scripts. Compatible with Alfred's Script Filter format.</p>
+        </article>
+        <article class="feature">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18c1.5 0 2-1 2-2s-1-1.5-1-2.5S14 15 15 15h2a4 4 0 0 0 4-4c0-4.4-4-8-9-8z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7.5" r="1"/><circle cx="15" cy="7.5" r="1"/></svg></div>
+          <h3>Make it yours</h3>
+          <p>Light, dark or system theme, your accent colour, fonts, custom CSS, and global hotkeys for any search or action.</p>
+        </article>
+        <article class="feature">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2 4 6v6c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V6z"/><path d="m9 12 2 2 4-4"/></svg></div>
+          <h3>Private by design</h3>
+          <p>Searching apps and files, calculations and ranking all run on your computer. Nothing is collected about you.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- Why -->
+  <section id="why">
+    <div class="wrap">
+      <div class="kicker">Why Sevak</div>
+      <h2>Small, quick and respectful of your machine</h2>
+      <p class="section-lede">The same launcher on every computer you use, and it stays out of your way.</p>
+      <div class="why">
+        <div class="why-card">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></div>
+          <div><h3>Instant</h3><p>Built in Rust with Tauri. Results update with every keystroke, and Sevak waits in the background so it appears right away.</p></div>
+        </div>
+        <div class="why-card">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></div>
+          <div><h3>Learns your habits</h3><p>What you open often and recently rises to the top, and Sevak remembers which result you picked for each search.</p></div>
+        </div>
+        <div class="why-card">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>
+          <div><h3>Truly cross-platform</h3><p>Windows 10 and 11, macOS 11 and later, and Linux on both X11 and Wayland, including GNOME's Wayland session.</p></div>
+        </div>
+        <div class="why-card">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
+          <div><h3>Your data stays yours</h3><p>No account and no telemetry. Sevak only goes online when you run a web search, check for updates (optional), or turn on currency rates.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Showcase -->
+  <section class="section-alt">
+    <div class="wrap">
+      <div class="kicker">A closer look</div>
+      <h2>Designed to disappear</h2>
+      <p class="section-lede">A single search bar that grows only as much as it needs to, with a Settings window for everything else.</p>
+      <div class="shots">
+        <div class="shot-stack">
+          <figure class="shot">
+            <img src="docs/media/launcher-files.png" alt="Sevak searching files: f project lists a matching folder and file with their locations." loading="lazy" width="1440" height="334">
+            <figcaption><b>Files:</b> <code>f</code> and a few letters of the name</figcaption>
+          </figure>
+          <figure class="shot">
+            <img src="docs/media/launcher-web.png" alt="Sevak offering to search Google for rust traits." loading="lazy" width="1440" height="238">
+            <figcaption><b>Web search:</b> a keyword, then your search</figcaption>
+          </figure>
+          <figure class="shot">
+            <img src="docs/media/launcher-light.png" alt="Sevak's search bar in the light theme." loading="lazy" width="1440" height="334">
+            <figcaption><b>Themes:</b> light, dark, or follow your system</figcaption>
+          </figure>
+        </div>
+        <figure class="shot">
+          <img src="docs/media/settings-general.png" alt="Sevak's Settings window: shortcut, hide when focus is lost, launch at login and check for updates." loading="lazy" width="2080" height="1400">
+          <figcaption><b>Settings:</b> every option in a friendly window, or in one plain text file</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- Name -->
+  <section>
+    <div class="wrap name">
+      <div class="devanagari" lang="hi">सेवक</div>
+      <div>
+        <div class="kicker">The name</div>
+        <blockquote><strong>Sevak</strong> (सेवक) means <em>one who serves</em>.</blockquote>
+        <p>That's the whole design brief. It appears when you call it, does what you ask, and gets out of the way. The flame-and-lamp logo carries the same idea: readiness to help, and a light to work by.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Download -->
+  <section id="download" class="section-alt">
+    <div class="wrap">
+      <div class="kicker">Download</div>
+      <h2>Free for Windows, macOS and Linux</h2>
+      <p class="section-lede">Pick the installer for your system from the latest release. Sevak can update itself when a new version comes out.</p>
+      <div class="platforms">
+        <div class="platform">
+          <h3>Windows</h3>
+          <div class="req">Windows 10 and 11</div>
+          <ul><li>Installer (<code>.exe</code>), no admin rights needed</li><li>MSI for managed installs</li></ul>
+          <a class="btn btn-primary" href="https://github.com/ninad-k/Sevak/releases/latest">Get it for Windows</a>
+        </div>
+        <div class="platform">
+          <h3>macOS</h3>
+          <div class="req">macOS 11 or later</div>
+          <ul><li>Universal <code>.dmg</code></li><li>Apple silicon and Intel</li></ul>
+          <a class="btn btn-primary" href="https://github.com/ninad-k/Sevak/releases/latest">Get it for macOS</a>
+        </div>
+        <div class="platform">
+          <h3>Linux</h3>
+          <div class="req">Ubuntu 22.04+, Debian, Fedora 39+ and more</div>
+          <ul><li><code>.deb</code> and <code>.rpm</code> packages</li><li><code>.AppImage</code> for other distributions</li></ul>
+          <a class="btn btn-primary" href="https://github.com/ninad-k/Sevak/releases/latest">Get it for Linux</a>
+        </div>
+      </div>
+      <p class="note">The installers aren't code-signed yet, so Windows and macOS may ask you to confirm the first launch. The <a href="docs/install/">install guide</a> walks you through it.</p>
+    </div>
+  </section>
+
+  <!-- Closing -->
+  <div class="closing">
+    <div class="wrap">
+      <h2>Give your desktop a Sevak</h2>
+      <p>Download it, press <kbd>Alt</kbd> <kbd>Space</kbd>, and see how much faster everyday work feels. It's open source, so you can read every line and help shape what comes next.</p>
+      <div class="cta">
+        <a class="btn btn-primary" href="https://github.com/ninad-k/Sevak/releases/latest">Download Sevak</a>
+        <a class="btn btn-ghost" href="https://github.com/ninad-k/Sevak">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02a9.6 9.6 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2z"/></svg>
+          Star on GitHub
+        </a>
+        <a class="btn btn-ghost" href="docs/">Read the docs</a>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Sevak · Apache License 2.0 · Built with Rust, Tauri and Svelte</span>
+    <nav aria-label="Footer">
+      <a href="docs/">Documentation</a>
+      <a href="docs/pdf/Sevak-User-Guide.pdf">PDF manual</a>
+      <a href="docs/privacy/">Privacy</a>
+      <a href="https://github.com/ninad-k/Sevak/releases">Releases</a>
+      <a href="https://github.com/ninad-k/Sevak">GitHub</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+  // Cycles the hero's recreated search bar through real example searches.
+  // Outputs match Sevak's own (see docs/features); icons are generic glyphs.
+  (() => {
+    const ICON = {
+      app: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+      calc: '<rect x="5" y="2.5" width="14" height="19" rx="2"/><path d="M8 7h8M8 12h2m4 0h2M8 16h2m4 0h2"/>',
+      web: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.8 3 2.8 15 0 18M12 3c-2.8 3-2.8 15 0 18"/>',
+      file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
+      snip: '<path d="M8 6 3 12l5 6M16 6l5 6-5 6"/>',
+    };
+    const SCENES = [
+      { query: "fire", caption: "<b>Apps:</b> type a few letters, press Enter", rows: [
+        ["app", "Firefox", "Application", "↵ Launch"],
+        ["app", "Firewall settings", "Application", "Ctrl+2"],
+        ["file", "fireworks-plan.docx", "~/Documents", "Ctrl+3"] ] },
+      { query: "12*7", caption: "<b>Calculator:</b> the answer appears as you type", rows: [
+        ["calc", "84", "12 * 7 · Enter to copy", "↵ Copy"] ] },
+      { query: "5 km in mi", caption: "<b>Conversions:</b> units, temperatures, data sizes", rows: [
+        ["calc", "3.106855961 mi", "5 km → mi · Enter to copy", "↵ Copy"] ] },
+      { query: "g rust traits", caption: "<b>Web search:</b> a keyword, then your search", rows: [
+        ["web", "Search Google for “rust traits”", "https://www.google.com/search?q=rust%20traits", "↵ Open"] ] },
+      { query: "f budget", caption: "<b>Files:</b> search the folders you choose", rows: [
+        ["file", "budget-2026.xlsx", "~/Documents/Finance", "↵ Open"],
+        ["file", "budget-notes.md", "~/Desktop", "Ctrl+2"] ] },
+      { query: "s sig", caption: "<b>Snippets:</b> saved text, pasted where you were typing", rows: [
+        ["snip", "Email signature", "Best regards, …", "↵ Paste"] ] },
+    ];
+    const textEl = document.getElementById("demo-text");
+    const rowsEl = document.getElementById("demo-rows");
+    const captionEl = document.getElementById("demo-caption");
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+    function render(rows) {
+      rowsEl.innerHTML = rows.map(([icon, title, sub, hint], i) => `
+        <div class="row${i === 0 ? " sel" : ""}">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON[icon]}</svg></div>
+          <div class="row-text"><div class="row-title">${esc(title)}</div><div class="row-sub">${esc(sub)}</div></div>
+          <span class="hint">${esc(hint)}</span>
+        </div>`).join("");
+    }
+
+    async function play() {
+      for (let n = 0; ; n = (n + 1) % SCENES.length) {
+        const scene = SCENES[n];
+        captionEl.innerHTML = scene.caption;
+        if (reduce) {
+          textEl.textContent = scene.query;
+          render(scene.rows);
+          await sleep(4000);
+          continue;
+        }
+        for (let i = textEl.textContent.length; i > 0; i--) {
+          textEl.textContent = textEl.textContent.slice(0, i - 1);
+          await sleep(28);
+        }
+        rowsEl.innerHTML = "";
+        for (let i = 1; i <= scene.query.length; i++) {
+          textEl.textContent = scene.query.slice(0, i);
+          if (i >= Math.min(3, scene.query.length)) render(scene.rows);
+          await sleep(85 + Math.random() * 60);
+        }
+        await sleep(2600);
+      }
+    }
+    render(SCENES[0].rows);
+    play();
+  })();
+</script>
+</body>
+</html>

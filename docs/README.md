@@ -1,6 +1,6 @@
 # Sevak documentation
 
-**Read it on the website: [ninad-k.github.io/Sevak](https://ninad-k.github.io/Sevak/)**,
+**Read it on the website: [ninad-k.github.io/Sevak/docs](https://ninad-k.github.io/Sevak/docs/)**,
 which adds search, diagrams and light and dark themes. Prefer a single file?
 Download the [PDF manual](pdf/Sevak-User-Guide.pdf).
 

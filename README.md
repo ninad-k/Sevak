@@ -7,7 +7,8 @@
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
 [**Download Sevak**](https://github.com/ninad-k/Sevak/releases/latest) ·
-[**Documentation**](https://ninad-k.github.io/Sevak/) ·
+[**Website**](https://ninad-k.github.io/Sevak/) ·
+[Documentation](https://ninad-k.github.io/Sevak/docs/) ·
 [PDF manual](docs/pdf/Sevak-User-Guide.pdf) ·
 [Quick start](docs/quickstart.md) · [Help](docs/troubleshooting.md) ·
 [Contribute](CONTRIBUTING.md)
@@ -199,7 +200,7 @@ and [data locations](docs/configuration.md#data-and-file-locations) for local fi
 ## Documentation
 
 The full documentation is published at
-**[ninad-k.github.io/Sevak](https://ninad-k.github.io/Sevak/)**, with search,
+**[ninad-k.github.io/Sevak/docs](https://ninad-k.github.io/Sevak/docs/)**, with search,
 diagrams and light and dark themes. The same user guide is available as a
 single [PDF manual](docs/pdf/Sevak-User-Guide.pdf). The pages are also
 readable right here on GitHub:
