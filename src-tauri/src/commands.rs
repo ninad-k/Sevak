@@ -97,13 +97,25 @@ pub async fn search(app: AppHandle, query: String) -> Vec<ResultDto> {
     dtos
 }
 
-/// Executes a result of the latest search. On success the window hides; on
-/// failure the message goes back to the UI and the window stays open.
+/// Executes a result of the latest search.
+///
+/// Actions that hand over to another program (launch, open a path or URL) hide
+/// the window *first*: the platform call can take a second (a slow `.lnk`), and
+/// the user's intent is already clear. If it then fails the window comes back
+/// as it was, with the error. Copying is instant and keeps the old order.
 #[tauri::command]
 pub async fn execute(app: AppHandle, id: String, query: String) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || run_execute(&app, &id, &query))
         .await
         .map_err(|err| format!("the action did not finish: {err}"))?
+}
+
+/// Whether the action leaves Sevak for another program.
+fn hands_over(action: &Action) -> bool {
+    matches!(
+        action,
+        Action::Launch { .. } | Action::OpenPath { .. } | Action::OpenUrl { .. }
+    )
 }
 
 fn run_execute(app: &AppHandle, id: &str, query: &str) -> Result<(), String> {
@@ -113,6 +125,11 @@ fn run_execute(app: &AppHandle, id: &str, query: &str) -> Result<(), String> {
         tracing::warn!(id, "execute: result expired");
         return Err("result expired".to_owned());
     };
+
+    let optimistic = hands_over(&item.action);
+    if optimistic {
+        window::hide_silently(app);
+    }
 
     let started = Instant::now();
     match search.engine().execute(&item, query) {
@@ -124,11 +141,18 @@ fn run_execute(app: &AppHandle, id: &str, query: &str) -> Result<(), String> {
                 "executed result"
             );
             search.saver.poke();
-            window::hide(app);
+            if optimistic {
+                window::announce_hidden(app);
+            } else {
+                window::hide(app);
+            }
             Ok(())
         }
         Err(err) => {
             tracing::warn!(id, plugin = item.plugin_id, "execute failed: {err}");
+            if optimistic {
+                window::reveal(app);
+            }
             Err(err.to_string())
         }
     }

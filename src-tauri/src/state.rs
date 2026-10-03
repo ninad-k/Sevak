@@ -4,6 +4,7 @@ use std::sync::{Mutex, MutexGuard, RwLock};
 use std::time::Instant;
 
 use serde::Serialize;
+use sevak_core::config::Theme;
 use sevak_core::Config;
 use sevak_platform::{AppPaths, DisplayServer};
 
@@ -31,6 +32,8 @@ pub struct Status {
     pub version: String,
     pub display: String,
     pub hotkey: HotkeyStatus,
+    /// The configured theme; the frontend resolves `system` itself.
+    pub theme: Theme,
     /// The search index is being (re)built.
     pub indexing: bool,
 }
@@ -84,6 +87,7 @@ impl AppState {
             version: env!("CARGO_PKG_VERSION").to_owned(),
             display: self.display.as_str().to_owned(),
             hotkey,
+            theme: self.config().appearance.theme,
             indexing: self.search.is_indexing(),
         }
     }

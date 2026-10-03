@@ -291,6 +291,14 @@ pub enum ConfigError {
         #[source]
         source: Box<toml::de::Error>,
     },
+    #[error("cannot update config file {path}: it is not valid TOML: {source}")]
+    Edit {
+        path: PathBuf,
+        #[source]
+        source: Box<toml_edit::TomlError>,
+    },
+    #[error("cannot serialize the configuration: {0}")]
+    Serialize(#[from] toml_edit::ser::Error),
 }
 
 impl Config {
@@ -330,6 +338,56 @@ impl Config {
         }
     }
 
+    /// Writes this configuration to `path`, editing the user's existing document
+    /// in place so their comments, key order and untouched values survive.
+    ///
+    /// - A missing file is created from [`DEFAULT_CONFIG_TOML`] first.
+    /// - Scalar values and arrays are replaced only when they differ, keeping
+    ///   the key's comments and any trailing inline comment.
+    /// - Keys Sevak does not know are left alone.
+    /// - `[[web_search]]` is rewritten as a whole (it is a list, so there is no
+    ///   meaningful per-entry merge); the comment above its first entry stays.
+    /// - The file is replaced atomically (temporary file + rename).
+    pub fn save_to(&self, path: &Path) -> Result<(), ConfigError> {
+        let io_err = |source| ConfigError::Io {
+            path: path.to_path_buf(),
+            source,
+        };
+
+        let existing = match fs::read_to_string(path) {
+            Ok(text) => text,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => DEFAULT_CONFIG_TOML.to_owned(),
+            Err(err) => return Err(io_err(err)),
+        };
+        let mut document = existing
+            .parse::<toml_edit::DocumentMut>()
+            .map_err(|source| ConfigError::Edit {
+                path: path.to_path_buf(),
+                source: Box::new(source),
+            })?;
+
+        let updated = toml_edit::ser::to_document(self)?;
+        merge_document(&mut document, &updated);
+        let mut text = document.to_string();
+        // The parser normalizes line endings to LF; give a CRLF file its own back.
+        if existing.contains("\r\n") {
+            text = text.replace("\r\n", "\n").replace('\n', "\r\n");
+        }
+
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(io_err)?;
+        }
+        let mut temp_name = path.file_name().unwrap_or_default().to_owned();
+        temp_name.push(".tmp");
+        let temp = path.with_file_name(temp_name);
+        let written = fs::write(&temp, text).and_then(|()| fs::rename(&temp, path));
+        if let Err(err) = written {
+            let _ = fs::remove_file(&temp);
+            return Err(io_err(err));
+        }
+        Ok(())
+    }
+
     /// Clamps values into their supported ranges.
     #[must_use]
     pub fn normalized(mut self) -> Self {
@@ -346,6 +404,151 @@ impl Config {
             hotkey.to_owned()
         };
         self
+    }
+}
+
+/// Key of the one array of tables in the schema.
+const WEB_SEARCH_KEY: &str = "web_search";
+
+/// Applies `updated` (a freshly serialized config) onto `document`.
+fn merge_document(document: &mut toml_edit::DocumentMut, updated: &toml_edit::DocumentMut) {
+    use toml_edit::Item;
+
+    for (key, new_item) in updated.as_table() {
+        if key == WEB_SEARCH_KEY {
+            merge_web_search(document.as_table_mut(), new_item);
+            continue;
+        }
+        // The serializer emits sections as inline tables; edit them as tables.
+        let new_table = match new_item {
+            Item::Table(table) => Some(table.clone()),
+            other => other.clone().into_table().ok(),
+        };
+        let Some(new_table) = new_table else {
+            merge_item(document.as_table_mut(), key, new_item);
+            continue;
+        };
+        match document.get_mut(key) {
+            Some(Item::Table(table)) => merge_table(table, &new_table),
+            // Missing, or not a table: write the section fresh.
+            _ => {
+                let mut table = new_table;
+                table.set_implicit(false);
+                document.insert(key, Item::Table(table));
+            }
+        }
+    }
+}
+
+fn merge_table(table: &mut toml_edit::Table, new_table: &toml_edit::Table) {
+    for (key, new_item) in new_table {
+        merge_item(table, key, new_item);
+    }
+}
+
+/// Sets `table[key]` to `new_item` unless it already holds an equal value.
+fn merge_item(table: &mut toml_edit::Table, key: &str, new_item: &toml_edit::Item) {
+    let Some(new_value) = new_item.as_value() else {
+        return;
+    };
+    match table.get_mut(key) {
+        Some(existing) => {
+            if existing
+                .as_value()
+                .is_some_and(|old| values_equal(old, new_value))
+            {
+                return;
+            }
+            let mut replacement = new_value.clone();
+            // Keep the spacing and trailing `# comment` of the old value.
+            if let Some(old) = existing.as_value() {
+                *replacement.decor_mut() = old.decor().clone();
+            }
+            *existing = toml_edit::Item::Value(replacement);
+        }
+        None => {
+            table.insert(key, toml_edit::Item::Value(new_value.clone()));
+        }
+    }
+}
+
+fn merge_web_search(root: &mut toml_edit::Table, new_item: &toml_edit::Item) {
+    use toml_edit::Item;
+
+    let mut new_engines = match new_item {
+        Item::ArrayOfTables(tables) => tables.clone(),
+        other => other
+            .clone()
+            .into_array_of_tables()
+            .unwrap_or_else(|_| toml_edit::ArrayOfTables::new()),
+    };
+
+    let unchanged = match root.get(WEB_SEARCH_KEY) {
+        Some(Item::ArrayOfTables(old)) => {
+            old.len() == new_engines.len()
+                && old
+                    .iter()
+                    .zip(new_engines.iter())
+                    .all(|(a, b)| tables_equal(a, b))
+        }
+        Some(Item::Value(toml_edit::Value::Array(old))) => old.is_empty() && new_engines.is_empty(),
+        _ => false,
+    };
+    if unchanged {
+        return;
+    }
+
+    // An empty list cannot be written as `[[web_search]]` tables, and omitting
+    // the key would bring the default engines back on the next load.
+    if new_engines.is_empty() {
+        root.insert(
+            WEB_SEARCH_KEY,
+            Item::Value(toml_edit::Value::Array(toml_edit::Array::new())),
+        );
+        return;
+    }
+
+    // The comment block above the first `[[web_search]]` belongs to the list.
+    let leading_decor = match root.get(WEB_SEARCH_KEY) {
+        Some(Item::ArrayOfTables(old)) => old.iter().next().map(|t| t.decor().clone()),
+        _ => None,
+    };
+    if let (Some(decor), Some(first)) = (leading_decor, new_engines.iter_mut().next()) {
+        *first.decor_mut() = decor;
+    }
+    root.insert(WEB_SEARCH_KEY, Item::ArrayOfTables(new_engines));
+}
+
+fn tables_equal(a: &toml_edit::Table, b: &toml_edit::Table) -> bool {
+    a.len() == b.len()
+        && a.iter().all(|(key, item)| {
+            match (
+                item.as_value(),
+                b.get(key).and_then(toml_edit::Item::as_value),
+            ) {
+                (Some(x), Some(y)) => values_equal(x, y),
+                _ => false,
+            }
+        })
+}
+
+/// Semantic equality: formatting and comments are ignored.
+fn values_equal(a: &toml_edit::Value, b: &toml_edit::Value) -> bool {
+    use toml_edit::Value;
+    match (a, b) {
+        (Value::String(x), Value::String(y)) => x.value() == y.value(),
+        (Value::Integer(x), Value::Integer(y)) => x.value() == y.value(),
+        (Value::Float(x), Value::Float(y)) => x.value() == y.value(),
+        (Value::Boolean(x), Value::Boolean(y)) => x.value() == y.value(),
+        (Value::Array(x), Value::Array(y)) => {
+            x.len() == y.len() && x.iter().zip(y.iter()).all(|(p, q)| values_equal(p, q))
+        }
+        (Value::InlineTable(x), Value::InlineTable(y)) => {
+            x.len() == y.len()
+                && x.iter()
+                    .all(|(key, p)| y.get(key).is_some_and(|q| values_equal(p, q)))
+        }
+        _ => false,
     }
 }
 
@@ -451,5 +654,182 @@ url = "https://example.com"
         let err = Config::load_or_create(&path).unwrap_err();
         assert!(matches!(err, ConfigError::Parse { .. }));
         assert_eq!(fs::read_to_string(&path).unwrap(), "[general\nhotkey = ");
+    }
+
+    fn saved(existing: Option<&str>, config: &Config) -> String {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        if let Some(text) = existing {
+            fs::write(&path, text).unwrap();
+        }
+        config.save_to(&path).unwrap();
+        assert!(
+            !dir.path().join("config.toml.tmp").exists(),
+            "temporary file left behind"
+        );
+        fs::read_to_string(&path).unwrap()
+    }
+
+    #[test]
+    fn saving_an_unchanged_config_keeps_the_file_byte_identical() {
+        assert_eq!(
+            saved(Some(DEFAULT_CONFIG_TOML), &Config::default()),
+            DEFAULT_CONFIG_TOML
+        );
+    }
+
+    #[test]
+    fn saving_without_a_file_creates_it_from_the_template() {
+        assert_eq!(saved(None, &Config::default()), DEFAULT_CONFIG_TOML);
+    }
+
+    #[test]
+    fn saving_creates_missing_parent_directories() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a").join("b").join("config.toml");
+        Config::default().save_to(&path).unwrap();
+        assert!(path.is_file());
+    }
+
+    #[test]
+    fn changed_values_persist_and_comments_survive() {
+        let mut config = Config::default();
+        config.general.hotkey = "Ctrl+Shift+K".to_owned();
+        config.general.launch_at_login = true;
+        config.search.max_results = 12;
+        config.appearance.theme = Theme::Dark;
+        config.window.width = 900;
+        config.files.directories = vec!["~/Projects".to_owned()];
+        config.plugins.disabled = vec!["files".to_owned()];
+
+        let text = saved(Some(DEFAULT_CONFIG_TOML), &config);
+        for comment in [
+            "# Sevak configuration",
+            "# Shortcut that shows and hides Sevak.",
+            "# Width of the search window in logical pixels (400-1600).",
+            "# \"system\", \"light\" or \"dark\".",
+            "# Index dot-files and dot-folders.",
+            "# Web search engines: type",
+        ] {
+            assert!(text.contains(comment), "lost comment {comment:?}:\n{text}");
+        }
+        assert_eq!(Config::from_toml_str(&text).unwrap(), config);
+
+        // Order is the document's own: the hotkey stays the first key of [general].
+        let general = text.find("[general]").unwrap();
+        let hotkey = text.find("hotkey = ").unwrap();
+        let hide = text.find("hide_on_blur").unwrap();
+        assert!(general < hotkey && hotkey < hide);
+    }
+
+    #[test]
+    fn user_comments_and_unknown_keys_survive() {
+        let existing = "\
+# my own notes
+[general]
+hotkey = \"Alt+Space\" # my favourite
+future_key = 42
+
+[search]
+max_results = 8 # keep it short
+
+[custom]
+thing = true
+";
+        let mut config = Config::default();
+        config.general.hotkey = "Ctrl+Space".to_owned();
+        config.search.max_results = 5;
+        let text = saved(Some(existing), &config);
+
+        assert!(text.starts_with("# my own notes\n[general]\n"));
+        assert!(text.contains("hotkey = \"Ctrl+Space\" # my favourite"));
+        assert!(text.contains("max_results = 5 # keep it short"));
+        assert!(text.contains("future_key = 42"));
+        assert!(text.contains("[custom]\nthing = true"));
+        assert_eq!(Config::from_toml_str(&text).unwrap().search.max_results, 5);
+    }
+
+    #[test]
+    fn missing_sections_and_keys_are_added() {
+        let text = saved(
+            Some("[general]\nhotkey = \"Alt+Space\"\n"),
+            &Config::default(),
+        );
+        assert!(text.contains("hide_on_blur = true"));
+        assert!(text.contains("[window]\nwidth = 720"));
+        assert_eq!(Config::from_toml_str(&text).unwrap(), Config::default());
+    }
+
+    #[test]
+    fn web_search_list_is_replaced_and_keeps_its_comment() {
+        let config = Config {
+            web_search: vec![
+                WebSearchEngine {
+                    keyword: "ddg".to_owned(),
+                    name: "DuckDuckGo".to_owned(),
+                    url: "https://duckduckgo.com/?q={query}".to_owned(),
+                },
+                WebSearchEngine {
+                    keyword: "g".to_owned(),
+                    name: "Google".to_owned(),
+                    url: "https://www.google.com/search?q={query}".to_owned(),
+                },
+            ],
+            ..Config::default()
+        };
+        let text = saved(Some(DEFAULT_CONFIG_TOML), &config);
+
+        assert!(text.contains("# Web search engines: type"));
+        assert!(text.contains("keyword = \"ddg\""));
+        assert!(!text.contains("YouTube"));
+        assert_eq!(
+            text.matches(
+                "
+[[web_search]]
+"
+            )
+            .count(),
+            2
+        );
+        assert_eq!(
+            Config::from_toml_str(&text).unwrap().web_search,
+            config.web_search
+        );
+    }
+
+    #[test]
+    fn an_empty_web_search_list_is_remembered() {
+        let mut config = Config::default();
+        config.web_search.clear();
+        let text = saved(Some(DEFAULT_CONFIG_TOML), &config);
+        assert!(!text.contains("[[web_search]]"));
+        assert!(Config::from_toml_str(&text).unwrap().web_search.is_empty());
+
+        // And back again.
+        let text = saved(Some(&text), &Config::default());
+        assert_eq!(
+            Config::from_toml_str(&text).unwrap().web_search,
+            WebSearchEngine::defaults()
+        );
+    }
+
+    #[test]
+    fn saving_over_an_invalid_file_fails_and_leaves_it_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        fs::write(&path, "[general\nhotkey = ").unwrap();
+        let err = Config::default().save_to(&path).unwrap_err();
+        assert!(matches!(err, ConfigError::Edit { .. }));
+        assert_eq!(fs::read_to_string(&path).unwrap(), "[general\nhotkey = ");
+    }
+
+    #[test]
+    fn crlf_files_stay_parseable_after_saving() {
+        let existing = DEFAULT_CONFIG_TOML.replace('\n', "\r\n");
+        let mut config = Config::default();
+        config.search.max_results = 3;
+        let text = saved(Some(&existing), &config);
+        assert!(text.contains("# Sevak configuration\r\n"), "{text:?}");
+        assert_eq!(Config::from_toml_str(&text).unwrap(), config);
     }
 }

@@ -2,10 +2,9 @@
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
-use crate::state::AppState;
-use crate::{app, window};
+use crate::{app, settings, window};
 
 const TRAY_ID: &str = "main";
 const TOOLTIP: &str = "Sevak \u{2014} at your service";
@@ -41,7 +40,7 @@ fn build(app: &AppHandle) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
             "show" => window::show(app),
-            "settings" => open_settings(app),
+            "settings" => settings::open(app),
             "reload" => app::reload(app),
             "quit" => app::quit(app),
             other => tracing::debug!("unhandled tray menu item {other}"),
@@ -61,12 +60,4 @@ fn build(app: &AppHandle) -> tauri::Result<()> {
     }
     builder.build(app)?;
     Ok(())
-}
-
-// A settings UI arrives later; until then "Settings" opens the config file.
-fn open_settings(app: &AppHandle) {
-    let path = app.state::<AppState>().paths.config_file.clone();
-    if let Err(err) = sevak_platform::open::open_in_editor(&path) {
-        tracing::error!("could not open {} for editing: {err}", path.display());
-    }
 }
