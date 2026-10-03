@@ -73,6 +73,31 @@ A browser request happens when you execute the web result.
 Check local plugins and indexing first, or disable the fallback under
 **Settings → Search**.
 
+## `c`, `1p`, `define` or `spell` does nothing
+
+- **Contacts and 1Password are off by default.** The row says "Contacts are off"
+  or "1Password is off"; add `[contacts] enabled = true` or
+  `[onepassword] enabled = true` to `config.toml` and choose **Reload index**.
+- **No contacts found.** The plugin reads vCard files from `vcard_files` and, with
+  `use_system = true`, the system address book. On macOS the first `c` shows
+  "Allow Sevak to read your Contacts": press Enter and answer the system
+  question; if you said no, enable Sevak under *System Settings → Privacy &
+  Security → Contacts*. On Windows the People store may be empty when your
+  accounts' contacts are not synced there; export a `.vcf` file instead. On Linux
+  only Evolution's local address books are read.
+- **1Password says `op` was not found or is not signed in.** Install the
+  [1Password CLI](https://developer.1password.com/docs/cli/get-started/), turn on
+  *Settings → Developer → Integrate with 1Password CLI* in the 1Password app, and
+  run `op account list` in a terminal to check. If `op` is somewhere unusual, set
+  `[onepassword] op_path`. After you dismiss the unlock prompt, press Enter on
+  "Try again". Sevak never reads or shows passwords.
+- **`define` finds nothing.** The bundled dictionary has single words and their
+  common inflections, not phrases or names of people. Check the spelling with
+  `spell`.
+- **`spell` calls a word wrong that is right.** The bundled word list is general
+  English. Specialist words are missing; on Linux the hunspell lists in
+  `/usr/share/hunspell` are added when installed.
+
 ## A web keyword does not work
 
 Use `g rust traits`, with a space after `g`. Then check that:
@@ -153,8 +178,8 @@ sure the package came from the project's release page.
 
 ## Does Sevak work offline?
 
-App search, indexed file search, calculations and local ranking work without
-network access. Web searches, checking for a release, and downloading updates
+App search, indexed file search, calculations, contacts, the dictionary and
+spelling, and local ranking work without network access. Web searches, checking for a release, and downloading updates
 need an internet connection. Indexes depend on locally accessible applications
 and folders.
 

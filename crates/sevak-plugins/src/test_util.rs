@@ -5,9 +5,10 @@ use std::sync::{Arc, Mutex};
 
 use sevak_core::{AppEntry, ClipContent, IconData, IconSource, LaunchTarget, ShellConfig};
 use sevak_platform::{
-    ClipboardMedia, ClipboardRead, Drive, ForegroundApp, MediaCommand, MediaRequest, NowPlaying,
-    PasteOutcome, PasteSupport, PlatformError, PlatformProvider, ProcessInfo, Result, RunningApp,
-    SettingsPage, SystemCommand, Task, TaskKind,
+    ClipboardMedia, ClipboardRead, Contact, ContactsAccess, DeepLink, Drive, ForegroundApp,
+    MediaCommand, MediaRequest, NowPlaying, PasteOutcome, PasteSupport, PlatformError,
+    PlatformProvider, ProcessInfo, Result, RunningApp, SettingsPage, Spelling, SystemCommand, Task,
+    TaskKind,
 };
 
 #[derive(Default)]
@@ -69,6 +70,18 @@ pub struct MockPlatform {
     pub playing: Mutex<Option<NowPlaying>>,
     pub now_playing_supported: Mutex<bool>,
     pub now_playing_calls: Mutex<usize>,
+    /// URLs of the `DeepLink`s opened.
+    pub opened_links: Mutex<Vec<String>>,
+    /// What `contacts_access` reports; `None` is "unsupported".
+    pub contacts_access: Mutex<Option<ContactsAccess>>,
+    /// What `request_contacts_access` switches `contacts_access` to.
+    pub contacts_after_request: Mutex<Option<ContactsAccess>>,
+    pub system_contacts: Mutex<Vec<Contact>>,
+    pub evolution_dbs: Mutex<Vec<PathBuf>>,
+    /// What `system_definition` answers, by word.
+    pub definitions: Mutex<Vec<(String, String)>>,
+    /// What `system_spelling` answers, by word.
+    pub spellings: Mutex<Vec<(String, Spelling)>>,
 }
 
 impl MockPlatform {
@@ -275,5 +288,52 @@ impl PlatformProvider for MockPlatform {
     fn now_playing(&self) -> Result<Option<NowPlaying>> {
         *self.now_playing_calls.lock().unwrap() += 1;
         Ok(self.playing.lock().unwrap().clone())
+    }
+
+    fn open_link(&self, link: &DeepLink) -> Result<()> {
+        self.opened_links
+            .lock()
+            .unwrap()
+            .push(link.as_str().to_owned());
+        Ok(())
+    }
+
+    fn contacts_access(&self) -> ContactsAccess {
+        self.contacts_access
+            .lock()
+            .unwrap()
+            .clone()
+            .unwrap_or(ContactsAccess::Unsupported)
+    }
+
+    fn request_contacts_access(&self) -> Result<ContactsAccess> {
+        if let Some(after) = self.contacts_after_request.lock().unwrap().clone() {
+            *self.contacts_access.lock().unwrap() = Some(after);
+        }
+        Ok(self.contacts_access())
+    }
+
+    fn system_contacts(&self) -> Result<Vec<Contact>> {
+        Ok(self.system_contacts.lock().unwrap().clone())
+    }
+
+    fn evolution_address_books(&self) -> Vec<PathBuf> {
+        self.evolution_dbs.lock().unwrap().clone()
+    }
+
+    fn system_definition(&self, word: &str) -> Option<String> {
+        let definitions = self.definitions.lock().unwrap();
+        definitions
+            .iter()
+            .find(|(w, _)| w == word)
+            .map(|(_, d)| d.clone())
+    }
+
+    fn system_spelling(&self, word: &str) -> Option<Spelling> {
+        let spellings = self.spellings.lock().unwrap();
+        spellings
+            .iter()
+            .find(|(w, _)| w == word)
+            .map(|(_, s)| s.clone())
     }
 }

@@ -10,6 +10,7 @@ plugins without rebuilding Sevak by dropping in a script.
 - [Architecture](#architecture)
 - [Writing a built-in plugin](#writing-a-built-in-plugin)
 - [Universal Actions](#universal-actions): offering actions for what the user selected in another app
+- [Contacts, 1Password and dictionary](#contacts-1password-and-dictionary): plugins with two keywords, an external tool, OS data sources and a bundled dictionary
 - [External plugins](#external-plugins): script plugins in Python, PowerShell, Node or anything else, including Alfred Script Filter scripts
 
 Code map:
@@ -26,6 +27,7 @@ Code map:
 | Typed-path browsing (files plugin) | `crates/sevak-plugins/src/path_browse.rs` |
 | Script plugins (external) | `crates/sevak-plugins/src/script/` |
 | Standard action execution | `crates/sevak-plugins/src/actions.rs` |
+| Contacts, 1Password, dictionary | `crates/sevak-plugins/src/{contacts,onepassword,dictionary}/`, `crates/sevak-platform/src/{contacts,deep_link,dictionary}.rs` |
 | Universal Actions (selection) | `crates/sevak-core/src/selection.rs`, `crates/sevak-plugins/src/selection/`, `crates/sevak-platform/src/capture.rs`, `src-tauri/src/selection.rs` |
 | OS access (`PlatformProvider`) | `crates/sevak-platform/src/provider.rs` |
 
@@ -94,7 +96,8 @@ secondary action.)
 - **Platform provider** (`PlatformProvider`) is the only OS-specific layer
   (Windows Start Menu / packaged apps, Linux `.desktop` entries). It also
   gatekeeps URLs: `open_url` accepts only `http://`, `https://` and `mailto:`.
-  Other OS entry points are narrow, closed vocabularies instead of strings:
+  Other OS entry points are narrow, closed vocabularies instead of strings
+  (`DeepLink` for `tel:` and app links, [below](#the-deeplink-allow-list)):
   `run_system_command(SystemCommand)` and `open_settings_page(SettingsPage)`
   (with `supported_*` methods that report what works on this machine). They
   back the `system` plugin, so settings URIs such as `ms-settings:` never pass
@@ -215,6 +218,9 @@ process, so plugins must never panic.
 | `snippets` | `snippets` | `s`, `[[snippet]]` entries pasted with placeholders expanded |
 | `emoji` | `emoji:word`, `emoji:colon` | `emoji ` and `:`, an offline emoji picker shown as a grid ([below](#emoji-a-grid-plugin)) |
 | `selection` | `selection` | Universal Actions for the text, URL or files selected in another app; no keyword ([below](#universal-actions)) |
+| `contacts` | `contacts`, `contacts:at` | `c` and `@`, opt-in through `[contacts] enabled` ([below](#contacts-1password-and-dictionary)) |
+| `1password` | `1password` | `1p`, opt-in through `[onepassword] enabled` |
+| `dict` | `dict`, `dict:spell` | `define` and `spell`, offline |
 | `uuid` | `uuid` | example plugin, keyword-only |
 
 - `PluginRegistry::builtin()` is the stock set; `register(descriptor)` adds (or
@@ -762,6 +768,87 @@ another program, runs everything off the UI thread and sends
 `sevak:buffer-progress` events. In a browser preview (`npm run dev`) the page
 uses `mockBuffer` from `ui/src/lib/mock.ts`; open `/#buffer` or `/#buffer-dest`.
 
+## Contacts, 1Password and dictionary
+
+Three built-in plugins (`crates/sevak-plugins/src/contacts/`, `onepassword/`,
+`dictionary/`) show patterns the simpler ones do not. User documentation is in
+[usage.md](usage.md#contacts).
+
+**Several keywords, one data set.** `Plugin::keyword` is a single string, so a
+plugin with two keywords is two instances sharing an `Arc` of the data:
+`contacts` (`c`, configurable) and `contacts:at` (`@`), and `dict` (`define`) and
+`dict:spell` (`spell`). The factory returns both; instance ids use the
+`family:instance` form, so `[plugins] disabled = ["contacts"]` turns both off.
+Only the family instance loads data in `refresh`.
+
+**Opt-in plugins** are built even when disabled in the config (so the settings
+window can list them) but hold no data and answer every query with one row that
+copies the line to add to `config.toml`; the clipboard plugin does the same.
+
+**Usage tracking.** All three return `false` from `tracks_usage`, so names,
+login titles and looked-up words never reach `usage.json` or the search history.
+
+**Large Type.** `ResultItem::with_large_text` sets what `Ctrl+L` shows instead of
+the title (a contact's phone number).
+
+### Platform pieces
+
+| Need | Where |
+|---|---|
+| Address book | `PlatformProvider::{contacts_access, request_contacts_access, system_contacts}`. macOS: `macos/contacts.rs` (`CNContactStore`, behind `NSContactsUsageDescription` in `src-tauri/Info.plist`). Windows: `windows/people.rs` (`Windows.ApplicationModel.Contacts`, read-only). Linux: `evolution_address_books()` returns Evolution's `contacts.db` paths and the plugin reads their vCards (`contacts/sources.rs`) from a private copy, like Firefox's bookmarks. |
+| vCard 2.1, 3.0 and 4.0 | `sevak_platform::contacts::parse_vcards` (unit tested; no crate) |
+| macOS permission | Never asked at startup or while typing. `contacts_access()` only reads the status; a row's Enter calls `request_contacts_access()`. |
+| Non-web links | `sevak_platform::DeepLink`, opened with `PlatformProvider::open_link`. |
+| Definitions | `PlatformProvider::system_definition` (macOS Dictionary Services, `macos/dictionary.rs`) |
+| Spelling | `PlatformProvider::system_spelling` (Windows `ISpellChecker`, `windows/spell.rs`, on a worker thread with a 120 ms answer limit) |
+
+### The `DeepLink` allow-list
+
+`open_url` accepts only `http(s):` and `mailto:` and must stay that way. Three
+plugin features need one more scheme each, so instead of loosening `open_url`
+there is a closed type, `DeepLink`, that can only be built by constructors that
+validate every piece and build the whole URL themselves:
+
+| Constructor | URL | Validation |
+|---|---|---|
+| `DeepLink::tel(number)` | `tel:+15551234567` | digits, a leading `+`, spaces and `-.()`; 3 to 20 digits |
+| `DeepLink::address_book_card(id)` | `addressbook://<id>` | letters, digits, `:`, `-`, `_`; at most 100 characters |
+| `DeepLink::onepassword_item(account, vault, item)` | `onepassword://view-item/?a=..&v=..&i=..` | each id letters and digits only, 20 to 40 characters |
+
+Plugins carry the pieces in an `Action::Custom` payload (`call:+44 20 ...`) and
+build the link in `execute`, so a tampered payload is refused there. To add a
+link, add a constructor with tests next to the others; do not add a scheme to
+`open_url`.
+
+### 1Password and `op`
+
+`onepassword/op.rs` holds the parsing (tested against JSON fixtures) and the
+`OpRunner` trait; `CliRunner` is the real implementation, and tests use a fake.
+Rules the plugin keeps:
+
+- Only `op item list --categories Login --format json` and `op account list
+  --format json` are ever run. `Login` has no field for a secret, and the parser
+  reads only `id`, `title`, `vault`, `urls` and `additional_information`.
+- `op` is started only from `query` (the keyword route), on a background thread,
+  when the in-memory list is missing or older than `cache_minutes`. `refresh` does
+  nothing, so startup and "Reload index" never trigger a biometric prompt. A
+  failure is remembered and not retried until the user presses Enter on the retry
+  row. The plugin tells the launcher the answer arrived through the notifier.
+- An item's "open in 1Password" link needs the account id (`op account list`); with
+  several accounts and no `[onepassword] account` the link is left out.
+
+### The dictionary
+
+`dictionary/lexicon.rs` is a small engine over `data/wordnet-en.z`: a sorted text
+index with binary search, WordNet-style inflection rules checked against the part
+of speech (`-ed` needs a verb) and consonant doubling (`stopped`, not `stoped`),
+and spelling suggestions by Damerau-Levenshtein distance, pre-filtered by length
+and letter set, ranked by distance, rearranged letters, first letter, frequency.
+The data is derived from Princeton WordNet 3.0 by
+`python scripts/build-dictionary.py <WordNet-3.0 folder>`; the licence is kept in
+the file's header and in `THIRD_PARTY_NOTICES.md`. It adds about 2.7 MB to the
+program and 8 MB of memory when unpacked (once per process, in `refresh`).
+
 ## External plugins
 
 You can add a keyword plugin without building Sevak: drop a folder with a
@@ -837,7 +924,7 @@ idle_timeout_secs = 300          # persistent: stop after this much inactivity (
   when two folders claim one id the first (by folder name) wins.
 - Keywords are matched case-insensitively. A keyword that another plugin (built-in
   or script) also uses queries both and merges their results, so pick one
-  that is not taken (`g`, `yt`, `gh`, `f`, `b`, `>`, `cb`, `s` and `uuid` are by
+  that is not taken (`g`, `yt`, `gh`, `f`, `b`, `>`, `cb`, `s`, `c`, `@`, `1p`, `define`, `spell` and `uuid` are by
   default).
 - Unknown keys are ignored, so a manifest written for a newer Sevak still loads.
 - A `plugin.toml` that is invalid is skipped with a message in the log and shown

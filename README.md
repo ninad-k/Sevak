@@ -81,6 +81,9 @@ They show the workflow rather than measured search or launch times.
 | Run a terminal command | `> git status` | Opens your terminal and runs it |
 | Paste earlier clipboard text, images or files | `cb invoice` | Pastes into the app you were using (opt-in) |
 | Paste a snippet | `s sig` | Pastes the snippet with `{date}` etc. filled in |
+| Look up a person | `c ada` or `@ada` | Copies the e-mail; the action panel writes, calls or opens the card (opt-in) |
+| Find a 1Password login | `1p github` | Opens its website; never reads passwords (opt-in, needs `op`) |
+| Define or spell-check a word | `define serendipity`, `spell recieve` | Copies the definition / pastes the right spelling, offline |
 | Generate a UUID | `uuid ` or `uuid 5` | Copies a UUID when the plugin is enabled |
 | Pick an emoji | `:heart` or `emoji thumbs up` | Pastes the selected emoji from a grid |
 
@@ -193,6 +196,22 @@ Whole-disk and content file search (`ff`, `in`) ask only your own computer's
 file index (Windows Search, Spotlight, locate, Tracker or Baloo); the words you
 type go to that local service and nowhere else.
 
+The optional integrations below make no network requests of their own:
+
+- Contacts (off by default, `[contacts] enabled`) reads vCard files you name
+  and, on request, your system address book (macOS asks for permission; Windows
+  People; Evolution on Linux). They are held in memory only: not written to
+  disk, logged, or sent anywhere, and your searches in it stay out of the usage
+  statistics and search history.
+- 1Password (off by default, `[onepassword] enabled`) runs the official `op`
+  tool only when you type `1p `, and reads only the list of logins: titles,
+  vault names, website addresses and usernames, never passwords or one-time
+  codes. The list stays in memory. Unlocking uses 1Password's own prompt, and
+  `op` is 1Password's program, which talks to 1Password as it normally does.
+- The dictionary and spelling checker are offline: a bundled WordNet dictionary,
+  or the operating system's own (macOS Dictionary, Windows spell checker). The
+  words you look up are not saved.
+
 There are explicit network uses:
 
 - Selecting a web result opens its URL in your browser, where the chosen
@@ -254,4 +273,5 @@ Bug reports, documentation improvements and plugins are welcome. Read
 Include your Sevak version, operating system and reproduction steps in issue
 reports. Report security issues through [SECURITY.md](SECURITY.md).
 
-[Apache License 2.0](LICENSE) · Built with Rust, Tauri and Svelte.
+[Apache License 2.0](LICENSE) · Built with Rust, Tauri and Svelte ·
+[Third-party notices](THIRD_PARTY_NOTICES.md) (the bundled WordNet dictionary).

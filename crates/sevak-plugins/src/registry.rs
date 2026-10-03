@@ -30,9 +30,9 @@ use sevak_platform::PlatformProvider;
 use crate::clipboard_history::default_history_path;
 use crate::emoji::Trigger;
 use crate::{
-    files_family, AppsPlugin, BookmarksPlugin, CalculatorPlugin, ClipboardPlugin, EmojiPlugin,
-    MediaPlugin, SelectionPlugin, ShellPlugin, SnippetsPlugin, SystemPlugin, TasksPlugin,
-    UuidPlugin, WebSearchPlugin,
+    files_family, AppsPlugin, BookmarksPlugin, CalculatorPlugin, ClipboardPlugin, ContactsPlugin,
+    DictionaryPlugin, EmojiPlugin, MediaPlugin, OnePasswordPlugin, SelectionPlugin, ShellPlugin,
+    SnippetsPlugin, SystemPlugin, TasksPlugin, UuidPlugin, WebSearchPlugin,
 };
 
 /// Builds the instances of one plugin family.
@@ -111,7 +111,8 @@ impl PluginRegistry {
 
     /// Apps, calculator, web search, files, bookmarks, system commands,
     /// automation tasks, media controls, shell, clipboard history, snippets,
-    /// emoji, Universal Actions and the example UUID plugin, in that order.
+    /// emoji, Universal Actions, contacts, 1Password, the dictionary and the
+    /// example UUID plugin, in that order.
     /// Order matters only for tie-breaking and logging.
     pub fn builtin() -> Self {
         let mut registry = Self::new();
@@ -253,6 +254,31 @@ impl PluginRegistry {
             |config, platform| vec![Arc::new(SelectionPlugin::new(config, platform.clone()))],
         ));
         registry.register(PluginDescriptor::new(
+            "contacts",
+            "Contacts",
+            "Type `c` or `@` to find people by name, email, phone or company. Off until [contacts] enabled = true.",
+            |config, platform| ContactsPlugin::instances(&config.contacts, platform.clone()),
+        ));
+        registry.register(PluginDescriptor::new(
+            "1password",
+            "1Password",
+            "Type `1p` to open a login's website or its 1Password item (titles only, never passwords). Needs the op tool; off until [onepassword] enabled = true.",
+            |config, platform| {
+                vec![Arc::new(OnePasswordPlugin::new(
+                    &config.onepassword,
+                    platform.clone(),
+                ))]
+            },
+        ));
+        registry.register(PluginDescriptor::new(
+            "dict",
+            "Dictionary and spelling",
+            "Type `define <word>` for definitions and `spell <word>` for corrections, offline.",
+            |config, platform| {
+                DictionaryPlugin::instances(&config.dictionary, &config.paste, platform.clone())
+            },
+        ));
+        registry.register(PluginDescriptor::new(
             "uuid",
             "UUID generator",
             "Type `uuid ` to generate random UUIDs; Enter copies one.",
@@ -373,6 +399,9 @@ mod tests {
                 "snippets",
                 "emoji",
                 "selection",
+                "contacts",
+                "1password",
+                "dict",
                 "uuid"
             ]
         );
@@ -401,6 +430,11 @@ mod tests {
                 "emoji:word",
                 "emoji:colon",
                 "selection",
+                "contacts",
+                "contacts:at",
+                "1password",
+                "dict",
+                "dict:spell",
                 "uuid"
             ]
         );
@@ -427,6 +461,11 @@ mod tests {
                 "emoji:word",
                 "emoji:colon",
                 "selection",
+                "contacts",
+                "contacts:at",
+                "1password",
+                "dict",
+                "dict:spell",
                 "uuid"
             ]
         );
@@ -453,7 +492,12 @@ mod tests {
                 "snippets",
                 "emoji:word",
                 "emoji:colon",
-                "selection"
+                "selection",
+                "contacts",
+                "contacts:at",
+                "1password",
+                "dict",
+                "dict:spell"
             ]
         );
     }
@@ -494,6 +538,11 @@ mod tests {
                 ("emoji:word", true),
                 ("emoji:colon", true),
                 ("selection", true),
+                ("contacts", true),
+                ("contacts:at", true),
+                ("1password", true),
+                ("dict", true),
+                ("dict:spell", true),
                 ("uuid", true),
             ]
         );

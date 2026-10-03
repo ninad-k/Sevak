@@ -216,6 +216,35 @@ ignore_apps = []       # e.g. ["KeePassXC", "1Password"]
 restore_clipboard = false   # put the previous clipboard text back after pasting
 ```
 
+### Contacts, 1Password and dictionary
+
+```toml
+[contacts]
+enabled = false        # opt-in: search contacts with "c <name>" or "@name"
+keyword = "c"          # the "@" keyword always works too
+use_system = true      # macOS Contacts, Windows People, Evolution (Linux)
+vcard_files = []       # .vcf files or folders of them, e.g. ["~/contacts.vcf"]
+
+[onepassword]
+enabled = false        # opt-in: "1p <text>" lists logins through the `op` tool
+keyword = "1p"
+op_path = ""           # path to `op`; empty searches PATH and the usual folders
+account = ""           # which account when several are signed in (address, name or ID)
+cache_minutes = 10     # how long the list of logins is kept in memory
+
+[dictionary]
+define_keyword = "define"
+spell_keyword = "spell"
+use_system = true      # false: always use the bundled English dictionary
+```
+
+Contacts and 1Password are off until `enabled = true`; the dictionary is on and
+is turned off with `dict` in `[plugins] disabled`. The settings window has no
+fields for these sections (edit them here); its plugin list can still switch the
+plugins off. Contacts and logins stay in memory. See
+[Contacts](usage.md#contacts), [1Password](usage.md#1password) and
+[Dictionary and spelling](usage.md#dictionary-and-spelling) for what each does.
+
 ### Snippets
 
 ```toml
@@ -320,7 +349,8 @@ An instance ID such as `web:yt` disables that engine. A family ID such as
 `files:content` are the `ff` and `in` searches), `bookmarks`, `system`,
 `tasks` (automation tasks), `media` (media controls), `shell`, `clipboard`,
 `snippets`, `emoji` (the emoji picker; `emoji:word` and `emoji:colon` are its
-two keywords), `selection` (Universal Actions) and `uuid`. Script plugins use
+two keywords), `selection` (Universal Actions), `contacts` (keywords `c` and
+`@`), `1password`, `dict` (`define` and `spell`) and `uuid`. Script plugins use
 `script:<name>`, or `script` for all of them.
 [Plugin details](plugins.md#registry-and-enablingdisabling).
 
@@ -364,6 +394,9 @@ available in the tray menu. Update installation requires your agreement.
 | `clipboard.images` / `files` / `max_image_bytes` | `true` / `true` / `10485760` | What the history records besides text (when it is on) |
 | `file_buffer.keep_between_shows` | `false` | Keep collected files when the launcher hides |
 | `paste.restore_clipboard` | `false` | Restore the clipboard after pasting |
+| `contacts.enabled` / `keyword` / `use_system` | `false` / `"c"` / `true` | Contacts are opt-in; `vcard_files` defaults to `[]` |
+| `onepassword.enabled` / `keyword` | `false` / `"1p"` | 1Password logins through `op`, opt-in; `cache_minutes` defaults to `10` |
+| `dictionary.define_keyword` / `spell_keyword` / `use_system` | `"define"` / `"spell"` / `true` | Offline dictionary and spelling |
 | `files.directories` | Desktop, Documents, Downloads under `~` | Replaced when explicitly set |
 | `files.max_depth` | `4` | Settings accepts 0–32 |
 | `files.include_hidden` | `false` | Include dot-files and dot-folders |

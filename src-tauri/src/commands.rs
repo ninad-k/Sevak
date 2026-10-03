@@ -80,6 +80,8 @@ pub struct ResultDto {
     pub text_view: bool,
     /// Enter opens the Text View instead of running the action.
     pub text_on_enter: bool,
+    /// What Ctrl+L shows as Large Type when it is not the title.
+    pub large_text: Option<String>,
 }
 
 /// A secondary action as the UI sees it; its payload stays in the shell.
@@ -133,6 +135,7 @@ pub(crate) fn to_dtos(icons: Vec<Option<IconDto>>, items: &[ResultItem]) -> Vec<
             },
             text_view: preview::has_text_view(item),
             text_on_enter: matches!(item.view, Some(ViewHint::Text { on_enter: true, .. })),
+            large_text: item.large_text.clone(),
         })
         .collect()
 }

@@ -87,6 +87,8 @@ export interface ResultDto {
   text_view?: boolean;
   /** Enter opens the Text View instead of running the action. */
   text_on_enter?: boolean;
+  /** What Ctrl+L shows as Large Type instead of the title (a phone number, say). */
+  large_text?: string | null;
 }
 
 export interface MetaRow {

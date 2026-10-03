@@ -45,6 +45,10 @@ pub struct ResultItem {
     /// [`ResultItem::with_view`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub view: Option<ViewHint>,
+    /// What Large Type (Ctrl+L) shows for this row instead of its title: a
+    /// phone number for a contact, say. `None` shows the title.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub large_text: Option<String>,
 }
 
 impl ResultItem {
@@ -67,6 +71,7 @@ impl ResultItem {
             autocomplete: None,
             preview: None,
             view: None,
+            large_text: None,
         }
     }
 
@@ -122,6 +127,13 @@ impl ResultItem {
     /// Whether this row asks to be a tile in the Grid View.
     pub fn is_tile(&self) -> bool {
         matches!(self.view, Some(ViewHint::Grid { .. }))
+    }
+
+    /// Sets the text Large Type shows (see [`ResultItem::large_text`]).
+    #[must_use]
+    pub fn with_large_text(mut self, text: impl Into<String>) -> Self {
+        self.large_text = Some(text.into());
+        self
     }
 
     /// Adds a secondary action. `modifier` is the key held with Enter to run it

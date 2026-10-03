@@ -21,11 +21,13 @@ tracing.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = [
+    "ApplicationModel_Contacts",
     "Devices_Radios",
     "Foundation",
     "Foundation_Collections",
     "Media_Control",
     "Win32_Foundation",
+    "Win32_Globalization",
     "Win32_Graphics_Dwm",
     "Win32_Graphics_Gdi",
     "Win32_Media_Audio",
@@ -68,16 +70,10 @@ objc2-app-kit = { version = "0.3", default-features = false, features = [
     "NSWorkspace",
     "objc2-core-graphics",
 ] }
-# NSFileManager.trashItemAtURL, for the file buffer's Move to Trash, and NSPoint
-# for the media key events.
-objc2-foundation = { version = "0.3", default-features = false, features = [
-    "std",
-    "NSError",
-    "NSFileManager",
-    "NSGeometry",
-    "NSString",
-    "NSURL",
-] }
+# NSFileManager.trashItemAtURL (the file buffer's Move to Trash), NSPoint (the
+# media key events) and the strings, arrays and errors of the Contacts framework.
+# The default features: the contacts code uses many of its classes.
+objc2-foundation = "0.3"
 objc2-core-graphics = { version = "0.3", default-features = false, features = [
     "std",
     "CGEvent",
@@ -85,6 +81,10 @@ objc2-core-graphics = { version = "0.3", default-features = false, features = [
     "CGEventTypes",
     "CGRemoteOperation",
 ] }
+
+# Contacts framework (CNContactStore) for the contacts plugin.
+block2 = "0.6"
+objc2-contacts = "0.3"
 
 [target.'cfg(windows)'.dev-dependencies]
 tempfile = "3"

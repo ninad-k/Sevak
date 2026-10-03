@@ -52,6 +52,9 @@ Intel), open it and drag Sevak into Applications.
   and say "Copies to clipboard". If you update Sevak and pasting stops, remove
   Sevak from that list and add it again (the build is ad-hoc signed, so macOS
   may treat each version as a new app).
+- The optional contacts plugin (`[contacts] enabled = true`) asks for access to
+  your contacts the first time you press Enter on its "Allow" row; nothing is
+  asked at startup. Change the answer under **Privacy & Security → Contacts**.
 
 ## Ubuntu 22.04+ / Debian
 
