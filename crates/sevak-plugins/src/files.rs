@@ -169,7 +169,7 @@ fn subtitle(path: &Path, home: Option<&Path>) -> String {
     parent.display().to_string()
 }
 
-fn home_dir() -> Option<PathBuf> {
+pub(crate) fn home_dir() -> Option<PathBuf> {
     let vars: [&str; 2] = if cfg!(windows) {
         ["USERPROFILE", "HOME"]
     } else {

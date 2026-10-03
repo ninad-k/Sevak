@@ -28,6 +28,9 @@ npm run tauri dev          # run with hot reload
 
 To add a result source, read [docs/plugins.md](docs/plugins.md); the `uuid`
 plugin (`crates/sevak-plugins/src/example_uuid.rs`) is a complete worked example.
+If you would rather not write Rust, a script plugin needs only a `plugin.toml`
+and a script; see [External plugins](docs/plugins.md#external-plugins) and the
+examples in `examples/plugins/`.
 
 ## Making a change
 

@@ -48,6 +48,7 @@ export const EVENT_SHOW = "sevak:show";
 export const EVENT_HIDDEN = "sevak:hidden";
 export const EVENT_STATUS = "sevak:status";
 export const EVENT_INDEX = "sevak:index";
+export const EVENT_RESULTS = "sevak:results";
 
 /** Hide the launcher window. */
 export async function hideWindow(): Promise<void> {
@@ -141,6 +142,14 @@ export function onHidden(cb: () => void): Promise<UnlistenFn> {
 /** Config reloaded / hotkey status changed. */
 export function onStatus(cb: (status: Status) => void): Promise<UnlistenFn> {
   return safeListen<Status>(EVENT_STATUS, cb);
+}
+
+/**
+ * A slow plugin (a script plugin) has answers for the query on screen: run the
+ * query again to pick them up.
+ */
+export function onResultsUpdated(cb: () => void): Promise<UnlistenFn> {
+  return safeListen<string>(EVENT_RESULTS, () => cb());
 }
 
 /** The search index started or finished (re)building. */

@@ -45,7 +45,7 @@ use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::model::{score, ResultItem};
-use crate::plugin::{Plugin, PluginError, PluginResult};
+use crate::plugin::{Plugin, PluginError, PluginResult, ResultsNotifier};
 use crate::usage::{normalize_query, UsageStore};
 
 /// Score multiplier for results of keyword plugins that answer global queries.
@@ -308,6 +308,20 @@ impl SearchEngine {
     /// A copy of the usage statistics, to save from another thread.
     pub fn usage_snapshot(&self) -> UsageStore {
         self.usage_read().clone()
+    }
+
+    /// Gives every plugin the shell's "results updated" callback.
+    pub fn attach_notifier(&self, notifier: &ResultsNotifier) {
+        for plugin in &self.plugins {
+            plugin.attach_notifier(Arc::clone(notifier));
+        }
+    }
+
+    /// Asks every plugin to stop its background work (called when quitting).
+    pub fn shutdown(&self) {
+        for plugin in &self.plugins {
+            let _ = guarded(plugin.as_ref(), "shutdown", || plugin.shutdown());
+        }
     }
 
     /// Refreshes every plugin one after another; returns the failures.
@@ -811,6 +825,67 @@ mod tests {
         assert!(e.plugin("app").is_some());
         assert!(e.plugin("nope").is_none());
         assert_eq!(e.plugins().len(), 1);
+    }
+
+    /// A plugin that records the notifier it was given and whether it was shut down.
+    #[derive(Default)]
+    struct Slow {
+        notifier: Mutex<Option<ResultsNotifier>>,
+        shut_down: AtomicUsize,
+        panic_on_shutdown: bool,
+    }
+
+    impl Plugin for Slow {
+        fn id(&self) -> &str {
+            "slow"
+        }
+        fn name(&self) -> &str {
+            "Slow"
+        }
+        fn keyword(&self) -> Option<&str> {
+            Some("slow")
+        }
+        fn query(&self, _input: &str) -> Vec<ResultItem> {
+            Vec::new()
+        }
+        fn execute(&self, item: &ResultItem) -> PluginResult<()> {
+            Err(PluginError::Unsupported(item.id.clone()))
+        }
+        fn attach_notifier(&self, notifier: ResultsNotifier) {
+            *self.notifier.lock().unwrap() = Some(notifier);
+        }
+        fn shutdown(&self) {
+            self.shut_down.fetch_add(1, AtomicOrdering::SeqCst);
+            assert!(!self.panic_on_shutdown, "boom");
+        }
+    }
+
+    #[test]
+    fn the_notifier_reaches_every_plugin_and_shutdown_survives_a_panic() {
+        let slow = Arc::new(Slow::default());
+        let crashing = Arc::new(Slow {
+            panic_on_shutdown: true,
+            ..Slow::default()
+        });
+        let plain = Mock::new("plain", |_| Vec::new()).arc();
+        let plugins: Vec<Arc<dyn Plugin>> = vec![slow.clone(), crashing.clone(), plain];
+        let e = SearchEngine::new(plugins, UsageStore::default(), EngineOptions::default());
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = Arc::clone(&calls);
+        let notifier: ResultsNotifier = Arc::new(move |id| {
+            assert_eq!(id, "slow");
+            seen.fetch_add(1, AtomicOrdering::SeqCst);
+        });
+        e.attach_notifier(&notifier);
+        let attached = slow.notifier.lock().unwrap().clone().unwrap();
+        attached("slow");
+        assert_eq!(calls.load(AtomicOrdering::SeqCst), 1);
+        assert!(crashing.notifier.lock().unwrap().is_some());
+
+        e.shutdown();
+        assert_eq!(slow.shut_down.load(AtomicOrdering::SeqCst), 1);
+        assert_eq!(crashing.shut_down.load(AtomicOrdering::SeqCst), 1);
     }
 
     #[test]

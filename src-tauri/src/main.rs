@@ -8,6 +8,7 @@ mod commands;
 mod hotkey;
 mod icons;
 mod logging;
+mod script_plugins;
 mod search;
 mod settings;
 mod state;

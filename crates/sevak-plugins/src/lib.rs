@@ -8,6 +8,9 @@
 //! | `files`          | [`FilesPlugin`]                         | config  | config |
 //! | `uuid`           | [`UuidPlugin`] (a tutorial example)     | `uuid`  | no     |
 //!
+//! Script plugins (`script:<name>`, from `<config dir>/plugins/`) are loaded by
+//! [`ScriptPluginHost`]; see [`script`].
+//!
 //! [`PluginRegistry`] knows these families; [`builtin_plugins`] builds the set
 //! for a [`Config`], honouring `[plugins] disabled`, and
 //! [`PluginRegistry::catalog`] lists them for settings. See `docs/plugins.md`.
@@ -23,6 +26,7 @@ pub mod calculator;
 pub mod example_uuid;
 pub mod files;
 pub mod registry;
+pub mod script;
 pub mod web_search;
 
 #[cfg(test)]
@@ -34,6 +38,7 @@ pub use calculator::CalculatorPlugin;
 pub use example_uuid::UuidPlugin;
 pub use files::FilesPlugin;
 pub use registry::{PluginDescriptor, PluginFactory, PluginInfo, PluginRegistry};
+pub use script::{ScriptPlugin, ScriptPluginHost};
 pub use web_search::WebSearchPlugin;
 
 /// Instantiates every enabled built-in plugin (`apps`, `calculator`, one

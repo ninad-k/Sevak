@@ -16,5 +16,5 @@ pub use config::{Config, ConfigError, ConfigOrigin, GeneralConfig, LinuxConfig, 
 pub use engine::{EngineOptions, SearchEngine};
 pub use fuzzy::FuzzyQuery;
 pub use model::{Action, AppEntry, IconData, IconSource, LaunchTarget, ResultItem};
-pub use plugin::{Plugin, PluginError, PluginResult};
+pub use plugin::{Plugin, PluginError, PluginResult, ResultsNotifier};
 pub use usage::{UsageEntry, UsageError, UsageStore};

@@ -1,0 +1,16 @@
+# A persistent Sevak plugin written in Python. Type "hello" and a space, then a name.
+#
+# Install: copy this folder into the plugins folder next to config.toml
+# (Windows: %APPDATA%\sevak\plugins, Linux: ~/.config/sevak/plugins, macOS:
+# ~/Library/Application Support/sevak/plugins), then choose "Reload index" in
+# Sevak's tray menu. Sevak asks once whether to allow it.
+protocol    = 1
+id          = "script:hello"
+name        = "Hello (Python)"
+description = "Greets whoever you type. A persistent Python plugin example."
+keyword     = "hello"
+
+# "script" runs main.py with a Python interpreter found on PATH
+# (py -3 on Windows, python3 elsewhere). Use `command = ["python3", "main.py"]`
+# to pick one yourself.
+script      = "main.py"

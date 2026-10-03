@@ -79,7 +79,8 @@ pub struct SettingsDto {
 pub async fn get_settings(app: AppHandle) -> SettingsDto {
     let state = app.state::<AppState>();
     let config = state.config();
-    let catalog = PluginRegistry::builtin().catalog(&config, state.search.platform.clone());
+    let mut catalog = PluginRegistry::builtin().catalog(&config, state.search.platform.clone());
+    catalog.extend(state.search.scripts.catalog(&config));
     SettingsDto {
         config,
         catalog,

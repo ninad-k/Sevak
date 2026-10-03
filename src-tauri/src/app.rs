@@ -141,5 +141,6 @@ pub fn apply_theme(app: &AppHandle) {
 pub fn quit(app: &AppHandle) {
     tracing::info!("quitting");
     search::save_usage(app);
+    search::shutdown(app);
     app.exit(0);
 }

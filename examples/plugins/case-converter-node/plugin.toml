@@ -1,0 +1,16 @@
+# An Alfred-style plugin: a Node script that prints Alfred Script Filter JSON.
+# Type "case" and a space, then some words: "case user account id".
+#
+# mode = "oneshot" runs the script for every query with the query as an
+# argument (Alfred's "with input as argv"); format = "alfred" tells Sevak to
+# read Script Filter JSON. Plain-text `arg` values are copied on Enter, URLs
+# open in the browser. The same plugin.toml turns many existing Alfred
+# Script Filters into Sevak plugins; see docs/plugins.md.
+protocol    = 1
+id          = "script:case"
+name        = "Case converter (Node, Alfred format)"
+description = "Rewrites the words you type as camelCase, snake_case, kebab-case and more."
+keyword     = "case"
+mode        = "oneshot"
+format      = "alfred"
+script      = "convert.js"

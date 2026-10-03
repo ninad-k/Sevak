@@ -43,6 +43,79 @@ fn apply_child_env(command: &mut Command, xwayland_forced: bool) {
     }
 }
 
+/// Prepares a long-lived helper child that Sevak talks to over pipes (a script
+/// plugin): the same child environment as [`spawn_detached`], and on Windows no
+/// console window, which would otherwise flash for every console program.
+pub fn configure_helper_command(command: &mut Command) {
+    apply_child_env(command, crate::session::xwayland_forced());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+}
+
+/// How to run a script file, by its extension.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ScriptRunner {
+    /// Run `<command...> <script path>`; the command is on `PATH`.
+    Interpreter(Vec<String>),
+    /// No interpreter is needed: start the file itself (an executable, a batch
+    /// file, or a script with a shebang line on Unix).
+    Direct,
+    /// The extension needs an interpreter and none of these is installed.
+    Missing(Vec<String>),
+}
+
+/// Picks how to run a script file with extension `extension` (no dot, any
+/// case). Python runs unbuffered (`-u`), so output reaches Sevak without the
+/// script having to flush.
+pub fn script_runner(extension: &str) -> ScriptRunner {
+    let candidates = interpreter_candidates(extension, cfg!(windows));
+    if candidates.is_empty() {
+        return ScriptRunner::Direct;
+    }
+    let names = candidates.iter().map(|c| c[0].to_owned()).collect();
+    candidates
+        .into_iter()
+        .find(|candidate| find_in_path(candidate[0]).is_some())
+        .map_or(ScriptRunner::Missing(names), |candidate| {
+            ScriptRunner::Interpreter(candidate.into_iter().map(str::to_owned).collect())
+        })
+}
+
+/// The interpreters to try for `extension`, best first. On Windows `python` and
+/// `python3` may be Microsoft Store stubs that open the Store instead of
+/// running anything, so the `py` launcher (which only exists for a real Python
+/// install) goes first.
+fn interpreter_candidates(extension: &str, windows: bool) -> Vec<Vec<&'static str>> {
+    match (extension.to_ascii_lowercase().as_str(), windows) {
+        ("py", true) => vec![
+            vec!["py", "-3", "-u"],
+            vec!["python", "-u"],
+            vec!["python3", "-u"],
+        ],
+        ("py", false) => vec![vec!["python3", "-u"], vec!["python", "-u"]],
+        ("ps1", true) => vec![
+            vec!["pwsh", "-NoProfile", "-NonInteractive", "-File"],
+            vec![
+                "powershell",
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+            ],
+        ],
+        ("ps1", false) => vec![vec!["pwsh", "-NoProfile", "-NonInteractive", "-File"]],
+        ("js" | "mjs" | "cjs", _) => vec![vec!["node"]],
+        ("sh", false) => vec![vec!["sh"]],
+        _ => Vec::new(),
+    }
+}
+
 fn detached_command<S: AsRef<OsStr>>(program: &str, args: &[S], cwd: Option<&Path>) -> Command {
     let mut command = Command::new(program);
     command
@@ -171,6 +244,25 @@ mod tests {
         };
         assert!(removed(true));
         assert!(!removed(false));
+    }
+
+    #[test]
+    fn interpreter_by_extension() {
+        let first = |ext, windows| interpreter_candidates(ext, windows).remove(0);
+        assert_eq!(first("py", true), ["py", "-3", "-u"]);
+        assert_eq!(first("PY", false), ["python3", "-u"]);
+        assert_eq!(first("js", true), ["node"]);
+        assert_eq!(first("ps1", true)[0], "pwsh");
+        assert!(interpreter_candidates("sh", true).is_empty());
+        assert!(interpreter_candidates("exe", true).is_empty());
+        assert!(interpreter_candidates("", false).is_empty());
+        assert_eq!(script_runner("exe"), ScriptRunner::Direct);
+        // Whatever is found must be a command that exists.
+        match script_runner("py") {
+            ScriptRunner::Interpreter(argv) => assert!(find_in_path(&argv[0]).is_some()),
+            ScriptRunner::Missing(names) => assert!(!names.is_empty()),
+            ScriptRunner::Direct => panic!("python scripts need an interpreter"),
+        }
     }
 
     #[test]
