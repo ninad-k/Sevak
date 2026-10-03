@@ -62,7 +62,7 @@ theme = "system"
 
 [plugins]
 # Ids of built-in plugins to turn off: "apps", "calculator", "files",
-# "bookmarks", "system", "shell", "web:<keyword>".
+# "bookmarks", "system", "shell", "clipboard", "snippets", "web:<keyword>".
 disabled = []
 
 [calculator]
@@ -118,6 +118,33 @@ shell = ""
 # Leave the terminal open, at a shell prompt, after the command exits.
 keep_open = true
 
+[paste]
+# Clipboard history and snippets paste into the app you were using before Sevak
+# opened. With this on, the clipboard's previous text is put back afterwards.
+restore_clipboard = false
+
+[clipboard]
+# Clipboard history ("cb <text>"). Off by default: turning it on makes Sevak
+# watch the clipboard and keep copied text in clipboard-history.json in its data
+# folder. Text only. Content that apps mark as secret (password managers) is
+# never recorded.
+enabled = false
+# Items kept (the oldest are dropped).
+max_items = 200
+# Longer text is not recorded.
+max_item_bytes = 65536
+# Never record text copied from these apps, e.g. ["KeePassXC", "1Password"].
+# Matched case-insensitively against the program or app name.
+ignore_apps = []
+
+# Snippets ("s <name>"): text you paste often. Placeholders: {date}, {time},
+# {datetime}, {date:%d %B %Y}, {clipboard}, {uuid}; write {{ and }} for literal
+# braces. "keyword" is optional and also matches the search.
+# [[snippet]]
+# name = "Email signature"
+# keyword = "sig"
+# text = "Best regards,\nNinad"
+
 # Web search engines: type "<keyword> <terms>". "{query}" is replaced by the
 # URL-encoded terms. Defining any [[web_search]] entry replaces this list.
 [[web_search]]
@@ -136,6 +163,8 @@ name = "GitHub"
 url = "https://github.com/search?q={query}"
 "#;
 
+pub const MAX_CLIPBOARD_ITEMS_LIMIT: usize = 5_000;
+pub const MAX_CLIPBOARD_ITEM_BYTES_LIMIT: usize = 4 * 1024 * 1024;
 pub const MIN_WINDOW_WIDTH: u32 = 400;
 pub const MAX_WINDOW_WIDTH: u32 = 1600;
 pub const MAX_RESULTS_LIMIT: usize = 20;
@@ -154,6 +183,11 @@ pub struct Config {
     pub bookmarks: BookmarksConfig,
     pub system: SystemConfig,
     pub shell: ShellConfig,
+    pub paste: PasteConfig,
+    pub clipboard: ClipboardConfig,
+    /// `[[snippet]]` entries. Edited by hand only: saves from the settings
+    /// window leave them untouched (see `merge_document`).
+    pub snippet: Vec<Snippet>,
     pub web_search: Vec<WebSearchEngine>,
 }
 
@@ -171,6 +205,9 @@ impl Default for Config {
             bookmarks: BookmarksConfig::default(),
             system: SystemConfig::default(),
             shell: ShellConfig::default(),
+            paste: PasteConfig::default(),
+            clipboard: ClipboardConfig::default(),
+            snippet: Vec::new(),
             web_search: WebSearchEngine::defaults(),
         }
     }
@@ -411,6 +448,38 @@ impl Default for ShellConfig {
     }
 }
 
+/// How text is pasted into the previously focused app.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PasteConfig {
+    /// Put the clipboard's previous text back after pasting.
+    pub restore_clipboard: bool,
+}
+
+/// The clipboard history plugin (`cb`). Opt-in: nothing is watched or stored
+/// unless `enabled` is set.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ClipboardConfig {
+    pub enabled: bool,
+    pub max_items: usize,
+    /// Text longer than this many bytes is not recorded.
+    pub max_item_bytes: usize,
+    /// Apps whose copies are never recorded (program or app names).
+    pub ignore_apps: Vec<String>,
+}
+
+impl Default for ClipboardConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            max_items: 200,
+            max_item_bytes: 64 * 1024,
+            ignore_apps: Vec::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SystemConfig {
@@ -457,6 +526,17 @@ impl Default for BookmarksConfig {
             global: true,
         }
     }
+}
+
+/// One `[[snippet]]`: text pasted on demand, with placeholders expanded.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Snippet {
+    pub name: String,
+    /// Extra word the snippet is found by (`s sig`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub keyword: Option<String>,
+    pub text: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -618,6 +698,24 @@ impl Config {
             .retain(|engine| !engine.keyword.trim().is_empty() && engine.url.contains("{query}"));
         self.shell.terminal = self.shell.terminal.trim().to_owned();
         self.shell.shell = self.shell.shell.trim().to_owned();
+        self.clipboard.max_items = self.clipboard.max_items.clamp(1, MAX_CLIPBOARD_ITEMS_LIMIT);
+        self.clipboard.max_item_bytes = self
+            .clipboard
+            .max_item_bytes
+            .clamp(1, MAX_CLIPBOARD_ITEM_BYTES_LIMIT);
+        self.clipboard
+            .ignore_apps
+            .retain(|app| !app.trim().is_empty());
+        // A snippet needs a name to be found by and text to paste.
+        self.snippet
+            .retain(|snippet| !snippet.name.trim().is_empty() && !snippet.text.is_empty());
+        for snippet in &mut self.snippet {
+            snippet.keyword = snippet
+                .keyword
+                .take()
+                .map(|keyword| keyword.trim().to_owned())
+                .filter(|keyword| !keyword.is_empty());
+        }
         let hotkey = self.general.hotkey.trim();
         self.general.hotkey = if hotkey.is_empty() {
             GeneralConfig::default().hotkey
@@ -630,12 +728,18 @@ impl Config {
 
 /// Key of the one array of tables in the schema.
 const WEB_SEARCH_KEY: &str = "web_search";
+/// `[[snippet]]` is edited by hand only; the settings window never changes it,
+/// so saving leaves the user's entries exactly as written.
+const SNIPPET_KEY: &str = "snippet";
 
 /// Applies `updated` (a freshly serialized config) onto `document`.
 fn merge_document(document: &mut toml_edit::DocumentMut, updated: &toml_edit::DocumentMut) {
     use toml_edit::Item;
 
     for (key, new_item) in updated.as_table() {
+        if key == SNIPPET_KEY {
+            continue;
+        }
         if key == WEB_SEARCH_KEY {
             merge_web_search(document.as_table_mut(), new_item);
             continue;
@@ -893,6 +997,61 @@ url = "https://example.com"
     }
 
     #[test]
+    fn clipboard_is_opt_in_and_paste_keeps_the_clipboard_by_default() {
+        let config = Config::default();
+        assert!(!config.clipboard.enabled);
+        assert_eq!(config.clipboard.max_items, 200);
+        assert!(!config.paste.restore_clipboard);
+        assert!(config.snippet.is_empty());
+    }
+
+    #[test]
+    fn clipboard_and_paste_sections_parse_and_are_clamped() {
+        let config = Config::from_toml_str(
+            "[paste]\nrestore_clipboard = true\n[clipboard]\nenabled = true\nmax_items = 0\n\
+             max_item_bytes = 999999999\nignore_apps = [\"KeePassXC\", \"  \"]\n",
+        )
+        .unwrap();
+        assert!(config.paste.restore_clipboard);
+        assert!(config.clipboard.enabled);
+        assert_eq!(config.clipboard.max_items, 1);
+        assert_eq!(
+            config.clipboard.max_item_bytes,
+            MAX_CLIPBOARD_ITEM_BYTES_LIMIT
+        );
+        assert_eq!(config.clipboard.ignore_apps, ["KeePassXC"]);
+    }
+
+    #[test]
+    fn snippets_parse_and_incomplete_ones_are_dropped() {
+        let config = Config::from_toml_str(
+            r#"
+[[snippet]]
+name = "Signature"
+keyword = " sig "
+text = "Regards\nNinad"
+
+[[snippet]]
+name = "No keyword"
+text = "x"
+
+[[snippet]]
+name = "  "
+text = "nameless"
+
+[[snippet]]
+name = "Empty"
+text = ""
+"#,
+        )
+        .unwrap();
+        assert_eq!(config.snippet.len(), 2);
+        assert_eq!(config.snippet[0].keyword.as_deref(), Some("sig"));
+        assert_eq!(config.snippet[0].text, "Regards\nNinad");
+        assert_eq!(config.snippet[1].keyword, None);
+    }
+
+    #[test]
     fn out_of_range_values_are_normalized() {
         let config =
             Config::from_toml_str("[general]\nhotkey = \"  \"\n[window]\nwidth = 10\n").unwrap();
@@ -1131,6 +1290,23 @@ thing = true
         assert!(text.contains("hide_on_blur = true"));
         assert!(text.contains("[window]\nwidth = 720"));
         assert_eq!(Config::from_toml_str(&text).unwrap(), Config::default());
+    }
+
+    #[test]
+    fn hand_written_snippets_survive_a_save() {
+        let existing = format!(
+            "{DEFAULT_CONFIG_TOML}\n[[snippet]]\nname = \"Sig\"   # mine\ntext = \"Hi\\nthere\"\n"
+        );
+        let mut config = Config::from_toml_str(&existing).unwrap();
+        config.clipboard.enabled = true;
+        let text = saved(Some(&existing), &config);
+
+        assert!(text.contains("name = \"Sig\"   # mine"));
+        assert!(text.contains("text = \"Hi\\nthere\""));
+        assert_eq!(text.matches("[[snippet]]").count(), 2); // the template's comment + ours
+        let reloaded = Config::from_toml_str(&text).unwrap();
+        assert!(reloaded.clipboard.enabled);
+        assert_eq!(reloaded.snippet, config.snippet);
     }
 
     #[test]

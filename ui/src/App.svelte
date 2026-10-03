@@ -445,6 +445,8 @@
         return "Launch";
       case "copy_text":
         return "Copy";
+      case "paste_text":
+        return "Paste";
       case "custom":
         return "Run";
       case "reveal_path":

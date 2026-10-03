@@ -61,8 +61,8 @@ pub struct ResultDto {
     pub plugin_id: String,
     /// What Tab turns the input into, when the plugin offers a completion.
     pub autocomplete: Option<String>,
-    /// `launch`, `open_path`, `open_url`, `copy_text`, `reveal_path`,
-    /// `run_as_admin` or `custom`.
+    /// `launch`, `open_path`, `open_url`, `copy_text`, `paste_text`,
+    /// `reveal_path`, `run_as_admin` or `custom`.
     pub action: &'static str,
     /// Secondary actions, in the order `execute`'s `action` index refers to.
     pub secondary: Vec<SecondaryDto>,
@@ -84,6 +84,7 @@ fn action_kind(action: &Action) -> &'static str {
         Action::OpenPath { .. } => "open_path",
         Action::OpenUrl { .. } => "open_url",
         Action::CopyText { .. } => "copy_text",
+        Action::PasteText { .. } => "paste_text",
         Action::Custom { .. } => "custom",
         Action::RevealPath { .. } => "reveal_path",
         Action::RunAsAdmin { .. } => "run_as_admin",
@@ -193,7 +194,8 @@ pub async fn copy_result(app: AppHandle, id: String, ticket: u64) -> Result<(), 
     Ok(())
 }
 
-/// Whether the action leaves Sevak for another program.
+/// Whether the action leaves Sevak for another program. Pasting does too: the
+/// window must be gone before the previous app is refocused and gets Ctrl+V.
 fn hands_over(action: &Action) -> bool {
     matches!(
         action,
@@ -202,6 +204,7 @@ fn hands_over(action: &Action) -> bool {
             | Action::OpenUrl { .. }
             | Action::RevealPath { .. }
             | Action::RunAsAdmin { .. }
+            | Action::PasteText { .. }
     )
 }
 

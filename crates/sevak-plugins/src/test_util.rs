@@ -4,7 +4,10 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use sevak_core::{AppEntry, IconData, IconSource, LaunchTarget, ShellConfig};
-use sevak_platform::{PlatformError, PlatformProvider, Result, SettingsPage, SystemCommand};
+use sevak_platform::{
+    ClipboardRead, ForegroundApp, PasteOutcome, PasteSupport, PlatformError, PlatformProvider,
+    Result, SettingsPage, SystemCommand,
+};
 
 #[derive(Default)]
 pub struct MockPlatform {
@@ -23,6 +26,16 @@ pub struct MockPlatform {
     pub ran_commands: Mutex<Vec<SystemCommand>>,
     pub opened_settings: Mutex<Vec<SettingsPage>>,
     pub terminal_runs: Mutex<Vec<(String, ShellConfig)>>,
+    /// `(text, restore_clipboard)` of every paste.
+    pub pasted: Mutex<Vec<(String, bool)>>,
+    /// When set, pasting is unavailable for this reason.
+    pub copy_only: Mutex<Option<String>>,
+    /// What `clipboard_text` returns (the `{clipboard}` placeholder).
+    pub clipboard_now: Mutex<Option<String>>,
+    pub foreground: Mutex<Option<ForegroundApp>>,
+    pub clipboard_sequence: Mutex<Option<u64>>,
+    /// What `read_clipboard` returns; `None` makes it fail like a busy clipboard.
+    pub clipboard_read: Mutex<Option<ClipboardRead>>,
 }
 
 impl MockPlatform {
@@ -113,5 +126,40 @@ impl PlatformProvider for MockPlatform {
     fn open_settings_page(&self, page: SettingsPage) -> Result<()> {
         self.opened_settings.lock().unwrap().push(page);
         Ok(())
+    }
+
+    fn clipboard_text(&self) -> Result<Option<String>> {
+        Ok(self.clipboard_now.lock().unwrap().clone())
+    }
+
+    fn foreground_app(&self) -> Option<ForegroundApp> {
+        self.foreground.lock().unwrap().clone()
+    }
+
+    fn paste_support(&self) -> PasteSupport {
+        match self.copy_only.lock().unwrap().clone() {
+            Some(reason) => PasteSupport::CopyOnly(reason),
+            None => PasteSupport::Available,
+        }
+    }
+
+    fn paste_text(&self, text: &str, restore_clipboard: bool) -> Result<PasteOutcome> {
+        self.pasted
+            .lock()
+            .unwrap()
+            .push((text.to_owned(), restore_clipboard));
+        Ok(PasteOutcome::Pasted)
+    }
+
+    fn clipboard_sequence(&self) -> Option<u64> {
+        *self.clipboard_sequence.lock().unwrap()
+    }
+
+    fn read_clipboard(&self) -> Result<ClipboardRead> {
+        self.clipboard_read
+            .lock()
+            .unwrap()
+            .clone()
+            .ok_or(PlatformError::Unsupported("a busy clipboard"))
     }
 }

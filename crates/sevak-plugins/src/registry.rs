@@ -27,9 +27,10 @@ use serde::Serialize;
 use sevak_core::{Config, Plugin};
 use sevak_platform::PlatformProvider;
 
+use crate::clipboard_history::default_history_path;
 use crate::{
-    AppsPlugin, BookmarksPlugin, CalculatorPlugin, FilesPlugin, ShellPlugin, SystemPlugin,
-    UuidPlugin, WebSearchPlugin,
+    AppsPlugin, BookmarksPlugin, CalculatorPlugin, ClipboardPlugin, FilesPlugin, ShellPlugin,
+    SnippetsPlugin, SystemPlugin, UuidPlugin, WebSearchPlugin,
 };
 
 /// Builds the instances of one plugin family.
@@ -106,8 +107,9 @@ impl PluginRegistry {
         Self::default()
     }
 
-    /// Apps, calculator, web search, files, bookmarks and the example UUID plugin, in that
-    /// order. Order matters only for tie-breaking and logging.
+    /// Apps, calculator, web search, files, bookmarks, system commands, shell,
+    /// clipboard history, snippets and the example UUID plugin, in that order.
+    /// Order matters only for tie-breaking and logging.
     pub fn builtin() -> Self {
         let mut registry = Self::new();
         registry.register(PluginDescriptor::new(
@@ -176,6 +178,31 @@ impl PluginRegistry {
             |config, platform| {
                 vec![Arc::new(ShellPlugin::new(
                     config.shell.clone(),
+                    platform.clone(),
+                ))]
+            },
+        ));
+        registry.register(PluginDescriptor::new(
+            "clipboard",
+            "Clipboard history",
+            "Type `cb` to paste text you copied earlier. Off until [clipboard] enabled = true.",
+            |config, platform| {
+                vec![Arc::new(ClipboardPlugin::new(
+                    &config.clipboard,
+                    &config.paste,
+                    platform.clone(),
+                    default_history_path(),
+                ))]
+            },
+        ));
+        registry.register(PluginDescriptor::new(
+            "snippets",
+            "Snippets",
+            "Type `s` to paste text from your [[snippet]] entries, with {date}, {clipboard} and more.",
+            |config, platform| {
+                vec![Arc::new(SnippetsPlugin::new(
+                    &config.snippet,
+                    &config.paste,
                     platform.clone(),
                 ))]
             },
@@ -295,6 +322,8 @@ mod tests {
                 "bookmarks",
                 "system",
                 "shell",
+                "clipboard",
+                "snippets",
                 "uuid"
             ]
         );
@@ -314,6 +343,8 @@ mod tests {
                 "bookmarks",
                 "system",
                 "shell",
+                "clipboard",
+                "snippets",
                 "uuid"
             ]
         );
@@ -331,6 +362,8 @@ mod tests {
                 "bookmarks",
                 "system",
                 "shell",
+                "clipboard",
+                "snippets",
                 "uuid"
             ]
         );
@@ -348,7 +381,9 @@ mod tests {
                 "web:gh",
                 "files",
                 "bookmarks",
-                "shell"
+                "shell",
+                "clipboard",
+                "snippets"
             ]
         );
     }
@@ -356,7 +391,7 @@ mod tests {
     #[test]
     fn unknown_disabled_ids_are_ignored() {
         let config = config_disabling(&["nope"]);
-        assert_eq!(ids(&PluginRegistry::builtin(), &config).len(), 10);
+        assert_eq!(ids(&PluginRegistry::builtin(), &config).len(), 12);
     }
 
     #[test]
@@ -376,6 +411,8 @@ mod tests {
                 ("bookmarks", true),
                 ("system", true),
                 ("shell", true),
+                ("clipboard", true),
+                ("snippets", true),
                 ("uuid", true),
             ]
         );

@@ -166,6 +166,14 @@ pub enum Action {
     CopyText {
         text: String,
     },
+    /// Types `text` into the app that had focus before Sevak opened (copy,
+    /// hide Sevak, refocus that app, Ctrl+V / Cmd+V). Where pasting is not
+    /// possible the text is only copied; see `PlatformProvider::paste_support`.
+    PasteText {
+        text: String,
+        /// Put the clipboard's previous text back afterwards (`[paste]`).
+        restore_clipboard: bool,
+    },
     /// Plugin-defined; only the owning plugin's `execute` understands it.
     Custom {
         payload: String,
@@ -183,9 +191,10 @@ pub enum Action {
 
 impl Action {
     /// The text most worth copying for this action; see [`ResultItem::copy_text`].
+    /// For `PasteText` that is the text it would paste.
     pub fn copy_text(&self) -> Option<String> {
         match self {
-            Self::CopyText { text } => Some(text.clone()),
+            Self::CopyText { text } | Self::PasteText { text, .. } => Some(text.clone()),
             Self::OpenUrl { url } => Some(url.clone()),
             Self::OpenPath { path } | Self::RevealPath { path } => {
                 Some(path.to_string_lossy().into_owned())
@@ -350,6 +359,14 @@ mod tests {
             Some("8")
         );
         assert_eq!(
+            text(Action::PasteText {
+                text: "hi".into(),
+                restore_clipboard: true
+            })
+            .as_deref(),
+            Some("hi")
+        );
+        assert_eq!(
             text(Action::OpenUrl {
                 url: "https://a.b/?q=1".into()
             })
@@ -402,5 +419,17 @@ mod tests {
     fn action_serializes_with_type_tag() {
         let json = serde_json::to_string(&Action::CopyText { text: "4".into() }).unwrap();
         assert_eq!(json, r#"{"type":"copy_text","text":"4"}"#);
+    }
+
+    #[test]
+    fn paste_action_serializes_with_type_tag() {
+        let action = Action::PasteText {
+            text: "hi".into(),
+            restore_clipboard: true,
+        };
+        assert_eq!(
+            serde_json::to_string(&action).unwrap(),
+            r#"{"type":"paste_text","text":"hi","restore_clipboard":true}"#
+        );
     }
 }

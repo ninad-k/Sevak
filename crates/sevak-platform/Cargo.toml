@@ -23,16 +23,42 @@ windows = { workspace = true, features = [
     "Win32_Storage_FileSystem",
     "Win32_System_Com",
     "Win32_System_Console",
+    "Win32_System_DataExchange",
+    "Win32_System_Memory",
     "Win32_System_Power",
     "Win32_System_Registry",
     "Win32_System_Shutdown",
+    "Win32_System_Threading",
+    "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",
     "Win32_UI_Shell_Common",
     "Win32_UI_WindowsAndMessaging",
 ] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# Pure-Rust X11 client (already pulled in by arboard): active window and the
+# XTest extension for the paste keystroke.
+x11rb = { version = "0.13", features = ["xtest"] }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 plist = "1"
+# Frontmost app, pasteboard types and the Cmd+V key event (all already in the
+# dependency tree through arboard).
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = [
+    "std",
+    "libc",
+    "NSPasteboard",
+    "NSRunningApplication",
+    "NSWorkspace",
+] }
+objc2-core-graphics = { version = "0.3", default-features = false, features = [
+    "std",
+    "CGEvent",
+    "CGEventSource",
+    "CGEventTypes",
+    "CGRemoteOperation",
+] }
 
 [target.'cfg(windows)'.dev-dependencies]
 tempfile = "3"

@@ -13,7 +13,8 @@ pub mod plugin;
 pub mod usage;
 
 pub use config::{
-    Config, ConfigError, ConfigOrigin, GeneralConfig, LinuxConfig, ShellConfig, WindowConfig,
+    ClipboardConfig, Config, ConfigError, ConfigOrigin, GeneralConfig, LinuxConfig, PasteConfig,
+    ShellConfig, Snippet, WindowConfig,
 };
 pub use engine::{EngineOptions, SearchEngine};
 pub use fuzzy::FuzzyQuery;

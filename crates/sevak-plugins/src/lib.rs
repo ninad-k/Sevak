@@ -9,6 +9,8 @@
 //! | `bookmarks`      | [`BookmarksPlugin`]                     | config  | config |
 //! | `system`         | [`SystemPlugin`]                        | none    | yes    |
 //! | `shell`          | [`ShellPlugin`]                         | `>`     | no     |
+//! | `clipboard`      | [`ClipboardPlugin`] (opt-in history)    | `cb`    | no     |
+//! | `snippets`       | [`SnippetsPlugin`]                      | `s`     | no     |
 //! | `uuid`           | [`UuidPlugin`] (a tutorial example)     | `uuid`  | no     |
 //!
 //! [`PluginRegistry`] knows these families; [`builtin_plugins`] builds the set
@@ -24,12 +26,14 @@ pub mod actions;
 pub mod apps;
 pub mod bookmarks;
 pub mod calculator;
+pub mod clipboard_history;
 pub mod currency;
 pub mod example_uuid;
 pub mod files;
 pub mod path_browse;
 pub mod registry;
 pub mod shell;
+pub mod snippets;
 pub mod system;
 pub mod units;
 pub mod web_search;
@@ -41,16 +45,18 @@ pub use actions::execute_action;
 pub use apps::AppsPlugin;
 pub use bookmarks::BookmarksPlugin;
 pub use calculator::CalculatorPlugin;
+pub use clipboard_history::ClipboardPlugin;
 pub use example_uuid::UuidPlugin;
 pub use files::FilesPlugin;
 pub use registry::{PluginDescriptor, PluginFactory, PluginInfo, PluginRegistry};
 pub use shell::ShellPlugin;
+pub use snippets::SnippetsPlugin;
 pub use system::SystemPlugin;
 pub use web_search::WebSearchPlugin;
 
 /// Instantiates every enabled built-in plugin (`apps`, `calculator`, one
 /// `web:<keyword>` per `[[web_search]]` engine, `files`, `bookmarks`, `system`,
-/// `shell`, `uuid`).
+/// `shell`, `clipboard`, `snippets`, `uuid`).
 ///
 /// Shorthand for `PluginRegistry::builtin().instantiate(config, platform)`.
 ///
@@ -89,6 +95,8 @@ mod tests {
                 "bookmarks",
                 "system",
                 "shell",
+                "clipboard",
+                "snippets",
                 "uuid"
             ]
         );
@@ -107,6 +115,8 @@ mod tests {
                 "bookmarks",
                 "system",
                 "shell",
+                "clipboard",
+                "snippets",
                 "uuid"
             ]
         );

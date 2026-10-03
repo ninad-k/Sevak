@@ -2,6 +2,7 @@
 //! entries, icon themes, and launching through `gio`.
 
 mod launch;
+mod paste;
 mod scan;
 mod xdg;
 
@@ -15,6 +16,7 @@ use crate::desktop_entry::Locale;
 use crate::error::{PlatformError, Result};
 use crate::icon_file;
 use crate::icon_theme::{self, IconResolver};
+use crate::paste::{ForegroundApp, PasteOutcome, PasteSupport};
 use crate::provider::PlatformProvider;
 use crate::session;
 
@@ -61,6 +63,22 @@ impl PlatformProvider for LinuxProvider {
             IconSource::Shell { .. } => Err(PlatformError::Unsupported("shell icons")),
             IconSource::Builtin { .. } => Err(PlatformError::Unsupported("built-in icons")),
         }
+    }
+
+    fn remember_foreground_app(&self) {
+        paste::remember_foreground_app();
+    }
+
+    fn foreground_app(&self) -> Option<ForegroundApp> {
+        paste::foreground_app()
+    }
+
+    fn paste_support(&self) -> PasteSupport {
+        paste::paste_support()
+    }
+
+    fn paste_text(&self, text: &str, restore_clipboard: bool) -> Result<PasteOutcome> {
+        paste::paste_text(text, restore_clipboard)
     }
 }
 

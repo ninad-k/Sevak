@@ -46,7 +46,7 @@ Code map:
     |
     v
  PlatformProvider::{launch, open_path, open_url, set_clipboard_text,
-                    reveal_path, launch_as_admin}                      (sevak-platform)
+                    paste_text, reveal_path, launch_as_admin}          (sevak-platform)
 ```
 
 (`SearchEngine::execute_secondary(item, index, query)` is the same path for a
@@ -57,8 +57,9 @@ secondary action.)
 - **Plugins** answer queries from in-memory data and describe what should
   happen as an `Action`. They do not touch the OS directly.
 - **Actions** (`Action`) are a closed vocabulary: `Launch`, `OpenPath`,
-  `OpenUrl`, `CopyText`, `RevealPath` (show in the file manager),
-  `RunAsAdmin` (elevated launch; Windows) and `Custom` (plugin-defined payload
+  `OpenUrl`, `CopyText`, `PasteText` (copy, return to the app that was focused
+  before Sevak opened, press Ctrl+V / Cmd+V), `RevealPath` (show in the file
+  manager), `RunAsAdmin` (elevated launch; Windows) and `Custom` (plugin-defined payload
   that only the owning plugin understands). `execute_action` in
   `sevak-plugins` maps the standard ones onto the platform provider; `Custom`
   yields `PluginError::Unsupported` there, so a plugin using it must handle it
@@ -74,10 +75,10 @@ secondary action.)
   arrives as `Custom` in `execute`). Usage is recorded for the item either way.
   Offer only what can work here: for example the apps plugin adds
   `RunAsAdmin` only when `PlatformProvider::can_run_as_admin()` is true.
-- **Copy text.** `ResultItem::copy_text()` is what `Ctrl+C` copies: the value
-  of a `CopyText` action, the URL of an `OpenUrl`, the path of `OpenPath`,
-  `RevealPath` or a launch target. Nothing is copied for `Custom` actions or
-  packaged apps.
+- **Copy text.** `ResultItem::copy_text()` is what `Ctrl+C` copies: the text
+  of a `CopyText` or `PasteText` action, the URL of an `OpenUrl`, the path of
+  `OpenPath`, `RevealPath` or a launch target. Nothing is copied for `Custom`
+  actions or packaged apps.
 - **Platform provider** (`PlatformProvider`) is the only OS-specific layer
   (Windows Start Menu / packaged apps, Linux `.desktop` entries). It also
   gatekeeps URLs: `open_url` accepts only `http://`, `https://` and `mailto:`.
@@ -181,6 +182,8 @@ process, so plugins must never panic.
 | `bookmarks` | `bookmarks` | see [Bookmarks](#bookmarks) |
 | `system` | `system` | lock, sleep, restart, settings pages; global |
 | `shell` | `shell` | `> command` runs in a terminal; see below |
+| `clipboard` | `clipboard` | `cb`, clipboard history; opt-in through `[clipboard] enabled` (see below) |
+| `snippets` | `snippets` | `s`, `[[snippet]]` entries pasted with placeholders expanded |
 | `uuid` | `uuid` | example plugin, keyword-only |
 
 - `PluginRegistry::builtin()` is the stock set; `register(descriptor)` adds (or
@@ -393,6 +396,58 @@ it (see `registry.rs` tests). Verify with:
 cargo test -p sevak-core -p sevak-plugins
 cargo clippy -p sevak-core -p sevak-plugins --all-targets -- -D warnings
 ```
+
+## Pasting, clipboard history and snippets
+
+Two built-in plugins go beyond "describe an action": `clipboard` (`cb`) and
+`snippets` (`s`). They show how to use `Action::PasteText` and, for the first,
+a background thread. User documentation is in the README.
+
+### Pasting into the previous app
+
+`Action::PasteText { text, restore_clipboard }` is executed by
+`PlatformProvider::paste_text`, which:
+
+1. copies `text` (asking the OS to keep it out of its own clipboard history);
+2. brings back the window remembered by `remember_foreground_app`, which the
+   shell calls just before it shows Sevak's window, while the user's app still
+   has focus;
+3. synthesizes Ctrl+V / Cmd+V;
+4. optionally puts the previous clipboard text back.
+
+The shell hides Sevak's window *before* executing a `PasteText` (as it does for
+`Launch`/`OpenPath`/`OpenUrl`). Implementations: `windows/paste.rs`
+(`GetForegroundWindow`, `SetForegroundWindow`, `SendInput`), `macos/paste.rs`
+(`NSWorkspace`, `CGEvent`; needs the Accessibility permission) and
+`linux/paste.rs` (`_NET_ACTIVE_WINDOW` and XTest through `x11rb`; X11 only).
+`paste.rs` holds the shared order of operations.
+
+Not every system can paste, so a plugin should ask `paste_support()` while
+building rows: for `PasteSupport::CopyOnly(reason)` return `Action::CopyText`
+and say "Copies to clipboard" plus the reason in the subtitle, so the row never
+promises more than Enter does. `paste_text` itself also degrades to copying
+(`PasteOutcome::CopiedOnly`) if the situation changed since the query.
+
+### `clipboard`: a plugin with a thread
+
+The constructor and `query` stay cheap; the recording thread is started by
+`refresh`, never by the constructor, because the settings window also builds
+plugins just to list them (`catalog`). Plugins are rebuilt on every config
+reload, so the history and its thread live in a `Shared` that a process-wide
+table hands to the new plugin while the old one is alive; the thread holds a
+`Weak` and ends when the last plugin is dropped. The platform supplies
+`clipboard_sequence()` (change counter), `read_clipboard()` (text plus the
+"secret" flag) and `foreground_app()` (source app, matched against
+`ignore_apps`). Text Sevak wrote itself is recognised through
+`sevak_platform::clipboard::take_own_write` and skipped.
+
+### `snippets`: expanding at execution time
+
+A snippet's row carries the *template* in its `PasteText` action; `execute`
+expands the placeholders (`{time}`, `{clipboard}`, ...) at the moment of
+pasting, looking the snippet up by its result id so a config reload between
+query and Enter uses the new text. Expansion is the pure function
+`snippets::expand`, tested without a platform.
 
 ## Toward script-based external plugins
 

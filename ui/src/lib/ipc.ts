@@ -32,6 +32,7 @@ export type ActionKind =
   | "copy_text"
   | "reveal_path"
   | "run_as_admin"
+  | "paste_text"
   | "custom";
 
 export type IconDto = { kind: "url"; url: string } | { kind: "builtin"; name: string };

@@ -5,11 +5,12 @@
 ```
 Cargo.toml              workspace: crates/* and src-tauri
 crates/sevak-core       config, fuzzy matcher, search engine, usage stats, Plugin trait
-crates/sevak-platform   OS access: launching, icons, app scanning, clipboard, paths,
-                        terminal launching, hotkey strategy, GNOME shortcut setup
-                        (Windows, macOS and Linux backends)
+crates/sevak-platform   OS access: launching, icons, app scanning, clipboard, pasting into the
+                        previous app, paths, terminal launching, hotkey strategy, GNOME
+                        shortcut setup (Windows, macOS and Linux backends)
 crates/sevak-plugins    built-in plugins: apps, calculator (+ units, currency), files, bookmarks,
-                        web search, system commands, shell, uuid example
+                        web search, system commands, shell, clipboard history, snippets,
+                        uuid example
 src-tauri               the Tauri shell: window, hotkey, tray, CLI, IPC commands, bundling config
 ui                      Svelte 5 + Vite frontend (builds to ui/dist)
 packaging/linux         desktop-entry template used by the .deb and .rpm
@@ -71,6 +72,14 @@ Type-check the Linux backend without a Linux toolchain:
 ```sh
 rustup target add x86_64-unknown-linux-gnu
 cargo clippy -p sevak-platform --target x86_64-unknown-linux-gnu
+```
+
+The macOS backend can be type-checked the same way (the crates it uses are pure
+Rust, so no Apple SDK is needed to *check*, only to build and run):
+
+```sh
+rustup target add aarch64-apple-darwin
+cargo clippy -p sevak-platform --target aarch64-apple-darwin
 ```
 
 Run the Linux tests inside WSL (no sudo; bootstraps Rust and Zig as a linker
