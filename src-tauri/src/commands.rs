@@ -74,10 +74,17 @@ fn to_dtos(icons: Vec<Option<IconDto>>, items: &[ResultItem]) -> Vec<ResultDto> 
         .collect()
 }
 
+/// A search's results, numbered so `execute` can name the set the UI shows.
+#[derive(Debug, Serialize)]
+pub struct SearchResponse {
+    pub ticket: u64,
+    pub results: Vec<ResultDto>,
+}
+
 /// Queries the engine. Async so it never runs on the main thread; a query is
 /// in-memory work (the engine logs a warning when it exceeds 16 ms).
 #[tauri::command]
-pub async fn search(app: AppHandle, query: String) -> Vec<ResultDto> {
+pub async fn search(app: AppHandle, query: String) -> SearchResponse {
     let started = Instant::now();
     let state = app.state::<AppState>();
     let search = &state.search;
@@ -86,7 +93,7 @@ pub async fn search(app: AppHandle, query: String) -> Vec<ResultDto> {
     let items = search.engine().query(&query);
     let dtos = to_dtos(search.icons.describe(&items), &items);
     let count = items.len();
-    search.store_results(ticket, items);
+    search.store_results(ticket, query.clone(), items);
 
     tracing::debug!(
         query_chars = query.chars().count(),
@@ -94,18 +101,21 @@ pub async fn search(app: AppHandle, query: String) -> Vec<ResultDto> {
         elapsed_us = started.elapsed().as_micros() as u64,
         "search"
     );
-    dtos
+    SearchResponse {
+        ticket,
+        results: dtos,
+    }
 }
 
-/// Executes a result of the latest search.
+/// Executes result `id` of search `ticket`, the result set the UI is showing.
 ///
 /// Actions that hand over to another program (launch, open a path or URL) hide
 /// the window *first*: the platform call can take a second (a slow `.lnk`), and
 /// the user's intent is already clear. If it then fails the window comes back
 /// as it was, with the error. Copying is instant and keeps the old order.
 #[tauri::command]
-pub async fn execute(app: AppHandle, id: String, query: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || run_execute(&app, &id, &query))
+pub async fn execute(app: AppHandle, id: String, ticket: u64) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || run_execute(&app, &id, ticket))
         .await
         .map_err(|err| format!("the action did not finish: {err}"))?
 }
@@ -118,10 +128,10 @@ fn hands_over(action: &Action) -> bool {
     )
 }
 
-fn run_execute(app: &AppHandle, id: &str, query: &str) -> Result<(), String> {
+fn run_execute(app: &AppHandle, id: &str, ticket: u64) -> Result<(), String> {
     let state = app.state::<AppState>();
     let search = &state.search;
-    let Some(item) = search.result(id) else {
+    let Some((item, query)) = search.result(ticket, id) else {
         tracing::warn!(id, "execute: result expired");
         return Err("result expired".to_owned());
     };
@@ -132,7 +142,7 @@ fn run_execute(app: &AppHandle, id: &str, query: &str) -> Result<(), String> {
     }
 
     let started = Instant::now();
-    match search.engine().execute(&item, query) {
+    match search.engine().execute(&item, &query) {
         Ok(()) => {
             tracing::info!(
                 id,

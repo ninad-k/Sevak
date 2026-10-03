@@ -40,6 +40,7 @@
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -73,7 +74,8 @@ impl Default for EngineOptions {
 
 pub struct SearchEngine {
     plugins: Vec<Arc<dyn Plugin>>,
-    usage: RwLock<UsageStore>,
+    /// Shared with engines built by [`SearchEngine::rebuild`].
+    usage: Arc<RwLock<UsageStore>>,
     options: EngineOptions,
 }
 
@@ -90,6 +92,21 @@ fn split_keyword(input: &str) -> Option<(&str, &str)> {
     let input = input.trim_start();
     let idx = input.find(char::is_whitespace)?;
     Some((&input[..idx], input[idx..].trim_start()))
+}
+
+/// Runs one plugin call, turning a panic into an error so a faulty plugin
+/// cannot take a search, or the resident app, down with it. (Release builds
+/// unwind rather than abort for this reason.)
+fn guarded<T>(plugin: &dyn Plugin, call: &str, f: impl FnOnce() -> T) -> Result<T, PluginError> {
+    catch_unwind(AssertUnwindSafe(f)).map_err(|panic| {
+        let reason = panic
+            .downcast_ref::<&str>()
+            .map(|s| (*s).to_owned())
+            .or_else(|| panic.downcast_ref::<String>().cloned())
+            .unwrap_or_else(|| "unknown panic".to_owned());
+        tracing::error!(plugin = plugin.id(), call, %reason, "plugin panicked");
+        PluginError::Message(format!("the {} plugin crashed: {reason}", plugin.id()))
+    })
 }
 
 fn rank_order(a: &ResultItem, b: &ResultItem) -> Ordering {
@@ -120,7 +137,18 @@ impl SearchEngine {
     pub fn new(plugins: Vec<Arc<dyn Plugin>>, usage: UsageStore, options: EngineOptions) -> Self {
         Self {
             plugins,
-            usage: RwLock::new(usage),
+            usage: Arc::new(RwLock::new(usage)),
+            options,
+        }
+    }
+
+    /// A new engine over `plugins` that shares this engine's usage statistics
+    /// (used after a config reload). A launch still finishing on the old engine
+    /// is therefore recorded in the new one too, rather than lost with a copy.
+    pub fn rebuild(&self, plugins: Vec<Arc<dyn Plugin>>, options: EngineOptions) -> Self {
+        Self {
+            plugins,
+            usage: Arc::clone(&self.usage),
             options,
         }
     }
@@ -157,7 +185,8 @@ impl SearchEngine {
         let mut slowest: (Duration, String) = (Duration::ZERO, String::new());
         let mut run = |plugin: &Arc<dyn Plugin>, text: &str| {
             let t = Instant::now();
-            let items = plugin.query(text);
+            let items =
+                guarded(plugin.as_ref(), "query", || plugin.query(text)).unwrap_or_default();
             let elapsed = t.elapsed();
             if elapsed >= slowest.0 {
                 slowest = (elapsed, plugin.id().to_owned());
@@ -172,7 +201,12 @@ impl SearchEngine {
             let plugins: Vec<&Arc<dyn Plugin>> = self
                 .plugins
                 .iter()
-                .filter(|p| p.keyword() == Some(kw))
+                // Case-insensitive, like the settings' duplicate check, so
+                // Caps Lock or a habitual capital does not bypass the keyword.
+                .filter(|p| {
+                    p.keyword()
+                        .is_some_and(|k| k.to_lowercase() == kw.to_lowercase())
+                })
                 .collect();
             (!plugins.is_empty()).then_some((plugins, rest))
         });
@@ -266,13 +300,12 @@ impl SearchEngine {
         let plugin = self
             .plugin(&item.plugin_id)
             .ok_or_else(|| PluginError::Unsupported(item.id.clone()))?;
-        plugin.execute(item)?;
+        guarded(plugin.as_ref(), "execute", || plugin.execute(item))??;
         self.usage_write().record(&item.id, query, now);
         Ok(())
     }
 
-    /// A copy of the usage statistics, to save from another thread or to carry
-    /// into a rebuilt engine after a config reload.
+    /// A copy of the usage statistics, to save from another thread.
     pub fn usage_snapshot(&self) -> UsageStore {
         self.usage_read().clone()
     }
@@ -282,7 +315,7 @@ impl SearchEngine {
         let mut failures = Vec::new();
         for plugin in &self.plugins {
             let started = Instant::now();
-            match plugin.refresh() {
+            match guarded(plugin.as_ref(), "refresh", || plugin.refresh()).and_then(|r| r) {
                 Ok(()) => tracing::debug!(
                     plugin = plugin.id(),
                     elapsed_ms = started.elapsed().as_millis() as u64,
@@ -500,16 +533,30 @@ mod tests {
     }
 
     #[test]
-    fn keyword_is_case_sensitive_and_unknown_keyword_goes_global() {
+    fn keyword_is_case_insensitive() {
+        let app = Mock::fixed("app", &[("a", "App", 50.0)]).arc();
+        let web = Mock::fixed("web:yt", &[("q", "Search", score::KEYWORD)])
+            .keyword("yt")
+            .arc();
+        let e = engine(vec![app.clone(), web.clone()], 8, &[]);
+
+        let r = e.query_at("YT rust", T0);
+        assert_eq!(ids(&r), vec!["web:yt:q"]);
+        assert_eq!(*web.inputs.lock().unwrap(), vec!["rust".to_owned()]);
+        assert!(app.inputs.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn unknown_keyword_goes_global() {
         let app = Mock::fixed("app", &[("a", "App", 50.0)]).arc();
         let web = Mock::fixed("web:g", &[("q", "Search", score::KEYWORD)])
             .keyword("g")
             .arc();
         let e = engine(vec![app.clone(), web.clone()], 8, &[]);
 
-        let r = e.query_at("G rust", T0);
+        let r = e.query_at("x rust", T0);
         assert_eq!(ids(&r), vec!["app:a"]);
-        assert_eq!(*app.inputs.lock().unwrap(), vec!["G rust".to_owned()]);
+        assert_eq!(*app.inputs.lock().unwrap(), vec!["x rust".to_owned()]);
     }
 
     #[test]
@@ -543,6 +590,28 @@ mod tests {
         let r = e.query_at("thing", T0);
         assert_eq!(ids(&r), vec!["app:a", "files:f"]);
         assert_eq!(r[1].score, 100.0 * GLOBAL_SECONDARY_WEIGHT);
+    }
+
+    #[test]
+    fn a_panicking_plugin_does_not_take_the_search_down() {
+        let app = Mock::fixed("app", &[("a", "Alpha", 60.0)]).arc();
+        let broken = Mock::new("broken", |_| panic!("bad index")).arc();
+        let e = engine(vec![broken, app], 8, &[]);
+
+        assert_eq!(ids(&e.query_at("al", T0)), vec!["app:a"]);
+    }
+
+    #[test]
+    fn rebuilt_engine_shares_usage_with_the_old_one() {
+        let app = Mock::fixed("app", &[("a", "Alpha", 60.0)]).arc();
+        let old = engine(vec![app.clone()], 8, &[]);
+        let item = old.query_at("al", T0).remove(0);
+        let new = old.rebuild(vec![app as Arc<dyn Plugin>], EngineOptions::default());
+
+        // A launch that completes on the old engine after the reload...
+        old.execute_at(&item, "al", T0).unwrap();
+        // ...still counts in the new one.
+        assert!(new.usage_snapshot().boost("app:a", "al", T0) > 0.0);
     }
 
     #[test]

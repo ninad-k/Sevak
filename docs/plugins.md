@@ -64,7 +64,7 @@ Code map:
 
 1. Whitespace-only input yields nothing.
 2. **Keyword route.** If the input is `<kw><whitespace><rest>` and at least
-   one plugin has `keyword() == kw` (case-sensitive), only those plugins are
+   one plugin has `keyword() == kw` (case-insensitive), only those plugins are
    queried, with `rest` (leading whitespace trimmed; it may be empty, e.g.
    `"g "`). No fallback runs in this mode. The keyword needs a following space:
    a bare `g` is an ordinary global query.
