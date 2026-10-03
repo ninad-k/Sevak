@@ -16,6 +16,7 @@ pub mod paths;
 pub mod process;
 pub mod provider;
 pub mod session;
+pub mod system;
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -31,6 +32,7 @@ pub use error::{PlatformError, Result};
 pub use paths::AppPaths;
 pub use provider::PlatformProvider;
 pub use session::{DisplayServer, HotkeyStrategy};
+pub use system::{SettingsPage, SystemCommand};
 
 /// The [`PlatformProvider`] for the operating system Sevak was built for.
 pub fn native_provider() -> Box<dyn PlatformProvider> {

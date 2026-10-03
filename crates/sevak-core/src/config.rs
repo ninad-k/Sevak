@@ -75,6 +75,17 @@ keyword = "f"
 # Also show (lower-ranked) file results for plain queries.
 global = true
 
+[system]
+# System commands: lock, sleep, hibernate, restart, shut down, log out, empty
+# the trash, and shortcuts to OS settings pages. Ask before restart, shut down,
+# log out and emptying the trash.
+confirm = true
+# Commands or pages to hide: "lock", "sleep", "hibernate", "restart",
+# "shutdown", "logout", "empty_trash", "settings" (every settings page) or
+# "settings:<page>" such as "settings:bluetooth". To turn the whole plugin off,
+# add "system" to [plugins] disabled instead.
+disabled = []
+
 # Web search engines: type "<keyword> <terms>". "{query}" is replaced by the
 # URL-encoded terms. Defining any [[web_search]] entry replaces this list.
 [[web_search]]
@@ -107,6 +118,7 @@ pub struct Config {
     pub appearance: AppearanceConfig,
     pub plugins: PluginsConfig,
     pub files: FilesConfig,
+    pub system: SystemConfig,
     pub web_search: Vec<WebSearchEngine>,
 }
 
@@ -120,6 +132,7 @@ impl Default for Config {
             appearance: AppearanceConfig::default(),
             plugins: PluginsConfig::default(),
             files: FilesConfig::default(),
+            system: SystemConfig::default(),
             web_search: WebSearchEngine::defaults(),
         }
     }
@@ -324,6 +337,34 @@ impl Default for FilesConfig {
             keyword: "f".to_owned(),
             global: true,
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SystemConfig {
+    /// Ask before restart, shut down, log out and emptying the trash.
+    pub confirm: bool,
+    /// Commands and settings pages to hide, by key (`restart`, `settings`,
+    /// `settings:bluetooth`, ...). Matched by the system plugin.
+    pub disabled: Vec<String>,
+}
+
+impl Default for SystemConfig {
+    fn default() -> Self {
+        Self {
+            confirm: true,
+            disabled: Vec::new(),
+        }
+    }
+}
+
+impl SystemConfig {
+    /// Whether `key` is switched off in `disabled` (case-insensitive).
+    pub fn is_disabled(&self, key: &str) -> bool {
+        self.disabled
+            .iter()
+            .any(|entry| entry.trim().eq_ignore_ascii_case(key))
     }
 }
 
@@ -693,6 +734,25 @@ url = "https://example.com"
         assert_eq!(config.appearance.theme, Theme::Dark);
         assert!(!config.plugins.is_enabled("files"));
         assert!(config.plugins.is_enabled("apps"));
+    }
+
+    #[test]
+    fn system_section_defaults_to_confirming_everything_enabled() {
+        let config = Config::from_toml_str("").unwrap();
+        assert!(config.system.confirm);
+        assert!(config.system.disabled.is_empty());
+    }
+
+    #[test]
+    fn system_section_parses_and_matches_keys_ignoring_case() {
+        let config = Config::from_toml_str(
+            "[system]\nconfirm = false\ndisabled = [\"Restart\", \"settings:wifi\"]\n",
+        )
+        .unwrap();
+        assert!(!config.system.confirm);
+        assert!(config.system.is_disabled("restart"));
+        assert!(config.system.is_disabled("settings:wifi"));
+        assert!(!config.system.is_disabled("shutdown"));
     }
 
     #[test]

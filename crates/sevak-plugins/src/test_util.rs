@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use sevak_core::{AppEntry, IconData, IconSource, LaunchTarget};
-use sevak_platform::{PlatformError, PlatformProvider, Result};
+use sevak_platform::{PlatformError, PlatformProvider, Result, SettingsPage, SystemCommand};
 
 #[derive(Default)]
 pub struct MockPlatform {
@@ -17,6 +17,11 @@ pub struct MockPlatform {
     pub elevated: Mutex<Vec<LaunchTarget>>,
     /// What `can_run_as_admin` reports; off by default, like most platforms.
     pub admin_supported: bool,
+    /// What `supported_system_commands` / `supported_settings_pages` report.
+    pub system_commands: Mutex<Vec<SystemCommand>>,
+    pub settings_pages: Mutex<Vec<SettingsPage>>,
+    pub ran_commands: Mutex<Vec<SystemCommand>>,
+    pub opened_settings: Mutex<Vec<SettingsPage>>,
 }
 
 impl MockPlatform {
@@ -80,6 +85,24 @@ impl PlatformProvider for MockPlatform {
 
     fn set_clipboard_text(&self, text: &str) -> Result<()> {
         self.clipboard.lock().unwrap().push(text.to_owned());
+        Ok(())
+    }
+
+    fn supported_system_commands(&self) -> Vec<SystemCommand> {
+        self.system_commands.lock().unwrap().clone()
+    }
+
+    fn run_system_command(&self, command: SystemCommand) -> Result<()> {
+        self.ran_commands.lock().unwrap().push(command);
+        Ok(())
+    }
+
+    fn supported_settings_pages(&self) -> Vec<SettingsPage> {
+        self.settings_pages.lock().unwrap().clone()
+    }
+
+    fn open_settings_page(&self, page: SettingsPage) -> Result<()> {
+        self.opened_settings.lock().unwrap().push(page);
         Ok(())
     }
 }

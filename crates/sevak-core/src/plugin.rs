@@ -68,6 +68,14 @@ pub trait Plugin: Send + Sync {
     /// Performs a result previously returned by [`Plugin::query`].
     fn execute(&self, item: &ResultItem) -> PluginResult<()>;
 
+    /// A question the shell must put to the user before [`Plugin::execute`]
+    /// runs `item` (it is skipped if they decline), or `None` to run at once.
+    /// For actions that cannot be undone, such as shutting the computer down.
+    /// Cheap and side-effect free; the shell calls it once per activation.
+    fn confirmation(&self, _item: &ResultItem) -> Option<String> {
+        None
+    }
+
     /// Rebuilds any index the plugin keeps. Called on a background thread at
     /// startup, on demand and periodically. May be slow.
     fn refresh(&self) -> PluginResult<()> {

@@ -339,6 +339,18 @@ impl SearchEngine {
         results
     }
 
+    /// The question to ask the user before [`SearchEngine::execute`] runs
+    /// `item`, if its plugin wants one (see [`Plugin::confirmation`]). Before a
+    /// secondary action, ask about [`ResultItem::secondary_as_primary`], the
+    /// item as [`SearchEngine::execute_secondary`] will run it.
+    pub fn confirmation(&self, item: &ResultItem) -> Option<String> {
+        let plugin = self.plugin(&item.plugin_id)?;
+        guarded(plugin.as_ref(), "confirmation", || {
+            plugin.confirmation(item)
+        })
+        .unwrap_or(None)
+    }
+
     /// Executes `item` through its plugin and, on success, records the launch.
     /// `query` is the text the user had typed (the whole input, keyword
     /// included, so it matches what [`SearchEngine::query`] later receives).
@@ -383,12 +395,9 @@ impl SearchEngine {
         query: &str,
         now: u64,
     ) -> PluginResult<()> {
-        let secondary = item.secondary.get(index).ok_or_else(|| {
+        let derived = item.secondary_as_primary(index).ok_or_else(|| {
             PluginError::Message(format!("{} has no action number {index}", item.id))
         })?;
-        let mut derived = item.clone();
-        derived.action = secondary.action.clone();
-        derived.secondary.clear();
         self.execute_at(&derived, query, now)
     }
 
@@ -538,6 +547,9 @@ mod tests {
             self.actions.lock().unwrap().push(item.action.clone());
             self.executed.fetch_add(1, AtomicOrdering::SeqCst);
             Ok(())
+        }
+        fn confirmation(&self, item: &ResultItem) -> Option<String> {
+            (item.id.ends_with(":danger")).then(|| format!("Run {}?", item.title))
         }
         fn refresh(&self) -> PluginResult<()> {
             match &self.refresh_error {
@@ -1027,6 +1039,15 @@ mod tests {
         assert!(matches!(err, PluginError::Message(_)));
         assert_eq!(ok.executed.load(AtomicOrdering::SeqCst), 0);
         assert!(e.usage_snapshot().is_empty());
+    }
+
+    #[test]
+    fn confirmation_comes_from_the_owning_plugin() {
+        let e = engine(vec![Mock::fixed("p", &[]).arc()], 8, &[]);
+        let danger = item("p", "danger", "Format", 1.0);
+        assert_eq!(e.confirmation(&danger).as_deref(), Some("Run Format?"));
+        assert_eq!(e.confirmation(&item("p", "safe", "Open", 1.0)), None);
+        assert_eq!(e.confirmation(&item("ghost", "danger", "X", 1.0)), None);
     }
 
     #[test]

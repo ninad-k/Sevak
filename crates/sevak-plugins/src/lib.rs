@@ -6,6 +6,7 @@
 //! | `calculator`     | [`CalculatorPlugin`]                    | none    | yes    |
 //! | `web:<keyword>`  | [`WebSearchPlugin`] (one per engine)    | engine  | no     |
 //! | `files`          | [`FilesPlugin`]                         | config  | config |
+//! | `system`         | [`SystemPlugin`]                        | none    | yes    |
 //! | `uuid`           | [`UuidPlugin`] (a tutorial example)     | `uuid`  | no     |
 //!
 //! [`PluginRegistry`] knows these families; [`builtin_plugins`] builds the set
@@ -24,6 +25,7 @@ pub mod example_uuid;
 pub mod files;
 pub mod path_browse;
 pub mod registry;
+pub mod system;
 pub mod web_search;
 
 #[cfg(test)]
@@ -35,6 +37,7 @@ pub use calculator::CalculatorPlugin;
 pub use example_uuid::UuidPlugin;
 pub use files::FilesPlugin;
 pub use registry::{PluginDescriptor, PluginFactory, PluginInfo, PluginRegistry};
+pub use system::SystemPlugin;
 pub use web_search::WebSearchPlugin;
 
 /// Instantiates every enabled built-in plugin (`apps`, `calculator`, one
@@ -74,6 +77,7 @@ mod tests {
                 "web:yt",
                 "web:gh",
                 "files",
+                "system",
                 "uuid"
             ]
         );
@@ -83,6 +87,6 @@ mod tests {
     fn disabled_plugins_are_skipped() {
         let mut config = Config::default();
         config.plugins.disabled = vec!["files".into(), "web:yt".into(), "calculator".into()];
-        assert_eq!(ids(&config), ["apps", "web:g", "web:gh", "uuid"]);
+        assert_eq!(ids(&config), ["apps", "web:g", "web:gh", "system", "uuid"]);
     }
 }

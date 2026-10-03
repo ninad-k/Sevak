@@ -52,7 +52,7 @@ impl AppsPlugin {
     }
 }
 
-fn name_bonus(name_lower: &str, query_lower: &str) -> f64 {
+pub(crate) fn name_bonus(name_lower: &str, query_lower: &str) -> f64 {
     if query_lower.is_empty() {
         return 0.0;
     }

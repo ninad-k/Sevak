@@ -27,7 +27,7 @@ use serde::Serialize;
 use sevak_core::{Config, Plugin};
 use sevak_platform::PlatformProvider;
 
-use crate::{AppsPlugin, CalculatorPlugin, FilesPlugin, UuidPlugin, WebSearchPlugin};
+use crate::{AppsPlugin, CalculatorPlugin, FilesPlugin, SystemPlugin, UuidPlugin, WebSearchPlugin};
 
 /// Builds the instances of one plugin family.
 ///
@@ -145,6 +145,17 @@ impl PluginRegistry {
             },
         ));
         registry.register(PluginDescriptor::new(
+            "system",
+            "System commands",
+            "Lock, sleep, restart, shut down, log out, empty the trash and open settings pages.",
+            |config, platform| {
+                vec![Arc::new(SystemPlugin::new(
+                    config.system.clone(),
+                    platform.clone(),
+                ))]
+            },
+        ));
+        registry.register(PluginDescriptor::new(
             "uuid",
             "UUID generator",
             "Type `uuid ` to generate random UUIDs; Enter copies one.",
@@ -249,7 +260,10 @@ mod tests {
             .iter()
             .map(|d| d.id)
             .collect();
-        assert_eq!(families, ["apps", "calculator", "web", "files", "uuid"]);
+        assert_eq!(
+            families,
+            ["apps", "calculator", "web", "files", "system", "uuid"]
+        );
     }
 
     #[test]
@@ -263,6 +277,7 @@ mod tests {
                 "web:yt",
                 "web:gh",
                 "files",
+                "system",
                 "uuid"
             ]
         );
@@ -273,13 +288,13 @@ mod tests {
         let config = config_disabling(&["web"]);
         assert_eq!(
             ids(&PluginRegistry::builtin(), &config),
-            ["apps", "calculator", "files", "uuid"]
+            ["apps", "calculator", "files", "system", "uuid"]
         );
     }
 
     #[test]
     fn disabling_an_instance_keeps_its_siblings() {
-        let config = config_disabling(&["web:yt", "uuid"]);
+        let config = config_disabling(&["web:yt", "uuid", "system"]);
         assert_eq!(
             ids(&PluginRegistry::builtin(), &config),
             ["apps", "calculator", "web:g", "web:gh", "files"]
@@ -289,7 +304,7 @@ mod tests {
     #[test]
     fn unknown_disabled_ids_are_ignored() {
         let config = config_disabling(&["nope"]);
-        assert_eq!(ids(&PluginRegistry::builtin(), &config).len(), 7);
+        assert_eq!(ids(&PluginRegistry::builtin(), &config).len(), 8);
     }
 
     #[test]
@@ -306,6 +321,7 @@ mod tests {
                 ("web:yt", false),
                 ("web:gh", true),
                 ("files", false),
+                ("system", true),
                 ("uuid", true),
             ]
         );

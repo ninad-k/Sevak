@@ -5,6 +5,7 @@ use std::time::Instant;
 use serde::Serialize;
 use sevak_core::{Action, Modifier, ResultItem};
 use tauri::{AppHandle, LogicalSize, Manager, State, WebviewWindow};
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
 use crate::icons::IconDto;
 use crate::state::{AppState, Status};
@@ -204,6 +205,22 @@ fn hands_over(action: &Action) -> bool {
     )
 }
 
+/// Puts a plugin's confirmation question to the user in a native dialog whose
+/// OK button carries the action's name. Blocks, so only call it off the main
+/// thread. Anything but an explicit OK (Cancel, closing the dialog, no dialog
+/// available) declines: a destructive action never runs by accident.
+fn confirmed(app: &AppHandle, action: &str, question: String) -> bool {
+    app.dialog()
+        .message(question)
+        .title("Sevak")
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            action.to_owned(),
+            "Cancel".to_owned(),
+        ))
+        .blocking_show()
+}
+
 fn run_execute(
     app: &AppHandle,
     id: &str,
@@ -217,17 +234,31 @@ fn run_execute(
         return Err("result expired".to_owned());
     };
 
-    let action = match choice {
-        None => &item.action,
-        Some(index) => match item.secondary.get(index) {
-            Some(secondary) => &secondary.action,
+    // The item as it will run: with the chosen secondary action as its action,
+    // so the plugin's confirmation sees exactly what is about to happen.
+    let target = match choice {
+        None => item.clone(),
+        Some(index) => match item.secondary_as_primary(index) {
+            Some(derived) => derived,
             None => {
                 tracing::warn!(id, index, "execute: no such action");
                 return Err("that action is not available".to_owned());
             }
         },
     };
-    let optimistic = hands_over(action);
+
+    if let Some(question) = search.engine().confirmation(&target) {
+        // The OK button names what will happen: the result, or the chosen action.
+        let label = choice
+            .and_then(|index| item.secondary.get(index))
+            .map_or(item.title.as_str(), |secondary| secondary.label.as_str());
+        if !confirmed(app, label, question) {
+            tracing::info!(id, "execute: declined at the confirmation");
+            return Ok(());
+        }
+    }
+
+    let optimistic = hands_over(&target.action);
     if optimistic {
         window::hide_silently(app);
     }

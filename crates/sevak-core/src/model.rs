@@ -100,6 +100,18 @@ impl ResultItem {
         self
     }
 
+    /// This item with its `index`th secondary action as its action (and no
+    /// secondary actions): what the owning plugin's `execute` and
+    /// `confirmation` see when that action is picked. `None` for an unknown
+    /// index.
+    pub fn secondary_as_primary(&self, index: usize) -> Option<ResultItem> {
+        let secondary = self.secondary.get(index)?;
+        let mut derived = self.clone();
+        derived.action = secondary.action.clone();
+        derived.secondary.clear();
+        Some(derived)
+    }
+
     /// The text most worth copying from this result: the calculator's value, a
     /// file or application path, a URL. `None` when there is nothing sensible
     /// (a packaged Windows app, a plugin-defined action).
@@ -257,7 +269,8 @@ pub enum IconSource {
     /// icon is extracted on demand.
     Shell { parsing_name: String },
     /// A glyph bundled with the UI: `app`, `calculator`, `web`, `file`,
-    /// `folder`, `copy`, `plugin`.
+    /// `folder`, `copy`, `plugin`, `lock`, `sleep`, `restart`, `power`,
+    /// `logout`, `trash`, `settings`.
     Builtin { name: String },
 }
 
@@ -321,6 +334,12 @@ mod tests {
         let json = serde_json::to_string(&item.secondary[0]).unwrap();
         assert!(json.contains(r#""modifier":"ctrl""#), "{json}");
         assert!(json.contains(r#""type":"reveal_path""#), "{json}");
+
+        let derived = item.secondary_as_primary(1).unwrap();
+        assert_eq!(derived.action, Action::CopyText { text: "y".into() });
+        assert!(derived.secondary.is_empty());
+        assert_eq!(derived.id, item.id);
+        assert_eq!(item.secondary_as_primary(2), None);
     }
 
     #[test]
