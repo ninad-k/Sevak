@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.9.0.schema.json
+PackageIdentifier: NinadKulkarni.Sevak
+PackageVersion: {{version}}
+PackageLocale: en-US
+Publisher: Ninad Kulkarni
+PublisherUrl: https://github.com/ninad-k
+PublisherSupportUrl: https://github.com/ninad-k/Sevak/issues
+PackageName: Sevak
+PackageUrl: https://github.com/ninad-k/Sevak
+License: Apache-2.0
+LicenseUrl: https://github.com/ninad-k/Sevak/blob/main/LICENSE
+ShortDescription: Keyboard-first quick launcher for apps, calculations, web and file search.
+Description: |-
+  Sevak is an open-source quick launcher. Press a hotkey, type a few letters, and launch apps,
+  do quick math, search the web or find files. Results are ranked by how often and how recently
+  you use them. It runs entirely on your machine with no telemetry and is configured from one
+  TOML file.
+Moniker: sevak
+Tags:
+  - launcher
+  - productivity
+  - search
+  - keyboard
+  - open-source
+ReleaseNotesUrl: https://github.com/ninad-k/Sevak/releases/tag/v{{version}}
+ManifestType: defaultLocale
+ManifestVersion: 1.9.0

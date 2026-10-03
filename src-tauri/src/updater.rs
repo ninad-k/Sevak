@@ -5,7 +5,12 @@
 //! `general.check_for_updates` is on, and from the tray's "Check for updates".
 //! An available update is only installed after the user agrees in a dialog;
 //! its signature is verified against the public key in `tauri.conf.json`.
+//!
+//! Package managers that update Sevak themselves (Scoop, the AUR package) ship
+//! a `package-manager` marker file (see [`ManagedBy`]); self-update is then off
+//! so the two never fight over the installation.
 
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
@@ -39,6 +44,13 @@ pub fn start(app: &AppHandle) {
         tracing::debug!("automatic update checks are off in debug builds");
         return;
     }
+    if let Some(managed) = ManagedBy::detect() {
+        tracing::info!(
+            manager = managed.name,
+            "updates are managed by a package manager"
+        );
+        return;
+    }
     let app = app.clone();
     let spawned = std::thread::Builder::new()
         .name("sevak-updates".into())
@@ -61,8 +73,70 @@ pub fn start(app: &AppHandle) {
 
 /// "Check for updates" from the tray: reports the outcome either way.
 pub fn check_now(app: &AppHandle) {
+    if let Some(managed) = ManagedBy::detect() {
+        message(app, &managed.hint(), MessageDialogKind::Info);
+        return;
+    }
     let app = app.clone();
     tauri::async_runtime::spawn(async move { check(&app, Trigger::Manual).await });
+}
+
+/// The package manager that installed Sevak, when it handles updates itself.
+///
+/// Packages declare it with a `package-manager` file whose first line names
+/// the manager and whose optional second line is the update command, e.g.
+/// `Scoop` / `scoop update sevak`. The file sits next to the executable
+/// (Scoop), or in `<prefix>/share/sevak/` for an executable in `<prefix>/bin`
+/// (Linux distribution packages).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ManagedBy {
+    pub name: String,
+    pub command: Option<String>,
+}
+
+impl ManagedBy {
+    const FILE: &'static str = "package-manager";
+
+    pub fn detect() -> Option<Self> {
+        let exe = std::env::current_exe().ok()?;
+        Self::marker_paths(&exe)
+            .iter()
+            .find_map(|path| std::fs::read_to_string(path).ok())
+            .map(|text| Self::parse(&text))
+    }
+
+    fn marker_paths(exe: &Path) -> Vec<PathBuf> {
+        let Some(dir) = exe.parent() else {
+            return Vec::new();
+        };
+        let mut paths = vec![dir.join(Self::FILE)];
+        if let Some(prefix) = dir.parent() {
+            paths.push(prefix.join("share").join("sevak").join(Self::FILE));
+        }
+        paths
+    }
+
+    fn parse(text: &str) -> Self {
+        let mut lines = text.lines().map(str::trim).filter(|line| !line.is_empty());
+        let name = lines
+            .next()
+            .map_or_else(|| "your package manager".to_owned(), str::to_owned);
+        let command = lines.next().map(str::to_owned);
+        Self { name, command }
+    }
+
+    fn hint(&self) -> String {
+        match &self.command {
+            Some(command) => format!(
+                "Sevak was installed with {}, which keeps it up to date.\n\nTo update now, run:\n{command}",
+                self.name
+            ),
+            None => format!(
+                "Sevak was installed with {}, which keeps it up to date.",
+                self.name
+            ),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -188,6 +262,39 @@ fn message(app: &AppHandle, text: &str, kind: MessageDialogKind) {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    #[test]
+    fn marker_names_the_manager_and_its_update_command() {
+        let scoop = ManagedBy::parse("Scoop\r\nscoop update sevak\r\n");
+        assert_eq!(scoop.name, "Scoop");
+        assert_eq!(scoop.command.as_deref(), Some("scoop update sevak"));
+        assert!(scoop.hint().ends_with("scoop update sevak"));
+
+        let bare = ManagedBy::parse("\n  AUR  \n");
+        assert_eq!(bare.name, "AUR");
+        assert_eq!(bare.command, None);
+        assert_eq!(ManagedBy::parse("").name, "your package manager");
+    }
+
+    #[test]
+    fn marker_is_found_next_to_the_exe_or_in_share() {
+        let root = tempfile::tempdir().unwrap();
+        let bin = root.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let paths = ManagedBy::marker_paths(&bin.join("sevak"));
+        assert_eq!(
+            paths,
+            [
+                bin.join("package-manager"),
+                root.path()
+                    .join("share")
+                    .join("sevak")
+                    .join("package-manager"),
+            ]
+        );
+    }
+
     /// The plugin parses this section at startup and Sevak cannot start if it
     /// is invalid, so catch mistakes here rather than in a release.
     #[test]

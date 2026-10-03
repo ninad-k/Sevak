@@ -29,6 +29,9 @@ tracing.workspace = true
 tracing-appender.workspace = true
 tracing-subscriber.workspace = true
 
+[dev-dependencies]
+tempfile.workspace = true
+
 [features]
 # Embeds `ui/dist` instead of loading the dev server. `tauri build` enables it
 # automatically; pass `--features custom-protocol` for a plain `cargo build --release`.

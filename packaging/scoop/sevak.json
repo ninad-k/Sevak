@@ -1,0 +1,28 @@
+{
+  "version": "{{version}}",
+  "description": "Keyboard-first quick launcher: apps, calculator, web and file search.",
+  "homepage": "https://github.com/ninad-k/Sevak",
+  "license": "Apache-2.0",
+  "notes": [
+    "Sevak runs in the system tray; press Alt+Space to open it.",
+    "Scoop keeps it up to date: scoop update sevak"
+  ],
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/ninad-k/Sevak/releases/download/v{{version}}/{{file:msi}}",
+      "hash": "{{sha256:msi}}"
+    }
+  },
+  "extract_dir": "PFiles\\Sevak",
+  "post_install": "Set-Content -Path \"$dir\\package-manager\" -Value @('Scoop', 'scoop update sevak')",
+  "bin": "sevak.exe",
+  "shortcuts": [["sevak.exe", "Sevak"]],
+  "checkver": "github",
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/ninad-k/Sevak/releases/download/v$version/Sevak_$version_x64_en-US.msi"
+      }
+    }
+  }
+}

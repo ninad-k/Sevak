@@ -3,6 +3,20 @@
 Download packages from the [Releases page](https://github.com/ninad-k/Sevak/releases).
 Release builds are currently **unsigned**.
 
+## Package managers
+
+| Platform | Install | Update |
+|---|---|---|
+| Windows (winget) | `winget install NinadKulkarni.Sevak` | Sevak updates itself, or `winget upgrade NinadKulkarni.Sevak` |
+| Windows (Scoop) | `scoop bucket add ninad-k https://github.com/ninad-k/scoop-bucket`, then `scoop install sevak` | `scoop update sevak` |
+| macOS (Homebrew) | `brew install --cask ninad-k/tap/sevak` | Sevak updates itself, or `brew upgrade --cask sevak` |
+| Arch Linux (AUR) | `yay -S sevak-bin` | `yay -Syu` |
+
+Scoop and AUR installs leave updates to the package manager: Sevak's own
+update check is off there, and "Check for updates" in the tray tells you which
+command to run. winget and Homebrew installs keep Sevak's own updater, which
+those package managers recognise.
+
 ## Windows 10 / 11
 
 | File | Notes |
