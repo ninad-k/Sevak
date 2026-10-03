@@ -28,6 +28,12 @@ pub struct ResultItem {
     /// [`ResultItem::with_secondary`].
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub secondary: Vec<SecondaryAction>,
+    /// What Tab turns the search input into when this row is selected, if the
+    /// plugin offers one (a keyword to keep typing after, a folder to drill
+    /// into). Relative to the plugin's own input: when the row came from a
+    /// keyword route the engine prefixes the typed keyword.
+    #[serde(default)]
+    pub autocomplete: Option<String>,
 }
 
 impl ResultItem {
@@ -47,6 +53,7 @@ impl ResultItem {
             plugin_id,
             action,
             secondary: Vec::new(),
+            autocomplete: None,
         }
     }
 
@@ -65,6 +72,13 @@ impl ResultItem {
     #[must_use]
     pub fn with_score(mut self, score: f64) -> Self {
         self.score = score;
+        self
+    }
+
+    /// Sets the text Tab completes the input to (see [`ResultItem::autocomplete`]).
+    #[must_use]
+    pub fn with_autocomplete(mut self, text: impl Into<String>) -> Self {
+        self.autocomplete = Some(text.into());
         self
     }
 
@@ -352,6 +366,16 @@ mod tests {
                 payload: "p".into()
             }),
             None
+        );
+    }
+
+    #[test]
+    fn autocomplete_is_optional() {
+        let item = ResultItem::new("p", "k", "t", Action::CopyText { text: "x".into() });
+        assert_eq!(item.autocomplete, None);
+        assert_eq!(
+            item.with_autocomplete("g ").autocomplete.as_deref(),
+            Some("g ")
         );
     }
 

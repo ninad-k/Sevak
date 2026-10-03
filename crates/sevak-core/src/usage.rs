@@ -8,6 +8,9 @@
 //! { "version": 1, "entries": { "app:firefox": { "count": 12, "last_used": 1700000000, "queries": ["fi"] } } }
 //! ```
 //!
+//! The same file also keeps the last [`MAX_HISTORY`] executed queries (as typed)
+//! for Up-arrow recall: `"history": ["g rust", "firefox"]`, most recent first.
+//!
 //! Saving is atomic (write a sibling `.tmp` file, then rename over the target)
 //! so a crash mid-write never leaves a truncated file behind.
 
@@ -28,6 +31,9 @@ pub const MAX_QUERIES_PER_ENTRY: usize = 5;
 /// [`UsageStore::record`] prunes the store to this many entries when it grows
 /// past it, dropping the least recently used.
 pub const MAX_ENTRIES: usize = 2000;
+
+/// How many executed queries are kept for recall.
+pub const MAX_HISTORY: usize = 50;
 
 // ---------------------------------------------------------------------------
 // Boost tuning
@@ -91,6 +97,8 @@ pub struct UsageEntry {
 pub struct UsageStore {
     version: u32,
     entries: BTreeMap<String, UsageEntry>,
+    /// Executed queries as typed, most recent first.
+    history: Vec<String>,
 }
 
 impl Default for UsageStore {
@@ -98,6 +106,7 @@ impl Default for UsageStore {
         Self {
             version: FORMAT_VERSION,
             entries: BTreeMap::new(),
+            history: Vec::new(),
         }
     }
 }
@@ -167,6 +176,28 @@ impl UsageStore {
         if self.entries.len() > MAX_ENTRIES {
             self.prune(MAX_ENTRIES);
         }
+    }
+
+    /// Remembers an executed `query` for recall: trimmed, moved to the front if
+    /// already present (ignoring case), at most [`MAX_HISTORY`] kept.
+    pub fn record_history(&mut self, query: &str) {
+        let query = query.trim();
+        if query.is_empty() {
+            return;
+        }
+        let lower = query.to_lowercase();
+        self.history.retain(|q| q.to_lowercase() != lower);
+        self.history.insert(0, query.to_owned());
+        self.history.truncate(MAX_HISTORY);
+    }
+
+    /// Executed queries, most recent first.
+    pub fn history(&self) -> &[String] {
+        &self.history
+    }
+
+    pub fn clear_history(&mut self) {
+        self.history.clear();
     }
 
     /// Score bonus for `id` given the current `query` at unix time `now`.
@@ -254,6 +285,37 @@ mod tests {
             s.record("x", q, T0);
         }
         assert_eq!(s.get("x").unwrap().queries, vec!["g", "f", "e", "d", "c"]);
+    }
+
+    #[test]
+    fn history_is_recent_first_deduped_and_capped() {
+        let mut s = UsageStore::default();
+        s.record_history("  firefox ");
+        s.record_history("g rust");
+        s.record_history("   ");
+        s.record_history("FireFox");
+        assert_eq!(s.history(), ["FireFox", "g rust"]);
+
+        for i in 0..(MAX_HISTORY + 5) {
+            s.record_history(&format!("q{i}"));
+        }
+        assert_eq!(s.history().len(), MAX_HISTORY);
+        assert_eq!(s.history()[0], format!("q{}", MAX_HISTORY + 4));
+        s.clear_history();
+        assert!(s.history().is_empty());
+    }
+
+    #[test]
+    fn files_without_history_still_load() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("usage.json");
+        fs::write(&path, r#"{"version":1,"entries":{}}"#).unwrap();
+        assert!(UsageStore::load(&path).unwrap().history().is_empty());
+
+        let mut s = UsageStore::default();
+        s.record_history("a b");
+        s.save(&path).unwrap();
+        assert_eq!(UsageStore::load(&path).unwrap().history(), ["a b"]);
     }
 
     #[test]

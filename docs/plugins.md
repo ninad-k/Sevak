@@ -20,6 +20,7 @@ Code map:
 | Fuzzy matcher | `crates/sevak-core/src/fuzzy.rs` |
 | Config (`[plugins] disabled`) | `crates/sevak-core/src/config.rs` |
 | Built-in plugins, registry | `crates/sevak-plugins/src/` |
+| Typed-path browsing (files plugin) | `crates/sevak-plugins/src/path_browse.rs` |
 | Standard action execution | `crates/sevak-plugins/src/actions.rs` |
 | OS access (`PlatformProvider`) | `crates/sevak-platform/src/provider.rs` |
 
@@ -114,8 +115,22 @@ secondary action.)
   descending (ties: title case-insensitively, then id) and truncated to
   `[search] max_results`.
 - **Fallback.** If a *global* query produced nothing, the configured fallback
-  plugins (`[search] fallback_web_search`, default `g`) are queried with the full
-  input and their results are shown instead.
+  plugins (`[search] fallback_web_search`, a keyword or a list of keywords,
+  default `g`) are queried with the full input and their results are shown
+  instead, in the configured order.
+- **Autocomplete (Tab).** A result may carry `autocomplete`
+  (`ResultItem::with_autocomplete`), the text the input becomes when the user
+  presses Tab on it. It is relative to the plugin's own input: for a keyword
+  route (`f ~/Doc`) the engine puts the typed keyword back in front, so a plugin
+  never has to know it. `ResultItem::new` is unchanged; the field defaults to
+  `None`.
+- **Keyword hints.** A global query that is exactly a plugin's keyword (`g`)
+  also shows that plugin's `Plugin::keyword_row()` (default `None`) after the
+  real matches. Its `autocomplete` is the full replacement input (`g `). Web
+  search uses it; hints never replace the fallback.
+- **Query history.** The engine records every executed query (the whole input,
+  keyword included) in the usage file for Up/Down recall, unless
+  `[search] query_history = false`.
 
 The engine logs a warning for any query slower than 16 ms, naming the slowest
 plugin. Plugin panics are **not** caught; the release profile aborts the
@@ -142,7 +157,7 @@ process, so plugins must never panic.
 | `apps` | `apps` | |
 | `calculator` | `calculator` | |
 | `web` | `web:<keyword>` per `[[web_search]]` engine | |
-| `files` | `files` | |
+| `files` | `files` | also browses typed paths ([below](#path-browsing-in-the-files-plugin)) |
 | `uuid` | `uuid` | example plugin, keyword-only |
 
 - `PluginRegistry::builtin()` is the stock set; `register(descriptor)` adds (or
@@ -163,6 +178,24 @@ then choose "Reload index" in the tray (or restart):
 # a family id disables all its instances; an instance id disables one
 disabled = ["web:yt", "uuid"]
 ```
+
+### Path browsing in the files plugin
+
+Input that starts like a path (`~/`, `~\` on Windows, `/`, `C:\` or `C:/` on
+Windows, `\\server\share\` on Windows) is not searched in the index. The plugin
+lists the one directory named by everything up to the last separator and filters
+its entries by the text after it. Folders sort above files; hidden (dot) entries
+appear only with `[files] include_hidden` or when the typed segment starts with
+a dot. Each row's `autocomplete` is the typed directory plus the entry name,
+with the typed separator appended for folders, which is what Tab inserts.
+
+Rows score above `score::KEYWORD`, so they are neither halved as secondary
+global results nor reordered by usage. The listing never recurses, is capped at
+5 000 entries, and runs on a helper thread the query waits on for at most
+150 ms, so a stalled network share yields no rows instead of a stalled UI (at
+most four such listings may be outstanding at once, and the last listing is
+reused for 1.5 s while the user types the filter). A UNC path needs both a
+server and a share before anything is read.
 
 ## Writing a built-in plugin
 

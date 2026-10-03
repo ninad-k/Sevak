@@ -2,7 +2,7 @@
 // the Rust shell, which re-checks everything on save; the shortcut itself is
 // parsed by Rust only (see `validateHotkey`).
 
-import type { Config, WebSearchEngine } from "./settings-ipc";
+import { fallbackList, type Config, type WebSearchEngine } from "./settings-ipc";
 
 export type SectionId = "general" | "appearance" | "search" | "plugins" | "web" | "files" | "linux";
 
@@ -57,9 +57,11 @@ export function validate(config: Config): Problems {
   const keywords = new Set(config.web_search.map((engine) => engine.keyword.trim().toLowerCase()));
   const problems: Problems = { engines, count };
 
-  const fallback = config.search.fallback_web_search.trim();
-  if (fallback !== "" && !keywords.has(fallback.toLowerCase())) {
-    problems.fallback = `The engine "${fallback}" no longer exists.`;
+  const missing = fallbackList(config.search.fallback_web_search).find(
+    (keyword) => !keywords.has(keyword.toLowerCase()),
+  );
+  if (missing !== undefined) {
+    problems.fallback = `The engine "${missing}" no longer exists.`;
     count.search++;
   }
 

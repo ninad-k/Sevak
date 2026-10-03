@@ -51,6 +51,8 @@ export interface ResultDto {
   subtitle: string;
   icon: IconDto | null;
   plugin_id: string;
+  /** What Tab turns the input into, when the plugin offers a completion. */
+  autocomplete?: string | null;
   action: ActionKind;
   /** Other actions; `execute`'s `action` index refers to this list. */
   secondary: SecondaryDto[];
@@ -119,6 +121,20 @@ export async function search(query: string): Promise<SearchResponse | null> {
   } catch (err) {
     console.warn("[ipc] search failed:", err);
     return null;
+  }
+}
+
+/** Executed queries, most recent first (empty when history is off). */
+export async function queryHistory(): Promise<string[]> {
+  if (import.meta.env.DEV && !hasTauri()) {
+    const { mockHistory } = await import("./mock");
+    return mockHistory();
+  }
+  try {
+    return await invoke<string[]>("query_history");
+  } catch (err) {
+    console.warn("[ipc] query_history failed:", err);
+    return [];
   }
 }
 

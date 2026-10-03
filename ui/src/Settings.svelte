@@ -12,6 +12,7 @@
     saveSettings,
     setupWaylandHotkey,
     validateHotkey,
+    fallbackList,
     type Config,
     type Outcome,
     type PluginInfo,
@@ -31,7 +32,7 @@
     general: { hotkey: "", hide_on_blur: true, launch_at_login: false, check_for_updates: true },
     window: { width: 720 },
     linux: { wayland_use_xwayland: true },
-    search: { max_results: 8, fallback_web_search: "" },
+    search: { max_results: 8, fallback_web_search: "", query_history: true },
     appearance: { theme: "system" },
     plugins: { disabled: [] },
     files: { directories: [], max_depth: 4, include_hidden: false, keyword: "", global: true },
@@ -100,10 +101,29 @@
       }),
     ),
   );
+  // config.toml may list several fallbacks; the select shows one, and leaves a
+  // list alone until the user picks an engine.
+  const MANY_FALLBACKS = "__many__";
+  const fallbackKeywords = $derived(fallbackList(draft.search.fallback_web_search));
+  const fallbackMany = $derived(fallbackKeywords.length > 1);
   const fallbackMissing = $derived(
-    draft.search.fallback_web_search !== "" &&
-      !engineKeywords.some((e) => e.keyword === draft.search.fallback_web_search),
+    fallbackKeywords.length === 1 && !engineKeywords.some((e) => e.keyword === fallbackKeywords[0]),
   );
+  function getFallback(): string {
+    return fallbackMany ? MANY_FALLBACKS : (fallbackKeywords[0] ?? "");
+  }
+  function setFallback(value: string) {
+    if (value !== MANY_FALLBACKS) draft.search.fallback_web_search = value;
+  }
+  /** Rewrites the fallback keywords (string or list form); `null` drops one. */
+  function mapFallback(change: (keyword: string) => string | null) {
+    const current = draft.search.fallback_web_search;
+    if (Array.isArray(current)) {
+      draft.search.fallback_web_search = current.flatMap((k) => change(k.trim()) ?? []);
+    } else {
+      draft.search.fallback_web_search = change(current.trim()) ?? "";
+    }
+  }
 
   /** Plugin rows: the backend catalog, with the web engines taken live from the form. */
   const pluginRows = $derived.by(() => {
@@ -210,7 +230,9 @@
     payload.general.hotkey = payload.general.hotkey.trim();
     payload.files.keyword = payload.files.keyword.trim();
     payload.files.directories = payload.files.directories.map((dir) => dir.trim());
-    payload.search.fallback_web_search = payload.search.fallback_web_search.trim();
+    payload.search.fallback_web_search = Array.isArray(payload.search.fallback_web_search)
+      ? payload.search.fallback_web_search.map((k) => k.trim())
+      : payload.search.fallback_web_search.trim();
     payload.web_search = payload.web_search.map((engine) => ({
       keyword: engine.keyword.trim(),
       name: engine.name.trim(),
@@ -264,18 +286,14 @@
     const removed = draft.web_search[index];
     draft.web_search = draft.web_search.filter((_, i) => i !== index);
     const stillDefined = draft.web_search.some((e) => e.keyword.trim() === removed.keyword.trim());
-    if (!stillDefined && draft.search.fallback_web_search === removed.keyword.trim()) {
-      draft.search.fallback_web_search = "";
-    }
+    if (!stillDefined) mapFallback((k) => (k === removed.keyword.trim() ? null : k));
   }
 
   function renameKeyword(index: number, value: string) {
     const old = draft.web_search[index].keyword;
     draft.web_search[index].keyword = value;
     // The fallback follows a renamed engine instead of silently dangling.
-    if (old.trim() !== "" && draft.search.fallback_web_search === old.trim()) {
-      draft.search.fallback_web_search = value.trim();
-    }
+    if (old.trim() !== "") mapFallback((k) => (k === old.trim() ? value.trim() : k));
   }
 
   function onKeydown(e: KeyboardEvent) {
@@ -489,7 +507,9 @@
             <div class="row">
               <div class="label">
                 <label class="name" for="fallback">Fallback web search</label>
-                <span class="hint">Offered when nothing else matches your query.</span>
+                <span class="hint">
+                  Offered when nothing else matches your query. config.toml can list several.
+                </span>
                 {#if problems.fallback}
                   <span class="msg error" role="alert">{problems.fallback}</span>
                 {/if}
@@ -498,20 +518,32 @@
                 id="fallback"
                 class="input select"
                 class:invalid={!!problems.fallback}
-                bind:value={draft.search.fallback_web_search}
+                bind:value={getFallback, setFallback}
               >
                 <option value="">None</option>
+                {#if fallbackMany}
+                  <option value={MANY_FALLBACKS}>{fallbackKeywords.join(", ")}</option>
+                {/if}
                 {#each engineKeywords as engine (engine.keyword)}
                   <option value={engine.keyword}>
                     {engine.name ? `${engine.name} (${engine.keyword})` : engine.keyword}
                   </option>
                 {/each}
                 {#if fallbackMissing}
-                  <option value={draft.search.fallback_web_search}>
-                    {draft.search.fallback_web_search} (missing)
-                  </option>
+                  <option value={fallbackKeywords[0]}>{fallbackKeywords[0]} (missing)</option>
                 {/if}
               </select>
+            </div>
+
+            <div class="row">
+              <div class="label">
+                <span class="name">Remember searches</span>
+                <span class="hint">
+                  Up and Down on an empty search bar recall what you last ran. Kept on this
+                  computer only.
+                </span>
+              </div>
+              <Toggle bind:checked={draft.search.query_history} label="Remember searches" />
             </div>
           </section>
         {:else if active === "plugins"}

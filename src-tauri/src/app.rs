@@ -55,6 +55,7 @@ pub fn run(
             commands::execute,
             commands::copy_result,
             commands::set_large_type,
+            commands::query_history,
             settings::get_settings,
             settings::save_settings,
             settings::validate_hotkey,

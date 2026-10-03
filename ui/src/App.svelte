@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import Glyph from "./lib/Glyph.svelte";
+  import { parentPath } from "./lib/path";
   import { applyTheme } from "./lib/theme";
   import {
     copyResult,
@@ -11,6 +12,7 @@
     onIndex,
     onShow,
     onStatus,
+    queryHistory,
     search,
     setContentHeight,
     setLargeType,
@@ -81,6 +83,11 @@
   /** Tags every search; a response is applied only if it is still the latest. */
   let searchSeq = 0;
   let executing = false;
+  /** Executed queries (newest first) while Up/Down recall them; empty otherwise. */
+  let history: string[] = [];
+  /** Index into `history` of the query shown, or -1 when not recalling. */
+  let historyPos = -1;
+  let historyQueue: Promise<void> = Promise.resolve();
   let lastPointer = { x: -1, y: -1 };
 
   function focusInput(select = false) {
@@ -103,6 +110,7 @@
     searchSeq++; // drop any search still in flight
     panelOpen = false;
     closeLargeType();
+    historyPos = -1;
     query = "";
     results = [];
     selected = 0;
@@ -128,7 +136,52 @@
 
   function onInput(e: Event) {
     error = null;
+    historyPos = -1; // typing leaves history recall
     void runSearch((e.currentTarget as HTMLInputElement).value);
+  }
+
+  /** Replaces the input (Tab completion, history recall) and searches for it. */
+  function setQuery(text: string) {
+    error = null;
+    query = text;
+    void runSearch(text);
+  }
+
+  /**
+   * Up/Down on an empty input walk back and forward through executed queries.
+   * Down past the newest one returns to the empty input.
+   */
+  function stepHistory(older: boolean) {
+    // One step at a time, so a quick second key press waits for the first
+    // press to finish loading the history instead of being lost.
+    historyQueue = historyQueue.then(() => stepHistoryNow(older));
+  }
+
+  async function stepHistoryNow(older: boolean) {
+    if (historyPos < 0) {
+      if (!older) return;
+      const loaded = await queryHistory();
+      // The user may have typed or recalled while this was loading.
+      if (query !== "" || historyPos >= 0 || loaded.length === 0) return;
+      history = loaded;
+      historyPos = 0;
+    } else {
+      const next = historyPos + (older ? 1 : -1);
+      if (next >= history.length) return;
+      historyPos = next;
+      if (next < 0) {
+        setQuery("");
+        return;
+      }
+    }
+    setQuery(history[historyPos]);
+  }
+
+  /** Tab completes to the selected row's suggestion; Shift+Tab goes up a folder. */
+  function complete(up: boolean) {
+    historyPos = -1;
+    const text = up ? parentPath(query) : results[selected]?.autocomplete;
+    if (text && text !== query) setQuery(text);
   }
 
   /** Runs row `index`: its primary action, or secondary action number `action`. */
@@ -331,6 +384,18 @@
       // to copy; copy the row instead.
       e.preventDefault();
       void copySelected();
+    } else if (
+      (key === "ArrowUp" || key === "ArrowDown") &&
+      !ctrl &&
+      !e.altKey &&
+      !e.shiftKey &&
+      (historyPos >= 0 || query === "")
+    ) {
+      e.preventDefault();
+      stepHistory(key === "ArrowUp");
+    } else if (key === "Tab" && !ctrl && !e.altKey) {
+      e.preventDefault(); // the input is the only focus target; keep it
+      complete(e.shiftKey);
     } else if (key === "ArrowDown" || (ctrl && lower === "n")) {
       e.preventDefault();
       move(1);
@@ -545,16 +610,21 @@
           </div>
         {/each}
       </div>
-    {:else if current && current.secondary.length > 0}
+    {:else if current && (current.secondary.length > 0 || current.autocomplete)}
       <div class="hints" aria-hidden="true">
         <span class="chips">
+          {#if current.autocomplete}
+            <span class="chip"><kbd>Tab</kbd>Complete</span>
+          {/if}
           {#each modifierHints as hint (hint.label)}
             {#if hint.modifier}
               <span class="chip"><kbd>{combo(hint.modifier)}</kbd>{hint.label}</span>
             {/if}
           {/each}
         </span>
-        <span class="chip more"><kbd>→</kbd>Actions</span>
+        {#if current.secondary.length > 0}
+          <span class="chip more"><kbd>→</kbd>Actions</span>
+        {/if}
       </div>
     {/if}
 

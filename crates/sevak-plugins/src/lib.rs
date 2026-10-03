@@ -22,6 +22,7 @@ pub mod apps;
 pub mod calculator;
 pub mod example_uuid;
 pub mod files;
+pub mod path_browse;
 pub mod registry;
 pub mod web_search;
 
