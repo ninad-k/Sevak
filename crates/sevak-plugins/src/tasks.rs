@@ -1552,8 +1552,12 @@ mod tests {
                 let _ = tx.lock().unwrap().send(id.to_owned());
             }))
             .ok();
-        // Before the first load the query answers at once with nothing ...
-        assert!(plugin.query("kill a").is_empty());
+        // Before the first load the query answers at once with nothing. Holding
+        // the mock's list keeps the background load from finishing first ...
+        {
+            let _hold = platform.processes.lock().unwrap();
+            assert!(plugin.query("kill a").is_empty());
+        }
         // ... and the notifier fires, naming this plugin, once the list is there.
         assert_eq!(rx.recv_timeout(Duration::from_secs(5)).unwrap(), "tasks");
         assert_eq!(plugin.query("kill a").len(), 1);
