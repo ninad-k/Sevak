@@ -14,6 +14,11 @@ use std::time::{Duration, Instant};
 
 /// How long a query waits for a directory listing before giving up.
 pub const LIST_TIMEOUT: Duration = Duration::from_millis(150);
+/// The listing budget of this crate's unit tests. They list small temporary
+/// folders and must not fail because a loaded machine took more than
+/// [`LIST_TIMEOUT`] to schedule the listing thread.
+#[cfg(test)]
+const TEST_LIST_TIMEOUT: Duration = Duration::from_secs(30);
 /// Entries read from one directory; a larger directory is filtered over the
 /// first ones only.
 pub const MAX_DIR_ENTRIES: usize = 5000;
@@ -96,10 +101,23 @@ struct Cached {
 }
 
 /// Lists directories within a time and concurrency budget.
-#[derive(Default)]
 pub struct DirReader {
     cache: Mutex<Option<Cached>>,
     in_flight: Arc<AtomicUsize>,
+    /// How long [`DirReader::list`] waits: [`LIST_TIMEOUT`] outside tests.
+    timeout: Duration,
+    /// How long the last listing is reused: [`CACHE_TTL`].
+    ttl: Duration,
+}
+
+impl Default for DirReader {
+    fn default() -> Self {
+        #[cfg(not(test))]
+        let timeout = LIST_TIMEOUT;
+        #[cfg(test)]
+        let timeout = TEST_LIST_TIMEOUT;
+        Self::with_timeout(timeout)
+    }
 }
 
 /// Decrements the in-flight counter when the listing thread ends, however it ends.
@@ -112,16 +130,26 @@ impl Drop for InFlight {
 }
 
 impl DirReader {
+    /// A reader that waits at most `timeout` for a listing.
+    pub fn with_timeout(timeout: Duration) -> Self {
+        Self {
+            cache: Mutex::new(None),
+            in_flight: Arc::new(AtomicUsize::new(0)),
+            timeout,
+            ttl: CACHE_TTL,
+        }
+    }
+
     /// The entries of `dir` (unfiltered, unsorted), or `None` if it cannot be
-    /// read within [`LIST_TIMEOUT`].
+    /// read within the reader's timeout ([`LIST_TIMEOUT`] by default).
     pub fn list(&self, dir: &Path) -> Option<Arc<Vec<DirItem>>> {
-        self.list_within(dir, LIST_TIMEOUT)
+        self.list_within(dir, self.timeout)
     }
 
     fn list_within(&self, dir: &Path, timeout: Duration) -> Option<Arc<Vec<DirItem>>> {
         let mut cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(cached) = cache.as_ref() {
-            if cached.dir == dir && cached.at.elapsed() < CACHE_TTL {
+            if cached.dir == dir && cached.at.elapsed() < self.ttl {
                 return cached.items.clone();
             }
         }
@@ -303,7 +331,11 @@ mod tests {
     #[test]
     fn the_last_listing_is_reused_briefly() {
         let dir = tempfile::tempdir().unwrap();
-        let reader = DirReader::default();
+        // Reused for as long as the test runs, however slowly it is scheduled.
+        let reader = DirReader {
+            ttl: Duration::from_secs(600),
+            ..DirReader::default()
+        };
         let first = reader.list(dir.path()).unwrap();
         fs::write(dir.path().join("new.txt"), b"x").unwrap();
         let second = reader.list(dir.path()).unwrap();
@@ -329,8 +361,15 @@ mod tests {
         // releases its slot.
         let reader = DirReader::default();
         assert!(reader.list(dir.path()).is_some());
-        std::thread::sleep(Duration::from_millis(50));
-        assert_eq!(reader.in_flight.load(Ordering::SeqCst), 0);
+        // The listing thread lets go of its slot just after it answers.
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while reader.in_flight.load(Ordering::SeqCst) != 0 {
+            assert!(
+                Instant::now() < deadline,
+                "the listing slot was never released"
+            );
+            std::thread::sleep(Duration::from_millis(5));
+        }
     }
 
     #[test]

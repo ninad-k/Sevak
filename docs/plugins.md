@@ -8,7 +8,9 @@ plugins without rebuilding Sevak by dropping in a script.
 - [Architecture](#architecture)
 - [Writing a built-in plugin](#writing-a-built-in-plugin)
 - [Universal Actions](#universal-actions): offering actions for what the user selected in another app
+- [Contacts, 1Password and dictionary](#contacts-1password-and-dictionary): plugins with two keywords, an external tool, OS data sources and a bundled dictionary
 - [External plugins](#external-plugins): script plugins in Python, PowerShell, Node or anything else, including Alfred Script Filter scripts
+- [Workflows for contributors](#workflows-for-contributors): the engine behind [Settings > Workflows](workflows.md)
 
 Code map:
 
@@ -23,7 +25,9 @@ Code map:
 | Built-in plugins, registry | `crates/sevak-plugins/src/` |
 | Typed-path browsing (files plugin) | `crates/sevak-plugins/src/path_browse.rs` |
 | Script plugins (external) | `crates/sevak-plugins/src/script/` |
+| Workflows and the gallery | `crates/sevak-plugins/src/workflow/`, `src-tauri/src/workflows.rs` |
 | Standard action execution | `crates/sevak-plugins/src/actions.rs` |
+| Contacts, 1Password, dictionary | `crates/sevak-plugins/src/{contacts,onepassword,dictionary}/`, `crates/sevak-platform/src/{contacts,deep_link,dictionary}.rs` |
 | Universal Actions (selection) | `crates/sevak-core/src/selection.rs`, `crates/sevak-plugins/src/selection/`, `crates/sevak-platform/src/capture.rs`, `src-tauri/src/selection.rs` |
 | OS access (`PlatformProvider`) | `crates/sevak-platform/src/provider.rs` |
 
@@ -61,7 +65,9 @@ secondary action.)
   happen as an `Action`. They do not touch the OS directly. Script plugins (see
   [External plugins](#external-plugins)) are the exception to "in-memory": they ask
   a child process, so they answer within a small time budget and deliver late
-  answers through `Plugin::attach_notifier`.
+  answers through `Plugin::attach_notifier`. So do the `files:names` and
+  `files:content` plugins, which ask the OS file index
+  ([below](#whole-disk-and-content-search-in-the-files-plugins)).
 - **Actions** (`Action`) are a closed vocabulary: `Launch`, `OpenPath`,
   `OpenUrl`, `CopyText`, `PasteText` (copy, return to the app that was focused
   before Sevak opened, press Ctrl+V / Cmd+V), `RevealPath` (show in the file
@@ -90,7 +96,8 @@ secondary action.)
 - **Platform provider** (`PlatformProvider`) is the only OS-specific layer
   (Windows Start Menu / packaged apps, Linux `.desktop` entries). It also
   gatekeeps URLs: `open_url` accepts only `http://`, `https://` and `mailto:`.
-  Other OS entry points are narrow, closed vocabularies instead of strings:
+  Other OS entry points are narrow, closed vocabularies instead of strings
+  (`DeepLink` for `tel:` and app links, [below](#the-deeplink-allow-list)):
   `run_system_command(SystemCommand)` and `open_settings_page(SettingsPage)`
   (with `supported_*` methods that report what works on this machine). They
   back the `system` plugin, so settings URIs such as `ms-settings:` never pass
@@ -144,6 +151,9 @@ secondary action.)
   route (`f ~/Doc`) the engine puts the typed keyword back in front, so a plugin
   never has to know it. `ResultItem::new` is unchanged; the field defaults to
   `None`.
+- **Preview, text and grid hints.** See [Previews and views](#previews-and-views).
+  Results made only of grid tiles keep up to `GRID_MAX_RESULTS` (60) instead
+  of `[search] max_results`.
 - **Keyword hints.** A global query that is exactly a plugin's keyword (`g`)
   also shows that plugin's `Plugin::keyword_row()` (default `None`) after the
   real matches. Its `autocomplete` is the full replacement input (`g `). Web
@@ -198,13 +208,19 @@ process, so plugins must never panic.
 | `apps` | `apps` | |
 | `calculator` | `calculator` | also converts units (`units.rs`) and, with `[calculator] currency`, currencies (`currency.rs`) |
 | `web` | `web:<keyword>` per `[[web_search]]` engine | |
-| `files` | `files` | also browses typed paths ([below](#path-browsing-in-the-files-plugin)) |
+| `files` | `files`, `files:names`, `files:content` | `files` also browses typed paths ([below](#path-browsing-in-the-files-plugin)); the other two search the whole disk (`ff`) and file contents (`in`) through the OS index ([below](#whole-disk-and-content-search-in-the-files-plugins)) |
 | `bookmarks` | `bookmarks` | see [Bookmarks](#bookmarks) |
 | `system` | `system` | lock, sleep, restart, settings pages; global |
+| `tasks` | `tasks` | automation tasks (dark mode, volume, quit, kill, eject, keep awake...); keyword `t`, also global; see [below](#automation-tasks-and-media-controls) |
+| `media` | `media` | play/pause, next, previous, stop and the playing track; keyword `play`, also global |
 | `shell` | `shell` | `> command` runs in a terminal; see below |
 | `clipboard` | `clipboard` | `cb`, clipboard history; opt-in through `[clipboard] enabled` (see below) |
 | `snippets` | `snippets` | `s`, `[[snippet]]` entries pasted with placeholders expanded |
+| `emoji` | `emoji:word`, `emoji:colon` | `emoji ` and `:`, an offline emoji picker shown as a grid ([below](#emoji-a-grid-plugin)) |
 | `selection` | `selection` | Universal Actions for the text, URL or files selected in another app; no keyword ([below](#universal-actions)) |
+| `contacts` | `contacts`, `contacts:at` | `c` and `@`, opt-in through `[contacts] enabled` ([below](#contacts-1password-and-dictionary)) |
+| `1password` | `1password` | `1p`, opt-in through `[onepassword] enabled` |
+| `dict` | `dict`, `dict:spell` | `define` and `spell`, offline |
 | `uuid` | `uuid` | example plugin, keyword-only |
 
 - `PluginRegistry::builtin()` is the stock set; `register(descriptor)` adds (or
@@ -225,6 +241,42 @@ then choose "Reload index" in the tray (or restart):
 # a family id disables all its instances; an instance id disables one
 disabled = ["web:yt", "uuid"]
 ```
+
+### Whole-disk and content search in the files plugins
+
+`files_family` (`crates/sevak-plugins/src/os_files.rs`) builds the `files`
+family: the folder-index `files` plugin and, unless `[files] use_os_index` is
+off, `files:names` (keyword `index_keyword`, default `ff`) and `files:content`
+(`content_keyword`, default `in`). Both are keyword-only. Their rows are the
+folder plugin's own (`plugin_id` is `files`, ids are `files:<full path>`), so
+activation, usage statistics and `[[hotkey]] run` treat them alike.
+
+The OS index is reached through `PlatformProvider::os_search(&OsSearchRequest)`
+(`crates/sevak-platform/src/os_search.rs`), a blocking call with its own
+timeout, so a platform override can use any mechanism:
+
+| OS | Names | Contents |
+|---|---|---|
+| Windows | `es.exe` (Everything) if installed and running; else Windows Search: ADO `Search.CollatorDSO` over IDispatch (`windows/os_search.rs`), `CONTAINS(System.FileName, '"word*" AND ...')` | same connection, `CONTAINS(System.Search.Contents, ...)` ordered by rank |
+| macOS | `mdfind 'kMDItemDisplayName == "*word*"cd && ...'` | `mdfind 'kMDItemTextContent == "word*"cd && ...'` |
+| Linux | `plocate`/`locate -i -b -A` | `tracker3 search --files`, else `baloosearch` |
+
+User text never reaches a shell: external programs get an argument list, and the
+SQL escapes its string literal and keeps the words inside quoted phrases. The
+builders and the output parsers are pure functions with unit tests on every OS.
+`os_search` reports `Unavailable` (service stopped, tool missing) separately
+from `TimedOut` and `Failed`; the plugin turns `Unavailable` and `Failed` into
+one explanatory row.
+
+The query never waits for the index. `query` takes a request number from the
+same `Delivery` the script plugins use, hands the text to one worker thread that
+keeps only the newest pending request, and waits 80 ms. An answer that is late
+notifies the shell, which runs the query again and finds it cached; an answer
+for a request that is no longer the newest is dropped, and a superseded request
+that the worker has not started is never run. `ff` adds the in-memory folder
+matches (without duplicates) to whatever the index has answered, and browses a
+typed path like `f` does. Hidden paths and the folder index's pruned directories
+(plus app bundles and system folders on macOS) are removed from the index's hits.
 
 ### Path browsing in the files plugin
 
@@ -304,6 +356,78 @@ appear (down-weighted like files) for plain queries.
   URLs from different browsers or profiles are merged into one result that lists
   the browsers.
 
+### Automation tasks and media controls
+
+The `tasks` and `media` plugins (`crates/sevak-plugins/src/tasks.rs`,
+`media.rs`) follow the `system` plugin's recipe: a closed vocabulary in the
+platform layer, an availability probe, two-phase activation and stable ids.
+
+- **A closed vocabulary.** `sevak_platform::Task` (`sevak-platform/src/tasks.rs`)
+  is an enum: parameterless variants (`ToggleDarkMode`, `Mute`, ...) and a few
+  that carry data (`SetVolume(u8)`, `KeepAwake(minutes)`, `QuitApp(name)`,
+  `ForceQuitApp(name)`, `KillProcess(name)`, `Eject(drive)`).
+  `PlatformProvider::run_task(&Task)` maps each to a fixed command line or Win32
+  call; no caller can make Sevak run an arbitrary program. `Task::to_key()` /
+  `Task::from_key()` give the stable spelling (`dark_mode`, `volume:30`,
+  `quit_app:Slack`) and validate the data again: a volume is 0 to 100, minutes
+  1 to 1440, names are plain text, a drive id is a letter (`E:`), a
+  `/Volumes/<name>` or a `/dev/<name>`. `media` has the same shape with
+  `MediaCommand` and `PlatformProvider::media_control`.
+- **Availability.** `PlatformProvider::supported_tasks()` probes the machine
+  (`PATH`, Windows radios) and `tasks::supported_kinds(Os, &TaskEnv)` decides
+  per OS; `Os` is a parameter so all three tables are tested on every OS.
+  Tasks that cannot work are not offered rather than failing: `FlushDns` needs
+  administrator rights on Windows and root on macOS, `MinimizeAll` and
+  `HideOthers` have no Linux equivalent, Wi-Fi and Bluetooth need a radio.
+- **Per-OS tables are pure.** `mac_task_command`, `linux_task_command`,
+  `linux_volume_command`, `windows_task_chord` (virtual-key codes for `Win+D`
+  and friends), `windows_eject_args`, and the parsers for tool output
+  (`parse_wifi_device`, `parse_airport_power`, `parse_nm_radio`,
+  `parse_lsblk`, `parse_playerctl`, ...) take plain values and return plain
+  values, so their tests run everywhere. The tasks that must read state before
+  acting (Linux dark mode, Wi-Fi, Bluetooth) read with a fixed command and
+  decide in Rust.
+- **Names travel as data.** macOS `QuitApp` runs `osascript` with the app name
+  as an *argument* of an `on run argv` handler, never inside the script text,
+  and names that could pass for an option are refused. Process names are
+  checked again when a process is ended, `PROTECTED_PROCESSES` (`csrss`,
+  `systemd`, `launchd`, ... and Sevak) are never listed or ended, and Sevak's
+  own pid is skipped.
+- **Typing never waits for the OS.** The running apps, the processes (with CPU
+  and memory, which needs two samples) and the removable drives are OS round
+  trips. `live::Cache<T>` keeps the last answer; `query` only reads it and, when
+  it is older than three seconds, starts one background refresh. When the
+  refresh finishes with a different answer it calls the notifier given to
+  `Plugin::attach_notifier`, and the shell re-runs the current query against
+  the fresh cache (the same mechanism script plugins use). `media` does the same
+  for the now-playing track, with a two second lifetime, and warms the cache in
+  `Plugin::refresh`. Plain name queries never touch the OS.
+- **Typed commands.** `quit`, `force quit`, `kill`, `eject`, `vol`, `awake` are
+  recognized by their whole first word (`parse_intent`) and answer with rows
+  scored at least `score::KEYWORD`, so they stay above ordinary matches and
+  out of the usage boost. The plugin has the keyword `t` and also answers
+  global queries (`[tasks] global`), down-weighted like other keyword plugins.
+- **Confirmation.** `Plugin::confirmation` asks for `ForceQuitApp`,
+  `KillProcess` and `RestartShell` (unless `[tasks] confirm = false`). The quit
+  rows carry a Shift secondary action, "Force quit"; the shell confirms the
+  derived item, so the question appears for that action too.
+- **Hotkeys and workflows.** `Plugin::resolve` accepts `tasks:<key>` for any
+  valid, offered task, with its data (`tasks:volume:30`, `tasks:kill:chrome.exe`),
+  and `media:<key>` for the buttons, so `[[hotkey]] run = "tasks:dark_mode"`
+  works without a query. The playing-track row is dynamic and not resolvable.
+- **Windows internals.** `windows/tasks.rs` and `windows/media.rs`: registry
+  and `WM_SETTINGCHANGE` for dark mode, `SendInput` chords (sent from a thread
+  after a short delay so they reach the app that was in front, not Sevak's
+  closing window), `IAudioEndpointVolume` for volume, WinRT
+  `Windows.Devices.Radios` for Wi-Fi and Bluetooth, `EnumWindows` (visible,
+  titled, not cloaked, not a tool window) for the app list with `WM_CLOSE` to
+  quit, `SetThreadExecutionState` on a dedicated thread for keep awake, and
+  `GlobalSystemMediaTransportControlsSessionManager` for the media session.
+  WinRT's blocking `join()` runs on a short-lived thread in the multithreaded
+  apartment (`on_mta_thread`).
+- **Dependencies.** `sysinfo` (the `system` feature only) lists processes with
+  their CPU and memory use and ends them; nothing else of it is used.
+
 ## Writing a built-in plugin
 
 The worked example is `crates/sevak-plugins/src/example_uuid.rs`: type `uuid `
@@ -354,7 +478,9 @@ Rules of thumb (all spelled out in the example):
   copy, a URL to copy). Secondary actions share the primary's `execute`.
 - Icons are `IconSource::builtin(name)` (a UI glyph: `app`, `calculator`,
   `web`, `file`, `folder`, `copy`, `terminal`, `plugin`, `lock`, `sleep`,
-  `restart`, `power`, `logout`, `trash`, `settings`), or `File` / `Shell` for real
+  `restart`, `power`, `logout`, `trash`, `settings`, `theme`, `desktop`, `camera`,
+  `volume`, `wifi`, `bluetooth`, `eject`, `bolt`, `kill`, `play`, `next`,
+  `previous`, `stop`, `note`), or `File` / `Shell` for real
   images.
 - For an action that cannot be undone, override `Plugin::confirmation(item)` to
   return the question to ask. The shell shows it in a native dialog before
@@ -436,6 +562,15 @@ a background thread. User documentation is in the README.
 3. synthesizes Ctrl+V / Cmd+V;
 4. optionally puts the previous clipboard text back.
 
+An image or a list of files is pasted the same way by `Action::PasteClip`
+{ content: `ClipContent`, restore_clipboard } (`PlatformProvider::paste_clip`; `paste.rs`
+runs the one order of operations for both). `ClipContent::Image { path }` names
+a PNG file whose pixels become the clipboard's image; `ClipContent::Files { paths }`
+puts the files on it as a file manager's copy does. `Action::CopyClip` only
+copies (`set_clipboard_clip`). The shell treats both like `PasteText` (hides the
+window first for a paste), and the UI shows them as "Paste" / "Copy". Only text
+is put back afterwards, if `restore_clipboard` is on.
+
 The shell hides Sevak's window *before* executing a `PasteText` (as it does for
 `Launch`/`OpenPath`/`OpenUrl`). Implementations: `windows/paste.rs`
 (`GetForegroundWindow`, `SetForegroundWindow`, `SendInput`), `macos/paste.rs`
@@ -460,7 +595,31 @@ table hands to the new plugin while the old one is alive; the thread holds a
 `clipboard_sequence()` (change counter), `read_clipboard()` (text plus the
 "secret" flag) and `foreground_app()` (source app, matched against
 `ignore_apps`). Text Sevak wrote itself is recognised through
-`sevak_platform::clipboard::take_own_write` and skipped.
+`sevak_platform::clipboard::take_own_write` and skipped; images and file lists
+the same way through `take_own_image` / `take_own_files`, which hash the pixels
+(`ClipboardImage::content_hash`) or the paths.
+
+Besides text, the monitor asks the platform for files and the image
+(`read_clipboard_media(MediaRequest)`, after `read_clipboard()` has said the
+content is not secret). Files win over text, and text over an image. The image
+is read as RGBA by `arboard` (which converts `CF_DIB`/`CF_DIBV5`/`PNG`, `public.png`/
+`public.tiff` and `image/png`), hashed, and only if it is new encoded as a PNG
+(RGB when it has no transparency) plus a 96 px thumbnail. `clipboard_store.rs`
+(`MediaStore`) owns the `clipboard/` folder: files are named after the pixel hash,
+nothing else in the folder is ever deleted, and `load` removes the files no entry
+refers to. Systems without a change counter (Linux) look for an image or files
+only every fourth poll while the clipboard holds no text.
+
+A history row for an image uses its thumbnail as `IconSource::File` (the shell
+serves it through the `sevak-icon` scheme, so the webview never gets a file
+path) and the `PasteClip` action, and is a Grid View tile (`as_tile(None)`) with a
+`PreviewHint::Path` of the full PNG, so `cb image` shows a grid. The history
+file is version 2: entries gain optional `image` (hash, size) and `files`; `text`
+is always written so version 1 readers still load the file.
+
+Universal Actions' clipboard restore (`ClipboardSnapshot`) covers an image too:
+the image is read into the snapshot only when the clipboard holds no text and no
+files, and putting it back is noted as Sevak's own write.
 
 ### `snippets`: expanding at execution time
 
@@ -469,6 +628,89 @@ expands the placeholders (`{time}`, `{clipboard}`, ...) at the moment of
 pasting, looking the snippet up by its result id so a config reload between
 query and Enter uses the new text. Expansion is the pure function
 `snippets::expand`, tested without a platform.
+
+### Expanding snippets as you type
+
+Not a plugin, but it reads the same `[[snippet]]` entries:
+`sevak_plugins::snippet_expansion` (started by `src-tauri/src/expansion.rs`
+only while `[snippets] auto_expand` is on). Three layers, so most of it is
+testable without an OS:
+
+- `PlatformProvider::start_key_listener` reports `KeyEvent::{Char, Backspace,
+  Reset}` (never key codes) from a low-level keyboard hook (Windows,
+  `windows/keyhook_expand.rs`), a listen-only event tap (macOS) or the X11
+  RECORD extension (Linux). Listeners translate with the focused app's layout,
+  ignore events Sevak injects, and turn everything that is not plain typing
+  (shortcuts, caret keys, clicks, focus changes) into `Reset`. `KeyEvent`'s
+  `Debug` output hides the character; keep it that way, and never log, store or
+  forward what a listener reports.
+- `Matcher` is pure: it holds the last 64 characters, finds the longest keyword
+  they end with (prefix, case, word-boundary and delimiter rules) and says how
+  many Backspaces to press. Its buffer is wiped on `reset` and on drop.
+- The worker asks `PlatformProvider::typing_target` (app, own window, password
+  box) before buffering and again before acting, then calls
+  `PlatformProvider::replace_typed_text(delete, text)`, which runs the shared
+  flow in `sevak-platform/src/expand.rs` (save clipboard, set text privately,
+  Backspaces, paste, restore) with an OS-specific key driver.
+
+To test expansion without a keyboard, implement `start_key_listener` on a fake
+provider and call the sink yourself, as the tests in `snippet_expansion.rs` do.
+`cargo test -p sevak-platform keyhook -- --ignored --nocapture` has two manual
+tests for the real Windows hook.
+
+## Previews and views
+
+Three optional parts of a `ResultItem` control how a row appears beyond the
+list. All default to "nothing special"; `ResultItem::new` is unchanged.
+
+**Preview pane** (user presses Shift or Ctrl+Y). With nothing set, the shell
+derives the preview from the row's action: `open_path` and `reveal_path` show
+the file or folder, `launch` the application, `open_url` the address (never
+fetched), `copy_text` and `paste_text` the text. To say something better:
+
+- `ResultItem::with_preview(PreviewHint)` sets a static hint:
+  `Text { text }`, `Path { path }`, `Url { url, title }` or
+  `Details { rows: Vec<(label, value)> }` (the calculator uses it for the
+  expression and result).
+- `Plugin::preview(&self, item) -> Option<PreviewHint>` is asked lazily, on a
+  worker thread, only for the row being previewed, so it can do a little work
+  that would be too slow in `query`: snippets fill in their placeholders, the
+  emoji plugin looks up keywords. It wins over the item's own hint.
+
+The producer lives in `sevak_core::preview` (no UI or OS dependency) and is
+bounded: text files are read up to 64 KB, images up to 4 MB (sent as `data:`
+URLs, so the content security policy needs no new source), folders list 100
+entries. Only the path the *result* refers to is read: never one supplied by
+the page, never a relative path, never a network location (`\\server\share`),
+and only regular files and folders. The shell commands are `preview(id,
+ticket)` and `text_view(id, ticket)`; a result that expired answers an error.
+
+**Text View** (Ctrl+T). `ResultItem::with_view(ViewHint::Text { text, on_enter
+})` carries a long text. Without a hint, a row whose `copy_text` or
+`paste_text` text has a line break or at least 160 characters can also be
+opened in the Text View (long clipboard entries, snippets). With `on_enter`,
+Enter opens the view instead of running the action; give such a row an action
+that copies the whole text.
+
+**Grid View.** `ResultItem::as_tile(Some("😀"))` (or
+`with_view(ViewHint::Grid { glyph })`) makes a row a tile: its title is the
+label and `glyph` (a short text) its picture, or its icon when there is none.
+The UI draws a grid when *every* result of a search is a tile, which in
+practice means a keyword plugin whose results all are; otherwise the tiles
+appear as ordinary rows. Enter, the action panel and secondary actions work as
+for any row. The image clipboard and file buffer use the same hint with an
+icon image (`IconSource::File`) and a `PreviewHint::Path` for the full picture.
+
+### `emoji`: a grid plugin
+
+`emoji.rs` is the worked example of a grid plugin: one family, two instances
+because a plugin has one keyword (`emoji:word` for `emoji `, `emoji:colon` for
+`:`). The list is `crates/sevak-plugins/data/emoji.tsv`
+(`glyph<TAB>name<TAB>keyword|keyword`), generated by
+`node scripts/generate-emoji.mjs` from Unicode's `emoji-test.txt` and CLDR
+annotations (Unicode License); the plugin never touches the network. Enter is
+`Action::PasteText` (or `CopyText` where pasting is unavailable), and
+`Plugin::preview` supplies the details table.
 
 ## Universal Actions
 
@@ -514,18 +756,132 @@ and its fake-driven tests; `windows/`, `macos/` and `linux/capture.rs` hold the
 key presses and modifier handling). `PlatformProvider::capture_selection`
 returns `Selected`, `Nothing` or `Unavailable(reason)`.
 
-**Script plugins and Universal Actions: design only.** Script plugins do not
-receive the selection yet. The plan, so the manifest can stay stable: a script
-plugin would declare `accepts = ["text", "url", "file"]` in `plugin.toml`; when a
-selection of one of those kinds is captured, the host would send the persistent
-script a request `{"selection": {"kind": "text", "text": "..."}}` (or `"url"`,
-`"files": [...]`) and show the Alfred-style items it answers with after the
-built-in actions, running them with the same `Action` mapping as query results.
-The open questions are the wait (scripts are normally answered asynchronously,
-but this panel is built once, so a deadline of about 300 ms would apply) and
-telling the user, in the approval dialog, that the plugin will see their
-selection. Until then a script plugin cannot read it, and a selection is never
-passed to any script.
+**Workflows implement the `accepts` design; script plugins still do not receive
+the selection.** The plan for script plugins was to declare
+`accepts = ["text", "url", "file"]` and be sent the selection by the host.
+[Workflows](workflows.md#triggers) now do exactly the declaring half: a
+*Universal Actions* trigger node has `accepts = ["text", "url", "file"]`, the
+workflow's `TriggersPlugin` (`workflow/plugins.rs`) implements
+`selection_actions` for the kinds it accepts, the selection becomes the
+workflow's argument (one link or path per line), and the approval dialog tells
+the user that the workflow will receive their selection. Everything above
+holds: ids name the node, never the selection (`workflow:<folder>:select:<node>`),
+and `tracks_usage()` is `false`. A *script plugin* still cannot read the
+selection, and a selection is never passed to a script unless a workflow the
+user allowed hands it to a *Run script* node as its argument. The open question
+for script plugins is the wait (scripts are normally answered asynchronously,
+but this panel is built once, so a deadline of about 300 ms would apply).
+
+## The file buffer
+
+Not a plugin: a collection of the paths of `files` results (`Alt+Up` /
+`Alt+Down` in the launcher) that the user acts on together. The logic is
+`sevak_plugins::file_buffer`:
+
+- `FileBuffer` holds the paths (ordered, each once, at most `MAX_ITEMS`).
+- `BufferAction` names what can be done (`OpenAll`, `ShowInFolder`,
+  `CopyPaths`, `CopyFiles`, `MoveTo`, `CopyTo`, `Trash`, `Zip`,
+  `OpenInTerminal`); `confirmation` returns the question to ask first, and
+  `run(context, action, items, destination, progress)` does it and returns an
+  `Outcome` (how many worked, the first failure, which items were used up).
+- `file_buffer::ops` is the disk work: `copy_items`, `move_items`,
+  `trash_items`, `zip_items`. Nothing overwrites or deletes for good; name
+  clashes become `name (2).ext` (`unique_path`), and every batch reports
+  per-item failures instead of stopping.
+- The OS parts are on `PlatformProvider`: `move_to_trash(path)` (Windows
+  `SHFileOperationW` with `FOF_ALLOWUNDO`, macOS `NSFileManager`
+  `trashItemAtURL`, Linux `gio trash`) and `set_clipboard_files(paths)`.
+  `MockPlatform` records both (`trashed`, `trash_refuses`, `clipboard_files`),
+  so tests never touch a real trash; tests that copy or move use a temp dir.
+
+The shell (`src-tauri/src/file_buffer.rs`) keeps the buffer in `AppState`, so the
+page can only add a result it was shown (a ticket and an id, never a path). It
+asks for the confirmation, hides the launcher for the actions that hand over to
+another program, runs everything off the UI thread and sends
+`sevak:buffer-progress` events. In a browser preview (`npm run dev`) the page
+uses `mockBuffer` from `ui/src/lib/mock.ts`; open `/#buffer` or `/#buffer-dest`.
+
+## Contacts, 1Password and dictionary
+
+Three built-in plugins (`crates/sevak-plugins/src/contacts/`, `onepassword/`,
+`dictionary/`) show patterns the simpler ones do not. User documentation is in
+[Contacts](features/contacts.md), [1Password](features/1password.md) and
+[Dictionary and spelling](features/dictionary.md).
+
+**Several keywords, one data set.** `Plugin::keyword` is a single string, so a
+plugin with two keywords is two instances sharing an `Arc` of the data:
+`contacts` (`c`, configurable) and `contacts:at` (`@`), and `dict` (`define`) and
+`dict:spell` (`spell`). The factory returns both; instance ids use the
+`family:instance` form, so `[plugins] disabled = ["contacts"]` turns both off.
+Only the family instance loads data in `refresh`.
+
+**Opt-in plugins** are built even when disabled in the config (so the settings
+window can list them) but hold no data and answer every query with one row that
+copies the line to add to `config.toml`; the clipboard plugin does the same.
+
+**Usage tracking.** All three return `false` from `tracks_usage`, so names,
+login titles and looked-up words never reach `usage.json` or the search history.
+
+**Large Type.** `ResultItem::with_large_text` sets what `Ctrl+L` shows instead of
+the title (a contact's phone number).
+
+### Platform pieces
+
+| Need | Where |
+|---|---|
+| Address book | `PlatformProvider::{contacts_access, request_contacts_access, system_contacts}`. macOS: `macos/contacts.rs` (`CNContactStore`, behind `NSContactsUsageDescription` in `src-tauri/Info.plist`). Windows: `windows/people.rs` (`Windows.ApplicationModel.Contacts`, read-only). Linux: `evolution_address_books()` returns Evolution's `contacts.db` paths and the plugin reads their vCards (`contacts/sources.rs`) from a private copy, like Firefox's bookmarks. |
+| vCard 2.1, 3.0 and 4.0 | `sevak_platform::contacts::parse_vcards` (unit tested; no crate) |
+| macOS permission | Never asked at startup or while typing. `contacts_access()` only reads the status; a row's Enter calls `request_contacts_access()`. |
+| Non-web links | `sevak_platform::DeepLink`, opened with `PlatformProvider::open_link`. |
+| Definitions | `PlatformProvider::system_definition` (macOS Dictionary Services, `macos/dictionary.rs`) |
+| Spelling | `PlatformProvider::system_spelling` (Windows `ISpellChecker`, `windows/spell.rs`, on a worker thread with a 120 ms answer limit) |
+
+### The `DeepLink` allow-list
+
+`open_url` accepts only `http(s):` and `mailto:` and must stay that way. Three
+plugin features need one more scheme each, so instead of loosening `open_url`
+there is a closed type, `DeepLink`, that can only be built by constructors that
+validate every piece and build the whole URL themselves:
+
+| Constructor | URL | Validation |
+|---|---|---|
+| `DeepLink::tel(number)` | `tel:+15551234567` | digits, a leading `+`, spaces and `-.()`; 3 to 20 digits |
+| `DeepLink::address_book_card(id)` | `addressbook://<id>` | letters, digits, `:`, `-`, `_`; at most 100 characters |
+| `DeepLink::onepassword_item(account, vault, item)` | `onepassword://view-item/?a=..&v=..&i=..` | each id letters and digits only, 20 to 40 characters |
+
+Plugins carry the pieces in an `Action::Custom` payload (`call:+44 20 ...`) and
+build the link in `execute`, so a tampered payload is refused there. To add a
+link, add a constructor with tests next to the others; do not add a scheme to
+`open_url`.
+
+### 1Password and `op`
+
+`onepassword/op.rs` holds the parsing (tested against JSON fixtures) and the
+`OpRunner` trait; `CliRunner` is the real implementation, and tests use a fake.
+Rules the plugin keeps:
+
+- Only `op item list --categories Login --format json` and `op account list
+  --format json` are ever run. `Login` has no field for a secret, and the parser
+  reads only `id`, `title`, `vault`, `urls` and `additional_information`.
+- `op` is started only from `query` (the keyword route), on a background thread,
+  when the in-memory list is missing or older than `cache_minutes`. `refresh` does
+  nothing, so startup and "Reload index" never trigger a biometric prompt. A
+  failure is remembered and not retried until the user presses Enter on the retry
+  row. The plugin tells the launcher the answer arrived through the notifier.
+- An item's "open in 1Password" link needs the account id (`op account list`); with
+  several accounts and no `[onepassword] account` the link is left out.
+
+### The dictionary
+
+`dictionary/lexicon.rs` is a small engine over `data/wordnet-en.z`: a sorted text
+index with binary search, WordNet-style inflection rules checked against the part
+of speech (`-ed` needs a verb) and consonant doubling (`stopped`, not `stoped`),
+and spelling suggestions by Damerau-Levenshtein distance, pre-filtered by length
+and letter set, ranked by distance, rearranged letters, first letter, frequency.
+The data is derived from Princeton WordNet 3.0 by
+`python scripts/build-dictionary.py <WordNet-3.0 folder>`; the licence is kept in
+the file's header and in `THIRD_PARTY_NOTICES.md`. It adds about 2.7 MB to the
+program and 8 MB of memory when unpacked (once per process, in `refresh`).
 
 ## External plugins
 
@@ -602,7 +958,7 @@ idle_timeout_secs = 300          # persistent: stop after this much inactivity (
   when two folders claim one id the first (by folder name) wins.
 - Keywords are matched case-insensitively. A keyword that another plugin (built-in
   or script) also uses queries both and merges their results, so pick one
-  that is not taken (`g`, `yt`, `gh`, `f`, `b`, `>`, `cb`, `s` and `uuid` are by
+  that is not taken (`g`, `yt`, `gh`, `f`, `b`, `>`, `cb`, `s`, `c`, `@`, `1p`, `define`, `spell` and `uuid` are by
   default).
 - Unknown keys are ignored, so a manifest written for a newer Sevak still loads.
 - A `plugin.toml` that is invalid is skipped with a message in the log and shown
@@ -715,6 +1071,9 @@ encoding, as Windows consoles do by default, still sees the right text.
 | `icon` | | `{"kind":"builtin","name":"copy"}` (a UI glyph: `app`, `calculator`, `web`, `file`, `folder`, `copy`, `plugin`) or `{"kind":"file","path":"icon.png"}` |
 | `action` | | what Enter does; defaults to copying the title |
 | `score` | | a number; see below |
+| `view` | | `"text"` or `"grid"`; see [Views](#views-text-and-grid) |
+| `text` | with `"view":"text"` | the long text for the Text View (100 000 characters) |
+| `glyph` | | with `"view":"grid"`: a short text (an emoji, 16 characters) drawn as the tile's picture |
 
 At most 50 items per answer are kept. An item that is malformed is skipped, the
 rest of the answer is used, and the log says why.
@@ -743,6 +1102,33 @@ reshuffle them). A given score is clamped into `0` to `4999`, just below the
 score Sevak reserves for its own keyword rows, so a script can order its rows
 but never outrank built-in answers. Give rows close scores if you want Sevak to
 reorder them by how often you pick them.
+
+#### Views: text and grid
+
+An item can ask for one of two presentations with `"view"`:
+
+- `"view": "text"` with `"text": "..."`: the long text opens in the Text View
+  (Ctrl+T, a scrollable full-height view; Esc or Left goes back). Without an
+  `action` the row exists to show that text: Enter opens the view, and copying
+  the row copies the whole text. With an `action`, Enter runs it as usual and
+  Ctrl+T opens the view. An item with `"view":"text"` but no text is shown as
+  an ordinary row.
+- `"view": "grid"`: the item is a tile. When *every* item of an answer is a
+  tile, Sevak shows them as a grid (arrows move, Enter runs the tile), up to 60
+  of them; mixed answers show ordinary rows. A tile's picture is the item's
+  `icon` (a bigger image looks better) or `"glyph": "🔥"`; its label is the
+  `title`. An answer holds at most 50 items, so a script's grid has at most 50
+  tiles.
+
+```json
+{"type":"results","request_id":3,"items":[
+  {"title":"fire","view":"grid","glyph":"🔥","action":{"type":"copy_text","text":"🔥"}},
+  {"title":"party popper","view":"grid","glyph":"🎉","action":{"type":"copy_text","text":"🎉"}}
+]}
+```
+
+The preview pane works for script items too, derived from their action (an
+`open_path` shows the file, a `copy_text` the text).
 
 **Icons.** A `file` icon is a path **inside the plugin folder** (`png`, `svg`,
 `ico`, `jpg`, `webp`). Absolute paths, `..`, and symlinks that lead outside the
@@ -792,16 +1178,43 @@ mode. Mapping:
 | `type` of `file` or `file:skipcheck` | `arg` is a path to open even if it does not exist |
 | `icon.path` | an icon, if the file is inside the plugin folder |
 | `valid: false`, or no `arg` | the row is shown; Enter copies its title |
+| `autocomplete` | what `Tab` turns the input into, relative to the plugin's own input: for `gh rep`, an `autocomplete` of `repo` makes `gh repo`, as for built-in plugins (`ResultItem::autocomplete`) |
+| `mods` | secondary actions of the row ([below](#modifiers-mods)) |
 | item order | kept (Sevak's scores follow the order) |
 
-Ignored: `autocomplete`, `quicklookurl`, `mods`, `variables`, `text`, `match`,
-`icon.type` (`fileicon` and `filetype` ask macOS for a file's icon), and the
-top-level `rerun`, `variables` and `cache`. A scheme other than web or mail in
+#### Modifiers (`mods`)
+
+Each entry of an item's `mods` becomes a secondary action, run with a modifier
+key held on Enter or picked in the action panel (`→` or `Ctrl+K`):
+
+```json
+{"title": "sevak", "arg": "https://github.com/ninad-k/Sevak",
+ "mods": {"alt":   {"arg": "git clone https://github.com/ninad-k/Sevak.git", "subtitle": "Copy the clone command"},
+          "cmd":   {"arg": "https://github.com/ninad-k/Sevak/issues",      "subtitle": "Open the issues"},
+          "ctrl+alt": {"arg": "x", "valid": false}}}
+```
+
+- The entry's `arg` becomes an action by the same shape rules as the row's; an
+  entry without `arg` uses the row's. `valid: false` leaves the entry out.
+- `subtitle` is the entry's label in the action panel and under the list; without
+  one the label says what the action does: "Open link", "Open" or "Copy".
+- Keys follow Sevak's own convention: Alfred's `cmd` is **`Ctrl+Enter`**
+  (Command on macOS), `alt` is `Alt+Enter`, `shift` is `Shift+Enter`. Alfred's
+  `ctrl`, `fn` and combinations such as `cmd+alt` have no key of their own here
+  and appear in the action panel only. Each Sevak modifier belongs to one entry;
+  the entries are listed in a fixed order (`cmd`, `alt`, `ctrl`, `shift`, `fn`,
+  then combinations), not in the order the script printed them.
+- `variables` of an entry only matter to [workflows](workflows.md#script-filter).
+
+Ignored: `quicklookurl`, `variables`, `text`, `match`, `icon.type` (`fileicon`
+and `filetype` ask macOS for a file's icon), and the top-level `rerun`,
+`variables` and `cache`. A scheme other than web or mail in
 `arg` (`slack://`, `obsidian://`) is copied rather than opened because Sevak
 does not open arbitrary schemes. Scripts that call `osascript`, read
 `~/Library`, or expect an Alfred preferences file need changes to run elsewhere.
-Only Script Filters are supported, not whole `.alfredworkflow` packages with
-their other node types.
+Only Script Filters are supported here, not whole `.alfredworkflow` packages with
+their other node types; [workflows](workflows.md) cover chaining actions after
+a Script Filter.
 
 ### Speed: queries never wait for scripts
 
@@ -823,8 +1236,8 @@ a **budget, not a deadline**:
    has already typed past it.
 
 The engine side of this is `Plugin::attach_notifier`: a plugin that can answer
-late is handed a callback (`ResultsNotifier`) and calls it with its id. Built-in
-plugins never use it.
+late is handed a callback (`ResultsNotifier`) and calls it with its id. Among the
+built-in plugins only the OS-index file searches use it.
 
 ### Lifecycle, crashes and restarts
 
@@ -857,8 +1270,10 @@ plugins never use it.
   what runs, Sevak asks again. (Editing the script file itself is not detected;
   the manifest is what you approve.) "Not now" asks again at the next start.
   Disabled plugins are never asked about.
-- Only folders in your own config directory are loaded. Sevak does not download,
-  update or install plugins, and makes no network requests for them. What a
+- Only folders in your own config directory are loaded. Sevak never downloads,
+  updates or installs plugins by itself; the only exception is the opt-in
+  [gallery](workflows.md#the-gallery), which fetches a package after you press
+  **Install** and still leaves it waiting for the approval above. What a
   script does on its own is outside Sevak's control and should be stated by its
   author.
 - Scripts cannot make Sevak do more than the fixed list of actions. `open_url`
@@ -902,7 +1317,7 @@ These settle what an earlier design draft left open.
 | Registry | A `ScriptPluginHost` next to the registry rather than one descriptor per manifest, because descriptor factories are plain function pointers with no access to the config directory. It honours `[plugins] disabled` itself and feeds the settings catalog. |
 | Manifest | `command` is one array (not `command` plus `args`) so the whole command line is explicit and approvable. |
 | Alfred | Supported as a one-shot output format, not as a separate plugin type. |
-| Distribution | Manual installation only; signing or a registry is out of scope. |
+| Distribution | Manual installation, or the opt-in [gallery](workflows.md#the-gallery) (checksum-verified, then the normal approval); signing is out of scope. |
 | Sandboxing | None. WASM components would give real isolation at the price of a much heavier runtime and authoring story; that is a possible future *additional* plugin type. |
 
 Versioning: `protocol` is an integer in the manifest and in `initialize`. Within
@@ -916,7 +1331,7 @@ scripts may ignore). Unknown fields must be ignored by both sides.
 | Manifest, command resolution | `crates/sevak-plugins/src/script/manifest.rs` |
 | Wire messages | `.../script/protocol.rs` |
 | Items to results, scores, icons | `.../script/items.rs` |
-| Alfred mapping | `.../script/alfred.rs` |
+| Alfred mapping (`mods`, `autocomplete`, the workflow variant `RawPick`) | `.../script/alfred.rs` |
 | Query generations and late answers | `.../script/delivery.rs` |
 | Process lifecycle | `.../script/runner.rs` (persistent), `.../script/oneshot.rs` |
 | `ScriptPlugin` | `.../script/plugin.rs` |
@@ -933,3 +1348,67 @@ bundled examples wherever their interpreter is installed.
 ```
 cargo test -p sevak-plugins
 ```
+
+## Workflows for contributors
+
+[Workflows](workflows.md) are plugins too: `WorkflowHost`
+(`crates/sevak-plugins/src/workflow/host.rs`) turns every approved, enabled
+`workflow.toml` into `Plugin`s that the shell appends to the engine's, next to
+the script plugin host.
+
+| Concern | Where |
+|---|---|
+| File format (`Workflow`, `Node`, `NodeKind`, `Connection`) | `workflow/model.rs` |
+| Validation: loops, dangling connections, bad fields | `workflow/validate.rs` |
+| `{query}` / `{var:name}` and the filters | `workflow/template.rs` |
+| Running: `Runtime`, `OutputSink`, timeouts, process handling | `workflow/exec.rs` |
+| The plugins: keyword, script filter, Universal Actions + hotkey + external | `workflow/plugins.rs` |
+| Discovery, approval, the settings operations | `workflow/host.rs` |
+| "New from template" | `workflow/templates.rs` |
+| The gallery: index, unpacking (download and checksum: `net.rs`, `sevak_core::checksum`) | `workflow/gallery.rs` |
+| Notifications, output windows, the Allow dialog, IPC commands, `--trigger` | `src-tauri/src/workflows.rs` (+ `cli.rs`, `hotkey.rs`, `direct.rs`) |
+| The builder and gallery pages | `ui/src/lib/workflows/` |
+
+Design notes:
+
+- **One plugin per entry point.** A keyword node is a `KeywordPlugin`
+  (`workflow:<folder>:<node>`, keyword-only, global false); a script filter is a
+  `FilterPlugin` wrapping a `ScriptPlugin` with the `Format::AlfredWorkflow`
+  variant, whose rows carry a `RawPick` (`arg`, `variables`, `modifier`) in a
+  `Custom` action instead of an open/copy action; Universal Actions, hotkey and
+  external triggers share one `TriggersPlugin` per workflow (`workflow:<folder>`,
+  `tracks_usage() == false`, `resolve()` for `workflow:<folder>:run:<node>`).
+- **`execute` returns at once.** It hands the run to `Runtime::start`, a thread
+  per run (at most 8 at a time), so the launcher can hide first. `run_execute`
+  in `commands.rs` hides the window before executing any `workflow:*` result.
+- **Approval** reuses `ApprovalStore` and its file. The key is a SHA-256 over the
+  nodes that can run code (`NodeKind::needs_approval`), the connections, the
+  variables and the bytes of the script files those nodes name (`approval_key`),
+  so layout changes never ask again and script edits always do. Add a node kind
+  that runs code, and you must make `needs_approval` say so.
+- **Output goes through `OutputSink`**, implemented by the shell (`TauriSink`:
+  `tauri-plugin-notification`, and `ShowPayload.output` for Large Type and text
+  views). Tests use a recording sink.
+- **Nothing user-typed is logged**: `Ctx` has a hand-written `Debug`, errors
+  name nodes by id, and a program's stderr is only logged when its node sets
+  `log_stderr`.
+- **Gallery** (`gallery.rs`): the download is `sevak_plugins::net::fetch_https`
+  (HTTPS only, size limit, timeout, redirects must stay on HTTPS) and the hash
+  check `sevak_core::checksum`, both shared with the theme gallery
+  (`src-tauri/src/themes.rs`, `sevak_core::theme_store`);
+  `install_bytes` verifies the SHA-256 first, then unpacks with strict path
+  rules (no `..`, drive letters, links, trailing dots or spaces, more than 200
+  files, 2 MiB per file, 10 MiB in all), validates the manifest and renames a
+  staging folder into place. The shell's `gallery_install` looks the entry up in
+  the last loaded index by id, so the page cannot name a URL.
+- **Adding a node kind**: a variant of `NodeKind` (and `type_name`, `category`,
+  `needs_approval`), a case in `validate.rs::check_node`, one in
+  `exec.rs::execute`, an entry in `ui/src/lib/workflows/model.ts` (`KINDS`), and
+  tests in each. `tests/workflows.rs` runs real programs through the engine using
+  the `wf-*` modes of `tests/fixtures/script_fixture.rs`.
+
+Building a gallery package: `cargo run -p sevak-plugins --example gallery_pack --
+examples/workflows/duckduckgo gallery/packages/duckduckgo.zip` prints the
+SHA-256 for `gallery/index.json`. A test checks that every entry's package exists,
+matches its checksum, installs, and equals the folder in `examples/` it was made
+from.

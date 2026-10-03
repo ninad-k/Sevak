@@ -34,6 +34,21 @@ pub struct ResultItem {
     /// keyword route the engine prefixes the typed keyword.
     #[serde(default)]
     pub autocomplete: Option<String>,
+    /// What the preview pane (Shift / Ctrl+Y) shows for this row when what its
+    /// action refers to is not enough. `None` for most plugins: the shell then
+    /// derives the preview from the action (a file's contents, a URL, the text
+    /// to copy or paste). Add with [`ResultItem::with_preview`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview: Option<PreviewHint>,
+    /// How the UI should present this row: as a tile in a grid, or with a
+    /// long text for the Text View. `None` is an ordinary list row. Add with
+    /// [`ResultItem::with_view`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub view: Option<ViewHint>,
+    /// What Large Type (Ctrl+L) shows for this row instead of its title: a
+    /// phone number for a contact, say. `None` shows the title.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub large_text: Option<String>,
 }
 
 impl ResultItem {
@@ -54,6 +69,9 @@ impl ResultItem {
             action,
             secondary: Vec::new(),
             autocomplete: None,
+            preview: None,
+            view: None,
+            large_text: None,
         }
     }
 
@@ -79,6 +97,42 @@ impl ResultItem {
     #[must_use]
     pub fn with_autocomplete(mut self, text: impl Into<String>) -> Self {
         self.autocomplete = Some(text.into());
+        self
+    }
+
+    /// Sets what the preview pane shows (see [`ResultItem::preview`]).
+    #[must_use]
+    pub fn with_preview(mut self, preview: PreviewHint) -> Self {
+        self.preview = Some(preview);
+        self
+    }
+
+    /// Sets how the row is presented (see [`ResultItem::view`]).
+    #[must_use]
+    pub fn with_view(mut self, view: ViewHint) -> Self {
+        self.view = Some(view);
+        self
+    }
+
+    /// Shows this row as a tile in the Grid View, with `glyph` (an emoji, a
+    /// short symbol) as the tile's picture; without one the row's icon is the
+    /// picture. The title is the tile's label.
+    #[must_use]
+    pub fn as_tile(self, glyph: Option<&str>) -> Self {
+        self.with_view(ViewHint::Grid {
+            glyph: glyph.map(str::to_owned),
+        })
+    }
+
+    /// Whether this row asks to be a tile in the Grid View.
+    pub fn is_tile(&self) -> bool {
+        matches!(self.view, Some(ViewHint::Grid { .. }))
+    }
+
+    /// Sets the text Large Type shows (see [`ResultItem::large_text`]).
+    #[must_use]
+    pub fn with_large_text(mut self, text: impl Into<String>) -> Self {
+        self.large_text = Some(text.into());
         self
     }
 
@@ -118,6 +172,38 @@ impl ResultItem {
     pub fn copy_text(&self) -> Option<String> {
         self.action.copy_text()
     }
+}
+
+/// What the preview pane shows for a result (see [`ResultItem::preview`]).
+///
+/// Paths in a hint are never read on the UI's say-so: the shell reads only
+/// what the result it holds refers to, with size limits (see
+/// [`crate::preview`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum PreviewHint {
+    /// Text, shown as it is (monospace, scrollable).
+    Text { text: String },
+    /// A file or folder: its contents, a picture, a listing or its details.
+    Path { path: PathBuf },
+    /// A link: the address and title only. Nothing is fetched from the network.
+    Url { url: String, title: Option<String> },
+    /// Labelled facts: a calculation's expression and result, an emoji's name.
+    Details { rows: Vec<(String, String)> },
+}
+
+/// How a result wants to be presented (see [`ResultItem::view`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ViewHint {
+    /// A long text for the scrollable Text View (Ctrl+T), instead of the
+    /// one-line row. With `on_enter`, Enter opens the view rather than running
+    /// the action: for rows that exist only to show text, such as a script's
+    /// output.
+    Text { text: String, on_enter: bool },
+    /// A tile in the Grid View, drawn when every result of a search is a tile.
+    /// `glyph` is the picture (an emoji); without one the row's icon is drawn.
+    Grid { glyph: Option<String> },
 }
 
 /// A modifier key held together with Enter to pick a secondary action. The UI
@@ -174,6 +260,18 @@ pub enum Action {
         /// Put the clipboard's previous text back afterwards (`[paste]`).
         restore_clipboard: bool,
     },
+    /// Puts an image or a list of files on the clipboard and pastes it into the
+    /// app that had focus before Sevak opened, like [`Action::PasteText`] does
+    /// for text.
+    PasteClip {
+        content: ClipContent,
+        /// Put the clipboard's previous text back afterwards (`[paste]`).
+        restore_clipboard: bool,
+    },
+    /// Puts an image or a list of files on the clipboard, without pasting.
+    CopyClip {
+        content: ClipContent,
+    },
     /// Plugin-defined; only the owning plugin's `execute` understands it.
     Custom {
         payload: String,
@@ -205,7 +303,36 @@ impl Action {
             Self::Launch { target } | Self::RunAsAdmin { target } => target
                 .path()
                 .map(|path| path.to_string_lossy().into_owned()),
+            Self::PasteClip { content, .. } | Self::CopyClip { content } => content.copy_text(),
             Self::Custom { .. } => None,
+        }
+    }
+}
+
+/// Something other than text that can be put on the clipboard.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ClipContent {
+    /// A PNG file whose pixels become the clipboard's image.
+    Image { path: PathBuf },
+    /// Files and folders, as a file manager's "copy" leaves them.
+    Files { paths: Vec<PathBuf> },
+}
+
+impl ClipContent {
+    /// The text a plain Ctrl+C copies for this content: the paths of the
+    /// files, one per line. An image has no useful text.
+    pub fn copy_text(&self) -> Option<String> {
+        match self {
+            Self::Image { .. } => None,
+            Self::Files { paths } if paths.is_empty() => None,
+            Self::Files { paths } => Some(
+                paths
+                    .iter()
+                    .map(|path| path.to_string_lossy())
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            ),
         }
     }
 }
@@ -409,6 +536,36 @@ mod tests {
     }
 
     #[test]
+    fn preview_and_view_hints_are_optional_and_round_trip() {
+        let plain = ResultItem::new("p", "k", "T", Action::CopyText { text: "x".into() });
+        assert_eq!((&plain.preview, &plain.view), (&None, &None));
+        let json = serde_json::to_string(&plain).unwrap();
+        assert!(
+            !json.contains("preview") && !json.contains("view"),
+            "{json}"
+        );
+
+        let rich = plain
+            .with_preview(PreviewHint::Details {
+                rows: vec![("Name".into(), "grinning face".into())],
+            })
+            .as_tile(Some("😀"));
+        assert!(rich.is_tile());
+        let json = serde_json::to_string(&rich).unwrap();
+        assert!(json.contains(r#""kind":"details""#), "{json}");
+        assert!(json.contains(r#""kind":"grid""#), "{json}");
+        assert_eq!(serde_json::from_str::<ResultItem>(&json).unwrap(), rich);
+
+        let text = ResultItem::new("p", "k", "T", Action::CopyText { text: "x".into() }).with_view(
+            ViewHint::Text {
+                text: "long".into(),
+                on_enter: true,
+            },
+        );
+        assert!(!text.is_tile());
+    }
+
+    #[test]
     fn autocomplete_is_optional() {
         let item = ResultItem::new("p", "k", "t", Action::CopyText { text: "x".into() });
         assert_eq!(item.autocomplete, None);
@@ -422,6 +579,39 @@ mod tests {
     fn action_serializes_with_type_tag() {
         let json = serde_json::to_string(&Action::CopyText { text: "4".into() }).unwrap();
         assert_eq!(json, r#"{"type":"copy_text","text":"4"}"#);
+    }
+
+    #[test]
+    fn clip_actions_copy_the_file_paths_but_not_an_image() {
+        let image = ClipContent::Image {
+            path: "/c/1.png".into(),
+        };
+        let files = ClipContent::Files {
+            paths: vec!["/a/x.txt".into(), "/a/y.txt".into()],
+        };
+        assert_eq!(image.copy_text(), None);
+        assert_eq!(files.copy_text().as_deref(), Some("/a/x.txt\n/a/y.txt"));
+        assert_eq!(ClipContent::Files { paths: vec![] }.copy_text(), None);
+
+        let paste = Action::PasteClip {
+            content: files,
+            restore_clipboard: false,
+        };
+        assert_eq!(paste.copy_text().as_deref(), Some("/a/x.txt\n/a/y.txt"));
+        assert_eq!(Action::CopyClip { content: image }.copy_text(), None);
+    }
+
+    #[test]
+    fn clip_actions_serialize_with_type_tags() {
+        let action = Action::CopyClip {
+            content: ClipContent::Image {
+                path: "a.png".into(),
+            },
+        };
+        assert_eq!(
+            serde_json::to_string(&action).unwrap(),
+            r#"{"type":"copy_clip","content":{"kind":"image","path":"a.png"}}"#
+        );
     }
 
     #[test]

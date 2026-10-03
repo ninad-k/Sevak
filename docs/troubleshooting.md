@@ -77,8 +77,13 @@ Check these in order:
 | Permissions | Ensure your user account can read that directory |
 | Index size | Reduce broad roots if you hit the 100,000-entry cap |
 
-File search matches names, not document contents. A word appearing only
-inside a PDF or document is not a filename match.
+`f` matches names in your indexed folders, not document contents. A file
+outside them, or a word that is only inside a document, needs `ff` or `in`
+([whole-disk search](features/files.md#whole-disk-and-content-search)). If those say
+"File index unavailable", start the Windows Search service (`WSearch`), install
+`plocate` and run `updatedb`, or install Tracker or Baloo, as the row explains;
+the OS only finds what it has indexed, so a file created seconds ago may take a
+moment to appear.
 [Full file-search behavior](usage.md#files-and-folders).
 
 ## I get a web suggestion instead of a local result
@@ -89,6 +94,31 @@ A browser request happens when you execute the web result.
 
 Check local plugins and indexing first, or disable the fallback under
 **Settings → Search**.
+
+## `c`, `1p`, `define` or `spell` does nothing
+
+- **Contacts and 1Password are off by default.** The row says "Contacts are off"
+  or "1Password is off"; add `[contacts] enabled = true` or
+  `[onepassword] enabled = true` to `config.toml` and choose **Reload index**.
+- **No contacts found.** The plugin reads vCard files from `vcard_files` and, with
+  `use_system = true`, the system address book. On macOS the first `c` shows
+  "Allow Sevak to read your Contacts": press Enter and answer the system
+  question; if you said no, enable Sevak under *System Settings → Privacy &
+  Security → Contacts*. On Windows the People store may be empty when your
+  accounts' contacts are not synced there; export a `.vcf` file instead. On Linux
+  only Evolution's local address books are read.
+- **1Password says `op` was not found or is not signed in.** Install the
+  [1Password CLI](https://developer.1password.com/docs/cli/get-started/), turn on
+  *Settings → Developer → Integrate with 1Password CLI* in the 1Password app, and
+  run `op account list` in a terminal to check. If `op` is somewhere unusual, set
+  `[onepassword] op_path`. After you dismiss the unlock prompt, press Enter on
+  "Try again". Sevak never reads or shows passwords.
+- **`define` finds nothing.** The bundled dictionary has single words and their
+  common inflections, not phrases or names of people. Check the spelling with
+  `spell`.
+- **`spell` calls a word wrong that is right.** The bundled word list is general
+  English. Specialist words are missing; on Linux the hunspell lists in
+  `/usr/share/hunspell` are added when installed.
 
 ## A web keyword does not work
 
@@ -110,6 +140,48 @@ where you need it.
 
 Sevak uses finite-precision arithmetic. Invalid expressions and operations
 such as division by zero do not produce a valid copyable answer.
+
+## An automation task or media control is missing
+
+Sevak lists only what can work on your machine. Type `t ` to see the tasks
+that are available. On Linux, tasks that need a helper program are hidden until
+it is installed: `wmctrl` (show desktop), `gnome-screenshot`, `spectacle` or
+`flameshot` (screenshot), `wpctl`, `pactl` or `amixer` (volume), `nmcli` or
+`rfkill` (Wi-Fi), `rfkill` or `bluetoothctl` (Bluetooth), `udisksctl` (eject),
+`systemd-inhibit` (keep awake) and `playerctl` (the media buttons and the
+playing track). On macOS, Bluetooth needs [blueutil](https://github.com/toy/blueutil),
+and dark mode, volume, quit and hide-others ask once for permission to control
+System Events (hide-others and show-desktop also need the Accessibility
+permission). On Windows, Wi-Fi and Bluetooth are listed only when the PC has
+the radio, and switching them needs *Settings → Privacy & security → Radios*
+to allow desktop apps. Flush DNS is not offered on Windows or macOS because it
+needs administrator rights. You can also hide tasks in
+[`[tasks]`](configuration.md#tasks).
+
+The list after `quit`, `kill` or `eject` appears a moment after you type the
+command, because Sevak asks the system for it in the background.
+
+## A snippet does not expand as I type
+
+Expansion is off until you turn it on (**Settings → Plugins**, or
+`[snippets] auto_expand = true`), and the snippet needs a `keyword`. Then:
+
+- Type the keyword in one go, with your `prefix` if you set one. Clicking,
+  arrow keys, Enter, Escape, shortcuts and switching windows make Sevak forget
+  what you typed. Without a prefix a keyword only works at the start of a word.
+- With `expand_on = "delimiter"` finish with a space or punctuation mark.
+- Sevak does nothing in its own windows, in terminals (set
+  `expand_in_terminals = true`), in apps listed in `ignore_apps`, in a password
+  box, or in windows running as administrator when Sevak is not.
+- **macOS:** allow Sevak under *Privacy & Security → Input Monitoring* and
+  *Accessibility*, then quit and start Sevak again. Settings shows what is
+  missing.
+- **Linux Wayland:** not possible; Wayland does not allow it. Use X11 or
+  paste snippets with `s <name>`.
+- Security software may block or warn about the keyboard hook; allow Sevak.
+  Turning the setting off removes the hook.
+
+[How expansion works and what it watches](features/snippets.md#expand-snippets-as-you-type).
 
 ## The launcher disappears
 
@@ -154,9 +226,10 @@ sure the package came from the project's release page.
 
 ## Does Sevak work offline?
 
-App search, indexed file search, calculations and local ranking work without
-network access. Web searches, checking for a release, and downloading updates
-need an internet connection. Indexes depend on locally accessible applications
+App search, indexed file search, calculations, contacts, the dictionary and
+spelling, and local ranking work without network access. Web searches, checking
+for a release, and downloading updates need an internet connection, as do the
+optional workflow and theme galleries and currency conversion. Indexes depend on locally accessible applications
 and folders.
 
 ## Where is my data? Does Sevak collect analytics?
@@ -165,11 +238,12 @@ and folders.
 
 **Network activity:**
 
-- **Optional update checks** (default on): Check GitHub for a new version at startup and daily. Disable with `[general] check_for_updates = false`.
-- **Web searches:** When you run a web search, your browser contacts that search provider (Google, YouTube, GitHub, etc.). Sevak does not proxy or log these.
+- **Optional update checks** (default on): Check GitHub for a new version at startup and daily. Disable with `[general] check_for_updates = false`. An update is downloaded only after you agree.
+- **Web searches and links:** When you run a web search or open a bookmark, your browser contacts that site (Google, YouTube, GitHub, etc.). Sevak does not proxy or log these.
 - **Currency conversion** (off by default): When enabled, Sevak downloads the European Central Bank's daily rates once per day for currency conversion.
+- **Theme and workflow galleries:** Only when you click **Browse online themes** or **Load gallery**, and a package only when you click **Install**.
 
-See [Files and data](files-and-data.md) for where everything is stored, and [Configuration](configuration.md) for the settings.
+The full list is in [Privacy](privacy.md). See [Files and data](files-and-data.md) for where everything is stored, and [Configuration](configuration.md) for the settings.
 
 ## Reporting a problem
 

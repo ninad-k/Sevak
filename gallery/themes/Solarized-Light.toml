@@ -1,0 +1,35 @@
+name = "Solarized Light"
+author = "Sevak"
+description = "Low-glare light colors after the Solarized palette."
+
+[font]
+size = 15
+
+[layout]
+radius = 14
+opacity = 100
+row_height = 48
+search_size = 22
+icon_size = 32
+window_width = 720
+
+[light]
+background = "#fdf6e3"
+text = "#52686f"
+subtext = "#566c74"
+border = "rgba(82, 104, 111, 0.12)"
+accent = "#1a6fb0"
+accent_strong = "#155b90"
+on_accent = "#fdf6e3"
+selection = "rgba(26, 111, 176, 0.08)"
+tile = "rgba(82, 104, 111, 0.06)"
+kbd_background = "rgba(82, 104, 111, 0.06)"
+kbd_border = "rgba(82, 104, 111, 0.14)"
+shadow = "0 8px 28px rgba(82, 104, 111, 0.22), 0 1px 3px rgba(82, 104, 111, 0.12)"
+surface = "rgba(82, 104, 111, 0.035)"
+input_background = "#ffffff"
+input_border = "rgba(82, 104, 111, 0.22)"
+switch_off = "rgba(82, 104, 111, 0.26)"
+warn = "#8a6500"
+error = "#c0302d"
+ok = "#5f7300"

@@ -28,9 +28,11 @@ use sevak_core::{Config, Plugin};
 use sevak_platform::PlatformProvider;
 
 use crate::clipboard_history::default_history_path;
+use crate::emoji::Trigger;
 use crate::{
-    AppsPlugin, BookmarksPlugin, CalculatorPlugin, ClipboardPlugin, FilesPlugin, SelectionPlugin,
-    ShellPlugin, SnippetsPlugin, SystemPlugin, UuidPlugin, WebSearchPlugin,
+    files_family, AppsPlugin, BookmarksPlugin, CalculatorPlugin, ClipboardPlugin, ContactsPlugin,
+    DictionaryPlugin, EmojiPlugin, MediaPlugin, OnePasswordPlugin, SelectionPlugin, ShellPlugin,
+    SnippetsPlugin, SystemPlugin, TasksPlugin, UuidPlugin, WebSearchPlugin,
 };
 
 /// Builds the instances of one plugin family.
@@ -107,9 +109,10 @@ impl PluginRegistry {
         Self::default()
     }
 
-    /// Apps, calculator, web search, files, bookmarks, system commands, shell,
-    /// clipboard history, snippets, Universal Actions and the example UUID
-    /// plugin, in that order.
+    /// Apps, calculator, web search, files, bookmarks, system commands,
+    /// automation tasks, media controls, shell, clipboard history, snippets,
+    /// emoji, Universal Actions, contacts, 1Password, the dictionary and the
+    /// example UUID plugin, in that order.
     /// Order matters only for tie-breaking and logging.
     pub fn builtin() -> Self {
         let mut registry = Self::new();
@@ -142,13 +145,8 @@ impl PluginRegistry {
         registry.register(PluginDescriptor::new(
             "files",
             "Files",
-            "Finds files and folders in your configured directories.",
-            |config, platform| {
-                vec![Arc::new(FilesPlugin::new(
-                    config.files.clone(),
-                    platform.clone(),
-                ))]
-            },
+            "Finds files and folders in your configured directories; `ff` and `in` search the whole disk by name and by contents through the OS index.",
+            files_family,
         ));
         registry.register(PluginDescriptor::new(
             "bookmarks",
@@ -173,6 +171,28 @@ impl PluginRegistry {
             },
         ));
         registry.register(PluginDescriptor::new(
+            "tasks",
+            "Automation tasks",
+            "Dark mode, volume, screenshot, quit an app, kill a process, eject, keep awake and more; type `t` to list them.",
+            |config, platform| {
+                vec![Arc::new(TasksPlugin::new(
+                    config.tasks.clone(),
+                    platform.clone(),
+                ))]
+            },
+        ));
+        registry.register(PluginDescriptor::new(
+            "media",
+            "Media controls",
+            "Play/pause, next, previous and stop, and the track that is playing; type `play`.",
+            |config, platform| {
+                vec![Arc::new(MediaPlugin::new(
+                    config.media.clone(),
+                    platform.clone(),
+                ))]
+            },
+        ));
+        registry.register(PluginDescriptor::new(
             "shell",
             "Terminal commands",
             "Type `> command` to run it in a terminal; recent commands are offered again.",
@@ -186,7 +206,7 @@ impl PluginRegistry {
         registry.register(PluginDescriptor::new(
             "clipboard",
             "Clipboard history",
-            "Type `cb` to paste text you copied earlier. Off until [clipboard] enabled = true.",
+            "Type `cb` to paste text, images and files you copied earlier. Off until [clipboard] enabled = true.",
             |config, platform| {
                 vec![Arc::new(ClipboardPlugin::new(
                     &config.clipboard,
@@ -209,10 +229,54 @@ impl PluginRegistry {
             },
         ));
         registry.register(PluginDescriptor::new(
+            "emoji",
+            "Emoji picker",
+            "Type `emoji ` or `:` and a name to pick an emoji from a grid; Enter pastes it. Works offline.",
+            |config, platform| {
+                vec![
+                    Arc::new(EmojiPlugin::new(
+                        Trigger::Word,
+                        &config.paste,
+                        platform.clone(),
+                    )),
+                    Arc::new(EmojiPlugin::new(
+                        Trigger::Colon,
+                        &config.paste,
+                        platform.clone(),
+                    )),
+                ]
+            },
+        ));
+        registry.register(PluginDescriptor::new(
             "selection",
             "Universal Actions",
             "Offers actions (search, transform, copy, open) for text, URLs or files you selected in another app; see actions_hotkey.",
             |config, platform| vec![Arc::new(SelectionPlugin::new(config, platform.clone()))],
+        ));
+        registry.register(PluginDescriptor::new(
+            "contacts",
+            "Contacts",
+            "Type `c` or `@` to find people by name, email, phone or company. Off until [contacts] enabled = true.",
+            |config, platform| ContactsPlugin::instances(&config.contacts, platform.clone()),
+        ));
+        registry.register(PluginDescriptor::new(
+            "1password",
+            "1Password",
+            "Type `1p` to open a login's website or its 1Password item (titles only, never passwords). Needs the op tool; off until [onepassword] enabled = true.",
+            |config, platform| {
+                vec![Arc::new(OnePasswordPlugin::new(
+                    &config.onepassword,
+                    platform.clone(),
+                ))]
+            },
+        ));
+        registry.register(PluginDescriptor::new(
+            "dict",
+            "Dictionary and spelling",
+            "Type `define <word>` for definitions and `spell <word>` for corrections, offline.",
+            |config, platform| {
+                DictionaryPlugin::instances(&config.dictionary, &config.paste, platform.clone())
+            },
         ));
         registry.register(PluginDescriptor::new(
             "uuid",
@@ -328,10 +392,16 @@ mod tests {
                 "files",
                 "bookmarks",
                 "system",
+                "tasks",
+                "media",
                 "shell",
                 "clipboard",
                 "snippets",
+                "emoji",
                 "selection",
+                "contacts",
+                "1password",
+                "dict",
                 "uuid"
             ]
         );
@@ -348,12 +418,23 @@ mod tests {
                 "web:yt",
                 "web:gh",
                 "files",
+                "files:names",
+                "files:content",
                 "bookmarks",
                 "system",
+                "tasks",
+                "media",
                 "shell",
                 "clipboard",
                 "snippets",
+                "emoji:word",
+                "emoji:colon",
                 "selection",
+                "contacts",
+                "contacts:at",
+                "1password",
+                "dict",
+                "dict:spell",
                 "uuid"
             ]
         );
@@ -368,12 +449,23 @@ mod tests {
                 "apps",
                 "calculator",
                 "files",
+                "files:names",
+                "files:content",
                 "bookmarks",
                 "system",
+                "tasks",
+                "media",
                 "shell",
                 "clipboard",
                 "snippets",
+                "emoji:word",
+                "emoji:colon",
                 "selection",
+                "contacts",
+                "contacts:at",
+                "1password",
+                "dict",
+                "dict:spell",
                 "uuid"
             ]
         );
@@ -390,11 +482,22 @@ mod tests {
                 "web:g",
                 "web:gh",
                 "files",
+                "files:names",
+                "files:content",
                 "bookmarks",
+                "tasks",
+                "media",
                 "shell",
                 "clipboard",
                 "snippets",
-                "selection"
+                "emoji:word",
+                "emoji:colon",
+                "selection",
+                "contacts",
+                "contacts:at",
+                "1password",
+                "dict",
+                "dict:spell"
             ]
         );
     }
@@ -402,7 +505,11 @@ mod tests {
     #[test]
     fn unknown_disabled_ids_are_ignored() {
         let config = config_disabling(&["nope"]);
-        assert_eq!(ids(&PluginRegistry::builtin(), &config).len(), 13);
+        // Every built-in instance is still there.
+        assert_eq!(
+            ids(&PluginRegistry::builtin(), &config),
+            ids(&PluginRegistry::builtin(), &config_disabling(&[]))
+        );
     }
 
     #[test]
@@ -419,12 +526,23 @@ mod tests {
                 ("web:yt", false),
                 ("web:gh", true),
                 ("files", false),
+                ("files:names", false),
+                ("files:content", false),
                 ("bookmarks", true),
                 ("system", true),
+                ("tasks", true),
+                ("media", true),
                 ("shell", true),
                 ("clipboard", true),
                 ("snippets", true),
+                ("emoji:word", true),
+                ("emoji:colon", true),
                 ("selection", true),
+                ("contacts", true),
+                ("contacts:at", true),
+                ("1password", true),
+                ("dict", true),
+                ("dict:spell", true),
                 ("uuid", true),
             ]
         );

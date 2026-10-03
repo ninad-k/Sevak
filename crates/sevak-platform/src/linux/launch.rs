@@ -135,12 +135,18 @@ mod tests {
         });
         result.unwrap();
 
+        // The shell creates `marker` before `pwd` writes to it, so wait for
+        // the whole line rather than for the file to exist.
         let marker = dir.path().join("marker");
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        while !marker.exists() && std::time::Instant::now() < deadline {
+        let mut written = String::new();
+        while std::time::Instant::now() < deadline {
+            written = std::fs::read_to_string(&marker).unwrap_or_default();
+            if written.ends_with('\n') {
+                break;
+            }
             std::thread::sleep(std::time::Duration::from_millis(20));
         }
-        let written = std::fs::read_to_string(&marker).unwrap();
         let expected = dir.path().canonicalize().unwrap();
         assert_eq!(std::path::Path::new(written.trim()), expected);
     }

@@ -26,8 +26,8 @@
 //! Placeholders are filled in when you press Enter, not while you type, so
 //! `{time}` is the time of the paste and `{clipboard}` is read only then.
 //!
-//! Typing a snippet's keyword in any app and having it expand in place would need
-//! a global keyboard hook; that is not part of Sevak (yet).
+//! Typing a snippet's keyword in any app and having it expand in place is the
+//! opt-in `[snippets] auto_expand` feature; see [`crate::snippet_expansion`].
 
 use std::fmt::Write as _;
 use std::sync::Arc;
@@ -36,7 +36,7 @@ use chrono::format::StrftimeItems;
 use chrono::{DateTime, FixedOffset, Local};
 use sevak_core::config::{PasteConfig, Snippet};
 use sevak_core::model::score;
-use sevak_core::{Action, FuzzyQuery, IconSource, Plugin, PluginResult, ResultItem};
+use sevak_core::{Action, FuzzyQuery, IconSource, Plugin, PluginResult, PreviewHint, ResultItem};
 use sevak_platform::{PasteSupport, PlatformProvider};
 
 use crate::actions::execute_action;
@@ -316,6 +316,21 @@ impl Plugin for SnippetsPlugin {
         Some(self.row(entry, &self.platform.paste_support()))
     }
 
+    /// The snippet as Enter would paste it, placeholders filled in (this is the
+    /// one place a preview reads the clipboard, and only for `{clipboard}`).
+    fn preview(&self, item: &ResultItem) -> Option<PreviewHint> {
+        let template = match &item.action {
+            Action::PasteText { text, .. } | Action::CopyText { text } => text,
+            _ => return None,
+        };
+        let template = self
+            .lookup(item)
+            .map_or(template.as_str(), |e| e.text.as_str());
+        Some(PreviewHint::Text {
+            text: self.env_expand(template),
+        })
+    }
+
     fn execute(&self, item: &ResultItem) -> PluginResult<()> {
         let (template, paste) = match &item.action {
             Action::Custom { .. } => return Ok(()),
@@ -562,6 +577,29 @@ mod tests {
         assert_ne!(rows[0].id, rows[1].id);
         plugin.execute(&rows[1]).unwrap();
         assert_eq!(platform.pasted.lock().unwrap()[0].0, "two");
+    }
+
+    #[test]
+    fn the_preview_shows_the_expanded_text_and_ignores_status_rows() {
+        let platform = MockPlatform::empty();
+        *platform.clipboard_now.lock().unwrap() = Some("copied".into());
+        let plugin = plugin(
+            &platform,
+            &[snippet("Reply", None, "Re: {clipboard}\n{{ok}}")],
+        );
+        let row = plugin.query("reply").remove(0);
+        assert_eq!(
+            plugin.preview(&row),
+            Some(PreviewHint::Text {
+                text: "Re: copied\n{ok}".into()
+            })
+        );
+        // Nothing was pasted or copied by looking.
+        assert!(platform.pasted.lock().unwrap().is_empty());
+
+        let empty = self::plugin(&platform, &[]);
+        let status = empty.query("").remove(0);
+        assert_eq!(empty.preview(&status), None);
     }
 
     #[test]

@@ -2,23 +2,26 @@
 //! entries, icon themes, and launching through `gio`.
 
 mod capture;
+mod expand;
 mod launch;
 mod paste;
 mod scan;
+pub(crate) mod tasks;
 mod xdg;
 
 use std::io::Read;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use sevak_core::{AppEntry, IconData, IconSource, LaunchTarget};
+use sevak_core::{AppEntry, ClipContent, IconData, IconSource, LaunchTarget};
 
 use crate::capture::{CaptureOptions, SelectionCapture};
 use crate::desktop_entry::Locale;
 use crate::error::{PlatformError, Result};
 use crate::icon_file;
 use crate::icon_theme::{self, IconResolver};
-use crate::paste::{ForegroundApp, PasteOutcome, PasteSupport};
+use crate::keyboard::{KeyListener, KeyListenerSupport, KeySink, TypingTarget};
+use crate::paste::{ForegroundApp, PasteContent, PasteOutcome, PasteSupport};
 use crate::provider::PlatformProvider;
 use crate::session;
 
@@ -81,6 +84,31 @@ impl PlatformProvider for LinuxProvider {
 
     fn paste_text(&self, text: &str, restore_clipboard: bool) -> Result<PasteOutcome> {
         paste::paste_text(text, restore_clipboard)
+    }
+
+    fn paste_clip(&self, content: &ClipContent, restore_clipboard: bool) -> Result<PasteOutcome> {
+        paste::paste_content(PasteContent::Clip(content), restore_clipboard)
+    }
+
+    fn key_listener_support(&self) -> KeyListenerSupport {
+        expand::key_listener_support()
+    }
+
+    fn start_key_listener(&self, sink: KeySink) -> Result<KeyListener> {
+        expand::start(sink)
+    }
+
+    fn typing_target(&self) -> TypingTarget {
+        expand::typing_target()
+    }
+
+    fn replace_typed_text(
+        &self,
+        delete: usize,
+        text: &str,
+        still_current: &dyn Fn() -> bool,
+    ) -> Result<bool> {
+        expand::replace_typed_text(delete, text, still_current)
     }
 
     fn capture_selection(&self, options: &CaptureOptions) -> SelectionCapture {

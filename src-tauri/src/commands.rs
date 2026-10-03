@@ -3,7 +3,8 @@
 use std::time::Instant;
 
 use serde::Serialize;
-use sevak_core::{Action, Modifier, PluginError, ResultItem};
+use sevak_core::preview::{self, PreviewContent, TextViewContent};
+use sevak_core::{Action, Modifier, PluginError, ResultItem, ViewHint};
 use tauri::{AppHandle, LogicalSize, Manager, State, WebviewWindow};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
@@ -31,11 +32,14 @@ pub fn set_content_height(window: WebviewWindow, state: State<'_, AppState>, hei
         tracing::debug!("set_content_height ignored: {height}");
         return;
     }
-    let width = f64::from(state.config().window.width);
-    let size = LogicalSize::new(width, height.clamp(MIN_HEIGHT, MAX_HEIGHT));
-    if let Err(err) = window.set_size(size) {
+    let width = f64::from(state.window_width());
+    let height = height.clamp(MIN_HEIGHT, MAX_HEIGHT);
+    if let Err(err) = window.set_size(LogicalSize::new(width, height)) {
         tracing::warn!("set_content_height: set_size failed: {err}");
     }
+    // A tall preview, text or grid must not run off the bottom of the screen;
+    // a short window goes back to its usual place.
+    window::keep_on_screen(&window, height);
 }
 
 /// Large Type: `true` stretches the window over the screen, `false` restores
@@ -68,6 +72,16 @@ pub struct ResultDto {
     pub secondary: Vec<SecondaryDto>,
     /// What Ctrl+C copies for this row (path, URL or value), if anything.
     pub copy_text: Option<String>,
+    /// The row is a tile of the Grid View (drawn as one when every row is).
+    pub tile: bool,
+    /// The tile's picture when it is text (an emoji) rather than the icon.
+    pub glyph: Option<String>,
+    /// The row has a text to open in the Text View (Ctrl+T).
+    pub text_view: bool,
+    /// Enter opens the Text View instead of running the action.
+    pub text_on_enter: bool,
+    /// What Ctrl+L shows as Large Type when it is not the title.
+    pub large_text: Option<String>,
 }
 
 /// A secondary action as the UI sees it; its payload stays in the shell.
@@ -84,7 +98,8 @@ fn action_kind(action: &Action) -> &'static str {
         Action::OpenPath { .. } => "open_path",
         Action::OpenUrl { .. } => "open_url",
         Action::CopyText { .. } => "copy_text",
-        Action::PasteText { .. } => "paste_text",
+        Action::PasteText { .. } | Action::PasteClip { .. } => "paste_text",
+        Action::CopyClip { .. } => "copy_text",
         Action::Custom { .. } => "custom",
         Action::RevealPath { .. } => "reveal_path",
         Action::RunAsAdmin { .. } => "run_as_admin",
@@ -113,6 +128,14 @@ pub(crate) fn to_dtos(icons: Vec<Option<IconDto>>, items: &[ResultItem]) -> Vec<
                 })
                 .collect(),
             copy_text: item.copy_text(),
+            tile: item.is_tile(),
+            glyph: match &item.view {
+                Some(ViewHint::Grid { glyph }) => glyph.clone(),
+                _ => None,
+            },
+            text_view: preview::has_text_view(item),
+            text_on_enter: matches!(item.view, Some(ViewHint::Text { on_enter: true, .. })),
+            large_text: item.large_text.clone(),
         })
         .collect()
 }
@@ -148,6 +171,39 @@ pub async fn search(app: AppHandle, query: String) -> SearchResponse {
         ticket,
         results: dtos,
     }
+}
+
+/// What the preview pane shows for result `id` of search `ticket`. It reads
+/// only what that result refers to (see `sevak_core::preview` for the limits),
+/// on a blocking thread so a slow disk never stalls the window. The page asks
+/// for the selected row only, and again when the selection moves.
+#[tauri::command]
+pub async fn preview(app: AppHandle, id: String, ticket: u64) -> Result<PreviewContent, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let search = &app.state::<AppState>().search;
+        let Some((item, _query)) = search.result(ticket, &id) else {
+            return Err("result expired".to_owned());
+        };
+        let hint = search.engine().preview_hint(&item);
+        Ok(preview::produce(&item, hint))
+    })
+    .await
+    .map_err(|err| format!("the preview did not finish: {err}"))?
+}
+
+/// The full text of result `id` of search `ticket` for the Text View (Ctrl+T).
+#[tauri::command]
+pub async fn text_view(app: AppHandle, id: String, ticket: u64) -> Result<TextViewContent, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let search = &app.state::<AppState>().search;
+        let Some((item, _query)) = search.result(ticket, &id) else {
+            return Err("result expired".to_owned());
+        };
+        let hint = search.engine().preview_hint(&item);
+        preview::text_view(&item, hint).ok_or_else(|| "this result has no text to show".to_owned())
+    })
+    .await
+    .map_err(|err| format!("the text did not load: {err}"))?
 }
 
 /// Executed queries, most recent first, for Up/Down recall on an empty input
@@ -212,7 +268,15 @@ fn hands_over(action: &Action) -> bool {
             | Action::RevealPath { .. }
             | Action::RunAsAdmin { .. }
             | Action::PasteText { .. }
+            | Action::PasteClip { .. }
     )
+}
+
+/// Whether `plugin_id` belongs to a workflow (`workflow:<folder>[:<node>]`).
+fn is_workflow(plugin_id: &str) -> bool {
+    plugin_id
+        .strip_prefix(sevak_plugins::workflow::FAMILY)
+        .is_some_and(|rest| rest.starts_with(':'))
 }
 
 /// Puts a plugin's confirmation question to the user in a native dialog whose
@@ -268,7 +332,9 @@ fn run_execute(
         }
     }
 
-    let optimistic = hands_over(&target.action);
+    // A workflow may paste or open something as soon as it starts, on a thread
+    // of its own, so the launcher steps aside first (as for a paste action).
+    let optimistic = hands_over(&target.action) || is_workflow(&target.plugin_id);
     if optimistic {
         window::hide_silently(app);
     }
@@ -301,5 +367,20 @@ fn run_execute(
             }
             Err(err.to_string())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn workflow_plugins_are_recognised_by_their_id() {
+        assert!(is_workflow("workflow:my-flow"));
+        assert!(is_workflow("workflow:my-flow:kw"));
+        assert!(!is_workflow("workflow"));
+        assert!(!is_workflow("workflows:x"));
+        assert!(!is_workflow("script:workflow:x"));
+        assert!(!is_workflow("web:g"));
     }
 }

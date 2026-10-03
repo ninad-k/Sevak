@@ -91,7 +91,7 @@ Sevak's built-in plugins work the same way:
 - `>` is shell commands' keyword
 - `f` is file search's keyword
 
-Script plugins work exactly like these: type the keyword, get results, press Enter.
+Script plugins work exactly like these: type the keyword, get results, press Enter. If a script plugin's keyword is also used by a built-in search, a web search engine, a workflow or another script plugin, Sevak logs a warning and shows it in the plugin's description in Settings; the plugin still loads and both sets of results appear.
 
 ## Built-in examples
 
@@ -117,6 +117,13 @@ The Sevak repository includes example plugins you can install:
     - **Location**: [`examples/plugins/case-converter-node/`](https://github.com/ninad-k/Sevak/tree/main/examples/plugins/case-converter-node)
     - **Keyword**: `case`
     - **How to use**: Type `case hello` to see case-conversion options.
+
+## Views, modifiers and the gallery
+
+- A script can ask for its rows to be shown as a **grid of tiles** (pictures, icons) or mark a row whose long text opens in the **Text View**; see [Views: text and grid](../plugins.md#views-text-and-grid). The [preview pane](../usage.md#preview-text-view-and-grid-view) works for script results too.
+- Alfred's `mods` (secondary actions on ++ctrl+enter++, ++alt+enter++, ++shift+enter++) are supported; see [Modifiers](../plugins.md#modifiers-mods).
+- **Settings → Gallery** can install ready-made script plugins, but only after you press **Load gallery** and **Install**; see [The gallery](../workflows.md#the-gallery). An installed plugin still asks for permission before it runs.
+- To chain a script with other steps (open a link, paste, show a notification), use a [workflow](../workflows.md) with a script filter.
 
 ## Enable and disable plugins
 

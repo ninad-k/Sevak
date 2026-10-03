@@ -74,14 +74,18 @@ font_family = ""
 opacity = 100
 # Corner radius of the search bar in pixels (0-32).
 radius = 14
+# A theme file inside this config folder, for example "themes/Nord.toml". Settings,
+# Appearance, Theme editor creates and applies them. "" uses no theme file.
+theme_file = ""
 # A stylesheet inside this config folder that overrides the theme's CSS variables
 # (see docs/themes.md), for example "theme.css". "" loads none.
 custom_css = ""
 
 [plugins]
 # Ids of built-in plugins to turn off: "apps", "calculator", "files",
-# "bookmarks", "system", "shell", "clipboard", "snippets", "selection"
-# (Universal Actions), "web:<keyword>".
+# "bookmarks", "system", "tasks", "media", "shell", "clipboard", "snippets",
+# "emoji", "selection" (Universal Actions), "contacts", "1password", "dict",
+# "web:<keyword>".
 disabled = []
 
 [calculator]
@@ -102,6 +106,13 @@ include_hidden = false
 keyword = "f"
 # Also show (lower-ranked) file results for plain queries.
 global = true
+# Whole-disk search through the operating system's own index (Windows Search,
+# Spotlight, locate / Tracker / Baloo). Nothing leaves your computer. Type
+# "<index_keyword> <name>" for file names and "<content_keyword> <words>" for
+# what is inside files. false turns both off.
+use_os_index = true
+index_keyword = "ff"
+content_keyword = "in"
 
 [bookmarks]
 # Browsers whose bookmarks are searchable; [] means every browser found.
@@ -123,6 +134,36 @@ confirm = true
 # "settings:<page>" such as "settings:bluetooth". To turn the whole plugin off,
 # add "system" to [plugins] disabled instead.
 disabled = []
+
+[tasks]
+# Automation tasks: toggle dark mode, show the desktop, mute and set the volume
+# ("vol 30"), take a screenshot, quit an app ("quit"), kill a process by name
+# ("kill chrome"), eject a drive ("eject"), keep the computer awake ("awake 30")
+# and more. What is offered depends on your system.
+# Ask before force quitting an app, ending a process and restarting Explorer or
+# Finder.
+confirm = true
+# Tasks to hide: "dark_mode", "show_desktop", "hide_others", "minimize_all",
+# "screenshot", "downloads", "recent_files", "flush_dns", "restart_shell",
+# "empty_clipboard", "mute", "unmute", "volume_up", "volume_down", "volume",
+# "wifi", "bluetooth", "keep_awake", "stop_keep_awake", "quit_app",
+# "force_quit_app", "kill", "eject". To turn the whole plugin off, add "tasks"
+# to [plugins] disabled instead.
+disabled = []
+# Type "<keyword> <task>" to search only tasks.
+keyword = "t"
+# Also show tasks for plain queries ("dark mode", "kill chrome").
+global = true
+
+[media]
+# Media controls: play/pause, next, previous, stop, and what is playing now.
+# Type "<keyword> <button>" to search only the controls.
+keyword = "play"
+# Also show the controls for plain queries ("pause", "next track").
+global = true
+# Show the track that is playing as a row (Enter plays or pauses it). It is read
+# from the system's media player on request; nothing is stored or sent anywhere.
+now_playing = true
 
 [shell]
 # Type "> <command>" (or ">command") to run a command in a terminal window. It
@@ -154,19 +195,71 @@ use_primary_selection = true
 # Accessibility permission), act on the current clipboard contents instead.
 use_clipboard_fallback = false
 
+[file_buffer]
+# The file buffer (Alt+Up / Alt+Down on a file result collects it). By default it
+# is emptied whenever the launcher hides; true keeps what you collected.
+keep_between_shows = false
+
 [clipboard]
 # Clipboard history ("cb <text>"). Off by default: turning it on makes Sevak
-# watch the clipboard and keep copied text in clipboard-history.json in its data
-# folder. Text only. Content that apps mark as secret (password managers) is
-# never recorded.
+# watch the clipboard and keep what you copy in clipboard-history.json in its
+# data folder: text, images (as PNG files in a "clipboard" folder next to it)
+# and the paths of copied files. All of it is stored unencrypted. Content that
+# apps mark as secret (password managers) is never recorded.
 enabled = false
-# Items kept (the oldest are dropped).
+# Items kept, of all kinds together (the oldest are dropped).
 max_items = 200
 # Longer text is not recorded.
 max_item_bytes = 65536
+# Record copied images, and copied files and folders (paths only).
+images = true
+files = true
+# An image whose PNG is larger than this is not recorded.
+max_image_bytes = 10485760
 # Never record text copied from these apps, e.g. ["KeePassXC", "1Password"].
 # Matched case-insensitively against the program or app name.
 ignore_apps = []
+
+[contacts]
+# Search your contacts ("c <name>" or "@name"): copy an email or phone number,
+# write an email, call (tel: link), or open the card. Off by default. Contacts
+# are read into memory only; nothing is written to disk or sent anywhere.
+enabled = false
+# Keyword (the "@" keyword always works too). "" keeps the default.
+keyword = "c"
+# Also read the system address book: macOS Contacts (asks for permission the
+# first time you use it), the Windows People store and Evolution's local
+# address books on Linux.
+use_system = true
+# vCard files (.vcf) or folders of them, e.g. ["~/contacts.vcf", "~/Contacts"].
+# This works everywhere and needs no permission.
+vcard_files = []
+
+[onepassword]
+# Search your 1Password logins ("1p github"): Enter opens the item's website,
+# the action panel opens it in the 1Password app or copies the username. Needs
+# the official `op` command-line tool, signed in (1Password > Settings >
+# Developer > "Integrate with 1Password CLI"). Only titles, websites and
+# usernames are read, never passwords or one-time codes. Off by default.
+enabled = false
+keyword = "1p"
+# Path to the `op` program. "" looks on PATH and in the usual install folders.
+op_path = ""
+# Which account to use when several are signed in: its address (my.1password.com),
+# short name or ID. "" uses op's default.
+account = ""
+# How long the list of logins is kept in memory before `1p` refreshes it.
+cache_minutes = 10
+
+[dictionary]
+# "define <word>" shows definitions and "spell <word>" suggests corrections, all
+# offline. macOS uses its Dictionary and Windows its spell checker; elsewhere a
+# bundled English dictionary (WordNet) is used. Turn it off with "dict" in
+# [plugins] disabled.
+define_keyword = "define"
+spell_keyword = "spell"
+# false always uses the bundled dictionary and word list.
+use_system = true
 
 # Snippets ("s <name>"): text you paste often. Placeholders: {date}, {time},
 # {datetime}, {date:%d %B %Y}, {clipboard}, {uuid}; write {{ and }} for literal
@@ -175,6 +268,24 @@ ignore_apps = []
 # name = "Email signature"
 # keyword = "sig"
 # text = "Best regards,\nNinad"
+
+[snippets]
+# Expand snippets as you type in any app (a snippet needs a "keyword"). OFF by
+# default: while on, Sevak watches your keystrokes (in memory only, last 64
+# characters, never stored or logged) to notice a keyword. See "Privacy" in the
+# README. Not available on Wayland.
+auto_expand = false
+# Typed before every keyword, e.g. ";" so that ";sig" expands and "sig" does not.
+prefix = ""
+# "immediate" expands the moment the keyword is typed; "delimiter" waits for a
+# space or punctuation mark, which is kept after the text.
+expand_on = "immediate"
+# false: "SIG" and "sig" both expand.
+case_sensitive = true
+# Never expand in these apps (program or app name, case-insensitive).
+ignore_apps = []
+# Terminal windows are skipped unless this is on.
+expand_in_terminals = false
 
 # Web search engines: type "<keyword> <terms>". "{query}" is replaced by the
 # URL-encoded terms. Defining any [[web_search]] entry replaces this list.
@@ -210,6 +321,7 @@ url = "https://github.com/search?q={query}"
 
 pub const MAX_CLIPBOARD_ITEMS_LIMIT: usize = 5_000;
 pub const MAX_CLIPBOARD_ITEM_BYTES_LIMIT: usize = 4 * 1024 * 1024;
+pub const MAX_CLIPBOARD_IMAGE_BYTES_LIMIT: usize = 64 * 1024 * 1024;
 pub const MIN_WINDOW_WIDTH: u32 = 400;
 pub const MAX_WINDOW_WIDTH: u32 = 1600;
 pub const MAX_RESULTS_LIMIT: usize = 20;
@@ -227,10 +339,18 @@ pub struct Config {
     pub files: FilesConfig,
     pub bookmarks: BookmarksConfig,
     pub system: SystemConfig,
+    pub tasks: TasksConfig,
+    pub media: MediaConfig,
     pub shell: ShellConfig,
     pub paste: PasteConfig,
     pub actions: ActionsConfig,
     pub clipboard: ClipboardConfig,
+    pub file_buffer: FileBufferConfig,
+    pub contacts: ContactsConfig,
+    pub onepassword: OnePasswordConfig,
+    pub dictionary: DictionaryConfig,
+    /// `[snippets]`: expanding snippet keywords as you type.
+    pub snippets: SnippetsConfig,
     /// `[[snippet]]` entries. Edited by hand only: saves from the settings
     /// window leave them untouched (see `merge_document`).
     pub snippet: Vec<Snippet>,
@@ -253,10 +373,17 @@ impl Default for Config {
             files: FilesConfig::default(),
             bookmarks: BookmarksConfig::default(),
             system: SystemConfig::default(),
+            tasks: TasksConfig::default(),
+            media: MediaConfig::default(),
             shell: ShellConfig::default(),
             paste: PasteConfig::default(),
             actions: ActionsConfig::default(),
             clipboard: ClipboardConfig::default(),
+            file_buffer: FileBufferConfig::default(),
+            contacts: ContactsConfig::default(),
+            onepassword: OnePasswordConfig::default(),
+            dictionary: DictionaryConfig::default(),
+            snippets: SnippetsConfig::default(),
             snippet: Vec::new(),
             web_search: WebSearchEngine::defaults(),
             hotkeys: Vec::new(),
@@ -439,6 +566,8 @@ pub struct AppearanceConfig {
     pub opacity: u32,
     /// Corner radius of the search bar, in pixels.
     pub radius: u32,
+    /// Theme file inside the config directory (`themes/Nord.toml`); empty uses none.
+    pub theme_file: String,
     /// Stylesheet inside the config directory; empty loads none.
     pub custom_css: String,
 }
@@ -452,6 +581,7 @@ impl Default for AppearanceConfig {
             font_family: String::new(),
             opacity: crate::theme::MAX_OPACITY,
             radius: crate::theme::DEFAULT_RADIUS,
+            theme_file: String::new(),
             custom_css: String::new(),
         }
     }
@@ -533,6 +663,14 @@ pub struct FilesConfig {
     pub include_hidden: bool,
     pub keyword: String,
     pub global: bool,
+    /// Search the whole disk through the OS index (`index_keyword`,
+    /// `content_keyword`). The folder index above still answers `keyword` and
+    /// plain queries, and stands in when the OS index cannot be reached.
+    pub use_os_index: bool,
+    /// Keyword for whole-disk file-name search; empty turns it off.
+    pub index_keyword: String,
+    /// Keyword for searching inside files; empty turns it off.
+    pub content_keyword: String,
 }
 
 impl Default for FilesConfig {
@@ -547,6 +685,9 @@ impl Default for FilesConfig {
             include_hidden: false,
             keyword: "f".to_owned(),
             global: true,
+            use_os_index: true,
+            index_keyword: "ff".to_owned(),
+            content_keyword: "in".to_owned(),
         }
     }
 }
@@ -604,6 +745,14 @@ impl Default for ActionsConfig {
     }
 }
 
+/// The file buffer: files collected from the results to act on together.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FileBufferConfig {
+    /// Keep the collected files when the launcher hides (else it is emptied).
+    pub keep_between_shows: bool,
+}
+
 /// The clipboard history plugin (`cb`). Opt-in: nothing is watched or stored
 /// unless `enabled` is set.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -615,6 +764,12 @@ pub struct ClipboardConfig {
     pub max_item_bytes: usize,
     /// Apps whose copies are never recorded (program or app names).
     pub ignore_apps: Vec<String>,
+    /// Record copied images (as PNG files next to the history).
+    pub images: bool,
+    /// Record copied files and folders (their paths; the files stay where they are).
+    pub files: bool,
+    /// An image whose PNG is larger than this many bytes is not recorded.
+    pub max_image_bytes: usize,
 }
 
 impl Default for ClipboardConfig {
@@ -624,6 +779,123 @@ impl Default for ClipboardConfig {
             max_items: 200,
             max_item_bytes: 64 * 1024,
             ignore_apps: Vec::new(),
+            images: true,
+            files: true,
+            max_image_bytes: 10 * 1024 * 1024,
+        }
+    }
+}
+
+/// The contacts plugin (`c` / `@`). Opt-in: nothing is read unless `enabled`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ContactsConfig {
+    pub enabled: bool,
+    pub keyword: String,
+    /// Also read the system address book (macOS Contacts, Windows People,
+    /// Evolution on Linux).
+    pub use_system: bool,
+    /// `.vcf` files and folders of them; `~` is the home folder.
+    pub vcard_files: Vec<String>,
+}
+
+impl Default for ContactsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            keyword: "c".to_owned(),
+            use_system: true,
+            vcard_files: Vec::new(),
+        }
+    }
+}
+
+/// The 1Password plugin (`1p`). Opt-in: the `op` tool is never started unless
+/// `enabled`, and then only when the user types the keyword.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct OnePasswordConfig {
+    pub enabled: bool,
+    pub keyword: String,
+    /// Path to `op`; empty searches `PATH` and the usual install folders.
+    pub op_path: String,
+    /// Account address, shorthand or ID passed to `op --account`; empty uses
+    /// op's default.
+    pub account: String,
+    /// Minutes the list of logins is kept before it is refreshed.
+    pub cache_minutes: u32,
+}
+
+impl Default for OnePasswordConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            keyword: "1p".to_owned(),
+            op_path: String::new(),
+            account: String::new(),
+            cache_minutes: 10,
+        }
+    }
+}
+
+/// The dictionary plugin (`define`, `spell`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DictionaryConfig {
+    pub define_keyword: String,
+    pub spell_keyword: String,
+    /// Prefer the OS dictionary and spell checker where there is one.
+    pub use_system: bool,
+}
+
+impl Default for DictionaryConfig {
+    fn default() -> Self {
+        Self {
+            define_keyword: "define".to_owned(),
+            spell_keyword: "spell".to_owned(),
+            use_system: true,
+        }
+    }
+}
+
+/// When a typed keyword is replaced.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ExpandOn {
+    /// The moment the last character of the keyword is typed.
+    #[default]
+    Immediate,
+    /// When a space or punctuation mark follows the keyword. Also what any
+    /// unrecognised value in the file means: the cautious choice.
+    #[serde(other)]
+    Delimiter,
+}
+
+/// Expanding `[[snippet]]` keywords as you type, in any app. Opt-in: no key is
+/// observed unless `auto_expand` is set.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SnippetsConfig {
+    pub auto_expand: bool,
+    /// Put in front of every keyword (`;` makes `;sig` expand and `sig` not).
+    pub prefix: String,
+    pub expand_on: ExpandOn,
+    pub case_sensitive: bool,
+    /// Apps in which nothing is observed or expanded (program or app names).
+    pub ignore_apps: Vec<String>,
+    /// Expand in terminal windows too.
+    pub expand_in_terminals: bool,
+}
+
+impl Default for SnippetsConfig {
+    fn default() -> Self {
+        Self {
+            auto_expand: false,
+            prefix: String::new(),
+            expand_on: ExpandOn::Immediate,
+            case_sensitive: true,
+            ignore_apps: Vec::new(),
+            expand_in_terminals: false,
         }
     }
 }
@@ -653,6 +925,63 @@ impl SystemConfig {
         self.disabled
             .iter()
             .any(|entry| entry.trim().eq_ignore_ascii_case(key))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TasksConfig {
+    /// Ask before force quitting an app, ending a process and restarting
+    /// Explorer or Finder.
+    pub confirm: bool,
+    /// Tasks to hide, by key (`dark_mode`, `kill`, `wifi`, ...). Matched by the
+    /// tasks plugin.
+    pub disabled: Vec<String>,
+    /// Type "<keyword> <task>" to search only tasks.
+    pub keyword: String,
+    /// Also show tasks for plain queries (`dark mode`, `kill chrome`).
+    pub global: bool,
+}
+
+impl Default for TasksConfig {
+    fn default() -> Self {
+        Self {
+            confirm: true,
+            disabled: Vec::new(),
+            keyword: "t".to_owned(),
+            global: true,
+        }
+    }
+}
+
+impl TasksConfig {
+    /// Whether `key` is switched off in `disabled` (case-insensitive).
+    pub fn is_disabled(&self, key: &str) -> bool {
+        self.disabled
+            .iter()
+            .any(|entry| entry.trim().eq_ignore_ascii_case(key))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MediaConfig {
+    /// Type "<keyword> <button>" to search only the media controls.
+    pub keyword: String,
+    /// Also show the controls for plain queries (`pause`, `next`).
+    pub global: bool,
+    /// Show the playing track as a row. Reads it from the player the system
+    /// reports; nothing is stored or sent anywhere.
+    pub now_playing: bool,
+}
+
+impl Default for MediaConfig {
+    fn default() -> Self {
+        Self {
+            keyword: "play".to_owned(),
+            global: true,
+            now_playing: true,
+        }
     }
 }
 
@@ -851,7 +1180,32 @@ impl Config {
             .clipboard
             .max_item_bytes
             .clamp(1, MAX_CLIPBOARD_ITEM_BYTES_LIMIT);
+        self.clipboard.max_image_bytes = self
+            .clipboard
+            .max_image_bytes
+            .clamp(1, MAX_CLIPBOARD_IMAGE_BYTES_LIMIT);
         self.clipboard
+            .ignore_apps
+            .retain(|app| !app.trim().is_empty());
+        for (keyword, default) in [
+            (&mut self.contacts.keyword, "c"),
+            (&mut self.onepassword.keyword, "1p"),
+            (&mut self.dictionary.define_keyword, "define"),
+            (&mut self.dictionary.spell_keyword, "spell"),
+        ] {
+            *keyword = keyword.trim().to_owned();
+            if keyword.is_empty() || keyword.contains(char::is_whitespace) {
+                *keyword = default.to_owned();
+            }
+        }
+        self.contacts
+            .vcard_files
+            .retain(|path| !path.trim().is_empty());
+        self.onepassword.op_path = self.onepassword.op_path.trim().to_owned();
+        self.onepassword.account = self.onepassword.account.trim().to_owned();
+        self.onepassword.cache_minutes = self.onepassword.cache_minutes.clamp(1, 24 * 60);
+        self.snippets.prefix = self.snippets.prefix.trim().to_owned();
+        self.snippets
             .ignore_apps
             .retain(|app| !app.trim().is_empty());
         // A snippet needs a name to be found by and text to paste.
@@ -1063,6 +1417,27 @@ mod tests {
     }
 
     #[test]
+    fn integrations_are_opt_in_and_normalized() {
+        let defaults = Config::default();
+        assert!(!defaults.contacts.enabled);
+        assert!(!defaults.onepassword.enabled);
+        assert_eq!(defaults.dictionary.define_keyword, "define");
+
+        let config = Config::from_toml_str(
+            "[contacts]\nenabled = true\nkeyword = \"  \"\nvcard_files = [\"a.vcf\", \" \"]\n\
+             [onepassword]\nkeyword = \"two words\"\ncache_minutes = 0\nop_path = \" /bin/op \"\n",
+        )
+        .unwrap()
+        .normalized();
+        assert!(config.contacts.enabled);
+        assert_eq!(config.contacts.keyword, "c");
+        assert_eq!(config.contacts.vcard_files, ["a.vcf"]);
+        assert_eq!(config.onepassword.keyword, "1p");
+        assert_eq!(config.onepassword.cache_minutes, 1);
+        assert_eq!(config.onepassword.op_path, "/bin/op");
+    }
+
+    #[test]
     fn empty_file_yields_defaults() {
         assert_eq!(Config::from_toml_str("").unwrap(), Config::default());
     }
@@ -1124,6 +1499,54 @@ url = "https://example.com"
     }
 
     #[test]
+    fn os_index_search_is_on_with_its_own_keywords() {
+        let config = Config::from_toml_str("").unwrap();
+        assert!(config.files.use_os_index);
+        assert_eq!(config.files.index_keyword, "ff");
+        assert_eq!(config.files.content_keyword, "in");
+
+        // A files section from before the OS index existed keeps working.
+        let config = Config::from_toml_str("[files]\nkeyword = \"x\"\n").unwrap();
+        assert!(config.files.use_os_index);
+        assert_eq!(config.files.index_keyword, "ff");
+
+        let config = Config::from_toml_str(
+            "[files]\nuse_os_index = false\nindex_keyword = \"all\"\ncontent_keyword = \"\"\n",
+        )
+        .unwrap();
+        assert!(!config.files.use_os_index);
+        assert_eq!(config.files.index_keyword, "all");
+        assert_eq!(config.files.content_keyword, "");
+    }
+
+    #[test]
+    fn tasks_and_media_sections_have_defaults_and_parse() {
+        let config = Config::from_toml_str("").unwrap();
+        assert!(config.tasks.confirm && config.tasks.global);
+        assert_eq!(config.tasks.keyword, "t");
+        assert!(config.tasks.disabled.is_empty());
+        assert_eq!(config.media.keyword, "play");
+        assert!(config.media.global && config.media.now_playing);
+
+        let config = Config::from_toml_str(
+            "[tasks]
+confirm = false
+keyword = \"tk\"
+disabled = [\"Kill\"]
+[media]
+now_playing = false
+",
+        )
+        .unwrap();
+        assert!(!config.tasks.confirm);
+        assert_eq!(config.tasks.keyword, "tk");
+        assert!(config.tasks.is_disabled("kill"));
+        assert!(!config.tasks.is_disabled("wifi"));
+        assert!(!config.media.now_playing);
+        assert_eq!(config.media.keyword, "play");
+    }
+
+    #[test]
     fn system_section_defaults_to_confirming_everything_enabled() {
         let config = Config::from_toml_str("").unwrap();
         assert!(config.system.confirm);
@@ -1181,6 +1604,18 @@ url = "https://example.com"
     }
 
     #[test]
+    fn the_file_buffer_is_emptied_when_the_window_hides_unless_asked() {
+        assert!(!Config::default().file_buffer.keep_between_shows);
+        let config = Config::from_toml_str(
+            "[file_buffer]
+keep_between_shows = true
+",
+        )
+        .unwrap();
+        assert!(config.file_buffer.keep_between_shows);
+    }
+
+    #[test]
     fn clipboard_and_paste_sections_parse_and_are_clamped() {
         let config = Config::from_toml_str(
             "[paste]\nrestore_clipboard = true\n[clipboard]\nenabled = true\nmax_items = 0\n\
@@ -1195,6 +1630,29 @@ url = "https://example.com"
             MAX_CLIPBOARD_ITEM_BYTES_LIMIT
         );
         assert_eq!(config.clipboard.ignore_apps, ["KeePassXC"]);
+    }
+
+    #[test]
+    fn clipboard_records_images_and_files_unless_turned_off() {
+        let config = Config::default();
+        assert!(config.clipboard.images && config.clipboard.files);
+        assert_eq!(config.clipboard.max_image_bytes, 10 * 1024 * 1024);
+
+        // A config written before these keys existed keeps working.
+        let old = Config::from_toml_str("[clipboard]\nenabled = true\n").unwrap();
+        assert!(old.clipboard.images && old.clipboard.files);
+
+        let config = Config::from_toml_str(
+            "[clipboard]\nimages = false\nfiles = false\nmax_image_bytes = 0\n",
+        )
+        .unwrap();
+        assert!(!config.clipboard.images && !config.clipboard.files);
+        assert_eq!(config.clipboard.max_image_bytes, 1);
+        let config = Config::from_toml_str("[clipboard]\nmax_image_bytes = 99999999999\n").unwrap();
+        assert_eq!(
+            config.clipboard.max_image_bytes,
+            MAX_CLIPBOARD_IMAGE_BYTES_LIMIT
+        );
     }
 
     #[test]
@@ -1258,6 +1716,46 @@ text = ""
         assert_eq!(config.snippet[0].keyword.as_deref(), Some("sig"));
         assert_eq!(config.snippet[0].text, "Regards\nNinad");
         assert_eq!(config.snippet[1].keyword, None);
+    }
+
+    #[test]
+    fn snippet_expansion_is_off_by_default() {
+        let snippets = Config::default().snippets;
+        assert!(!snippets.auto_expand);
+        assert_eq!(snippets.prefix, "");
+        assert_eq!(snippets.expand_on, ExpandOn::Immediate);
+        assert!(snippets.case_sensitive);
+        assert!(snippets.ignore_apps.is_empty());
+        assert!(!snippets.expand_in_terminals);
+    }
+
+    #[test]
+    fn snippet_expansion_settings_parse_and_normalize() {
+        let config = Config::from_toml_str(
+            r#"
+[snippets]
+auto_expand = true
+prefix = " ; "
+expand_on = "delimiter"
+case_sensitive = false
+ignore_apps = ["KeePassXC", "  "]
+expand_in_terminals = true
+"#,
+        )
+        .unwrap();
+        let snippets = config.snippets;
+        assert!(snippets.auto_expand);
+        assert_eq!(snippets.prefix, ";");
+        assert_eq!(snippets.expand_on, ExpandOn::Delimiter);
+        assert!(!snippets.case_sensitive);
+        assert_eq!(snippets.ignore_apps, ["KeePassXC"]);
+        assert!(snippets.expand_in_terminals);
+    }
+
+    #[test]
+    fn an_unknown_expand_on_means_delimiter_not_a_broken_file() {
+        let config = Config::from_toml_str("[snippets]\nexpand_on = \"whenever\"\n").unwrap();
+        assert_eq!(config.snippets.expand_on, ExpandOn::Delimiter);
     }
 
     #[test]
@@ -1681,6 +2179,7 @@ query = "no key, dropped"
         config.appearance.font_family = "Fira Sans, sans-serif".to_owned();
         config.appearance.opacity = 85;
         config.appearance.radius = 4;
+        config.appearance.theme_file = "themes/Nord.toml".to_owned();
         config.appearance.custom_css = "theme.css".to_owned();
         let text = saved(Some(DEFAULT_CONFIG_TOML), &config);
         assert!(text.contains("# Corner radius of the search bar in pixels (0-32)."));

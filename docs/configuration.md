@@ -31,6 +31,12 @@ If the file has a mistake (invalid TOML or a value of the wrong type), Sevak nev
 
 A minimal config works: missing fields use their defaults, so a nearly empty file is valid.
 
+### Keywords
+
+Every keyword is one word, and no two searches may share one: the configurable keywords (`[files]` `keyword` / `index_keyword` / `content_keyword`, `[bookmarks]`, `[tasks]`, `[media]`, `[contacts]`, `[onepassword]`, `[dictionary]` `define_keyword` / `spell_keyword`), the fixed ones (`>`, `cb`, `s`, `emoji`, `:`, `@`, `uuid`) and your web search keywords. Settings refuses to save a clash; in a hand-edited file a clashing keyword is ignored and logged. An empty keyword turns that keyword off.
+
+Keywords of [workflows](workflows.md) and [script plugins](features/script-plugins.md) are checked the same way but only produce a warning (in Settings and in the log), because both plugins then answer the keyword and show their results.
+
 ## How configuration is loaded
 
 ```mermaid
@@ -123,6 +129,7 @@ Launcher theme and styling.
 | `font_family` | string | `""` (empty) | any font family name, comma-separated | Comma-separated font family list, e.g. `"Fira Sans, sans-serif"`. Empty uses your system font. CSS font-family syntax; if the font is missing, the next in the list is used. |
 | `opacity` | integer | `100` | 30–100 (percent) | Background opacity of the search bar. 100 is fully opaque; 30 is quite transparent. Whole numbers only. |
 | `radius` | integer | `14` | 0–32 (pixels) | Corner radius of the search bar. 0 is sharp corners; 32 is very rounded. Whole numbers only. |
+| `theme_file` | string | `""` (empty) | path in config folder, or `""` | A theme file, such as `"themes/Nord.toml"`, made, imported or installed in **Settings → Appearance → Theme editor**. Applied between the built-in light/dark look and the settings above; `""` uses none. See [Theme files and the editor](themes.md#theme-files-and-the-editor). |
 | `custom_css` | string | `""` (empty) | filename in config folder, or `""` | Stylesheet to override theme colours and layout. Must be a file in the config folder (same folder as `config.toml`), e.g. `"theme.css"`. `""` loads none. See [Themes guide](themes.md) for available CSS variables. |
 
 ```toml
@@ -133,6 +140,7 @@ font_size = 15
 font_family = ""
 opacity = 100
 radius = 14
+theme_file = ""
 custom_css = ""
 ```
 
@@ -142,7 +150,7 @@ Which plugins are active. Each built-in plugin can be disabled.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `disabled` | array of strings | `[]` | Plugin ids to turn off. Available ids: `"apps"`, `"calculator"`, `"files"`, `"bookmarks"`, `"system"`, `"shell"`, `"clipboard"`, `"snippets"`, `"selection"` (Universal Actions), `"web:<keyword>"` (specific web-search engines). Example: `disabled = ["files", "web:yt"]` turns off file search and YouTube search. Unknown ids are ignored. |
+| `disabled` | array of strings | `[]` | Plugin ids to turn off. Available ids: `"apps"`, `"calculator"`, `"web"` (all engines) or `"web:<keyword>"` (one engine), `"files"` (its instances `"files:names"` and `"files:content"` are the `ff` and `in` searches), `"bookmarks"`, `"system"`, `"tasks"` (automation tasks), `"media"` (media controls), `"shell"`, `"clipboard"`, `"snippets"`, `"emoji"` (the emoji picker; `"emoji:word"` and `"emoji:colon"` are its two keywords), `"selection"` (Universal Actions), `"contacts"`, `"1password"`, `"dict"` (`define` and `spell`), `"uuid"`, `"script"` or `"script:<name>"` (script plugins) and `"workflow"` or `"workflow:<folder>"` ([workflows](workflows.md); each also has its own switch in **Settings → Workflows**). Example: `disabled = ["files", "web:yt"]` turns off file search and YouTube search. Unknown ids are ignored. |
 
 ```toml
 [plugins]
@@ -173,6 +181,9 @@ Indexed file search settings.
 | `include_hidden` | boolean | `false` | Index dot-files and dot-folders (starting with `.`). `false` ignores them. |
 | `keyword` | string | `"f"` | Prefix to search only files: type `f filename`. Leave empty `""` to disable keyword search. |
 | `global` | boolean | `true` | Show file results even in ordinary queries without the keyword. `false` requires `f <name>` to search files. |
+| `use_os_index` | boolean | `true` | Whole-disk (`ff`) and content (`in`) search through the operating system's own file index (Windows Search, Spotlight, `locate`, Tracker or Baloo). Queries go only to that local index, never over the network. `false` turns both off. See [what each OS needs](features/files.md#whole-disk-and-content-search). |
+| `index_keyword` | string | `"ff"` | Keyword for file names anywhere on the disk: `ff report`. `""` turns off just this search. |
+| `content_keyword` | string | `"in"` | Keyword for words inside files: `in invoice 2026`. `""` turns off just this search. |
 
 ```toml
 [files]
@@ -181,6 +192,9 @@ max_depth = 4
 include_hidden = false
 keyword = "f"
 global = true
+use_os_index = true
+index_keyword = "ff"
+content_keyword = "in"
 ```
 
 ### [bookmarks]
@@ -213,6 +227,44 @@ System commands (lock, sleep, restart, etc.) and settings pages.
 [system]
 confirm = true
 disabled = []
+```
+
+### [tasks]
+
+[Automation tasks](features/tasks.md): dark mode, show the desktop, volume, screenshots, quit or kill an app, eject a drive, keep the computer awake and more.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `confirm` | boolean | `true` | Ask before force quitting an app, ending a process and restarting Explorer or Finder. |
+| `disabled` | array of strings | `[]` | Tasks to hide: `"dark_mode"`, `"show_desktop"`, `"hide_others"`, `"minimize_all"`, `"screenshot"`, `"downloads"`, `"recent_files"`, `"flush_dns"`, `"restart_shell"`, `"empty_clipboard"`, `"mute"`, `"unmute"`, `"volume_up"`, `"volume_down"`, `"volume"`, `"wifi"`, `"bluetooth"`, `"keep_awake"`, `"stop_keep_awake"`, `"quit_app"`, `"force_quit_app"`, `"kill"`, `"eject"`. To turn the whole plugin off, add `"tasks"` to `[plugins] disabled` instead. |
+| `keyword` | string | `"t"` | `t ` lists the tasks. `""` removes the keyword. |
+| `global` | boolean | `true` | Also match task names in ordinary searches (`dark mode`, `kill chrome`). |
+
+```toml
+[tasks]
+confirm = true
+disabled = []
+keyword = "t"
+global = true
+```
+
+### [media]
+
+[Media controls](features/media.md): play/pause, next, previous, stop and what is playing now.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `keyword` | string | `"play"` | `play ` lists the buttons and the track. `""` removes the keyword. |
+| `global` | boolean | `true` | Also match `pause`, `next track`… in ordinary searches. |
+| `now_playing` | boolean | `true` | Show the playing track (title, artist, app) as a row. It is read from the system's media player on request; nothing is stored or sent anywhere. |
+
+To turn the plugin off, add `"media"` to `[plugins] disabled`.
+
+```toml
+[media]
+keyword = "play"
+global = true
+now_playing = true
 ```
 
 ### [shell]
@@ -266,9 +318,12 @@ Clipboard history settings (opt-in feature).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `enabled` | boolean | `false` | Enable clipboard history (`cb <text>` to search). Off by default: turning it on makes Sevak watch your clipboard and keep copied text in a local file. Text only; content marked as secret by apps (password managers) is never recorded. |
-| `max_items` | integer | `200` | How many clipboard items to keep. Older items are dropped. Range: 1–5000. |
+| `enabled` | boolean | `false` | Enable clipboard history (`cb <text>` to search). Off by default: turning it on makes Sevak watch your clipboard and keep what you copy in its data folder, unencrypted: text and the paths of copied files in `clipboard-history.json`, images as PNG files in the `clipboard` folder. Content marked as secret by apps (password managers) is never recorded. |
+| `max_items` | integer | `200` | How many clipboard items to keep, of all kinds together. Older items are dropped (with their image files). Range: 1–5000. |
 | `max_item_bytes` | integer | `65536` (64 KiB) | Maximum size of a clipboard item in bytes. Longer text is not recorded. Range: 1–4,194,304 (4 MiB). |
+| `images` | boolean | `true` | Also record copied images (as PNG files with thumbnails). |
+| `files` | boolean | `true` | Also record copied files and folders (their paths only). |
+| `max_image_bytes` | integer | `10485760` (10 MiB) | An image whose PNG is larger is not recorded. Range: 1–67,108,864 (64 MiB). |
 | `ignore_apps` | array of strings | `[]` | Apps whose copies are never recorded, e.g. `["KeePassXC", "1Password"]`. Matched case-insensitively against the program or app name. |
 
 ```toml
@@ -276,7 +331,103 @@ Clipboard history settings (opt-in feature).
 enabled = false
 max_items = 200
 max_item_bytes = 65536
+images = true
+files = true
+max_image_bytes = 10485760
 ignore_apps = []
+```
+
+### [file_buffer]
+
+The [file buffer](features/files.md#file-buffer) (++alt+arrow-down++ on a file result collects it). There is no settings page for it.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `keep_between_shows` | boolean | `false` | Keep the collected files when the launcher hides. By default the buffer is emptied whenever the launcher hides. |
+
+```toml
+[file_buffer]
+keep_between_shows = false
+```
+
+### [contacts]
+
+[Contacts](features/contacts.md) (`c <name>` or `@name`). Off by default. Contacts are read into memory only; nothing is written to disk or sent anywhere. The Settings window has no fields for this section.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | boolean | `false` | Turn the plugin on. |
+| `keyword` | string | `"c"` | Keyword to search contacts. The `@` keyword always works too. `""` keeps the default. |
+| `use_system` | boolean | `true` | Also read the system address book: macOS Contacts (asks for permission the first time you use it), the Windows People store and Evolution's local address books on Linux. |
+| `vcard_files` | array of strings | `[]` | vCard files (`.vcf`) or folders of them, e.g. `["~/contacts.vcf", "~/Contacts"]`. Works everywhere and needs no permission. |
+
+```toml
+[contacts]
+enabled = false
+keyword = "c"
+use_system = true
+vcard_files = []
+```
+
+### [onepassword]
+
+[1Password](features/1password.md) logins (`1p github`) through the official `op` command-line tool. Off by default. Only titles, vault names, websites and usernames are read, never passwords or one-time codes. The Settings window has no fields for this section.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | boolean | `false` | Turn the plugin on. `op` only runs when you type the keyword followed by a space. |
+| `keyword` | string | `"1p"` | Keyword to search logins. |
+| `op_path` | string | `""` | Path to the `op` program. `""` looks on `PATH` and in the usual install folders. |
+| `account` | string | `""` | Which account to use when several are signed in: its address (`my.1password.com`), short name or ID. `""` uses `op`'s default. |
+| `cache_minutes` | integer | `10` | How long the list of logins is kept in memory before `1p` refreshes it. Range: 1–1440. |
+
+```toml
+[onepassword]
+enabled = false
+keyword = "1p"
+op_path = ""
+account = ""
+cache_minutes = 10
+```
+
+### [dictionary]
+
+[Dictionary and spelling](features/dictionary.md), all offline. On by default; turn it off with `"dict"` in `[plugins] disabled`. The Settings window has no fields for this section.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `define_keyword` | string | `"define"` | Keyword for definitions. |
+| `spell_keyword` | string | `"spell"` | Keyword for spelling corrections. |
+| `use_system` | boolean | `true` | Use the macOS Dictionary and the Windows spell checker where available. `false` always uses the bundled English dictionary (WordNet) and word list. |
+
+```toml
+[dictionary]
+define_keyword = "define"
+spell_keyword = "spell"
+use_system = true
+```
+
+### [snippets]
+
+[Expanding snippets as you type](features/snippets.md#expand-snippets-as-you-type) in any app. **Off by default**: while it is on, Sevak watches your keystrokes (in memory only, the last 64 characters, never stored or logged) to notice a snippet `keyword`. Not available on Wayland. The snippets themselves are the `[[snippet]]` entries below.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `auto_expand` | boolean | `false` | Expand snippet keywords as you type. Reloading applies changes; the keyboard hook is removed when this is turned off. |
+| `prefix` | string | `""` | Typed before every keyword, e.g. `";"` so that `;sig` expands and `sig` does not. No spaces. |
+| `expand_on` | string | `"immediate"` | `"immediate"` expands the moment the keyword is typed; `"delimiter"` waits for a space or punctuation mark, which is kept after the text. An unknown value is treated as `"delimiter"`. |
+| `case_sensitive` | boolean | `true` | `false`: `SIG` and `sig` both expand. |
+| `ignore_apps` | array of strings | `[]` | Never watch or expand in these apps, e.g. `["KeePassXC", "Firefox"]`. Matched case-insensitively against the program or app name, like `[clipboard] ignore_apps`. |
+| `expand_in_terminals` | boolean | `false` | Terminal windows are skipped unless this is on. |
+
+```toml
+[snippets]
+auto_expand = false
+prefix = ""
+expand_on = "immediate"
+case_sensitive = true
+ignore_apps = []
+expand_in_terminals = false
 ```
 
 ## [[snippet]]
@@ -287,7 +438,7 @@ Snippets: text you paste often, with placeholders that expand.
 |---|---|---|---|
 | `name` | string | yes | Name of the snippet; type `s <name>` to search for it. Must not be empty. |
 | `text` | string | yes | Text to paste. Can include newlines (`\n`). Must not be empty. |
-| `keyword` | string | optional | Extra word to search by, e.g. `keyword = "sig"` lets you find it with `s sig`. Trimmed; empty keywords are ignored. |
+| `keyword` | string | optional | Extra word to search by, e.g. `keyword = "sig"` lets you find it with `s sig`. With [`[snippets] auto_expand`](#snippets) on, typing it in any app expands the snippet. Trimmed; empty keywords are ignored. |
 
 **Placeholders** in `text`:
 
@@ -361,6 +512,8 @@ Result ids:
 - System commands: `system:lock`, `system:sleep`, `system:restart`, `system:shutdown`, `system:logout`, `system:settings`, `system:settings:bluetooth`, `system:settings:wifi`, etc.
 - Snippets: `snippets:<name>`
 - Shell commands: `shell:<command>`
+- Automation tasks: `tasks:dark_mode`, `tasks:volume:30`, `tasks:keep_awake:45`, `tasks:kill:chrome.exe` (see [Automation tasks](features/tasks.md#bind-a-task-to-a-hotkey))
+- Workflows: `workflow:<folder>:run:<node id>`, the result a workflow's hotkey trigger runs; usually it is simpler to give the workflow its own hotkey trigger in the builder (see [Triggers](workflows.md#triggers))
 
 Calculator, web search and clipboard history results have no stable id and cannot be bound.
 
@@ -379,6 +532,18 @@ run = "system:lock"
 key = "Super+F"
 run = "apps:firefox.desktop"
 ```
+
+## Files next to config.toml
+
+Some settings are files of their own in the config folder rather than keys in `config.toml`:
+
+| Folder | Contents |
+|---|---|
+| `plugins/` | [Script plugins](features/script-plugins.md), one folder each with a `plugin.toml` |
+| `workflows/` | [Workflows](workflows.md), one folder each with a `workflow.toml`; the builder in **Settings → Workflows** writes them |
+| `themes/` | [Theme files](themes.md#theme-files-and-the-editor) made, imported or installed in **Settings → Appearance**; `[appearance] theme_file` picks one |
+
+See [Files and data](files-and-data.md) for the data folder.
 
 ## Complete example
 
@@ -446,14 +611,18 @@ font_family = ""
 opacity = 100
 # Corner radius of the search bar in pixels (0-32).
 radius = 14
+# A theme file inside this config folder, for example "themes/Nord.toml". Settings,
+# Appearance, Theme editor creates and applies them. "" uses no theme file.
+theme_file = ""
 # A stylesheet inside this config folder that overrides the theme's CSS variables
 # (see docs/themes.md), for example "theme.css". "" loads none.
 custom_css = ""
 
 [plugins]
 # Ids of built-in plugins to turn off: "apps", "calculator", "files",
-# "bookmarks", "system", "shell", "clipboard", "snippets", "selection"
-# (Universal Actions), "web:<keyword>".
+# "bookmarks", "system", "tasks", "media", "shell", "clipboard", "snippets",
+# "emoji", "selection" (Universal Actions), "contacts", "1password", "dict",
+# "web:<keyword>".
 disabled = []
 
 [calculator]
@@ -474,6 +643,13 @@ include_hidden = false
 keyword = "f"
 # Also show (lower-ranked) file results for plain queries.
 global = true
+# Whole-disk search through the operating system's own index (Windows Search,
+# Spotlight, locate / Tracker / Baloo). Nothing leaves your computer. Type
+# "<index_keyword> <name>" for file names and "<content_keyword> <words>" for
+# what is inside files. false turns both off.
+use_os_index = true
+index_keyword = "ff"
+content_keyword = "in"
 
 [bookmarks]
 # Browsers whose bookmarks are searchable; [] means every browser found.
@@ -495,6 +671,36 @@ confirm = true
 # "settings:<page>" such as "settings:bluetooth". To turn the whole plugin off,
 # add "system" to [plugins] disabled instead.
 disabled = []
+
+[tasks]
+# Automation tasks: toggle dark mode, show the desktop, mute and set the volume
+# ("vol 30"), take a screenshot, quit an app ("quit"), kill a process by name
+# ("kill chrome"), eject a drive ("eject"), keep the computer awake ("awake 30")
+# and more. What is offered depends on your system.
+# Ask before force quitting an app, ending a process and restarting Explorer or
+# Finder.
+confirm = true
+# Tasks to hide: "dark_mode", "show_desktop", "hide_others", "minimize_all",
+# "screenshot", "downloads", "recent_files", "flush_dns", "restart_shell",
+# "empty_clipboard", "mute", "unmute", "volume_up", "volume_down", "volume",
+# "wifi", "bluetooth", "keep_awake", "stop_keep_awake", "quit_app",
+# "force_quit_app", "kill", "eject". To turn the whole plugin off, add "tasks"
+# to [plugins] disabled instead.
+disabled = []
+# Type "<keyword> <task>" to search only tasks.
+keyword = "t"
+# Also show tasks for plain queries ("dark mode", "kill chrome").
+global = true
+
+[media]
+# Media controls: play/pause, next, previous, stop, and what is playing now.
+# Type "<keyword> <button>" to search only the controls.
+keyword = "play"
+# Also show the controls for plain queries ("pause", "next track").
+global = true
+# Show the track that is playing as a row (Enter plays or pauses it). It is read
+# from the system's media player on request; nothing is stored or sent anywhere.
+now_playing = true
 
 [shell]
 # Type "> <command>" (or ">command") to run a command in a terminal window. It
@@ -526,19 +732,71 @@ use_primary_selection = true
 # Accessibility permission), act on the current clipboard contents instead.
 use_clipboard_fallback = false
 
+[file_buffer]
+# The file buffer (Alt+Up / Alt+Down on a file result collects it). By default it
+# is emptied whenever the launcher hides; true keeps what you collected.
+keep_between_shows = false
+
 [clipboard]
 # Clipboard history ("cb <text>"). Off by default: turning it on makes Sevak
-# watch the clipboard and keep copied text in clipboard-history.json in its data
-# folder. Text only. Content that apps mark as secret (password managers) is
-# never recorded.
+# watch the clipboard and keep what you copy in clipboard-history.json in its
+# data folder: text, images (as PNG files in a "clipboard" folder next to it)
+# and the paths of copied files. All of it is stored unencrypted. Content that
+# apps mark as secret (password managers) is never recorded.
 enabled = false
-# Items kept (the oldest are dropped).
+# Items kept, of all kinds together (the oldest are dropped).
 max_items = 200
 # Longer text is not recorded.
 max_item_bytes = 65536
+# Record copied images, and copied files and folders (paths only).
+images = true
+files = true
+# An image whose PNG is larger than this is not recorded.
+max_image_bytes = 10485760
 # Never record text copied from these apps, e.g. ["KeePassXC", "1Password"].
 # Matched case-insensitively against the program or app name.
 ignore_apps = []
+
+[contacts]
+# Search your contacts ("c <name>" or "@name"): copy an email or phone number,
+# write an email, call (tel: link), or open the card. Off by default. Contacts
+# are read into memory only; nothing is written to disk or sent anywhere.
+enabled = false
+# Keyword (the "@" keyword always works too). "" keeps the default.
+keyword = "c"
+# Also read the system address book: macOS Contacts (asks for permission the
+# first time you use it), the Windows People store and Evolution's local
+# address books on Linux.
+use_system = true
+# vCard files (.vcf) or folders of them, e.g. ["~/contacts.vcf", "~/Contacts"].
+# This works everywhere and needs no permission.
+vcard_files = []
+
+[onepassword]
+# Search your 1Password logins ("1p github"): Enter opens the item's website,
+# the action panel opens it in the 1Password app or copies the username. Needs
+# the official `op` command-line tool, signed in (1Password > Settings >
+# Developer > "Integrate with 1Password CLI"). Only titles, websites and
+# usernames are read, never passwords or one-time codes. Off by default.
+enabled = false
+keyword = "1p"
+# Path to the `op` program. "" looks on PATH and in the usual install folders.
+op_path = ""
+# Which account to use when several are signed in: its address (my.1password.com),
+# short name or ID. "" uses op's default.
+account = ""
+# How long the list of logins is kept in memory before `1p` refreshes it.
+cache_minutes = 10
+
+[dictionary]
+# "define <word>" shows definitions and "spell <word>" suggests corrections, all
+# offline. macOS uses its Dictionary and Windows its spell checker; elsewhere a
+# bundled English dictionary (WordNet) is used. Turn it off with "dict" in
+# [plugins] disabled.
+define_keyword = "define"
+spell_keyword = "spell"
+# false always uses the bundled dictionary and word list.
+use_system = true
 
 # Snippets ("s <name>"): text you paste often. Placeholders: {date}, {time},
 # {datetime}, {date:%d %B %Y}, {clipboard}, {uuid}; write {{ and }} for literal
@@ -547,6 +805,24 @@ ignore_apps = []
 # name = "Email signature"
 # keyword = "sig"
 # text = "Best regards,\nNinad"
+
+[snippets]
+# Expand snippets as you type in any app (a snippet needs a "keyword"). OFF by
+# default: while on, Sevak watches your keystrokes (in memory only, last 64
+# characters, never stored or logged) to notice a keyword. See "Privacy" in the
+# README. Not available on Wayland.
+auto_expand = false
+# Typed before every keyword, e.g. ";" so that ";sig" expands and "sig" does not.
+prefix = ""
+# "immediate" expands the moment the keyword is typed; "delimiter" waits for a
+# space or punctuation mark, which is kept after the text.
+expand_on = "immediate"
+# false: "SIG" and "sig" both expand.
+case_sensitive = true
+# Never expand in these apps (program or app name, case-insensitive).
+ignore_apps = []
+# Terminal windows are skipped unless this is on.
+expand_in_terminals = false
 
 # Web search engines: type "<keyword> <terms>". "{query}" is replaced by the
 # URL-encoded terms. Defining any [[web_search]] entry replaces this list.

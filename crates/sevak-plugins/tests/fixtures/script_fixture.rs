@@ -106,7 +106,81 @@ fn persistent() {
     }
 }
 
+/// The programs workflow nodes run in `tests/workflows.rs` (first argument
+/// `wf-...`). Returns false for any other mode.
+fn workflow_mode(mode: &str, rest: &[String]) -> bool {
+    match mode {
+        // The arguments after the mode, joined with `|`.
+        "wf-echo" => println!("{}", rest.join("|")),
+        // The value of the environment variable named by the first argument.
+        "wf-env" => println!(
+            "{}",
+            std::env::var(&rest[0]).unwrap_or_else(|_| "<unset>".into())
+        ),
+        // Standard input, upper-cased.
+        "wf-stdin" => {
+            let mut text = String::new();
+            let _ = std::io::Read::read_to_string(&mut std::io::stdin(), &mut text);
+            print!("{}", text.to_uppercase());
+        }
+        // Exits with the code in the first argument, complaining on stderr.
+        "wf-exit" => {
+            eprintln!("this is private output");
+            std::process::exit(rest[0].parse().unwrap_or(1));
+        }
+        // Sleeps for the milliseconds in the first argument, then prints "late".
+        "wf-sleep" => {
+            std::thread::sleep(Duration::from_millis(rest[0].parse().unwrap_or(0)));
+            println!("late");
+        }
+        // Prints Alfred's workflow envelope: an argument and variables.
+        "wf-envelope" => println!(
+            "{}",
+            json!({"alfredworkflow": {"arg": "from-envelope", "variables": {"picked": "yes", "n": 2}}})
+        ),
+        // Writes the first argument into the workflow's data folder.
+        "wf-record" => {
+            let dir = std::env::var("SEVAK_WORKFLOW_DATA").unwrap_or_default();
+            let path = std::path::Path::new(&dir).join("record.txt");
+            let mut note = std::fs::read_to_string(&path).unwrap_or_default();
+            note.push_str(&rest.join(" "));
+            note.push('\n');
+            let _ = std::fs::write(path, note);
+        }
+        // A script filter: rows for the query, with variables, mods and autocomplete.
+        "wf-filter" => {
+            let query = rest.last().cloned().unwrap_or_default();
+            println!(
+                "{}",
+                json!({"items": [
+                    {
+                        "uid": "one",
+                        "title": format!("one: {query}"),
+                        "subtitle": std::env::var("SEVAK_WORKFLOW_ID").unwrap_or_default(),
+                        "arg": format!("arg-{query}"),
+                        "autocomplete": format!("one {query}"),
+                        "variables": {"from": "filter", "site": "row"},
+                        "mods": {
+                            "alt": {"arg": "alt-arg", "subtitle": "The alt way"},
+                            "cmd": {"valid": false}
+                        }
+                    },
+                    {"uid": "info", "title": "only information", "valid": false}
+                ]})
+            );
+        }
+        _ => return false,
+    }
+    true
+}
+
 fn main() {
+    let all: Vec<String> = std::env::args().skip(1).collect();
+    if let Some((mode, rest)) = all.split_first() {
+        if mode.starts_with("wf-") && workflow_mode(mode, rest) {
+            return;
+        }
+    }
     let mut args = std::env::args().skip(1);
     let mode = args.next();
     let query = args.next().unwrap_or_default();
@@ -125,6 +199,11 @@ fn main() {
                         "title": format!("alfred: {query}"),
                         "subtitle": pid_note(),
                         "arg": format!("https://example.com/?q={query}"),
+                        "autocomplete": format!("alfred {query} "),
+                        "mods": {
+                            "alt": {"arg": format!("copy {query}"), "subtitle": "Copy the text"},
+                            "cmd+shift": {"arg": "https://example.com/both", "subtitle": "Open both"}
+                        },
                         "icon": {"path": "icon.png"},
                         "valid": true
                     },

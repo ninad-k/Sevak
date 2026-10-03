@@ -1,0 +1,35 @@
+name = "Sevak Dark"
+author = "Sevak"
+description = "Sevak's dark theme."
+
+[font]
+size = 15
+
+[layout]
+radius = 14
+opacity = 100
+row_height = 48
+search_size = 22
+icon_size = 32
+window_width = 720
+
+[dark]
+background = "#17152b"
+text = "#ece9fb"
+subtext = "#9a97b8"
+border = "rgba(236, 233, 251, 0.12)"
+accent = "#fbbf24"
+accent_strong = "#f59e0b"
+on_accent = "#1c1b2e"
+selection = "rgba(251, 191, 36, 0.16)"
+tile = "rgba(236, 233, 251, 0.08)"
+kbd_background = "rgba(236, 233, 251, 0.08)"
+kbd_border = "rgba(236, 233, 251, 0.16)"
+shadow = "0 8px 28px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.4)"
+surface = "rgba(236, 233, 251, 0.05)"
+input_background = "rgba(236, 233, 251, 0.06)"
+input_border = "rgba(236, 233, 251, 0.24)"
+switch_off = "rgba(236, 233, 251, 0.28)"
+warn = "#fbbf24"
+error = "#ff8a80"
+ok = "#4ade80"

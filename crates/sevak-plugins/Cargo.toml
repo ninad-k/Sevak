@@ -1,6 +1,6 @@
 [package]
 name = "sevak-plugins"
-description = "Sevak built-in plugins: applications, calculator and conversions, web search, file search, bookmarks, system commands, terminal commands, clipboard history, snippets and an example plugin."
+description = "Sevak built-in plugins: applications, calculator and conversions, web search, file search, bookmarks, system commands, terminal commands, clipboard history, snippets, contacts, 1Password, a dictionary and an example plugin."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -15,6 +15,10 @@ name = "sevak-script-fixture"
 path = "tests/fixtures/script_fixture.rs"
 test = false
 doc = false
+
+# The real-clipboard tests (ignored by default) write images the way another app would.
+[target.'cfg(windows)'.dev-dependencies]
+arboard.workspace = true
 
 [dependencies]
 sevak-core.workspace = true
@@ -36,9 +40,21 @@ rusqlite = { version = "0.40", features = ["bundled"] }
 # Local date and time for snippet placeholders (no timezone database needed).
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 walkdir = "2"
+# Compress to .zip in the file buffer, and unpack the workflow gallery's packages
+# (pure Rust; the version the updater already links, with only deflate).
+zip = { version = "4", default-features = false, features = ["deflate-flate2"] }
+# zip's deflate encoder is flate2, which needs one backend picked; the pure-Rust one.
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+# Unpacks the bundled WordNet dictionary (zlib) for `define` and `spell`; pure
+# Rust, already in the dependency tree through flate2 and png.
+miniz_oxide = "0.8"
 # Daily ECB exchange rates for the opt-in currency conversion (see `currency`).
 # Same crates and TLS backend (rustls + ring) the updater already links; the
 # blocking client runs on a plain background thread, never on the typing path.
 reqwest = { version = "0.13", default-features = false, features = ["blocking", "rustls-no-provider"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
+# Workflows: regex conditions and replacements (linear-time matching), and the
+# SHA-256 behind the opt-in gallery's downloads.
+regex = "1"
+sha2 = "0.10"
 

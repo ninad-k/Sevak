@@ -65,6 +65,10 @@ Select any text:
 
 Transformations **replace the selection** in the app (Sevak pastes over it) where pasting works. `Ctrl+Enter` copies the result instead of pasting. If pasting is not available (Wayland, or macOS without permission), they copy.
 
+### Workflows
+
+A [workflow](../workflows.md) with a **Universal Actions** trigger appears in this list for the kinds of selection it accepts (text, links, or files and folders). Picking it runs the workflow with the selection as its argument, for example to tidy the text and paste it back.
+
 ### URLs and links
 
 Select one or more URLs (starting with `http://`, `https://`, `mailto:` or `www.`):

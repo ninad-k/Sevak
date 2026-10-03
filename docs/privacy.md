@@ -4,24 +4,29 @@ Sevak is local-first. Your data stays on your machine except when you explicitly
 
 ## What stays local
 
-- Application index, files and bookmarks
+- Application index, files and bookmarks (bookmarks are read from your browsers' files, read-only)
+- Whole-disk and content file search (`ff`, `in`): queries go only to your computer's own file index (Windows Search, Spotlight, `locate`, Tracker or Baloo)
+- The preview pane: it reads the selected file or folder from your disk, only while it is open; links are shown as addresses and never fetched
 - Search history (if enabled)
-- Clipboard history (if enabled)
-- Snippet library
+- Clipboard history (if enabled), including copied images (PNG files) and the paths of copied files, unencrypted
+- Snippet library, and snippet expansion as you type (if enabled): the last 64 typed characters are kept in memory only, never stored, logged or sent
+- Contacts (if enabled) and the 1Password list of logins (if enabled): in memory only, and kept out of the search history and usage statistics
+- The dictionary and spelling checker (bundled WordNet data or the system's own), the emoji picker, automation tasks and media controls
+- Themes: built-in, edited, imported or exported
 - Settings and configuration
 - Usage statistics (how often you run each result)
 - Logs (for debugging)
-- Script plugins and their data
+- Script plugins, workflows and their data
 
 All data is stored in a single folder on your machine; none is uploaded anywhere.
 
 ## What touches the network
 
-Only when you opt in or use network features:
+Only when you opt in or use network features. Every network request Sevak itself makes is listed in this section: links you open, update checks, update downloads, currency rates, the theme gallery and the workflow gallery.
 
-### Web search
+### Web search and links
 
-When you search with a web keyword or open a web search result, your query is sent to the selected search engine (Google, YouTube, GitHub, etc.) in your browser. Your search engine provider receives the query. This is **always your choice** — you type a web keyword and press Enter, or click a web result.
+When you search with a web keyword or open a web search result, a bookmark or any other link (including a Universal Actions web search), the address opens in your browser. For a web search, your query is sent to the selected search engine (Google, YouTube, GitHub, etc.) in your browser. Your search engine provider receives the query. This is **always your choice** — you type a web keyword and press Enter, or click a web result.
 
 Example: typing `g rust traits` constructs `https://www.google.com/search?q=rust+traits` and opens it in your browser. Google sees `rust traits` as your query.
 
@@ -52,6 +57,32 @@ Opt-in feature (on by default). When enabled via `[general] check_for_updates = 
 
 Disable with `[general] check_for_updates = false` to turn off the network request.
 
+### Installing an update
+
+When an update is available and you agree to install it, its package is downloaded from GitHub Releases and its update signature is verified before it is installed. Windows installation may also download Microsoft's WebView2 runtime if it is missing.
+
+### Theme gallery
+
+Only when you click **Browse online themes** (**Settings → Appearance → Theme editor**):
+
+- One request for `https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes.json`, the list of community themes
+- **Install** on a theme downloads that one theme file, saved only if its SHA-256 matches the one in the list
+- Nothing is requested in the background or on startup
+
+See [Theme gallery](themes.md#theme-gallery).
+
+### Workflow gallery
+
+Only when you press **Load gallery** (**Settings → Gallery**):
+
+- One request for `gallery/index.json` from `raw.githubusercontent.com`, the list of ready-made workflows and script plugins
+- **Install** on an entry downloads that one package, checked against the checksum in the index before anything is written; the installed folder still has to be allowed before it runs
+- Nothing is requested in the background or on startup
+
+See [The gallery](workflows.md#the-gallery).
+
+Both galleries send nothing but the request itself (no cookies or identifiers beyond a `Sevak/<version> (gallery)` user agent). Sevak never downloads plugins or workflows on its own.
+
 ## What is NOT collected
 
 - No telemetry (no tracking, analytics, or usage data sent anywhere)
@@ -61,7 +92,7 @@ Disable with `[general] check_for_updates = false` to turn off the network reque
 - No timestamps of your searches or results
 - No identifiers or user profiles
 
-Script plugins run with your permissions and can make network requests themselves; review what they do before installing them.
+Script plugins and workflows run with your permissions and can make network requests themselves; review what they do before installing them. Workflows send nothing themselves and keep what you type or select out of the logs. 1Password's `op` tool, which the optional 1Password plugin runs when you type `1p `, talks to 1Password as it normally does; Sevak asks it only for the list of logins, never passwords.
 
 ## Local data files
 
@@ -71,8 +102,12 @@ Inside your config folder (see [Files and data locations](files-and-data.md)):
 |---|---|---|
 | `config.toml` | Your settings | No |
 | `usage.json` | Frequency/recency of results; search history (if enabled) | No |
+| `clipboard-history.json`, `clipboard/` | Clipboard history: text, paths of copied files, images (if enabled) | No |
 | `currency-rates.json` | Cached ECB rates (if currency enabled) | No |
+| `script-plugin-approvals.json` | Script plugins and workflows you allowed | No |
 | `plugins/` folder | Script plugins and their data | No, unless the plugin makes network requests |
+| `workflows/` folder | Workflows and their data | No, unless a workflow's script makes network requests |
+| `themes/` folder | Theme files | No |
 | Logs | Diagnostic output for troubleshooting | No (you can share them manually) |
 
 ## Clipboard behavior
@@ -80,6 +115,16 @@ Inside your config folder (see [Files and data locations](files-and-data.md)):
 - **Pasting**: when you paste a result, Sevak hides, brings the previous window back, and presses ++ctrl+v++ (++cmd+v++ on macOS). The app itself receives the text.
 - **Copying**: ++ctrl+c++ in the launcher copies the selected result's value or path to your clipboard. Your OS clipboard history (Windows Win+V, macOS, or a clipboard manager) may record it.
 - **Accessibility**: on macOS, pasting and Universal Actions need the **Accessibility** permission. You grant this once in System Settings.
+
+## Snippet expansion as you type
+
+Off by default (`[snippets] auto_expand`). While it is on, Sevak watches your keystrokes to notice a snippet keyword:
+
+- Only the last 64 characters you typed are kept, in memory, and they are wiped whenever the text could have changed and after every expansion. They are never written to disk, logged or sent anywhere.
+- Nothing is observed while the setting is off; the keyboard hook is not even installed.
+- Sevak's own windows, terminals, apps listed in `[snippets] ignore_apps` and password boxes the system can detect are skipped.
+
+See [Expand snippets as you type](features/snippets.md#expand-snippets-as-you-type).
 
 ## Selection reading (Universal Actions)
 
@@ -117,6 +162,7 @@ graph LR
     
     A -.->|optional| H["ECB<br/>daily rates"]
     A -.->|optional| I["GitHub<br/>releases"]
+    A -.->|on click| M["Theme and workflow<br/>galleries"]
     A -.->|always| J["Your browser<br/>web searches"]
     
     H --> K["currency-rates.json<br/>cached locally"]
@@ -125,6 +171,7 @@ graph LR
     style H fill:#ffcccc
     style I fill:#ffcccc
     style J fill:#ffcccc
+    style M fill:#ffcccc
     style K fill:#ccffcc
     style L fill:#ccffcc
     style E fill:#ccffcc

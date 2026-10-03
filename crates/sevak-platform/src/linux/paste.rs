@@ -17,7 +17,9 @@ use x11rb::protocol::xtest::{self, ConnectionExt as _};
 use x11rb::rust_connection::RustConnection;
 
 use crate::error::{PlatformError, Result};
-use crate::paste::{self, ForegroundApp, PasteDriver, PasteOutcome, PasteSupport, SystemClipboard};
+use crate::paste::{
+    self, ForegroundApp, PasteContent, PasteDriver, PasteOutcome, PasteSupport, SystemClipboard,
+};
 use crate::session::DisplayServer;
 
 /// The window that was active when Sevak was shown.
@@ -33,7 +35,7 @@ const KEYSYM_CONTROL_L: u32 = 0xffe3;
 const FALLBACK_KEYCODE_V: u8 = 55;
 const FALLBACK_KEYCODE_CONTROL_L: u8 = 37;
 
-fn x_error(operation: &'static str, err: impl std::fmt::Display) -> PlatformError {
+pub(super) fn x_error(operation: &'static str, err: impl std::fmt::Display) -> PlatformError {
     PlatformError::Os {
         operation,
         message: err.to_string(),
@@ -61,7 +63,7 @@ impl X {
             .map_err(|e| x_error("X11", e))
     }
 
-    fn active_window(&self) -> Option<Window> {
+    pub(super) fn active_window(&self) -> Option<Window> {
         let atom = self.atom("_NET_ACTIVE_WINDOW").ok()?;
         let reply = self
             .conn
@@ -85,7 +87,7 @@ impl X {
         pid
     }
 
-    fn app_of(&self, window: Window) -> Option<ForegroundApp> {
+    pub(super) fn app_of(&self, window: Window) -> Option<ForegroundApp> {
         let reply = self
             .conn
             .get_property(false, window, AtomEnum::WM_CLASS, AtomEnum::STRING, 0, 256)
@@ -117,7 +119,7 @@ impl X {
         )
     }
 
-    fn is_own(&self, window: Window) -> bool {
+    pub(super) fn is_own(&self, window: Window) -> bool {
         self.window_pid(window) == Some(std::process::id())
     }
 
@@ -205,11 +207,24 @@ fn detect_support() -> PasteSupport {
 }
 
 pub(crate) fn paste_text(text: &str, restore_clipboard: bool) -> Result<PasteOutcome> {
+    paste_content(PasteContent::Text(text), restore_clipboard)
+}
+
+pub(crate) fn paste_content(
+    content: PasteContent<'_>,
+    restore_clipboard: bool,
+) -> Result<PasteOutcome> {
     if let PasteSupport::CopyOnly(reason) = paste_support() {
-        crate::clipboard::set_text(text)?;
+        content.copy()?;
         return Ok(PasteOutcome::CopiedOnly(reason));
     }
-    paste::paste(text, restore_clipboard, &SystemClipboard, &X11Driver, true)
+    paste::paste(
+        content,
+        restore_clipboard,
+        &SystemClipboard,
+        &X11Driver,
+        true,
+    )
 }
 
 struct X11Driver;

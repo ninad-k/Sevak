@@ -19,8 +19,8 @@ use windows::Win32::System::Threading::{
     QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
-    VIRTUAL_KEY, VK_CONTROL, VK_V,
+    MapVirtualKeyW, SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS,
+    KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, MAPVK_VK_TO_VSC_EX, VIRTUAL_KEY, VK_CONTROL, VK_V,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     GetForegroundWindow, GetWindowThreadProcessId, IsIconic, IsWindow, SetForegroundWindow,
@@ -29,7 +29,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 use crate::error::{PlatformError, Result};
 use crate::paste::{
-    self, ClipboardRead, ForegroundApp, PasteDriver, PasteOutcome, PasteSupport, SystemClipboard,
+    self, ClipboardRead, ForegroundApp, PasteContent, PasteDriver, PasteOutcome, PasteSupport,
+    SystemClipboard,
 };
 
 /// The window that had focus when Sevak was shown (an `HWND` as an integer, so
@@ -47,14 +48,14 @@ pub(super) fn int_to_hwnd(value: isize) -> HWND {
     HWND(value as *mut c_void)
 }
 
-fn foreground_window() -> Option<HWND> {
+pub(super) fn foreground_window() -> Option<HWND> {
     // SAFETY: plain Win32 call without arguments.
     let hwnd = unsafe { GetForegroundWindow() };
     (!hwnd.0.is_null()).then_some(hwnd)
 }
 
 /// Process id and thread id owning `hwnd`.
-fn window_owner(hwnd: HWND) -> Option<(u32, u32)> {
+pub(super) fn window_owner(hwnd: HWND) -> Option<(u32, u32)> {
     let mut pid = 0u32;
     // SAFETY: `pid` outlives the call; `hwnd` is only read.
     let thread = unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
@@ -81,7 +82,7 @@ fn process_path(pid: u32) -> Option<String> {
     }
 }
 
-fn app_of(hwnd: HWND) -> Option<ForegroundApp> {
+pub(super) fn app_of(hwnd: HWND) -> Option<ForegroundApp> {
     let (pid, _) = window_owner(hwnd)?;
     let path = process_path(pid)?;
     let path = Path::new(&path);
@@ -90,7 +91,7 @@ fn app_of(hwnd: HWND) -> Option<ForegroundApp> {
     Some(ForegroundApp::new(stem).with_identifier(file))
 }
 
-fn is_own_window(hwnd: HWND) -> bool {
+pub(super) fn is_own_window(hwnd: HWND) -> bool {
     // SAFETY: plain Win32 call without arguments.
     window_owner(hwnd).is_some_and(|(pid, _)| pid == unsafe { GetCurrentProcessId() })
 }
@@ -115,8 +116,15 @@ pub(crate) fn paste_support() -> PasteSupport {
 }
 
 pub(crate) fn paste_text(text: &str, restore_clipboard: bool) -> Result<PasteOutcome> {
+    paste_content(PasteContent::Text(text), restore_clipboard)
+}
+
+pub(crate) fn paste_content(
+    content: PasteContent<'_>,
+    restore_clipboard: bool,
+) -> Result<PasteOutcome> {
     paste::paste(
-        text,
+        content,
         restore_clipboard,
         &SystemClipboard,
         &WindowsDriver,
@@ -145,13 +153,19 @@ impl PasteDriver for WindowsDriver {
     }
 
     fn press_paste(&self) -> Result<()> {
-        send_inputs(&[
-            key_input(VK_CONTROL, false),
-            key_input(VK_V, false),
-            key_input(VK_V, true),
-            key_input(VK_CONTROL, true),
-        ])
+        send_inputs(&ctrl_v())
     }
+}
+
+/// Ctrl+V as one `SendInput` batch: the system inserts it without any other
+/// input in between, so nothing the user types can land between Ctrl and V.
+fn ctrl_v() -> [INPUT; 4] {
+    [
+        key_input(VK_CONTROL, false),
+        key_input(VK_V, false),
+        key_input(VK_V, true),
+        key_input(VK_CONTROL, true),
+    ]
 }
 
 /// Sends key events to the focused window, all or nothing as far as the OS
@@ -173,18 +187,41 @@ pub(super) fn send_inputs(inputs: &[INPUT]) -> Result<()> {
     }
 }
 
+/// A press (or release, `up`) of `key` for [`send_inputs`], with the key's
+/// hardware scan code as well as its virtual-key code.
+///
+/// The scan code matters: an event with `wScan` 0 reaches the app with scan
+/// code 0 in its `WM_KEYDOWN`, and apps whose input stack works from scan codes
+/// (WinUI/XAML ones such as Windows 11 Notepad and Windows Terminal) then do not
+/// recognise the key; a Ctrl they do not see turns Ctrl+V into a typed "v".
+/// Keys of the extended set (arrows, right Ctrl, ...) get
+/// `KEYEVENTF_EXTENDEDKEY`, as a real keyboard would send them.
 pub(super) fn key_input(key: VIRTUAL_KEY, up: bool) -> INPUT {
+    // SAFETY: a lookup in the keyboard layout's tables; it has no side effects.
+    let scan = unsafe { MapVirtualKeyW(u32::from(key.0), MAPVK_VK_TO_VSC_EX) };
+    key_input_with_scan(key, scan, up)
+}
+
+/// [`key_input`] for a scan code from `MapVirtualKeyW(.., MAPVK_VK_TO_VSC_EX)`:
+/// the low byte is the code, a high byte of `0xE0` or `0xE1` marks an extended
+/// key, and 0 means the layout has no such key (the event then carries only the
+/// virtual-key code).
+fn key_input_with_scan(key: VIRTUAL_KEY, scan: u32, up: bool) -> INPUT {
+    let mut flags = if up {
+        KEYEVENTF_KEYUP
+    } else {
+        KEYBD_EVENT_FLAGS(0)
+    };
+    if matches!(scan >> 8, 0xE0 | 0xE1) {
+        flags |= KEYEVENTF_EXTENDEDKEY;
+    }
     INPUT {
         r#type: INPUT_KEYBOARD,
         Anonymous: INPUT_0 {
             ki: KEYBDINPUT {
                 wVk: key,
-                wScan: 0,
-                dwFlags: if up {
-                    KEYEVENTF_KEYUP
-                } else {
-                    KEYBD_EVENT_FLAGS(0)
-                },
+                wScan: (scan & 0xFF) as u16,
+                dwFlags: flags,
                 time: 0,
                 dwExtraInfo: 0,
             },
@@ -354,8 +391,78 @@ unsafe fn read_dword(format: u32) -> Option<u32> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use super::*;
+    use windows::Win32::UI::Input::KeyboardAndMouse::{VK_BACK, VK_RIGHT};
+
+    /// `(virtual key, scan code, key up, extended)` of a keyboard `INPUT`.
+    pub(in crate::windows) fn key_of(input: &INPUT) -> (VIRTUAL_KEY, u16, bool, bool) {
+        assert_eq!(input.r#type, INPUT_KEYBOARD);
+        // SAFETY: the type says `ki` is the active field.
+        let ki = unsafe { input.Anonymous.ki };
+        (
+            ki.wVk,
+            ki.wScan,
+            ki.dwFlags.contains(KEYEVENTF_KEYUP),
+            ki.dwFlags.contains(KEYEVENTF_EXTENDEDKEY),
+        )
+    }
+
+    #[test]
+    fn key_events_carry_their_scan_codes() {
+        // Left Ctrl and Backspace have the same scan code on every layout.
+        assert_eq!(
+            key_of(&key_input(VK_CONTROL, false)),
+            (VK_CONTROL, 0x1D, false, false)
+        );
+        assert_eq!(
+            key_of(&key_input(VK_CONTROL, true)),
+            (VK_CONTROL, 0x1D, true, false)
+        );
+        assert_eq!(
+            key_of(&key_input(VK_BACK, true)),
+            (VK_BACK, 0x0E, true, false)
+        );
+        // V moves with the layout (Dvorak), but always has a scan code.
+        let (vk, scan, up, _) = key_of(&key_input(VK_V, false));
+        assert_eq!((vk, up), (VK_V, false));
+        assert_ne!(scan, 0, "V must carry its scan code");
+        // Extended keys say so; a key the layout lacks keeps only its VK.
+        assert_eq!(
+            key_of(&key_input_with_scan(VK_RIGHT, 0xE04D, false)),
+            (VK_RIGHT, 0x4D, false, true)
+        );
+        assert_eq!(
+            key_of(&key_input_with_scan(VK_V, 0, true)),
+            (VK_V, 0, true, false)
+        );
+        // SAFETY: `ki` is the active field of a keyboard INPUT.
+        assert_eq!(
+            unsafe { key_input(VK_V, false).Anonymous.ki.dwExtraInfo },
+            0
+        );
+    }
+
+    #[test]
+    fn ctrl_v_holds_ctrl_around_the_v_in_one_batch() {
+        let keys: Vec<_> = ctrl_v()
+            .iter()
+            .map(|input| {
+                let (vk, scan, up, _) = key_of(input);
+                assert_ne!(scan, 0);
+                (vk, up)
+            })
+            .collect();
+        assert_eq!(
+            keys,
+            [
+                (VK_CONTROL, false),
+                (VK_V, false),
+                (VK_V, true),
+                (VK_CONTROL, true)
+            ]
+        );
+    }
 
     #[test]
     fn the_foreground_window_can_be_described() {

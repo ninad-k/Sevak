@@ -1,7 +1,20 @@
 // Dev-only fixtures so the UI can be previewed in a plain browser (`npm run dev`)
 // where there is no Rust backend. Never imported in production builds.
 
-import type { ResultDto, SecondaryDto, SelectionActionDto, SelectionPayload } from "./ipc";
+import type {
+  BufferActionDto,
+  BufferDestination,
+  BufferDto,
+  BufferItemDto,
+  BufferProgress,
+  BufferRunDto,
+  PreviewContent,
+  ResultDto,
+  SecondaryDto,
+  SelectionActionDto,
+  SelectionPayload,
+  TextViewContent,
+} from "./ipc";
 import type { SettingsDto } from "./settings-ipc";
 
 const appActions: SecondaryDto[] = [
@@ -12,16 +25,124 @@ const appActions: SecondaryDto[] = [
 const fileActions: SecondaryDto[] = appActions.slice(0, 2);
 const noExtras = { secondary: [], copy_text: null };
 
+const longText = [
+  "Dear team,",
+  "",
+  "Thanks for the quick turnaround on the quarterly figures. A few notes before the review on Thursday:",
+  "",
+  "  1. Revenue is up 8.4% quarter over quarter, driven mostly by the new annual plans.",
+  "  2. Support volume dropped for the third month in a row; the new onboarding guide seems to be working.",
+  "  3. The infrastructure bill came in 6% under forecast after the storage clean-up.",
+  "",
+  "Please send corrections by Wednesday noon so they can go into the deck. If anything looks off, reply here",
+  "rather than editing the spreadsheet directly, because several people are building on it.",
+  "",
+  "Open questions for Thursday:",
+  "  - Do we keep the discount for annual renewals next quarter?",
+  "  - Who owns the migration of the legacy reports?",
+  "  - Is the new region launch still on for November?",
+  "",
+  "Best regards,",
+  "Ninad",
+].join("\n");
+
+/** A small picture for the image preview (an SVG, so the fixture stays text). */
+const sunset = `data:image/svg+xml;utf8,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1e1b4b"/><stop offset=".55" stop-color="#f97316"/><stop offset="1" stop-color="#fde68a"/></linearGradient></defs><rect width="640" height="360" fill="url(#g)"/><circle cx="320" cy="230" r="64" fill="#fff7ed"/><rect y="270" width="640" height="90" fill="#0f172a"/></svg>',
+)}`;
+
+/** The emoji of the grid preview: `[glyph, name, keywords]`. */
+const emoji: [string, string, string][] = [
+  ["😀", "grinning face", "happy smile"],
+  ["😂", "face with tears of joy", "lol laugh"],
+  ["🙂", "slightly smiling face", "smile"],
+  ["😉", "winking face", "wink"],
+  ["😍", "smiling face with heart-eyes", "love"],
+  ["😎", "smiling face with sunglasses", "cool"],
+  ["🤔", "thinking face", "hmm"],
+  ["😴", "sleeping face", "zzz"],
+  ["😭", "loudly crying face", "sad"],
+  ["😡", "enraged face", "angry"],
+  ["👍", "thumbs up", "yes like"],
+  ["👎", "thumbs down", "no dislike"],
+  ["👏", "clapping hands", "applause"],
+  ["🙏", "folded hands", "thanks please"],
+  ["💪", "flexed biceps", "strong"],
+  ["👀", "eyes", "look"],
+  ["❤️", "red heart", "love"],
+  ["💔", "broken heart", "sad"],
+  ["🔥", "fire", "hot lit"],
+  ["✨", "sparkles", "shiny"],
+  ["🎉", "party popper", "celebrate"],
+  ["💯", "hundred points", "perfect"],
+  ["✅", "check mark button", "done yes"],
+  ["❌", "cross mark", "no wrong"],
+  ["⚠️", "warning", "caution"],
+  ["🚀", "rocket", "launch ship"],
+  ["🐛", "bug", "insect"],
+  ["💡", "light bulb", "idea"],
+  ["📌", "pushpin", "pin"],
+  ["📎", "paperclip", "attach"],
+  ["📅", "calendar", "date"],
+  ["☕", "hot beverage", "coffee"],
+  ["🍕", "pizza", "food"],
+  ["🌈", "rainbow", "weather"],
+  ["⭐", "star", "favorite"],
+  ["🎯", "bullseye", "target"],
+];
+
+function emojiRows(words: string): ResultDto[] {
+  const terms = words.toLowerCase().split(/\s+/).filter(Boolean);
+  return emoji
+    .filter(([, name, keywords]) => terms.every((t) => `${name} ${keywords}`.includes(t)))
+    .map(([glyph, name]) => ({
+      id: `emoji:word:${glyph}`,
+      title: name,
+      subtitle: `${glyph} · Enter to paste`,
+      icon: null,
+      plugin_id: "emoji:word",
+      action: "paste_text" as const,
+      secondary: [{ label: "Copy emoji", modifier: "shift" as const, kind: "copy_text" as const }],
+      copy_text: glyph,
+      tile: true,
+      glyph,
+    }));
+}
+
+const sampleCode = `//! Sevak's launcher window.
+use tauri::{AppHandle, Manager};
+
+pub fn toggle(app: &AppHandle) {
+    let visible = app
+        .get_webview_window("main")
+        .and_then(|window| window.is_visible().ok())
+        .unwrap_or(false);
+    if visible {
+        hide(app);
+    } else {
+        show(app);
+    }
+}
+`;
+
 const rows: ResultDto[] = [
   { id: "m:chrome", title: "Google Chrome", subtitle: "Application", icon: { kind: "builtin", name: "app" }, plugin_id: "apps", action: "launch", secondary: appActions, copy_text: "C:/ProgramData/Start Menu/Google Chrome.lnk" },
   { id: "m:calc", title: "Calculator", subtitle: "Application", icon: { kind: "builtin", name: "calculator" }, plugin_id: "apps", action: "launch", ...noExtras },
   { id: "m:file", title: "quarterly-report-final-v2.xlsx", subtitle: "C:/Users/someone/Documents/Reports/2026/Q3/quarterly-report-final-v2.xlsx", icon: { kind: "builtin", name: "file" }, plugin_id: "files", action: "open_path", secondary: fileActions, copy_text: "C:/Users/someone/Documents/Reports/2026/Q3/quarterly-report-final-v2.xlsx" },
   { id: "m:folder", title: "Projects", subtitle: "D:/Projects", icon: { kind: "builtin", name: "folder" }, plugin_id: "files", action: "open_path", secondary: fileActions, copy_text: "D:/Projects", autocomplete: "D:/Projects/" },
+  { id: "m:file2", title: "budget-2026.pdf", subtitle: "~/Documents/Finance", icon: { kind: "builtin", name: "file" }, plugin_id: "files", action: "open_path", secondary: fileActions, copy_text: "C:/Users/someone/Documents/Finance/budget-2026.pdf" },
+  { id: "m:file3", title: "meeting-notes.md", subtitle: "~/Documents", icon: { kind: "builtin", name: "file" }, plugin_id: "files", action: "open_path", secondary: fileActions, copy_text: "C:/Users/someone/Documents/meeting-notes.md" },
+  { id: "m:folder2", title: "Documents", subtitle: "~", icon: { kind: "builtin", name: "folder" }, plugin_id: "files", action: "open_path", secondary: fileActions, copy_text: "C:/Users/someone/Documents", autocomplete: "~/Documents/" },
+  { id: "m:folder3", title: "Downloads", subtitle: "~", icon: { kind: "builtin", name: "folder" }, plugin_id: "files", action: "open_path", secondary: fileActions, copy_text: "C:/Users/someone/Downloads", autocomplete: "~/Downloads/" },
   { id: "m:web", title: "Search Google for “rust traits”", subtitle: "Web search", icon: { kind: "builtin", name: "web" }, plugin_id: "web:g", action: "open_url", secondary: [{ label: "Copy URL", modifier: "shift", kind: "copy_text" }], copy_text: "https://www.google.com/search?q=rust%20traits" },
   { id: "m:copy", title: "8", subtitle: "2+2*3 · Enter to copy", icon: { kind: "builtin", name: "copy" }, plugin_id: "calculator", action: "copy_text", secondary: [], copy_text: "8" },
   { id: "m:broken", title: "Broken icon app", subtitle: "Falls back to the app glyph", icon: { kind: "url", url: "http://sevak-icon.localhost/0000000000000000" }, plugin_id: "apps", action: "launch", ...noExtras },
   { id: "m:shell", title: "Run `git status` in terminal", subtitle: "Runs only when you press Enter", icon: { kind: "builtin", name: "terminal" }, plugin_id: "shell", action: "custom", ...noExtras },
   { id: "m:plugin", title: "Custom plugin result", subtitle: "Plugin", icon: { kind: "builtin", name: "plugin" }, plugin_id: "x", action: "custom", ...noExtras },
+  { id: "m:code", title: "window.rs", subtitle: "D:/Projects/sevak/src-tauri/src/window.rs", icon: { kind: "builtin", name: "file" }, plugin_id: "files", action: "open_path", secondary: fileActions, copy_text: "D:/Projects/sevak/src-tauri/src/window.rs" },
+  { id: "m:image", title: "sunset.svg", subtitle: "C:/Users/someone/Pictures/sunset.svg", icon: { kind: "builtin", name: "file" }, plugin_id: "files", action: "open_path", secondary: fileActions, copy_text: "C:/Users/someone/Pictures/sunset.svg" },
+  { id: "m:long", title: "Dear team, thanks for the quick turnaround on the quarterly figures and…", subtitle: "Copied 12 minutes ago · Enter to paste", icon: { kind: "builtin", name: "copy" }, plugin_id: "clipboard", action: "paste_text", secondary: [], copy_text: longText, text_view: true },
+  { id: "m:output", title: "Disk usage report", subtitle: "Enter to read the output", icon: { kind: "builtin", name: "terminal" }, plugin_id: "script:disk", action: "copy_text", secondary: [], copy_text: longText, text_view: true, text_on_enter: true },
   { id: "m:9", title: "Ninth row", subtitle: "Scrolls the list", icon: null, plugin_id: "apps", action: "launch", ...noExtras },
   { id: "m:10", title: "Tenth row", subtitle: "Scrolls the list", icon: null, plugin_id: "apps", action: "launch", ...noExtras },
 ];
@@ -68,12 +189,167 @@ export function mockSelection(): SelectionPayload {
   };
 }
 
+/** The files-plugin rows of the preview, as buffer items. */
+function bufferItemFor(id: string): BufferItemDto | null {
+  const row = rows.find((r) => r.id === id && r.plugin_id === "files");
+  if (!row?.copy_text) return null;
+  return {
+    path: row.copy_text,
+    name: row.title,
+    is_dir: !!row.autocomplete,
+    icon: row.icon,
+  };
+}
+
+const bufferActions: BufferActionDto[] = [
+  { key: "open_all", label: "Open all", destination: false },
+  { key: "show_in_folder", label: "Show in folder", destination: false },
+  { key: "copy_paths", label: "Copy paths", destination: false },
+  { key: "copy_files", label: "Copy files to clipboard", destination: false },
+  { key: "move_to", label: "Move to…", destination: true },
+  { key: "copy_to", label: "Copy to…", destination: true },
+  { key: "trash", label: "Move to Trash", destination: false },
+  { key: "zip", label: "Compress to .zip", destination: false },
+  { key: "open_terminal", label: "Open in terminal", destination: false },
+];
+
+/** In-memory file buffer for the browser preview (the real one lives in the shell). */
+let previewItems: BufferItemDto[] = [];
+const progressListeners = new Set<(progress: BufferProgress) => void>();
+const snapshot = (): BufferDto => ({ items: [...previewItems], actions: bufferActions });
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export const mockBuffer = {
+  get: (): BufferDto => snapshot(),
+  add(id: string): BufferDto | string {
+    const item = bufferItemFor(id);
+    if (!item) return "Only files and folders from the file results can be collected.";
+    if (!previewItems.some((i) => i.path === item.path)) previewItems.push(item);
+    return snapshot();
+  },
+  remove(index?: number): BufferDto {
+    if (index === undefined) previewItems.pop();
+    else previewItems = previewItems.filter((_, i) => i !== index);
+    return snapshot();
+  },
+  clear(): BufferDto {
+    previewItems = [];
+    return snapshot();
+  },
+  /** A few seeded items, for `/#buffer`. */
+  seed(): BufferDto {
+    previewItems = ["m:file", "m:folder", "m:file2", "m:file3"].flatMap((id) => {
+      const item = bufferItemFor(id);
+      return item ? [item] : [];
+    });
+    return snapshot();
+  },
+  /** Pretends to run an action, with progress, so the progress row can be seen. */
+  async run(key: string, destination: BufferDestination | null): Promise<BufferRunDto | string> {
+    const action = bufferActions.find((a) => a.key === key);
+    if (!action) return "that action is not available";
+    if (action.destination && !destination) return "Pick a destination folder first.";
+    const total = previewItems.length;
+    if (["move_to", "copy_to", "trash", "zip"].includes(key)) {
+      for (let done = 0; done <= total; done++) {
+        for (const listener of progressListeners) {
+          listener({ label: action.label, done, total, name: previewItems[done]?.name ?? "" });
+        }
+        await pause(450);
+      }
+    }
+    const consumed = key === "move_to" || key === "trash";
+    const message = `${action.label}: ${total} items (preview, nothing was changed).`;
+    if (consumed) previewItems = [];
+    return { message, ok: true, declined: false, hidden: false, buffer: snapshot() };
+  },
+  onProgress(cb: (progress: BufferProgress) => void) {
+    progressListeners.add(cb);
+    return () => void progressListeners.delete(cb);
+  },
+};
+
 export function mockHistory(): string[] {
   return ["g rust traits", "chrome", "~/Documents/"];
 }
 
 export function mockSearch(query: string): ResultDto[] {
-  return query.trim() === "none" ? [] : rows;
+  const text = query.trim();
+  if (text === "none") return [];
+  // The emoji picker: `:smile` or `emoji smile` shows a grid.
+  const grid = /^(?::|emoji\s)\s*(.*)$/.exec(text);
+  if (grid) return emojiRows(grid[1]);
+  return rows;
+}
+
+/** Previews of the fixtures above, shaped like the shell's `preview` answer. */
+export function mockPreview(id: string): PreviewContent | null {
+  const base = { modified: 1_790_000_000, note: null };
+  const row = rows.find((r) => r.id === id) ?? mockSearch(":").find((r) => r.id === id);
+  if (!row) return null;
+  const common = { title: row.title, subtitle: row.subtitle, ...base };
+  switch (id) {
+    case "m:file":
+      return { ...common, body: { kind: "none" }, note: "No preview for this kind of file", meta: [
+        { label: "Kind", value: "Excel workbook" },
+        { label: "Size", value: "184.3 KB" },
+        { label: "Path", value: row.copy_text ?? "" },
+      ] };
+    case "m:image":
+      return { ...common, body: { kind: "image", src: sunset }, meta: [
+        { label: "Kind", value: "SVG image" },
+        { label: "Size", value: "612 bytes" },
+        { label: "Path", value: row.copy_text ?? "" },
+      ] };
+    case "m:folder":
+      return { ...common, body: { kind: "folder", truncated: false, entries: [
+        { name: "sevak", dir: true },
+        { name: "website", dir: true },
+        { name: "notes", dir: true },
+        { name: "archive", dir: true },
+        { name: "main.rs", dir: false },
+        { name: "README.md", dir: false },
+        { name: "todo.txt", dir: false },
+        { name: "budget.xlsx", dir: false },
+      ] }, meta: [
+        { label: "Kind", value: "Folder" },
+        { label: "Items", value: "8" },
+        { label: "Path", value: row.copy_text ?? "" },
+      ] };
+    case "m:web":
+      return { ...common, body: { kind: "url", url: row.copy_text ?? "" }, meta: [{ label: "Site", value: "www.google.com" }] };
+    case "m:copy":
+      return { ...common, body: { kind: "none" }, meta: [
+        { label: "Result", value: "8" },
+        { label: "Calculation", value: "2 + 2 * 3" },
+      ] };
+    case "m:long":
+    case "m:output":
+      return { ...common, body: { kind: "text", text: longText, truncated: false }, meta: [] };
+    case "m:chrome":
+    case "m:calc":
+      return { ...common, body: { kind: "none" }, meta: [
+        { label: "Kind", value: "Application" },
+        { label: "Shortcut", value: "C:/ProgramData/Microsoft/Windows/Start Menu/Programs/" + row.title + ".lnk" },
+      ] };
+    case "m:code":
+      return { ...common, body: { kind: "text", text: sampleCode, truncated: true }, meta: [] };
+  }
+  if (row.glyph) {
+    const found = emoji.find(([glyph]) => glyph === row.glyph);
+    return { ...common, body: { kind: "none" }, meta: [
+      { label: "Name", value: row.title },
+      { label: "Keywords", value: (found?.[2] ?? "").split(" ").join(", ") },
+      { label: "Code points", value: [...row.glyph].map((c) => `U+${c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}`).join(" ") },
+    ] };
+  }
+  return { ...common, body: { kind: "none" }, meta: [] };
+}
+
+export function mockTextView(id: string): TextViewContent | null {
+  const row = rows.find((r) => r.id === id);
+  if (!row?.text_view) return null;
+  return { title: row.title, text: `${longText}\n\n${longText}`, truncated: false };
 }
 
 export function mockSettings(): SettingsDto {
@@ -97,16 +373,28 @@ export function mockSettings(): SettingsDto {
         font_family: "",
         opacity: 100,
         radius: 14,
+        theme_file: "",
         custom_css: "",
       },
       plugins: { disabled: ["uuid"] },
       calculator: { currency: false },
+      snippets: {
+        auto_expand: false,
+        prefix: "",
+        expand_on: "immediate",
+        case_sensitive: true,
+        ignore_apps: [],
+        expand_in_terminals: false,
+      },
       files: {
         directories: ["~/Desktop", "~/Documents", "~/Downloads"],
         max_depth: 4,
         include_hidden: false,
         keyword: "f",
         global: true,
+        use_os_index: true,
+        index_keyword: "ff",
+        content_keyword: "in",
       },
       bookmarks: { browsers: [], keyword: "b", global: true },
       shell: { terminal: "", shell: "", keep_open: true },

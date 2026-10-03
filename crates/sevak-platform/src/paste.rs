@@ -9,6 +9,8 @@
 use std::thread::sleep;
 use std::time::Duration;
 
+use sevak_core::ClipContent;
+
 use crate::clipboard;
 use crate::error::Result;
 
@@ -133,12 +135,35 @@ pub(crate) trait PasteDriver {
     fn press_paste(&self) -> Result<()>;
 }
 
+/// What a paste puts on the clipboard first.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum PasteContent<'a> {
+    Text(&'a str),
+    /// An image or files (see [`ClipContent`]).
+    Clip(&'a ClipContent),
+}
+
+impl PasteContent<'_> {
+    /// Puts the content on the clipboard without pasting it (where pasting is
+    /// not possible).
+    #[cfg_attr(windows, allow(dead_code))]
+    pub(crate) fn copy(self) -> Result<()> {
+        match self {
+            Self::Text(text) => clipboard::set_text(text),
+            Self::Clip(content) => clipboard::set_clip(content, false),
+        }
+    }
+}
+
 /// The clipboard operations a paste needs; a trait so the order of operations
 /// can be tested without touching the real clipboard.
 pub(crate) trait PasteClipboard {
+    /// The clipboard's text, to put back afterwards. (An image or file list
+    /// that was there is not restored: only text is.)
     fn get_text(&self) -> Option<String>;
-    /// Replaces the text, asking the OS to keep it out of its own history.
-    fn set_private(&self, text: &str) -> Result<()>;
+    /// Replaces the clipboard's content, asking the OS to keep it out of its
+    /// own history.
+    fn set_private(&self, content: PasteContent<'_>) -> Result<()>;
 }
 
 pub(crate) struct SystemClipboard;
@@ -148,27 +173,30 @@ impl PasteClipboard for SystemClipboard {
         clipboard::get_text().ok().flatten()
     }
 
-    fn set_private(&self, text: &str) -> Result<()> {
-        clipboard::set_text_private(text)
+    fn set_private(&self, content: PasteContent<'_>) -> Result<()> {
+        match content {
+            PasteContent::Text(text) => clipboard::set_text_private(text),
+            PasteContent::Clip(content) => clipboard::set_clip(content, true),
+        }
     }
 }
 
-/// Copies `text`, refocuses the previous window and presses paste.
+/// Copies `content`, refocuses the previous window and presses paste.
 ///
 /// Only a failure to copy is an error. If the previous window cannot be
-/// refocused or the keystroke cannot be sent, the text stays on the clipboard
-/// and the outcome says so, so the user can paste by hand.
+/// refocused or the keystroke cannot be sent, the content stays on the
+/// clipboard and the outcome says so, so the user can paste by hand.
 pub(crate) fn paste(
-    text: &str,
+    content: PasteContent<'_>,
     restore_clipboard: bool,
     clipboard: &dyn PasteClipboard,
     driver: &dyn PasteDriver,
     delays: bool,
 ) -> Result<PasteOutcome> {
-    // Read first: setting the text replaces it.
+    // Read first: setting the content replaces it.
     let previous = restore_clipboard.then(|| clipboard.get_text()).flatten();
 
-    clipboard.set_private(text)?;
+    clipboard.set_private(content)?;
 
     if let Err(reason) = driver.focus_previous() {
         return Ok(PasteOutcome::CopiedOnly(reason));
@@ -179,7 +207,7 @@ pub(crate) fn paste(
     if let Err(err) = driver.press_paste() {
         tracing::warn!("could not send the paste keystroke: {err}");
         return Ok(PasteOutcome::CopiedOnly(format!(
-            "Could not press paste ({err}); the text is on the clipboard"
+            "Could not press paste ({err}); it is on the clipboard"
         )));
     }
 
@@ -187,7 +215,7 @@ pub(crate) fn paste(
         if delays {
             sleep(RESTORE_DELAY);
         }
-        if let Err(err) = clipboard.set_private(&previous) {
+        if let Err(err) = clipboard.set_private(PasteContent::Text(&previous)) {
             tracing::warn!("could not restore the clipboard: {err}");
         }
     }
@@ -212,9 +240,18 @@ mod tests {
         fn get_text(&self) -> Option<String> {
             self.clipboard.borrow().clone()
         }
-        fn set_private(&self, text: &str) -> Result<()> {
-            self.log.borrow_mut().push(format!("set {text}"));
-            *self.clipboard.borrow_mut() = Some(text.to_owned());
+        fn set_private(&self, content: PasteContent<'_>) -> Result<()> {
+            match content {
+                PasteContent::Text(text) => {
+                    self.log.borrow_mut().push(format!("set {text}"));
+                    *self.clipboard.borrow_mut() = Some(text.to_owned());
+                }
+                PasteContent::Clip(clip) => {
+                    self.log.borrow_mut().push(format!("set {clip:?}"));
+                    // An image or file list replaces the text.
+                    *self.clipboard.borrow_mut() = None;
+                }
+            }
             Ok(())
         }
     }
@@ -236,7 +273,7 @@ mod tests {
 
     fn run(fake: &Fake, restore: bool) -> PasteOutcome {
         paste(
-            "new",
+            PasteContent::Text("new"),
             restore,
             fake as &dyn PasteClipboard,
             fake as &dyn PasteDriver,
@@ -259,6 +296,27 @@ mod tests {
         assert_eq!(run(&fake, true), PasteOutcome::Pasted);
         assert_eq!(*fake.log.borrow(), ["set new", "focus", "paste", "set old"]);
         assert_eq!(fake.clipboard.borrow().as_deref(), Some("old"));
+    }
+
+    #[test]
+    fn an_image_is_pasted_like_text_and_the_old_text_comes_back() {
+        let fake = Fake::default();
+        *fake.clipboard.borrow_mut() = Some("old".into());
+        let clip = ClipContent::Image {
+            path: "a.png".into(),
+        };
+        let outcome = paste(
+            PasteContent::Clip(&clip),
+            true,
+            &fake as &dyn PasteClipboard,
+            &fake as &dyn PasteDriver,
+            false,
+        )
+        .unwrap();
+        assert_eq!(outcome, PasteOutcome::Pasted);
+        let log = fake.log.borrow();
+        assert!(log[0].starts_with("set Image"), "{log:?}");
+        assert_eq!(log[1..], ["focus", "paste", "set old"]);
     }
 
     #[test]

@@ -61,8 +61,9 @@ graph LR
 - **UI (Svelte 5):** The launcher window with the search input, result list, and action panel. Communicates with Tauri via IPC commands.
 - **Sevak Shell (Tauri):** Owns the application window, system hotkey registration, tray icon, and CLI argument parsing. Routes queries to the engine and executes actions via the platform provider. Manages the single-instance lock (on Windows/macOS/Linux).
 - **SearchEngine:** The core: routes queries to plugins, ranks results by fuzzy match and usage statistics, applies fallback search, and supplies late-result notification callbacks.
-- **Built-in plugins:** Apps, files, calculator (with unit/currency conversion), web search, system commands, shell commands, clipboard history, snippets, and bookmarks. Each implements the `Plugin` trait and answers queries from in-memory data.
+- **Built-in plugins:** Apps, files (and whole-disk / content search through the OS index), calculator (with unit/currency conversion), web search, system commands, automation tasks, media controls, shell commands, clipboard history (text, images and files), snippets, the emoji picker, contacts, 1Password, the dictionary, and bookmarks. Each implements the `Plugin` trait and answers queries from in-memory data or, for slow sources such as the OS file index, through late results. The file buffer and snippet expansion as you type live beside them.
 - **Script Plugin Host:** Discovers and manages external plugins—scripts in Python, PowerShell, Node.js, or any language—without requiring a rebuild.
+- **Workflows:** A graph engine and runtime for [workflows](workflows.md) (keyword, script filter, hotkey, Universal Actions and external triggers chained to actions and outputs), plus the opt-in gallery. See [Workflows for contributors](plugins.md#workflows-for-contributors).
 - **Platform Provider:** The OS abstraction. Launches apps, opens files and URLs, manages clipboard, synthesizes keypresses for pasting, captures the selection (for Universal Actions), and provides the hotkey strategy.
 
 ## Query lifecycle

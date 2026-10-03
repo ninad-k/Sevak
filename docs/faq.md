@@ -81,7 +81,7 @@ More: [File search](usage.md#files-and-folders).
 
 ### Can Sevak search inside document text?
 
-No, Sevak searches filenames and folder names only, not document contents. For full-text search, use your operating system's built-in search (Windows Search, Spotlight, etc.) or specialized tools.
+Yes, through your operating system's own file index: type `in` and the words, for example `in invoice 2026`. `ff report` searches file names anywhere on the disk. `f` still searches names in the folders you chose. The queries go only to the local index (Windows Search, Spotlight, Tracker or Baloo), never over the network. See [Whole-disk and content search](features/files.md#whole-disk-and-content-search).
 
 ### The file index is incomplete or seems stuck.
 
@@ -134,6 +134,18 @@ Click **Save**.
 
 More: [Web search keywords](configuration.md#web_search).
 
+### Can I preview a file without opening it?
+
+Yes. Tap ++shift++ or press ++ctrl+y++ to open the preview pane under the results: text files, images, folders, links, snippets and clipboard entries. ++ctrl+t++ opens a long text in a scrollable view. See [Preview, Text View and Grid View](usage.md#preview-text-view-and-grid-view).
+
+### Can Sevak expand text as I type, like a text expander?
+
+Yes, opt-in. Give a snippet a `keyword` and turn on **Settings → Plugins → Expand snippets as you type**. While it is on, Sevak watches your keystrokes (the last 64 characters, in memory only). See [Expand snippets as you type](features/snippets.md#expand-snippets-as-you-type).
+
+### What is the difference between a script plugin and a workflow?
+
+A script plugin adds a keyword whose results come from your script. A [workflow](workflows.md) chains a trigger (a keyword, a hotkey, Universal Actions, `sevak --trigger`) to several steps, such as running a script, transforming text, opening a link, pasting and showing a notification, built visually in **Settings → Workflows**. Both ask for permission before they run code.
+
 ### How do I write a script plugin?
 
 Script plugins let you add custom keywords without rebuilding Sevak. Put a folder with a `plugin.toml` and a script in the `plugins` folder next to `config.toml`.
@@ -144,10 +156,12 @@ See [Script plugins](usage.md#script-plugins) and the [Plugins guide](plugins.md
 
 ### Does Sevak send my data anywhere?
 
-No. Your searches, files, clipboard and settings stay on your machine. Sevak makes only two optional network requests:
+No. Your searches, files, clipboard and settings stay on your machine. The network requests Sevak itself makes are:
 
-1. **Updates** (off by default in config): checks GitHub once a day
-2. **Currency rates** (off by default): downloads ECB daily rates once per day if you enable it
+1. **Links you open**: web searches and bookmarks open in your browser
+2. **Update checks** (on by default, `[general] check_for_updates`): checks GitHub at startup and once a day; an update is downloaded only after you agree
+3. **Currency rates** (off by default): downloads ECB daily rates once per day if you enable it
+4. **Theme gallery** and **workflow gallery**: only when you click **Browse online themes** or **Load gallery**, and a package only when you click **Install**
 
 Nothing is uploaded. [Read the full privacy policy.](privacy.md)
 
@@ -200,7 +214,7 @@ Sevak reads `config.toml` at startup. To reset to defaults:
 3. Delete `config.toml`
 4. Restart Sevak; a fresh config is created with defaults
 
-Settings, usage history and clipboard history are in the same folder.
+Settings, usage history and clipboard history are in the same folder on Windows and macOS (see [Files and data](files-and-data.md) for Linux).
 
 ## Wayland (Linux)
 

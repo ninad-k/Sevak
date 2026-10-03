@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use serde_json::Value;
 use sevak_core::model::score;
-use sevak_core::{Action, IconSource, ResultItem};
+use sevak_core::{Action, IconSource, ResultItem, ViewHint};
 use sevak_platform::icon_file;
 
 use super::manifest::relative_inside;
@@ -21,6 +21,10 @@ pub const MAX_ITEMS: usize = 50;
 const MAX_TITLE_CHARS: usize = 200;
 const MAX_SUBTITLE_CHARS: usize = 300;
 const MAX_KEY_CHARS: usize = 200;
+/// Text kept for an item's Text View, in characters.
+const MAX_VIEW_TEXT_CHARS: usize = 100_000;
+/// A grid tile's glyph is a few characters at most (an emoji sequence).
+const MAX_GLYPH_CHARS: usize = 16;
 
 /// What the converters need to know about the plugin they work for.
 #[derive(Debug, Clone, Copy)]
@@ -89,6 +93,58 @@ struct RawItem {
     icon: Option<Value>,
     action: Option<Value>,
     score: Option<f64>,
+    /// `"text"` (long text for the Text View, in `text`) or `"grid"` (a tile).
+    view: Option<String>,
+    text: Option<String>,
+    /// With `"view": "grid"`: a short text (an emoji) drawn as the tile's picture.
+    glyph: Option<String>,
+}
+
+/// The view an item asks for. Anything unusable is logged and ignored, so the
+/// item still shows as an ordinary row.
+fn view_from(ctx: &ItemContext<'_>, index: usize, raw: &RawItem) -> Option<ViewKind> {
+    let kind = raw.view.as_deref()?;
+    match kind {
+        "text" => {
+            let text: String = raw
+                .text
+                .as_deref()
+                .unwrap_or("")
+                .chars()
+                .take(MAX_VIEW_TEXT_CHARS)
+                .collect();
+            if text.trim().is_empty() {
+                tracing::warn!(
+                    plugin = ctx.plugin_id,
+                    index,
+                    "ignoring view \"text\": the item has no text"
+                );
+                return None;
+            }
+            Some(ViewKind::Text(text))
+        }
+        "grid" => Some(ViewKind::Grid(
+            raw.glyph
+                .as_deref()
+                .map(str::trim)
+                .filter(|glyph| !glyph.is_empty())
+                .map(|glyph| glyph.chars().take(MAX_GLYPH_CHARS).collect()),
+        )),
+        other => {
+            tracing::warn!(
+                plugin = ctx.plugin_id,
+                index,
+                view = other,
+                "ignoring an unknown view"
+            );
+            None
+        }
+    }
+}
+
+enum ViewKind {
+    Text(String),
+    Grid(Option<String>),
 }
 
 /// Converts the `items` of a persistent-protocol `results` message (or of a
@@ -113,9 +169,16 @@ pub fn convert_items(ctx: ItemContext<'_>, values: &[Value]) -> Vec<ResultItem> 
             );
             continue;
         }
+        let view = view_from(&ctx, index, &raw);
+        let explicit_action = raw.action.is_some();
         let action = match raw.action {
+            // An item that only shows text: Enter opens the Text View (below),
+            // and copying it gives the whole text.
             None => Action::CopyText {
-                text: title.clone(),
+                text: match &view {
+                    Some(ViewKind::Text(text)) => text.clone(),
+                    _ => title.clone(),
+                },
             },
             Some(value) => match serde_json::from_value::<Action>(value) {
                 Ok(Action::Custom { .. }) if !ctx.allow_custom => {
@@ -154,6 +217,14 @@ pub fn convert_items(ctx: ItemContext<'_>, values: &[Value]) -> Vec<ResultItem> 
         if let Some(icon) = raw.icon.as_ref().and_then(|icon| icon_from_json(ctx, icon)) {
             item = item.with_icon(icon);
         }
+        item = match view {
+            Some(ViewKind::Text(text)) => item.with_view(ViewHint::Text {
+                text,
+                on_enter: !explicit_action,
+            }),
+            Some(ViewKind::Grid(glyph)) => item.as_tile(glyph.as_deref()),
+            None => item,
+        };
         items.push(item);
     }
     items
@@ -303,6 +374,75 @@ mod tests {
         ]));
         let ids: Vec<_> = items.iter().map(|i| i.id.as_str()).collect();
         assert_eq!(ids, ["script:t:same", "script:t:same#2", "script:t:same#3"]);
+    }
+
+    #[test]
+    fn text_views_open_on_enter_unless_the_item_has_its_own_action() {
+        let items = convert(json!([
+            {"title": "Output", "view": "text", "text": "line 1\nline 2"},
+            {"title": "Copy me", "view": "text", "text": "body",
+             "action": {"type": "copy_text", "text": "x"}},
+            {"title": "No text", "view": "text"},
+            {"title": "Blank", "view": "text", "text": "  \n "},
+            {"title": "Odd", "view": "carousel"}
+        ]));
+        assert_eq!(
+            items[0].view,
+            Some(ViewHint::Text {
+                text: "line 1\nline 2".into(),
+                on_enter: true
+            })
+        );
+        // Copying such a row gives the whole text, not its title.
+        assert_eq!(
+            items[0].action,
+            Action::CopyText {
+                text: "line 1\nline 2".into()
+            }
+        );
+        assert_eq!(
+            items[1].view,
+            Some(ViewHint::Text {
+                text: "body".into(),
+                on_enter: false
+            })
+        );
+        assert_eq!(items[1].action, Action::CopyText { text: "x".into() });
+        // Unusable views leave an ordinary row.
+        assert!(items[2..].iter().all(|item| item.view.is_none()));
+        assert_eq!(items.len(), 5);
+    }
+
+    #[test]
+    fn grid_items_become_tiles_with_an_optional_glyph() {
+        let items = convert(json!([
+            {"title": "Fire", "view": "grid", "glyph": "🔥"},
+            {"title": "Plain", "view": "grid"},
+            {"title": "Long", "view": "grid", "glyph": "x".repeat(100)}
+        ]));
+        assert_eq!(
+            items[0].view,
+            Some(ViewHint::Grid {
+                glyph: Some("🔥".into())
+            })
+        );
+        assert_eq!(items[1].view, Some(ViewHint::Grid { glyph: None }));
+        let Some(ViewHint::Grid { glyph: Some(glyph) }) = &items[2].view else {
+            panic!("expected a glyph");
+        };
+        assert_eq!(glyph.chars().count(), MAX_GLYPH_CHARS);
+        assert!(items.iter().all(ResultItem::is_tile));
+    }
+
+    #[test]
+    fn view_text_is_capped() {
+        let items = convert(json!([
+            {"title": "Big", "view": "text", "text": "é".repeat(MAX_VIEW_TEXT_CHARS + 50)}
+        ]));
+        let Some(ViewHint::Text { text, .. }) = &items[0].view else {
+            panic!("expected a text view");
+        };
+        assert_eq!(text.chars().count(), MAX_VIEW_TEXT_CHARS);
     }
 
     #[test]

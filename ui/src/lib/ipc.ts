@@ -43,6 +43,8 @@ export interface Status {
   theme: ThemeSetting;
   /** The search index is being (re)built. */
   indexing: boolean;
+  /** Snippet expansion as you type: running, or why not. */
+  snippet_expansion: { active: boolean; problem: string | null };
 }
 
 export type ActionKind =
@@ -79,6 +81,48 @@ export interface ResultDto {
   secondary: SecondaryDto[];
   /** What Ctrl+C copies for this row, if anything. */
   copy_text: string | null;
+  /** The row is a tile of the Grid View (shown as one when every row is). */
+  tile?: boolean;
+  /** The tile's picture when it is text (an emoji) rather than the icon. */
+  glyph?: string | null;
+  /** The row has a text to open in the Text View (Ctrl+T). */
+  text_view?: boolean;
+  /** Enter opens the Text View instead of running the action. */
+  text_on_enter?: boolean;
+  /** What Ctrl+L shows as Large Type instead of the title (a phone number, say). */
+  large_text?: string | null;
+}
+
+export interface MetaRow {
+  label: string;
+  value: string;
+}
+
+/** The main content of the preview pane. */
+export type PreviewBody =
+  | { kind: "none" }
+  | { kind: "text"; text: string; truncated: boolean }
+  | { kind: "image"; src: string }
+  | { kind: "folder"; entries: { name: string; dir: boolean }[]; truncated: boolean }
+  | { kind: "url"; url: string };
+
+/** What the preview pane draws for one result. */
+export interface PreviewContent {
+  title: string;
+  subtitle: string;
+  body: PreviewBody;
+  meta: MetaRow[];
+  /** Seconds since the unix epoch. */
+  modified: number | null;
+  /** Why there is no (or only a partial) preview. */
+  note: string | null;
+}
+
+/** The full text of a result, for the Text View. */
+export interface TextViewContent {
+  title: string;
+  text: string;
+  truncated: boolean;
 }
 
 export type IndexState = "indexing" | "ready";
@@ -92,6 +136,7 @@ export const EVENT_HIDDEN = "sevak:hidden";
 export const EVENT_STATUS = "sevak:status";
 export const EVENT_INDEX = "sevak:index";
 export const EVENT_RESULTS = "sevak:results";
+export const EVENT_BUFFER_PROGRESS = "sevak:buffer-progress";
 
 /** Hide the launcher window. */
 export async function hideWindow(): Promise<void> {
@@ -142,6 +187,37 @@ export async function search(query: string): Promise<SearchResponse | null> {
     return await invoke<SearchResponse>("search", { query });
   } catch (err) {
     console.warn("[ipc] search failed:", err);
+    return null;
+  }
+}
+
+/**
+ * What the preview pane shows for result `id` of search `ticket`. The shell
+ * reads only what that result refers to; `null` when it could not.
+ */
+export async function preview(id: string, ticket: number): Promise<PreviewContent | null> {
+  if (import.meta.env.DEV && !hasTauri()) {
+    const { mockPreview } = await import("./mock");
+    return mockPreview(id);
+  }
+  try {
+    return await invoke<PreviewContent>("preview", { id, ticket });
+  } catch (err) {
+    console.warn("[ipc] preview failed:", err);
+    return null;
+  }
+}
+
+/** The full text of result `id` for the Text View, or `null`. */
+export async function textView(id: string, ticket: number): Promise<TextViewContent | null> {
+  if (import.meta.env.DEV && !hasTauri()) {
+    const { mockTextView } = await import("./mock");
+    return mockTextView(id);
+  }
+  try {
+    return await invoke<TextViewContent>("text_view", { id, ticket });
+  } catch (err) {
+    console.warn("[ipc] text_view failed:", err);
     return null;
   }
 }
@@ -244,6 +320,13 @@ export interface SelectionPayload {
   actions: SelectionActionDto[];
 }
 
+/** Text a workflow's Large Type or text view node shows. */
+export interface OutputPayload {
+  kind: "large_type" | "text_view";
+  heading: string;
+  text: string;
+}
+
 /** What the launcher is asked to show with (`sevak --query`, hotkey entries, errors). */
 export interface ShowPayload {
   /** Text to put in the search field. */
@@ -252,6 +335,8 @@ export interface ShowPayload {
   error: string | null;
   /** Actions for the selection captured by Universal Actions. */
   selection?: SelectionPayload | null;
+  /** Output of a workflow (Large Type or a block of text). */
+  output?: OutputPayload | null;
 }
 
 /** Window is being shown: clear the query, focus the input, apply the payload. */
@@ -293,4 +378,136 @@ export function onResultsUpdated(cb: () => void): Promise<UnlistenFn> {
 /** The search index started or finished (re)building. */
 export function onIndex(cb: (state: IndexState) => void): Promise<UnlistenFn> {
   return safeListen<IndexEvent>(EVENT_INDEX, (e) => cb(e.state));
+}
+
+// ---- File buffer: files collected from the results to act on together ----
+
+/** One collected file or folder. */
+export interface BufferItemDto {
+  path: string;
+  name: string;
+  is_dir: boolean;
+  icon: IconDto | null;
+}
+
+/** An action offered for the whole buffer. */
+export interface BufferActionDto {
+  key: string;
+  label: string;
+  /** Asks for a destination folder next. */
+  destination: boolean;
+}
+
+export interface BufferDto {
+  items: BufferItemDto[];
+  actions: BufferActionDto[];
+}
+
+/** How a buffer action ended. */
+export interface BufferRunDto {
+  message: string;
+  /** Everything worked. */
+  ok: boolean;
+  /** The user cancelled the confirmation. */
+  declined: boolean;
+  /** The launcher went away (the action handed over, or copied). */
+  hidden: boolean;
+  buffer: BufferDto;
+}
+
+/** A slow buffer action's progress. */
+export interface BufferProgress {
+  label: string;
+  done: number;
+  total: number;
+  name: string;
+}
+
+/** What the buffer says about the last action. */
+export interface BufferNote {
+  text: string;
+  error: boolean;
+}
+
+/** Where Move to… / Copy to… puts the items. */
+export type BufferDestination =
+  | { kind: "result"; id: string; ticket: number }
+  | { kind: "text"; text: string };
+
+const inPreview = () => import.meta.env.DEV && !hasTauri();
+
+/** The buffer as it is now. */
+export async function fileBufferGet(): Promise<BufferDto | null> {
+  if (inPreview()) return (await import("./mock")).mockBuffer.get();
+  try {
+    return await invoke<BufferDto>("file_buffer_get");
+  } catch (err) {
+    console.warn("[ipc] file_buffer_get failed:", err);
+    return null;
+  }
+}
+
+/** Adds result `id` of search `ticket`. Resolves to the buffer, or an error message. */
+export async function fileBufferAdd(id: string, ticket: number): Promise<BufferDto | string> {
+  if (inPreview()) return (await import("./mock")).mockBuffer.add(id);
+  try {
+    return await invoke<BufferDto>("file_buffer_add", { id, ticket });
+  } catch (err) {
+    console.warn("[ipc] file_buffer_add failed:", err);
+    return errorText(err);
+  }
+}
+
+/** Removes the item at `index`, or the last one. */
+export async function fileBufferRemove(index?: number): Promise<BufferDto | null> {
+  if (inPreview()) return (await import("./mock")).mockBuffer.remove(index);
+  try {
+    return await invoke<BufferDto>("file_buffer_remove", { index: index ?? null });
+  } catch (err) {
+    console.warn("[ipc] file_buffer_remove failed:", err);
+    return null;
+  }
+}
+
+export async function fileBufferClear(): Promise<BufferDto | null> {
+  if (inPreview()) return (await import("./mock")).mockBuffer.clear();
+  try {
+    return await invoke<BufferDto>("file_buffer_clear");
+  } catch (err) {
+    console.warn("[ipc] file_buffer_clear failed:", err);
+    return null;
+  }
+}
+
+/** Runs buffer action `key` on everything collected. Resolves to how it went, or an error message. */
+export async function fileBufferRun(
+  key: string,
+  destination: BufferDestination | null,
+): Promise<BufferRunDto | string> {
+  if (inPreview()) return (await import("./mock")).mockBuffer.run(key, destination);
+  try {
+    return await invoke<BufferRunDto>("file_buffer_run", { key, destination });
+  } catch (err) {
+    console.warn("[ipc] file_buffer_run failed:", err);
+    return errorText(err);
+  }
+}
+
+/** The Universal Actions for the collected files ("More file actions…"). */
+export async function fileBufferSelection(): Promise<SelectionPayload | string> {
+  if (inPreview()) return (await import("./mock")).mockSelection();
+  try {
+    return await invoke<SelectionPayload>("file_buffer_selection");
+  } catch (err) {
+    console.warn("[ipc] file_buffer_selection failed:", err);
+    return errorText(err);
+  }
+}
+
+/** Progress of a slow buffer action (move, copy, trash, zip). */
+export async function onBufferProgress(
+  cb: (progress: BufferProgress) => void,
+): Promise<UnlistenFn> {
+  if (inPreview()) return (await import("./mock")).mockBuffer.onProgress(cb);
+  return safeListen<BufferProgress>(EVENT_BUFFER_PROGRESS, cb);
 }

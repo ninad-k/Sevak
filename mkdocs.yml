@@ -112,10 +112,17 @@ nav:
       - Browser bookmarks: features/bookmarks.md
       - Clipboard history: features/clipboard.md
       - Snippets: features/snippets.md
+      - Emoji picker: features/emoji.md
       - System commands: features/system.md
+      - Automation tasks: features/tasks.md
+      - Media controls: features/media.md
       - Shell commands: features/shell.md
       - Selection actions: features/selection.md
+      - Contacts: features/contacts.md
+      - 1Password: features/1password.md
+      - Dictionary and spelling: features/dictionary.md
       - Script plugins: features/script-plugins.md
+      - Workflows: workflows.md
   - Reference:
       - Configuration file: configuration.md
       - Command line: cli.md

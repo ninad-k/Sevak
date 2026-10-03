@@ -146,6 +146,14 @@ Rounding of the search bar's corners in pixels. Range: 0–32 px (0 = sharp corn
 
 Links to: `[appearance] radius` in configuration.
 
+### Theme editor and gallery
+
+**Theme editor** creates and edits theme files with a live preview: eight built-in themes (Sevak Light, Sevak Dark, Nord, Dracula, Solarized Light, Solarized Dark, Gruvbox and High Contrast), color pickers, sliders for sizes, a WCAG contrast check, undo and redo, **Save as…**, **Apply**, **Import…** and **Export…**. **Open themes folder** shows the `themes` folder next to `config.toml`.
+
+**Browse online themes** loads the community theme gallery. Nothing is requested until you click it, and **Install** saves a theme only if its checksum matches.
+
+Links to: `[appearance] theme_file` in configuration and [Theme files and the editor](themes.md#theme-files-and-the-editor).
+
 ### Custom stylesheet
 
 A CSS file in your config folder to override theme variables. Example: `theme.css`. Leave empty to use none.
@@ -188,12 +196,20 @@ Enable or disable built-in result sources:
 - **Calculator** (arithmetic, unit conversion, currency)
 - **Files** (indexed folders; also see Files tab)
 - **Bookmarks** (browser bookmarks; also see Bookmarks section in configuration)
-- **Clipboard history** (if enabled; search recent copied text)
+- **Clipboard history** (if enabled; search recent copied text, images and files)
 - **Snippets** (saved text templates)
+- **Emoji picker** (`:heart`, `emoji heart`)
 - **System commands** (lock, sleep, settings, etc.)
+- **Automation tasks** (dark mode, volume, quit, kill, eject, keep awake…)
+- **Media controls** (play, pause, next, now playing)
 - **Shell** (type `> command` to run in a terminal)
 - **Selection** (Universal Actions)
+- **Contacts** and **1Password** (also need `enabled = true` in `config.toml`)
+- **Dictionary** (`define`, `spell`)
+- **Script plugins** and **workflows** you installed
 - **Web search engines** (see Web search tab)
+
+Contacts, 1Password, the dictionary, automation tasks and media controls have no fields of their own here; edit their sections in `config.toml` ([configuration](configuration.md)).
 
 ### Currency conversion
 
@@ -202,6 +218,27 @@ Optional: download the European Central Bank's daily exchange rates to convert c
 When enabled, `100 usd in eur` works in the calculator. Rates are cached locally for 24 hours. Disable to keep Sevak offline.
 
 Links to: `[calculator] currency` in configuration and [Privacy](privacy.md#currency-conversion).
+
+### Expand snippets as you type
+
+Off by default. When on, typing a snippet's keyword in any app replaces it with the snippet's text. While it is on, Sevak watches your keystrokes for the keyword (the last few characters, in memory only). When it is on, two more fields appear:
+
+- **Keyword prefix**: typed before every keyword, such as `;`, so that `;sig` expands and a plain `sig` does not.
+- **Expand**: as soon as the keyword is typed, or after a space or punctuation mark.
+
+A warning under the switch says what is missing (macOS Input Monitoring permission, Wayland). The other options (`case_sensitive`, `ignore_apps`, `expand_in_terminals`) are in `config.toml`.
+
+Links to: `[snippets]` in [configuration](configuration.md#snippets) and [Expand snippets as you type](features/snippets.md#expand-snippets-as-you-type).
+
+## Workflows
+
+Lists every [workflow](workflows.md) with a switch to turn it on or off, **Edit**, **Delete**, and **Review…** for one that waits for your permission. **New workflow** starts a blank one in the visual builder; **New from template…** offers three starting points. See [The builder](workflows.md#the-builder).
+
+Workflows are saved as files in the `workflows` folder next to `config.toml`, not in `config.toml`, so they are saved by the builder's own **Save**, not the Settings **Save** button.
+
+## Gallery
+
+Lists ready-made workflows and script plugins. Opening the page requests nothing: **Load gallery** downloads the list, **Install** downloads one package and checks its checksum, and the installed folder asks for permission before anything in it runs. See [The gallery](workflows.md#the-gallery).
 
 ## Web search
 
@@ -274,6 +311,17 @@ Also include matching files in plain searches, ranked lower than apps and bookma
 Default: on.
 
 Links to: `[files] global` in configuration.
+
+### Search the whole disk
+
+Turns `ff` (file names anywhere) and `in` (words inside files) on or off. Both ask your computer's own file index (Windows Search, Spotlight, `locate`, Tracker or Baloo); nothing leaves your computer. When on, two fields set the keywords:
+
+- **Whole-disk keyword**: default `ff`. Empty turns off name search.
+- **Contents keyword**: default `in`. Empty turns off content search.
+
+Every keyword must be one word and differ from all other keywords; Settings refuses to save a clash.
+
+Links to: `[files] use_os_index`, `index_keyword` and `content_keyword` in configuration, and [Whole-disk and content search](features/files.md#whole-disk-and-content-search).
 
 ## Linux
 

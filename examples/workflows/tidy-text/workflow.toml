@@ -1,0 +1,61 @@
+# Select text in any app, press the Universal Actions shortcut (Ctrl+Alt+Space)
+# and choose "Tidy up whitespace": runs of spaces, tabs and line breaks become a
+# single space, and the result replaces your selection (or is copied where
+# pasting is not possible).
+#
+# A Universal Actions trigger, a text transform and the paste output. It runs
+# no code, so Sevak does not ask for approval; it does receive the text you
+# select, which stays in memory and is never logged.
+format = 1
+name = "Tidy up whitespace"
+description = "Collapses spaces and line breaks in the selected text."
+author = "Sevak"
+version = "1.0"
+
+[[node]]
+id = "selection"
+type = "selection"
+title = "Tidy up whitespace"
+x = 40.0
+y = 100.0
+accepts = ["text"]
+
+[[node]]
+id = "collapse"
+type = "transform"
+title = "Collapse whitespace"
+x = 320.0
+y = 100.0
+op = "regex_replace"
+input = "{query}"
+find = "\\s+"
+replace = " "
+
+[[node]]
+id = "trim"
+type = "transform"
+title = "Trim the ends"
+x = 600.0
+y = 100.0
+op = "trim"
+input = "{query}"
+
+[[node]]
+id = "paste"
+type = "paste"
+title = "Replace the selection"
+x = 880.0
+y = 100.0
+text = "{query}"
+
+[[connection]]
+from = "selection"
+to = "collapse"
+
+[[connection]]
+from = "collapse"
+to = "trim"
+
+[[connection]]
+from = "trim"
+to = "paste"

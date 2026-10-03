@@ -18,12 +18,13 @@ use sevak_core::{
     UsageStore,
 };
 use sevak_platform::{native_provider, AppPaths, PlatformProvider};
-use sevak_plugins::{builtin_plugins, ScriptPluginHost};
+use sevak_plugins::{builtin_plugins, KeywordOwners, ScriptPluginHost, WorkflowHost};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::icons::IconStore;
 use crate::state::{lock, AppState};
-use crate::{script_plugins, window};
+use crate::workflows::TauriSink;
+use crate::{script_plugins, window, workflows};
 
 pub const EVENT_INDEX: &str = "sevak:index";
 /// A script plugin's late answer is ready: the UI runs its current query again.
@@ -54,14 +55,18 @@ fn engine_options(config: &Config) -> EngineOptions {
 }
 
 /// The built-in plugins plus the approved script plugins from the config
-/// directory's `plugins` folder.
+/// directory's `plugins` folder and the workflows from its `workflows` folder.
 fn all_plugins(
     config: &Config,
     platform: &Arc<dyn PlatformProvider>,
     scripts: &ScriptPluginHost,
+    workflows: &WorkflowHost,
 ) -> Vec<Arc<dyn Plugin>> {
     let mut plugins = builtin_plugins(config, platform.clone());
     plugins.extend(scripts.plugins(config, platform));
+    plugins.extend(workflows.plugins(config, platform));
+    // A keyword two plugins answer is not an error, but say so once.
+    KeywordOwners::collect(config, scripts, workflows).log_shared();
     plugins
 }
 
@@ -70,9 +75,10 @@ pub fn build_engine(
     platform: Arc<dyn PlatformProvider>,
     usage: UsageStore,
     scripts: &ScriptPluginHost,
+    workflows: &WorkflowHost,
 ) -> SearchEngine {
     SearchEngine::new(
-        all_plugins(config, &platform, scripts),
+        all_plugins(config, &platform, scripts, workflows),
         usage,
         engine_options(config),
     )
@@ -223,6 +229,11 @@ pub struct Search {
     pub platform: Arc<dyn PlatformProvider>,
     /// Script plugins found in `<config dir>/plugins`.
     pub scripts: Arc<ScriptPluginHost>,
+    /// Workflows found in `<config dir>/workflows`.
+    pub workflows: Arc<WorkflowHost>,
+    /// Where workflow output nodes show their results; gets its window handle
+    /// in [`start`].
+    pub sink: Arc<TauriSink>,
     engine: RwLock<Arc<SearchEngine>>,
     latest: Mutex<Latest>,
     next_ticket: AtomicU64,
@@ -245,11 +256,21 @@ impl Search {
             paths.data_dir.join("plugins"),
             paths.data_dir.join("script-plugin-approvals.json"),
         ));
-        let engine = build_engine(config, platform.clone(), usage, &scripts);
+        let sink = Arc::new(TauriSink::default());
+        let workflows = Arc::new(WorkflowHost::new(
+            paths.config_dir.join("workflows"),
+            paths.data_dir.join("workflows"),
+            // The same file as the script plugins': one list of what is allowed.
+            paths.data_dir.join("script-plugin-approvals.json"),
+            sink.clone(),
+        ));
+        let engine = build_engine(config, platform.clone(), usage, &scripts, &workflows);
         Self {
             icons: IconStore::new(platform.clone()),
             platform,
             scripts,
+            workflows,
+            sink,
             engine: RwLock::new(Arc::new(engine)),
             latest: Mutex::new(Latest::default()),
             next_ticket: AtomicU64::new(1),
@@ -388,7 +409,9 @@ pub fn start(app: &AppHandle) {
         .search
         .engine()
         .attach_notifier(&results_notifier(app));
+    state.search.sink.attach(app);
     script_plugins::review_new(app);
+    workflows::review_new(app);
 
     let guard = IndexGuard::new(app);
     let indexer = app.clone();
@@ -448,7 +471,7 @@ pub fn reload(app: &AppHandle, config: &Config) {
     let state = app.state::<AppState>();
     let search = &state.search;
     let generation = search.reload_generation.fetch_add(1, Ordering::SeqCst) + 1;
-    let plugins = all_plugins(config, &search.platform, &search.scripts);
+    let plugins = all_plugins(config, &search.platform, &search.scripts, &search.workflows);
     let notifier = results_notifier(app);
     for plugin in &plugins {
         plugin.attach_notifier(Arc::clone(&notifier));
@@ -456,6 +479,7 @@ pub fn reload(app: &AppHandle, config: &Config) {
     let options = engine_options(config);
 
     script_plugins::review_new(app);
+    workflows::review_new(app);
 
     let guard = IndexGuard::new(app);
     let app = app.clone();
