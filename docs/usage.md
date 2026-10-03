@@ -622,6 +622,23 @@ Switch it off with `actions_hotkey = ""` or by disabling the `selection`
 plugin; see [configuration](configuration.md#universal-actions). Details for
 plugin authors are in [plugins.md](plugins.md#universal-actions).
 
+## Workflows
+
+A workflow chains a trigger to actions and outputs, built as boxes and
+connectors in **Settings → Workflows**: type `issue 14` to open issue 14 and
+`issue dark mode` to search the issues, or select text in any app and have a
+workflow tidy it and paste it back. Triggers are a keyword (with or without text
+after it), a script filter (results from your own script), a global hotkey, a
+Universal Actions entry for the text, links or files you select, and
+`sevak --trigger <workflow>/<id> [text]`. Start from one of the three templates
+in **New from template…**.
+
+A workflow that runs scripts or commands asks for your permission first, like a
+script plugin, and again if what it runs changes. Workflows that only open
+links, copy, paste and show text run without asking. **Settings → Gallery**
+installs ready-made workflows and script plugins, but only after you press
+**Load gallery** and **Install**. The full guide is [workflows.md](workflows.md).
+
 ## Search history
 
 On an empty search bar, `↑` and `↓` step through the last 50 searches you
@@ -790,6 +807,7 @@ sevak --toggle              # Toggle the launcher
 sevak --query "> "          # Open the launcher with text already typed
 sevak --run system:lock     # Run a result by id without showing the launcher
 sevak --actions             # Universal Actions for the current selection
+sevak --trigger my-flow/go some text   # Start a workflow's external trigger (see workflows.md)
 sevak --background          # Start without showing the launcher
 sevak --settings            # Open Settings
 sevak --quit                # Quit the running instance

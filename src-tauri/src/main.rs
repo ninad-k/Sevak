@@ -20,6 +20,7 @@ mod themes;
 mod tray;
 mod updater;
 mod window;
+mod workflows;
 
 use std::path::Path;
 use std::process::ExitCode;

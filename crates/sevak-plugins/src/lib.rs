@@ -63,6 +63,7 @@ pub mod system;
 pub mod tasks;
 pub mod units;
 pub mod web_search;
+pub mod workflow;
 
 #[cfg(test)]
 mod test_util;
@@ -88,6 +89,7 @@ pub use snippets::SnippetsPlugin;
 pub use system::SystemPlugin;
 pub use tasks::TasksPlugin;
 pub use web_search::WebSearchPlugin;
+pub use workflow::WorkflowHost;
 
 /// Instantiates every enabled built-in plugin (`apps`, `calculator`, one
 /// `web:<keyword>` per `[[web_search]]` engine, `files`, `bookmarks`, `system`,

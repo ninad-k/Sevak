@@ -48,7 +48,7 @@ pub fn open(app: &AppHandle) {
         WebviewUrl::App(WINDOW_URL.into()),
     )
     .title(WINDOW_TITLE)
-    .inner_size(760.0, 620.0)
+    .inner_size(920.0, 680.0)
     .min_inner_size(560.0, 460.0)
     .resizable(true)
     .center()

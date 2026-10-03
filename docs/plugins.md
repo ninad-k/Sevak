@@ -12,6 +12,7 @@ plugins without rebuilding Sevak by dropping in a script.
 - [Universal Actions](#universal-actions): offering actions for what the user selected in another app
 - [Contacts, 1Password and dictionary](#contacts-1password-and-dictionary): plugins with two keywords, an external tool, OS data sources and a bundled dictionary
 - [External plugins](#external-plugins): script plugins in Python, PowerShell, Node or anything else, including Alfred Script Filter scripts
+- [Workflows for contributors](#workflows-for-contributors): the engine behind [Settings > Workflows](workflows.md)
 
 Code map:
 
@@ -26,6 +27,7 @@ Code map:
 | Built-in plugins, registry | `crates/sevak-plugins/src/` |
 | Typed-path browsing (files plugin) | `crates/sevak-plugins/src/path_browse.rs` |
 | Script plugins (external) | `crates/sevak-plugins/src/script/` |
+| Workflows and the gallery | `crates/sevak-plugins/src/workflow/`, `src-tauri/src/workflows.rs` |
 | Standard action execution | `crates/sevak-plugins/src/actions.rs` |
 | Contacts, 1Password, dictionary | `crates/sevak-plugins/src/{contacts,onepassword,dictionary}/`, `crates/sevak-platform/src/{contacts,deep_link,dictionary}.rs` |
 | Universal Actions (selection) | `crates/sevak-core/src/selection.rs`, `crates/sevak-plugins/src/selection/`, `crates/sevak-platform/src/capture.rs`, `src-tauri/src/selection.rs` |
@@ -756,18 +758,21 @@ and its fake-driven tests; `windows/`, `macos/` and `linux/capture.rs` hold the
 key presses and modifier handling). `PlatformProvider::capture_selection`
 returns `Selected`, `Nothing` or `Unavailable(reason)`.
 
-**Script plugins and Universal Actions: design only.** Script plugins do not
-receive the selection yet. The plan, so the manifest can stay stable: a script
-plugin would declare `accepts = ["text", "url", "file"]` in `plugin.toml`; when a
-selection of one of those kinds is captured, the host would send the persistent
-script a request `{"selection": {"kind": "text", "text": "..."}}` (or `"url"`,
-`"files": [...]`) and show the Alfred-style items it answers with after the
-built-in actions, running them with the same `Action` mapping as query results.
-The open questions are the wait (scripts are normally answered asynchronously,
-but this panel is built once, so a deadline of about 300 ms would apply) and
-telling the user, in the approval dialog, that the plugin will see their
-selection. Until then a script plugin cannot read it, and a selection is never
-passed to any script.
+**Workflows implement the `accepts` design; script plugins still do not receive
+the selection.** The plan for script plugins was to declare
+`accepts = ["text", "url", "file"]` and be sent the selection by the host.
+[Workflows](workflows.md#triggers) now do exactly the declaring half: a
+*Universal Actions* trigger node has `accepts = ["text", "url", "file"]`, the
+workflow's `TriggersPlugin` (`workflow/plugins.rs`) implements
+`selection_actions` for the kinds it accepts, the selection becomes the
+workflow's argument (one link or path per line), and the approval dialog tells
+the user that the workflow will receive their selection. Everything above
+holds: ids name the node, never the selection (`workflow:<folder>:select:<node>`),
+and `tracks_usage()` is `false`. A *script plugin* still cannot read the
+selection, and a selection is never passed to a script unless a workflow the
+user allowed hands it to a *Run script* node as its argument. The open question
+for script plugins is the wait (scripts are normally answered asynchronously,
+but this panel is built once, so a deadline of about 300 ms would apply).
 
 ## The file buffer
 
@@ -1174,16 +1179,43 @@ mode. Mapping:
 | `type` of `file` or `file:skipcheck` | `arg` is a path to open even if it does not exist |
 | `icon.path` | an icon, if the file is inside the plugin folder |
 | `valid: false`, or no `arg` | the row is shown; Enter copies its title |
+| `autocomplete` | what `Tab` turns the input into, relative to the plugin's own input: for `gh rep`, an `autocomplete` of `repo` makes `gh repo`, as for built-in plugins (`ResultItem::autocomplete`) |
+| `mods` | secondary actions of the row ([below](#modifiers-mods)) |
 | item order | kept (Sevak's scores follow the order) |
 
-Ignored: `autocomplete`, `quicklookurl`, `mods`, `variables`, `text`, `match`,
-`icon.type` (`fileicon` and `filetype` ask macOS for a file's icon), and the
-top-level `rerun`, `variables` and `cache`. A scheme other than web or mail in
+#### Modifiers (`mods`)
+
+Each entry of an item's `mods` becomes a secondary action, run with a modifier
+key held on Enter or picked in the action panel (`→` or `Ctrl+K`):
+
+```json
+{"title": "sevak", "arg": "https://github.com/ninad-k/Sevak",
+ "mods": {"alt":   {"arg": "git clone https://github.com/ninad-k/Sevak.git", "subtitle": "Copy the clone command"},
+          "cmd":   {"arg": "https://github.com/ninad-k/Sevak/issues",      "subtitle": "Open the issues"},
+          "ctrl+alt": {"arg": "x", "valid": false}}}
+```
+
+- The entry's `arg` becomes an action by the same shape rules as the row's; an
+  entry without `arg` uses the row's. `valid: false` leaves the entry out.
+- `subtitle` is the entry's label in the action panel and under the list; without
+  one the label says what the action does: "Open link", "Open" or "Copy".
+- Keys follow Sevak's own convention: Alfred's `cmd` is **`Ctrl+Enter`**
+  (Command on macOS), `alt` is `Alt+Enter`, `shift` is `Shift+Enter`. Alfred's
+  `ctrl`, `fn` and combinations such as `cmd+alt` have no key of their own here
+  and appear in the action panel only. Each Sevak modifier belongs to one entry;
+  the entries are listed in a fixed order (`cmd`, `alt`, `ctrl`, `shift`, `fn`,
+  then combinations), not in the order the script printed them.
+- `variables` of an entry only matter to [workflows](workflows.md#script-filter).
+
+Ignored: `quicklookurl`, `variables`, `text`, `match`, `icon.type` (`fileicon`
+and `filetype` ask macOS for a file's icon), and the top-level `rerun`,
+`variables` and `cache`. A scheme other than web or mail in
 `arg` (`slack://`, `obsidian://`) is copied rather than opened because Sevak
 does not open arbitrary schemes. Scripts that call `osascript`, read
 `~/Library`, or expect an Alfred preferences file need changes to run elsewhere.
-Only Script Filters are supported, not whole `.alfredworkflow` packages with
-their other node types.
+Only Script Filters are supported here, not whole `.alfredworkflow` packages with
+their other node types; [workflows](workflows.md) cover chaining actions after
+a Script Filter.
 
 ### Speed: queries never wait for scripts
 
@@ -1239,8 +1271,10 @@ built-in plugins only the OS-index file searches use it.
   what runs, Sevak asks again. (Editing the script file itself is not detected;
   the manifest is what you approve.) "Not now" asks again at the next start.
   Disabled plugins are never asked about.
-- Only folders in your own config directory are loaded. Sevak does not download,
-  update or install plugins, and makes no network requests for them. What a
+- Only folders in your own config directory are loaded. Sevak never downloads,
+  updates or installs plugins by itself; the only exception is the opt-in
+  [gallery](workflows.md#the-gallery), which fetches a package after you press
+  **Install** and still leaves it waiting for the approval above. What a
   script does on its own is outside Sevak's control and should be stated by its
   author.
 - Scripts cannot make Sevak do more than the fixed list of actions. `open_url`
@@ -1284,7 +1318,7 @@ These settle what an earlier design draft left open.
 | Registry | A `ScriptPluginHost` next to the registry rather than one descriptor per manifest, because descriptor factories are plain function pointers with no access to the config directory. It honours `[plugins] disabled` itself and feeds the settings catalog. |
 | Manifest | `command` is one array (not `command` plus `args`) so the whole command line is explicit and approvable. |
 | Alfred | Supported as a one-shot output format, not as a separate plugin type. |
-| Distribution | Manual installation only; signing or a registry is out of scope. |
+| Distribution | Manual installation, or the opt-in [gallery](workflows.md#the-gallery) (checksum-verified, then the normal approval); signing is out of scope. |
 | Sandboxing | None. WASM components would give real isolation at the price of a much heavier runtime and authoring story; that is a possible future *additional* plugin type. |
 
 Versioning: `protocol` is an integer in the manifest and in `initialize`. Within
@@ -1298,7 +1332,7 @@ scripts may ignore). Unknown fields must be ignored by both sides.
 | Manifest, command resolution | `crates/sevak-plugins/src/script/manifest.rs` |
 | Wire messages | `.../script/protocol.rs` |
 | Items to results, scores, icons | `.../script/items.rs` |
-| Alfred mapping | `.../script/alfred.rs` |
+| Alfred mapping (`mods`, `autocomplete`, the workflow variant `RawPick`) | `.../script/alfred.rs` |
 | Query generations and late answers | `.../script/delivery.rs` |
 | Process lifecycle | `.../script/runner.rs` (persistent), `.../script/oneshot.rs` |
 | `ScriptPlugin` | `.../script/plugin.rs` |
@@ -1315,3 +1349,65 @@ bundled examples wherever their interpreter is installed.
 ```
 cargo test -p sevak-plugins
 ```
+
+## Workflows for contributors
+
+[Workflows](workflows.md) are plugins too: `WorkflowHost`
+(`crates/sevak-plugins/src/workflow/host.rs`) turns every approved, enabled
+`workflow.toml` into `Plugin`s that the shell appends to the engine's, next to
+the script plugin host.
+
+| Concern | Where |
+|---|---|
+| File format (`Workflow`, `Node`, `NodeKind`, `Connection`) | `workflow/model.rs` |
+| Validation: loops, dangling connections, bad fields | `workflow/validate.rs` |
+| `{query}` / `{var:name}` and the filters | `workflow/template.rs` |
+| Running: `Runtime`, `OutputSink`, timeouts, process handling | `workflow/exec.rs` |
+| The plugins: keyword, script filter, Universal Actions + hotkey + external | `workflow/plugins.rs` |
+| Discovery, approval, the settings operations | `workflow/host.rs` |
+| "New from template" | `workflow/templates.rs` |
+| The gallery: index, checksum, unpacking | `workflow/gallery.rs` |
+| Notifications, output windows, the Allow dialog, IPC commands, `--trigger` | `src-tauri/src/workflows.rs` (+ `cli.rs`, `hotkey.rs`, `direct.rs`) |
+| The builder and gallery pages | `ui/src/lib/workflows/` |
+
+Design notes:
+
+- **One plugin per entry point.** A keyword node is a `KeywordPlugin`
+  (`workflow:<folder>:<node>`, keyword-only, global false); a script filter is a
+  `FilterPlugin` wrapping a `ScriptPlugin` with the `Format::AlfredWorkflow`
+  variant, whose rows carry a `RawPick` (`arg`, `variables`, `modifier`) in a
+  `Custom` action instead of an open/copy action; Universal Actions, hotkey and
+  external triggers share one `TriggersPlugin` per workflow (`workflow:<folder>`,
+  `tracks_usage() == false`, `resolve()` for `workflow:<folder>:run:<node>`).
+- **`execute` returns at once.** It hands the run to `Runtime::start`, a thread
+  per run (at most 8 at a time), so the launcher can hide first. `run_execute`
+  in `commands.rs` hides the window before executing any `workflow:*` result.
+- **Approval** reuses `ApprovalStore` and its file. The key is a SHA-256 over the
+  nodes that can run code (`NodeKind::needs_approval`), the connections, the
+  variables and the bytes of the script files those nodes name (`approval_key`),
+  so layout changes never ask again and script edits always do. Add a node kind
+  that runs code, and you must make `needs_approval` say so.
+- **Output goes through `OutputSink`**, implemented by the shell (`TauriSink`:
+  `tauri-plugin-notification`, and `ShowPayload.output` for Large Type and text
+  views). Tests use a recording sink.
+- **Nothing user-typed is logged**: `Ctx` has a hand-written `Debug`, errors
+  name nodes by id, and a program's stderr is only logged when its node sets
+  `log_stderr`.
+- **Gallery** (`gallery.rs`): `fetch_https` is generic (HTTPS only, size limit,
+  timeout, redirects must stay on HTTPS) so other galleries can reuse it;
+  `install_bytes` verifies the SHA-256 first, then unpacks with strict path
+  rules (no `..`, drive letters, links, trailing dots or spaces, more than 200
+  files, 2 MiB per file, 10 MiB in all), validates the manifest and renames a
+  staging folder into place. The shell's `gallery_install` looks the entry up in
+  the last loaded index by id, so the page cannot name a URL.
+- **Adding a node kind**: a variant of `NodeKind` (and `type_name`, `category`,
+  `needs_approval`), a case in `validate.rs::check_node`, one in
+  `exec.rs::execute`, an entry in `ui/src/lib/workflows/model.ts` (`KINDS`), and
+  tests in each. `tests/workflows.rs` runs real programs through the engine using
+  the `wf-*` modes of `tests/fixtures/script_fixture.rs`.
+
+Building a gallery package: `cargo run -p sevak-plugins --example gallery_pack --
+examples/workflows/duckduckgo gallery/packages/duckduckgo.zip` prints the
+SHA-256 for `gallery/index.json`. A test checks that every entry's package exists,
+matches its checksum, installs, and equals the folder in `examples/` it was made
+from.

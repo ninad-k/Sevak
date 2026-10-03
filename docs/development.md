@@ -18,7 +18,7 @@ crates/sevak-plugins    built-in plugins: apps, calculator (+ units, currency), 
                         web search, system commands, automation tasks, media controls, shell,
                         clipboard history, snippets, emoji picker (data/emoji.tsv), uuid example;
                         the file buffer (collect files, act on all); the script plugin host
-                        (external plugins)
+                        (external plugins); workflows (graph engine, runtime, gallery)
 src-tauri               the Tauri shell: window, hotkeys (main, Universal Actions + [[hotkey]] entries), tray, CLI,
                         --query / --run handling (direct.rs), script plugin approval, IPC
                         commands, bundling config
@@ -27,7 +27,9 @@ packaging/linux         desktop-entry template used by the .deb and .rpm
 scripts                 icon generator, emoji list generator, WSL Linux test runner
 docs                    plugins, install, development
 examples/plugins        example script plugins (Python, PowerShell, Node)
-gallery                 the online theme gallery: themes.json (the index) and themes/*.toml
+examples/workflows      example workflows (also packaged for the gallery)
+gallery                 the opt-in online galleries: index.json and packages/*.zip (workflows and
+                        script plugins), themes.json and themes/*.toml (themes)
 .github/workflows       ci.yml, release.yml
 ```
 

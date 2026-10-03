@@ -380,7 +380,9 @@ An instance ID such as `web:yt` disables that engine. A family ID such as
 `snippets`, `emoji` (the emoji picker; `emoji:word` and `emoji:colon` are its
 two keywords), `selection` (Universal Actions), `contacts` (keywords `c` and
 `@`), `1password`, `dict` (`define` and `spell`) and `uuid`. Script plugins use
-`script:<name>`, or `script` for all of them.
+`script:<name>`, or `script` for all of them. [Workflows](workflows.md) use
+`workflow:<folder>`, or `workflow` for all of them (each workflow also has its
+own switch in Settings > Workflows).
 [Plugin details](plugins.md#registry-and-enablingdisabling).
 
 ### Control startup and updates
@@ -453,7 +455,10 @@ when introducing or documenting a new setting.
 
 Linux locations follow the OS/XDG directory configuration when overridden;
 `SEVAK_CONFIG_DIR` / `--config` and `SEVAK_DATA_DIR` override them on every OS.
-Script plugins live in `plugins/` next to `config.toml`.
+Script plugins live in `plugins/` next to `config.toml`, and [workflows](workflows.md)
+in `workflows/` (each in a folder with a `workflow.toml`; the builder in
+Settings writes them). A workflow's scripts may keep files in `workflows/<name>/`
+of the data folder.
 
 The data folder holds:
 
@@ -463,7 +468,8 @@ The data folder holds:
 | `clipboard-history.json` | Clipboard history (text and the paths of copied files), unencrypted, only if enabled |
 | `clipboard/` | The images of the clipboard history as PNG files with thumbnails, unencrypted, only if enabled and `images = true`; deleted with the entries |
 | `currency-rates.json` | Cached ECB exchange rates, only if currency conversion is on |
-| `script-plugin-approvals.json` | Script plugins you allowed |
+| `script-plugin-approvals.json` | Script plugins and workflows you allowed |
+| `plugins/<name>/`, `workflows/<name>/` | Data folders for script plugins and workflows (`SEVAK_PLUGIN_DATA`, `SEVAK_WORKFLOW_DATA`) |
 | `logs/` | Log files |
 
 Usage history affects ranking; logs help diagnose failures. These files stay

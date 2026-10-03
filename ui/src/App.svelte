@@ -40,6 +40,7 @@
     type Modifier,
     type PreviewContent,
     type ResultDto,
+    type OutputPayload,
     type SelectionActionDto,
     type SelectionPayload,
     type ShowPayload,
@@ -71,6 +72,8 @@
    * it is set the panel lists them instead of a row's actions (and is open).
    */
   let selection = $state<SelectionPayload | null>(null);
+  /** A workflow's text view node: a block of text under the search bar. */
+  let outputView = $state<{ heading: string; text: string } | null>(null);
   /** Large Type: the text shown huge, or `null` when it is not showing. */
   let largeText = $state<string | null>(null);
   /** The window was stretched over the screen (else the text shows inside the launcher). */
@@ -267,6 +270,7 @@
     selection = null;
     destination = null;
     bufferNote = null;
+    outputView = null;
     closeLargeType();
     previewOpen = false;
     previewContent = null;
@@ -287,11 +291,25 @@
       openSelection(payload.selection);
       return;
     }
+    if (payload?.output) {
+      showOutput(payload.output);
+      return;
+    }
     if (payload?.error) error = payload.error;
     if (payload?.query) {
       prefill(payload.query);
       return;
     }
+    focusInput(true);
+  }
+
+  /** Shows what a workflow's Large Type or text view node produced. */
+  function showOutput(output: OutputPayload) {
+    if (output.kind === "large_type") {
+      void openLargeType(output.text);
+      return;
+    }
+    outputView = { heading: output.heading, text: output.text };
     focusInput(true);
   }
 
@@ -974,8 +992,10 @@
 
     if (key === "Escape") {
       e.preventDefault();
-      // The preview pane closes first; a second Esc hides the launcher.
+      // The preview pane, then a workflow's text output, close first; the
+      // next Esc hides the launcher.
       if (previewOpen) previewOpen = false;
+      else if (outputView) outputView = null;
       else void hideWindow();
     } else if (ctrl && !e.shiftKey && lower === "y") {
       e.preventDefault();
@@ -1341,6 +1361,13 @@
       </div>
     {/if}
 
+    {#if outputView}
+      <div class="output" role="region" aria-label={outputView.heading || "Workflow output"}>
+        {#if outputView.heading}<div class="output-heading">{outputView.heading}</div>{/if}
+        <pre class="output-text">{outputView.text}</pre>
+      </div>
+    {/if}
+
     {#if error}
       <div class="error" role="alert">{error}</div>
     {/if}
@@ -1464,6 +1491,31 @@
     font-size: calc(11px * var(--font-scale, 1));
     line-height: 1.5;
     color: var(--muted);
+  }
+
+  .output {
+    max-height: 340px;
+    overflow-y: auto;
+    padding: 10px 18px 12px;
+    border-top: 1px solid var(--border);
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
+  .output-heading {
+    margin-bottom: 4px;
+    color: var(--muted);
+    font-size: calc(12px * var(--font-scale, 1));
+    font-weight: 600;
+  }
+
+  .output-text {
+    margin: 0;
+    font: inherit;
+    font-size: calc(14px * var(--font-scale, 1));
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 
   .error {

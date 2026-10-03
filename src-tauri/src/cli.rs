@@ -15,6 +15,10 @@ Options:
                          without showing the search bar
       --actions          Universal Actions: act on what is selected in the app
                          you are using (bind this to a key on Wayland)
+      --trigger WORKFLOW/ID [TEXT]
+                         Start the external trigger ID of the workflow in the
+                         folder WORKFLOW, with TEXT as its argument (put -- before
+                         text that starts with a dash)
       --background       Start without showing the window
       --settings         Open the settings window
       --quit             Quit the running instance
@@ -50,6 +54,12 @@ pub enum Launch {
     /// Universal Actions: capture the selection in the foreground app and
     /// show the actions for it.
     Actions,
+    /// Start a workflow's external trigger: `target` is `<workflow>/<node id>`,
+    /// `arg` the text handed to it (may be empty).
+    Trigger {
+        target: String,
+        arg: String,
+    },
 }
 
 // By hand: what the user typed into a query stays out of the log.
@@ -64,6 +74,9 @@ impl fmt::Debug for Launch {
             Self::Query(text) => write!(f, "Query({} chars)", text.chars().count()),
             Self::Run(id) => write!(f, "Run({id})"),
             Self::Actions => f.write_str("Actions"),
+            Self::Trigger { target, arg } => {
+                write!(f, "Trigger({target}, {} chars)", arg.chars().count())
+            }
         }
     }
 }
@@ -86,7 +99,7 @@ pub struct Command {
 }
 
 /// Options that take a value, as `--name VALUE` or `--name=VALUE`.
-const VALUE_OPTIONS: [&str; 3] = ["--config", "--query", "--run"];
+const VALUE_OPTIONS: [&str; 4] = ["--config", "--query", "--run", "--trigger"];
 
 /// Parses the arguments after the executable name.
 pub fn parse<I, S>(args: I) -> Result<Command, String>
@@ -128,6 +141,36 @@ where
                     }
                 }
                 "--query" => set(&mut invocation, Invocation::Run(Launch::Query(value)))?,
+                "--trigger" => {
+                    let target = value.trim().to_owned();
+                    if !target.contains('/') || target.starts_with('/') || target.ends_with('/') {
+                        return Err(
+                            "--trigger: expected <workflow>/<trigger id>, for example my-flow/go"
+                                .to_owned(),
+                        );
+                    }
+                    // The words after it are its text, up to the next option;
+                    // `--` makes everything after it text.
+                    let mut words: Vec<String> = Vec::new();
+                    while let Some(next) = args.peek() {
+                        if next == "--" {
+                            args.next();
+                            words.extend(args.by_ref());
+                            break;
+                        }
+                        if next.starts_with('-') {
+                            break;
+                        }
+                        words.extend(args.next());
+                    }
+                    set(
+                        &mut invocation,
+                        Invocation::Run(Launch::Trigger {
+                            target,
+                            arg: words.join(" "),
+                        }),
+                    )?;
+                }
                 _ => {
                     if value.trim().is_empty() {
                         return Err("--run: expected a result id".to_owned());
@@ -301,6 +344,89 @@ mod tests {
         assert!(parse_strs(&["--run"]).is_err());
         assert!(parse_strs(&["--run", "  "]).is_err());
         assert!(parse_strs(&["--query", "a", "--run", "b"]).is_err());
+    }
+
+    fn trigger(target: &str, arg: &str) -> Result<Invocation, String> {
+        Ok(Invocation::Run(Launch::Trigger {
+            target: target.into(),
+            arg: arg.into(),
+        }))
+    }
+
+    #[test]
+    fn trigger_takes_a_target_and_optional_text() {
+        assert_eq!(
+            parse_strs(&["--trigger", "flow/go"]),
+            trigger("flow/go", "")
+        );
+        assert_eq!(parse_strs(&["--trigger=flow/go"]), trigger("flow/go", ""));
+        assert_eq!(
+            parse_strs(&["--trigger", "flow/go", "hello"]),
+            trigger("flow/go", "hello")
+        );
+        // Several words are one text.
+        assert_eq!(
+            parse_strs(&["--trigger", "flow/go", "hello", "big", "world"]),
+            trigger("flow/go", "hello big world")
+        );
+        // The text may be quoted as a single argument.
+        assert_eq!(
+            parse_strs(&["--trigger", "flow/go", "hello big world"]),
+            trigger("flow/go", "hello big world")
+        );
+        // `--` lets the text start with a dash or look like an option.
+        assert_eq!(
+            parse_strs(&["--trigger", "flow/go", "--", "-v", "--toggle"]),
+            trigger("flow/go", "-v --toggle")
+        );
+        assert_eq!(
+            parse_strs(&["--trigger", "flow/go", "--"]),
+            trigger("flow/go", "")
+        );
+    }
+
+    #[test]
+    fn trigger_stops_at_the_next_option_and_needs_a_valid_target() {
+        assert_eq!(
+            parse(["--trigger", "flow/go", "text", "--config", "d"]).unwrap(),
+            Command {
+                invocation: Invocation::Run(Launch::Trigger {
+                    target: "flow/go".into(),
+                    arg: "text".into(),
+                }),
+                config: Some("d".into()),
+            }
+        );
+        for bad in ["flow", "/go", "flow/", ""] {
+            assert!(parse_strs(&["--trigger", bad]).is_err(), "{bad:?}");
+        }
+        assert!(parse_strs(&["--trigger"]).is_err());
+        assert!(parse_strs(&["--toggle", "--trigger", "a/b"]).is_err());
+        assert!(parse_strs(&["--trigger", "a/b", "--toggle"]).is_err());
+    }
+
+    #[test]
+    fn a_forwarded_trigger_keeps_its_text() {
+        assert_eq!(
+            parse_remote(&argv(&["sevak", "--trigger", "a/b", "some", "text"])).launch,
+            Launch::Trigger {
+                target: "a/b".into(),
+                arg: "some text".into()
+            }
+        );
+    }
+
+    #[test]
+    fn debug_output_leaves_the_trigger_text_out() {
+        let text = format!(
+            "{:?}",
+            Launch::Trigger {
+                target: "a/b".into(),
+                arg: "secret".into()
+            }
+        );
+        assert!(!text.contains("secret"));
+        assert!(text.contains("a/b") && text.contains("6 chars"));
     }
 
     #[test]

@@ -53,7 +53,7 @@ fn pressed(app: &AppHandle, shortcut: &Shortcut) {
             selection::trigger(app);
             return;
         }
-        if let Some(binding) = config.hotkeys.iter().find(|b| is(&b.key)) {
+        if let Some(binding) = all_bindings(app, &config).iter().find(|b| is(&b.key)) {
             match binding.target() {
                 Ok(HotkeyTarget::Query(query)) => direct::open_with_query(app, query),
                 Ok(HotkeyTarget::Run(id)) => direct::run_result(app, id),
@@ -63,6 +63,16 @@ fn pressed(app: &AppHandle, shortcut: &Shortcut) {
         }
     }
     window::toggle(app);
+}
+
+/// The `[[hotkey]]` entries of the config, then the hotkey triggers of the
+/// workflows that may run (bound to `run` ids; never written to the config).
+fn all_bindings(app: &AppHandle, config: &Config) -> Vec<HotkeyBinding> {
+    let mut bindings = config.hotkeys.clone();
+    if let Some(state) = app.try_state::<AppState>() {
+        bindings.extend(state.search.workflows.hotkey_bindings(config));
+    }
+    bindings
 }
 
 /// A shortcut parse error without the parser's "please report this to ..." plea.
@@ -112,6 +122,8 @@ pub fn apply(app: &AppHandle) -> HotkeyStatus {
     };
 
     let actions_key = config.general.actions_hotkey.clone();
+    // The config's entries, then the workflows' hotkey triggers.
+    let bindings = all_bindings(app, &config);
     let (status, actions_error, custom_errors) = match state.display.hotkey_strategy() {
         HotkeyStrategy::External => {
             tracing::info!(
@@ -122,7 +134,7 @@ pub fn apply(app: &AppHandle) -> HotkeyStatus {
                 } else {
                     ", the actions_hotkey to `--actions`"
                 },
-                if config.hotkeys.is_empty() {
+                if bindings.is_empty() {
                     ""
                 } else {
                     " and the [[hotkey]] entries to `--query` / `--run`"
@@ -133,7 +145,7 @@ pub fn apply(app: &AppHandle) -> HotkeyStatus {
                 mode: HotkeyMode::External,
                 error: None,
             };
-            (status, None, vec![None; config.hotkeys.len()])
+            (status, None, vec![None; bindings.len()])
         }
         HotkeyStrategy::InApp => {
             let registered = register_all(
@@ -141,7 +153,7 @@ pub fn apply(app: &AppHandle) -> HotkeyStatus {
                 &accelerator,
                 previous.as_deref(),
                 &actions_key,
-                &config.hotkeys,
+                &bindings,
             );
             match &registered.main {
                 None => tracing::info!("registered global hotkey {accelerator}"),
@@ -164,8 +176,7 @@ pub fn apply(app: &AppHandle) -> HotkeyStatus {
         error: actions_error,
     });
 
-    let customs: Vec<CustomHotkeyStatus> = config
-        .hotkeys
+    let customs: Vec<CustomHotkeyStatus> = bindings
         .iter()
         .zip(custom_errors)
         .map(|(binding, error)| {

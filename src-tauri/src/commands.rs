@@ -272,6 +272,13 @@ fn hands_over(action: &Action) -> bool {
     )
 }
 
+/// Whether `plugin_id` belongs to a workflow (`workflow:<folder>[:<node>]`).
+fn is_workflow(plugin_id: &str) -> bool {
+    plugin_id
+        .strip_prefix(sevak_plugins::workflow::FAMILY)
+        .is_some_and(|rest| rest.starts_with(':'))
+}
+
 /// Puts a plugin's confirmation question to the user in a native dialog whose
 /// OK button carries the action's name. Blocks, so only call it off the main
 /// thread. Anything but an explicit OK (Cancel, closing the dialog, no dialog
@@ -325,7 +332,9 @@ fn run_execute(
         }
     }
 
-    let optimistic = hands_over(&target.action);
+    // A workflow may paste or open something as soon as it starts, on a thread
+    // of its own, so the launcher steps aside first (as for a paste action).
+    let optimistic = hands_over(&target.action) || is_workflow(&target.plugin_id);
     if optimistic {
         window::hide_silently(app);
     }
@@ -358,5 +367,20 @@ fn run_execute(
             }
             Err(err.to_string())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn workflow_plugins_are_recognised_by_their_id() {
+        assert!(is_workflow("workflow:my-flow"));
+        assert!(is_workflow("workflow:my-flow:kw"));
+        assert!(!is_workflow("workflow"));
+        assert!(!is_workflow("workflows:x"));
+        assert!(!is_workflow("script:workflow:x"));
+        assert!(!is_workflow("web:g"));
     }
 }

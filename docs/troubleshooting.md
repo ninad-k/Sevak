@@ -201,8 +201,9 @@ sure the package came from the project's release page.
 ## Does Sevak work offline?
 
 App search, indexed file search, calculations, contacts, the dictionary and
-spelling, and local ranking work without network access. Web searches, checking for a release, and downloading updates
-need an internet connection. Indexes depend on locally accessible applications
+spelling, and local ranking work without network access. Web searches, checking
+for a release, and downloading updates need an internet connection, as do the
+optional workflow and theme galleries and currency conversion. Indexes depend on locally accessible applications
 and folders.
 
 ## Where is my data? Does Sevak collect analytics?

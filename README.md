@@ -116,6 +116,14 @@ Sevak also includes:
 - **Plugins** — enable the sources you need, build a compiled-in extension, or
   drop in a [script plugin](docs/plugins.md#external-plugins) (Python,
   PowerShell, Node…). Many Alfred Script Filter scripts run unchanged.
+- **Workflows** — chain a keyword, hotkey, Universal Actions entry or
+  `sevak --trigger` to actions and outputs in a visual builder (Settings →
+  Workflows). Script filters run your own scripts, with Alfred Script Filter
+  JSON supported; anything that runs code asks first.
+  [How workflows work →](docs/workflows.md)
+- **Gallery** — an optional list of ready-made workflows and script plugins,
+  fetched only when you press **Load gallery**, installed only when you press
+  **Install**, checksum-verified.
 - **Custom hotkeys** — extra global keys that open Sevak with text typed in
   (`> `, `g `) or run a result directly.
 - **Themes** — light, dark or system, plus accent color, font, radius, opacity
@@ -246,8 +254,19 @@ There are explicit network uses:
   stored, logged or sent anywhere, and Sevak's own windows, terminals, apps you
   list in `ignore_apps` and detectable password boxes are skipped.
   [Details →](docs/usage.md#expand-snippets-as-you-type)
-- Script plugins you install and allow run with your permissions; what they do
-  on the network is up to them. Sevak never downloads plugins itself.
+
+- Script plugins and workflows you install and allow run with your permissions;
+  what they do on the network is up to them. Workflows send nothing themselves
+  and keep what you type or select out of the logs. Sevak never downloads
+  plugins or workflows on its own.
+- The optional gallery (Settings → Gallery) contacts GitHub only when you press
+  **Load gallery** (one request for `gallery/index.json` from
+  `raw.githubusercontent.com`) and again when you press **Install** on an entry
+  (one request for that package, checked against the checksum in the index
+  before anything is written). Requests carry no identifier beyond the
+  `Sevak/<version> (gallery)` user agent, and an installed folder still has to
+  be allowed before it runs. Notifications and Large Type from workflows are
+  local.
 
 Update signatures are separate from Windows installer signing and macOS
 notarization. See [installation notes](docs/install.md) for packaging details
@@ -264,6 +283,7 @@ and [data locations](docs/configuration.md#data-and-file-locations) for local fi
 | Fix a shortcut, search or update problem | [Troubleshooting & FAQ](docs/troubleshooting.md) |
 | Install on another platform | [Installation](docs/install.md) |
 | Understand the name and visual identity | [Brand story](docs/brand.md) |
+| Chain triggers and actions, or install a ready-made workflow | [Workflows](docs/workflows.md) |
 | Write a plugin (Rust or a script) | [Plugin guide](docs/plugins.md) |
 | Build, test or package Sevak | [Development](docs/development.md) |
 | Browse every help page | [Documentation index](docs/README.md) |

@@ -320,6 +320,13 @@ export interface SelectionPayload {
   actions: SelectionActionDto[];
 }
 
+/** Text a workflow's Large Type or text view node shows. */
+export interface OutputPayload {
+  kind: "large_type" | "text_view";
+  heading: string;
+  text: string;
+}
+
 /** What the launcher is asked to show with (`sevak --query`, hotkey entries, errors). */
 export interface ShowPayload {
   /** Text to put in the search field. */
@@ -328,6 +335,8 @@ export interface ShowPayload {
   error: string | null;
   /** Actions for the selection captured by Universal Actions. */
   selection?: SelectionPayload | null;
+  /** Output of a workflow (Large Type or a block of text). */
+  output?: OutputPayload | null;
 }
 
 /** Window is being shown: clear the query, focus the input, apply the payload. */

@@ -22,6 +22,7 @@ press Enter to launch an app, open a file or web search, or copy a calculation.
 | [Troubleshooting & FAQ](troubleshooting.md) | Common problems and diagnostics |
 | [Installation](install.md) | Packages, dependencies and platform setup |
 | [Brand story](brand.md) | Meaning of Sevak, logo and product descriptions |
+| [Workflows](workflows.md) | Chaining triggers, actions and outputs; the visual builder and the gallery |
 | [Plugin guide](plugins.md) | Routing and writing a compiled-in extension |
 | [Development](development.md) | Architecture, builds, tests and releases |
 | [Media](media/README.md) | Images, the reel and regeneration instructions |

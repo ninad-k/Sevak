@@ -1,0 +1,226 @@
+/*
+ * Styles shared by the workflow pages (list, builder, gallery). Everything is
+ * prefixed `wf-` and uses the theme variables of app.css, so it follows the
+ * light, dark and custom themes. The settings window's own classes are scoped
+ * to Settings.svelte, hence this small copy of the controls.
+ */
+
+.wf-page h1 {
+  margin: 0 0 6px;
+  font-size: 19px;
+  font-weight: 650;
+}
+
+.wf-lead {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.wf-lead code,
+.wf-hint code,
+.wf-code {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--kbd-bg);
+  font-family: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.wf-hint {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.wf-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.wf-btn {
+  height: 30px;
+  padding: 0 14px;
+  border: 1px solid var(--input-border);
+  border-radius: 7px;
+  background: var(--input-bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.wf-btn:hover:not(:disabled) {
+  border-color: var(--accent-strong);
+}
+
+.wf-btn:focus-visible,
+.wf-input:focus-visible,
+.wf-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.wf-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.wf-btn.primary {
+  border-color: var(--accent-strong);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.wf-btn.primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+
+.wf-btn.danger:hover:not(:disabled) {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.wf-btn.small {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.wf-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-strong);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.wf-input {
+  width: 100%;
+  min-height: 30px;
+  padding: 4px 9px;
+  border: 1px solid var(--input-border);
+  border-radius: 7px;
+  background: var(--input-bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+}
+
+.wf-input.mono {
+  font-family: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12.5px;
+}
+
+textarea.wf-input {
+  resize: vertical;
+  min-height: 56px;
+  line-height: 1.4;
+}
+
+.wf-input.invalid {
+  border-color: var(--error);
+}
+
+.wf-field {
+  margin-bottom: 11px;
+}
+
+.wf-field > label,
+.wf-label {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.wf-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+}
+
+.wf-chip {
+  display: inline-block;
+  padding: 0 7px;
+  border: 1px solid var(--kbd-border);
+  border-radius: 999px;
+  background: var(--kbd-bg);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.wf-chip.warn {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.wf-chip.error {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.wf-chip.ok {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.wf-card {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface);
+}
+
+.wf-card + .wf-card {
+  margin-top: 10px;
+}
+
+.wf-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wf-grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.wf-title {
+  font-weight: 600;
+}
+
+.wf-sub {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.wf-msg {
+  margin: 8px 0;
+  font-size: 12.5px;
+}
+
+.wf-msg.error {
+  color: var(--error);
+}
+
+.wf-msg.ok {
+  color: var(--ok);
+}
+
+.wf-msg.warn {
+  color: var(--warn);
+}

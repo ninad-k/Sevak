@@ -62,6 +62,8 @@ pub struct Spec {
     pub dir: PathBuf,
     /// A per-plugin folder the script may keep state in (`SEVAK_PLUGIN_DATA`).
     pub data_dir: PathBuf,
+    /// Extra environment for the script: a workflow's variables.
+    pub env: Vec<(String, String)>,
 }
 
 impl Spec {
@@ -90,7 +92,10 @@ impl Spec {
             .env("SEVAK_PLUGIN_ID", &self.manifest.id)
             .env("SEVAK_PLUGIN_DIR", &self.dir)
             .env("SEVAK_PLUGIN_DATA", &self.data_dir);
-        if self.manifest.format == Format::Alfred {
+        if matches!(
+            self.manifest.format,
+            Format::Alfred | Format::AlfredWorkflow
+        ) {
             // The variables Alfred workflows read.
             command
                 .env("alfred_workflow_bundleid", &self.manifest.id)
@@ -98,6 +103,7 @@ impl Spec {
                 .env("alfred_workflow_data", &self.data_dir)
                 .env("alfred_workflow_cache", &self.data_dir);
         }
+        command.envs(self.env.iter().map(|(name, value)| (name, value)));
         configure_helper_command(&mut command);
         Ok(command)
     }
@@ -604,6 +610,7 @@ pub(super) fn parse_oneshot(
     let ctx = spec.item_context();
     match spec.manifest.format {
         Format::Alfred => alfred::parse(ctx, stdout),
+        Format::AlfredWorkflow => alfred::parse_workflow(ctx, stdout),
         Format::Sevak => {
             let value: serde_json::Value =
                 serde_json::from_str(stdout.trim_start_matches('\u{feff}').trim())
@@ -647,6 +654,7 @@ mod tests {
             manifest,
             dir: PathBuf::from("plugin"),
             data_dir: PathBuf::from("data"),
+            env: Vec::new(),
         }
     }
 
