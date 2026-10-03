@@ -1,0 +1,54 @@
+:root {
+  --bg: #fcfcfd;
+  --fg: #1c1b2e;
+  --muted: #6b6a80;
+  --border: rgba(28, 27, 46, 0.12);
+  --accent: #f59e0b;
+  --warn: #b45309;
+  --shadow: 0 8px 28px rgba(28, 27, 46, 0.22), 0 1px 3px rgba(28, 27, 46, 0.12);
+
+  color-scheme: light;
+  font-family: system-ui, -apple-system, "Segoe UI", Ubuntu, Cantarell, "Noto Sans", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17152b;
+    --fg: #ece9fb;
+    --muted: #9a97b8;
+    --border: rgba(236, 233, 251, 0.12);
+    --accent: #fbbf24;
+    --warn: #fbbf24;
+    --shadow: 0 8px 28px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.4);
+
+    color-scheme: dark;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  background: transparent;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+::-webkit-scrollbar {
+  display: none;
+}
+
+input {
+  user-select: text;
+  -webkit-user-select: text;
+}

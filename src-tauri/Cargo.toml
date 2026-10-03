@@ -1,0 +1,29 @@
+[package]
+name = "sevak"
+description = "Sevak: a keyboard-first quick launcher."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[build-dependencies]
+tauri-build.workspace = true
+
+[dependencies]
+sevak-core.workspace = true
+sevak-platform.workspace = true
+
+anyhow.workspace = true
+serde.workspace = true
+tauri = { workspace = true, features = ["tray-icon"] }
+tauri-plugin-global-shortcut.workspace = true
+tauri-plugin-single-instance.workspace = true
+tracing.workspace = true
+tracing-appender.workspace = true
+tracing-subscriber.workspace = true
+
+[features]
+# Embeds `ui/dist` instead of loading the dev server. `tauri build` enables it
+# automatically; pass `--features custom-protocol` for a plain `cargo build --release`.
+custom-protocol = ["tauri/custom-protocol"]
