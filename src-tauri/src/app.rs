@@ -10,8 +10,8 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent};
 use crate::cli::{self, Launch};
 use crate::state::AppState;
 use crate::{
-    autostart, commands, direct, file_buffer, hotkey, icons, search, selection, settings, tray,
-    updater, window,
+    autostart, commands, direct, file_buffer, hotkey, icons, search, selection, settings, themes,
+    tray, updater, window,
 };
 
 pub fn run(
@@ -83,7 +83,15 @@ pub fn run(
             settings::setup_wayland_hotkey,
             settings::open_config_file,
             settings::open_log_dir,
-            settings::close_settings
+            settings::close_settings,
+            themes::list_themes,
+            themes::save_theme,
+            themes::use_builtin_theme,
+            themes::import_theme,
+            themes::export_theme,
+            themes::open_themes_dir,
+            themes::fetch_theme_gallery,
+            themes::install_gallery_theme
         ])
         .on_window_event(window::on_window_event)
         .setup(move |app| {

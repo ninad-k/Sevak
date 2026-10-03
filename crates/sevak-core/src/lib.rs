@@ -13,6 +13,8 @@ pub mod plugin;
 pub mod preview;
 pub mod selection;
 pub mod theme;
+pub mod theme_file;
+pub mod theme_store;
 pub mod usage;
 
 pub use config::{

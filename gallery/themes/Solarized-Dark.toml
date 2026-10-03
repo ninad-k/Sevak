@@ -1,0 +1,35 @@
+name = "Solarized Dark"
+author = "Sevak"
+description = "Low-glare dark colors after the Solarized palette."
+
+[font]
+size = 15
+
+[layout]
+radius = 14
+opacity = 100
+row_height = 48
+search_size = 22
+icon_size = 32
+window_width = 720
+
+[dark]
+background = "#002b36"
+text = "#9fabab"
+subtext = "#8fa0a8"
+border = "rgba(159, 171, 171, 0.12)"
+accent = "#3b9be0"
+accent_strong = "#307fb8"
+on_accent = "#002b36"
+selection = "rgba(59, 155, 224, 0.1)"
+tile = "rgba(159, 171, 171, 0.08)"
+kbd_background = "rgba(159, 171, 171, 0.08)"
+kbd_border = "rgba(159, 171, 171, 0.16)"
+shadow = "0 8px 28px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.4)"
+surface = "rgba(159, 171, 171, 0.05)"
+input_background = "rgba(159, 171, 171, 0.06)"
+input_border = "rgba(159, 171, 171, 0.24)"
+switch_off = "rgba(159, 171, 171, 0.28)"
+warn = "#d6a41c"
+error = "#ff7b72"
+ok = "#9bbf2b"

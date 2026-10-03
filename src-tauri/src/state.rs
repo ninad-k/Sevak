@@ -114,6 +114,15 @@ impl AppState {
             .unwrap_or_else(|poisoned| poisoned.into_inner()) = resolved;
     }
 
+    /// The launcher's logical width: the config's, or the theme file's while the
+    /// config still has the default.
+    pub fn window_width(&self) -> u32 {
+        self.appearance
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .window_width_or(self.config().window.width)
+    }
+
     pub fn status(&self) -> Status {
         let hotkey = self
             .hotkey

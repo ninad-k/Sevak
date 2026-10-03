@@ -14,7 +14,7 @@ the running app then reloads the saved configuration.
 |---|---|
 | General | Launcher shortcut, hide-on-blur, launch at login, update checks |
 | Hotkeys | Extra global keys that type a query or run a result |
-| Appearance | Theme, launcher width, accent color, font, size, opacity, radius, custom stylesheet |
+| Appearance | Theme, launcher width, accent color, font, size, opacity, radius, custom stylesheet, theme editor and gallery |
 | Search | Result limit, fallback web engines, search history |
 | Plugins | Available result sources (including script plugins) and currency conversion |
 | Web search | Keywords, provider names and URL templates |
@@ -108,12 +108,14 @@ font_size = 15         # 12–22 px; the bar scales with it
 font_family = ""       # "Fira Sans, sans-serif"; "" = the system font
 opacity = 100          # 30–100, percent opacity of the bar's background
 radius = 14            # 0–32 px
+theme_file = ""        # "themes/Nord.toml", a theme made in Settings → Appearance
 custom_css = ""        # "theme.css", a stylesheet in the config folder
 ```
 
 Invalid values fall back to their defaults with a warning in the log and in
 Settings → Appearance. `opacity` and `radius` are whole numbers. The
-[themes guide](themes.md) lists the CSS variables a stylesheet can override.
+[themes guide](themes.md) explains theme files (`theme_file`) and lists the CSS
+variables a stylesheet can override.
 
 ### Custom hotkeys
 
@@ -379,6 +381,7 @@ available in the tray menu. Update installation requires your agreement.
 | `appearance.theme` | `"system"` | Also `"light"` or `"dark"` |
 | `appearance.accent` / `font_size` / `font_family` | `""` / `15` / `""` | Empty uses the theme's / system's |
 | `appearance.opacity` / `radius` / `custom_css` | `100` / `14` / `""` | Percent, pixels, stylesheet path |
+| `appearance.theme_file` | `""` | A theme file in the config folder, such as `themes/Nord.toml` |
 | `search.max_results` | `8` | 1–20 results |
 | `search.fallback_web_search` | `"g"` | A keyword or a list; empty string disables fallback |
 | `search.query_history` | `true` | `↑` on an empty bar recalls searches |

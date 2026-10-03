@@ -15,6 +15,7 @@ mod search;
 mod selection;
 mod settings;
 mod state;
+mod themes;
 mod tray;
 mod updater;
 mod window;

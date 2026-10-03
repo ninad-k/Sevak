@@ -3,6 +3,7 @@
   import AppearanceExtras from "./lib/AppearanceExtras.svelte";
   import HotkeyField from "./lib/HotkeyField.svelte";
   import HotkeyList from "./lib/HotkeyList.svelte";
+  import ThemeEditor from "./lib/ThemeEditor.svelte";
   import Toggle from "./lib/Toggle.svelte";
   import { getStatus, onStatus, type Status } from "./lib/ipc";
   import {
@@ -50,6 +51,7 @@
       font_family: "",
       opacity: 100,
       radius: 14,
+      theme_file: "",
       custom_css: "",
     },
     plugins: { disabled: [] },
@@ -310,6 +312,7 @@
       : payload.search.fallback_web_search.trim();
     payload.appearance.accent = payload.appearance.accent.trim();
     payload.appearance.font_family = payload.appearance.font_family.trim();
+    payload.appearance.theme_file = payload.appearance.theme_file.trim();
     payload.appearance.custom_css = payload.appearance.custom_css.trim();
     payload.hotkey = payload.hotkey.map((binding) =>
       binding.run != null
@@ -617,6 +620,8 @@
             errors={problems.appearance}
             warnings={status?.appearance.warnings ?? []}
           />
+
+          <ThemeEditor bind:appearance={draft.appearance} />
         {:else if active === "search"}
           <h1>Search</h1>
 
