@@ -1,7 +1,7 @@
 // Dev-only fixtures so the UI can be previewed in a plain browser (`npm run dev`)
 // where there is no Rust backend. Never imported in production builds.
 
-import type { ResultDto, SecondaryDto } from "./ipc";
+import type { ResultDto, SecondaryDto, SelectionActionDto, SelectionPayload } from "./ipc";
 import type { SettingsDto } from "./settings-ipc";
 
 const appActions: SecondaryDto[] = [
@@ -26,6 +26,48 @@ const rows: ResultDto[] = [
   { id: "m:10", title: "Tenth row", subtitle: "Scrolls the list", icon: null, plugin_id: "apps", action: "launch", ...noExtras },
 ];
 
+/** Universal Actions for a selected sentence, shown by the preview at `/#selection`. */
+export function mockSelection(): SelectionPayload {
+  const copyIt: SecondaryDto = { label: "Copy", modifier: "ctrl", kind: "copy_text" };
+  const row = (
+    key: string,
+    title: string,
+    subtitle: string,
+    action: SelectionActionDto["action"],
+    extras: Partial<SelectionActionDto> = {},
+  ): SelectionActionDto => ({
+    id: `selection:${key}`,
+    title,
+    subtitle,
+    icon: null,
+    plugin_id: "selection",
+    action,
+    secondary: [],
+    copy_text: null,
+    window: null,
+    ...extras,
+  });
+  return {
+    ticket: 0,
+    title: "Selected text",
+    subtitle: "the quick brown fox jumps over the lazy dog",
+    actions: [
+      row("search:g", "Search Google for “the quick brown fox…”", "https://www.google.com/search?q=the%20quick%20brown%20fox", "open_url", {
+        secondary: [{ label: "Copy URL", modifier: "shift", kind: "copy_text" }],
+      }),
+      row("search:yt", "Search YouTube for “the quick brown fox…”", "https://www.youtube.com/results?search_query=the%20quick", "open_url"),
+      row("large_type", "Show as Large Type", "", "custom", {
+        window: { kind: "large_type", text: "the quick brown fox jumps over the lazy dog" },
+      }),
+      row("copy", "Copy text", "the quick brown fox jumps over the lazy dog", "copy_text"),
+      row("paste_plain", "Paste as plain text", "Replaces the selection without its formatting", "paste_text"),
+      row("t:upper", "Uppercase", "THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG", "paste_text", { secondary: [copyIt] }),
+      row("t:title", "Title Case", "The Quick Brown Fox Jumps Over The Lazy Dog", "paste_text", { secondary: [copyIt] }),
+      row("t:base64_encode", "Base64 encode", "dGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZw==", "paste_text", { secondary: [copyIt] }),
+    ],
+  };
+}
+
 export function mockHistory(): string[] {
   return ["g rust traits", "chrome", "~/Documents/"];
 }
@@ -37,9 +79,16 @@ export function mockSearch(query: string): ResultDto[] {
 export function mockSettings(): SettingsDto {
   return {
     config: {
-      general: { hotkey: "Alt+Space", hide_on_blur: true, launch_at_login: false, check_for_updates: true },
+      general: {
+        hotkey: "Alt+Space",
+        actions_hotkey: "Ctrl+Alt+Space",
+        hide_on_blur: true,
+        launch_at_login: false,
+        check_for_updates: true,
+      },
       window: { width: 720 },
       linux: { wayland_use_xwayland: true },
+      actions: { use_primary_selection: true, use_clipboard_fallback: false },
       search: { max_results: 8, fallback_web_search: "g", query_history: true },
       appearance: {
         theme: "system",

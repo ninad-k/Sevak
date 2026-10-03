@@ -1,5 +1,6 @@
 //! Win32 calls used by the rest of the crate. Only compiled on Windows.
 
+mod capture;
 mod com;
 mod icons;
 mod packaged;

@@ -1,6 +1,7 @@
 //! Linux implementation of [`crate::PlatformProvider`]: freedesktop `.desktop`
 //! entries, icon themes, and launching through `gio`.
 
+mod capture;
 mod launch;
 mod paste;
 mod scan;
@@ -12,6 +13,7 @@ use std::time::{Duration, Instant};
 
 use sevak_core::{AppEntry, IconData, IconSource, LaunchTarget};
 
+use crate::capture::{CaptureOptions, SelectionCapture};
 use crate::desktop_entry::Locale;
 use crate::error::{PlatformError, Result};
 use crate::icon_file;
@@ -79,6 +81,10 @@ impl PlatformProvider for LinuxProvider {
 
     fn paste_text(&self, text: &str, restore_clipboard: bool) -> Result<PasteOutcome> {
         paste::paste_text(text, restore_clipboard)
+    }
+
+    fn capture_selection(&self, options: &CaptureOptions) -> SelectionCapture {
+        capture::capture_selection(options)
     }
 }
 

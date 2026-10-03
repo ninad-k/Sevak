@@ -13,13 +13,16 @@ Options:
       --query TEXT       Show the search bar with TEXT already typed in
       --run ID           Run the result with this id (e.g. apps:firefox.desktop)
                          without showing the search bar
+      --actions          Universal Actions: act on what is selected in the app
+                         you are using (bind this to a key on Wayland)
       --background       Start without showing the window
       --settings         Open the settings window
       --quit             Quit the running instance
       --setup-hotkey [KEY]
                          Bind KEY (default: the hotkey from config.toml) to
-                         `sevak --toggle` in GNOME, and the [[hotkey]] entries
-                         to `--query` / `--run`. Needed on Wayland.
+                         `sevak --toggle` in GNOME, the actions_hotkey to
+                         `--actions`, and the [[hotkey]] entries to `--query` /
+                         `--run`. Needed on Wayland.
       --config PATH      Use PATH as the config folder (or the config file, if
                          it ends in .toml) instead of the default; overrides
                          SEVAK_CONFIG_DIR. Only used when this process starts
@@ -44,6 +47,9 @@ pub enum Launch {
     Query(String),
     /// Run the result with this id; the window stays hidden.
     Run(String),
+    /// Universal Actions: capture the selection in the foreground app and
+    /// show the actions for it.
+    Actions,
 }
 
 // By hand: what the user typed into a query stays out of the log.
@@ -57,6 +63,7 @@ impl fmt::Debug for Launch {
             Self::Quit => f.write_str("Quit"),
             Self::Query(text) => write!(f, "Query({} chars)", text.chars().count()),
             Self::Run(id) => write!(f, "Run({id})"),
+            Self::Actions => f.write_str("Actions"),
         }
     }
 }
@@ -139,6 +146,7 @@ where
             "--background" => set(&mut invocation, Invocation::Run(Launch::Background))?,
             "--settings" => set(&mut invocation, Invocation::Run(Launch::Settings))?,
             "--quit" => set(&mut invocation, Invocation::Run(Launch::Quit))?,
+            "--actions" => set(&mut invocation, Invocation::Run(Launch::Actions))?,
             "-h" | "--help" => set(&mut invocation, Invocation::Help)?,
             "-V" | "--version" => set(&mut invocation, Invocation::Version)?,
             "--setup-hotkey" => {
@@ -242,6 +250,24 @@ mod tests {
             Ok(Invocation::Run(Launch::Settings))
         );
         assert_eq!(parse_strs(&["--quit"]), Ok(Invocation::Run(Launch::Quit)));
+        assert_eq!(
+            parse_strs(&["--actions"]),
+            Ok(Invocation::Run(Launch::Actions))
+        );
+    }
+
+    #[test]
+    fn actions_is_a_launch_of_its_own() {
+        assert!(parse_strs(&["--actions", "--toggle"]).is_err());
+        assert!(parse_strs(&["--actions", "stray"]).is_err());
+        assert_eq!(
+            parse(["--config", "d", "--actions"]).unwrap(),
+            Command {
+                invocation: Invocation::Run(Launch::Actions),
+                config: Some("d".into()),
+            }
+        );
+        assert_eq!(format!("{:?}", Launch::Actions), "Actions");
     }
 
     #[test]
@@ -371,6 +397,7 @@ mod tests {
         assert_eq!(launch(&["sevak", "--quit"]), Launch::Quit);
         assert_eq!(launch(&["sevak", "--settings"]), Launch::Settings);
         assert_eq!(launch(&["sevak", "--background"]), Launch::Background);
+        assert_eq!(launch(&["sevak", "--actions"]), Launch::Actions);
         assert_eq!(
             launch(&["sevak", "--query", "> "]),
             Launch::Query("> ".into())

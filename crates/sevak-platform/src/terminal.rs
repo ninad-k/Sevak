@@ -57,12 +57,8 @@ pub struct Probe<'a> {
     pub env: &'a dyn Fn(&str) -> Option<String>,
 }
 
-/// Opens a terminal and runs `command` in it according to `config`.
-pub fn run_in_terminal(command: &str, config: &ShellConfig) -> Result<()> {
-    let command = command.trim();
-    if command.contains('\0') {
-        return Err(terminal_error("the command contains a NUL character"));
-    }
+/// Runs `f` with a [`Probe`] of the real machine.
+fn with_system_probe<T>(f: impl FnOnce(&Probe) -> T) -> T {
     let find = |program: &str| -> Option<String> {
         let path = Path::new(program);
         if path.components().count() > 1 {
@@ -72,19 +68,41 @@ pub fn run_in_terminal(command: &str, config: &ShellConfig) -> Result<()> {
         find_in_path(program).map(|found| found.to_string_lossy().into_owned())
     };
     let env = |name: &str| std::env::var(name).ok().filter(|v| !v.trim().is_empty());
-    let probe = Probe {
+    f(&Probe {
         find: &find,
         env: &env,
-    };
+    })
+}
 
+/// Opens a terminal at a shell prompt in `dir` (an absolute path). The terminal
+/// stays open whatever `[shell] keep_open` says: there is no command whose end
+/// would close it, and a window that closes at once is no use.
+pub fn open_terminal_in(dir: &Path, config: &ShellConfig) -> Result<()> {
+    let mut config = config.clone();
+    config.keep_open = true;
+    let kind = with_system_probe(|probe| current_shell_kind(&config, probe))?;
+    let command = cd_command(kind, dir)?;
+    run_in_terminal(&command, &config)
+}
+
+/// Opens a terminal and runs `command` in it according to `config`.
+pub fn run_in_terminal(command: &str, config: &ShellConfig) -> Result<()> {
+    let command = command.trim();
+    if command.contains('\0') {
+        return Err(terminal_error("the command contains a NUL character"));
+    }
+    with_system_probe(|probe| run_planned(command, config, probe))
+}
+
+fn run_planned(command: &str, config: &ShellConfig, probe: &Probe) -> Result<()> {
     #[cfg(windows)]
-    let invocation = plan_windows(command, config, &probe)?;
+    let invocation = plan_windows(command, config, probe)?;
     #[cfg(target_os = "macos")]
     let invocation = plan_macos(command, config)?;
     #[cfg(target_os = "linux")]
-    let invocation = plan_linux(command, config, &probe)?;
+    let invocation = plan_linux(command, config, probe)?;
     #[cfg(target_os = "macos")]
-    let _ = &probe;
+    let _ = probe;
 
     tracing::debug!(program = %invocation.program, "opening terminal");
     // Terminals start where the user's own terminals do.
@@ -142,6 +160,56 @@ fn shell_kind(shell: &str) -> ShellKind {
         "cmd" => ShellKind::Cmd,
         _ => ShellKind::Posix,
     }
+}
+
+/// The kind of the shell [`run_in_terminal`] would use on this OS.
+fn current_shell_kind(config: &ShellConfig, probe: &Probe) -> Result<ShellKind> {
+    #[cfg(windows)]
+    let shell = windows_shell(config, probe)?;
+    #[cfg(target_os = "linux")]
+    let shell = linux_shell(config, probe)?;
+    // macOS runs the user's login shell; every one of them takes `cd 'dir'`.
+    #[cfg(target_os = "macos")]
+    let shell = {
+        let _ = (config, probe);
+        "sh".to_owned()
+    };
+    Ok(shell_kind(&shell))
+}
+
+/// The command that makes a shell of `kind` change to `dir`.
+fn cd_command(kind: ShellKind, dir: &Path) -> Result<String> {
+    if !dir.is_absolute() {
+        return Err(terminal_error("the folder must be an absolute path"));
+    }
+    let dir = dir.to_string_lossy();
+    if dir.chars().any(|c| c == '\0' || c == '\n' || c == '\r') {
+        return Err(terminal_error("the folder name contains a line break"));
+    }
+    Ok(match kind {
+        ShellKind::PowerShell => {
+            // Every kind of single quote ends a PowerShell string; doubling
+            // one keeps it literal.
+            let mut quoted = String::with_capacity(dir.len() + 2);
+            for c in dir.chars() {
+                quoted.push(c);
+                if matches!(c, '\'' | '\u{2018}' | '\u{2019}' | '\u{201a}' | '\u{201b}') {
+                    quoted.push(c);
+                }
+            }
+            format!("Set-Location -LiteralPath '{quoted}'")
+        }
+        ShellKind::Cmd => {
+            // Neither can be escaped on cmd's command line.
+            if dir.contains('"') || dir.contains('%') {
+                return Err(terminal_error(
+                    "cmd cannot change to a folder whose name contains \" or %",
+                ));
+            }
+            format!("cd /d \"{dir}\"")
+        }
+        ShellKind::Posix => format!("cd {}", sh_quote(&dir)),
+    })
 }
 
 /// Single-quotes `text` for a POSIX shell (also valid in fish).
@@ -370,20 +438,7 @@ fn terminal_invocation(terminal: &Terminal, shell: Option<(String, Vec<String>)>
 /// Windows: Windows Terminal when installed, else a console window; PowerShell
 /// 7, then Windows PowerShell, then `cmd` as the shell.
 pub fn plan_windows(command: &str, config: &ShellConfig, probe: &Probe) -> Result<Invocation> {
-    let shell = if config.shell.is_empty() {
-        ["pwsh", "powershell"]
-            .into_iter()
-            .find_map(|name| (probe.find)(name))
-            .or_else(|| (probe.env)("COMSPEC"))
-            .unwrap_or_else(|| "cmd.exe".to_owned())
-    } else {
-        (probe.find)(&config.shell).ok_or_else(|| {
-            terminal_error(format!(
-                "the shell `{}` set in [shell] shell was not found",
-                config.shell
-            ))
-        })?
-    };
+    let shell = windows_shell(config, probe)?;
     let kind = shell_kind(&shell);
     let args = shell_args(kind, &shell, command, config.keep_open);
 
@@ -411,6 +466,25 @@ pub fn plan_windows(command: &str, config: &ShellConfig, probe: &Probe) -> Resul
             }
             Ok(invocation)
         }
+    }
+}
+
+/// The shell on Windows: `[shell] shell`, else PowerShell 7, Windows
+/// PowerShell, then `cmd`.
+fn windows_shell(config: &ShellConfig, probe: &Probe) -> Result<String> {
+    if config.shell.is_empty() {
+        Ok(["pwsh", "powershell"]
+            .into_iter()
+            .find_map(|name| (probe.find)(name))
+            .or_else(|| (probe.env)("COMSPEC"))
+            .unwrap_or_else(|| "cmd.exe".to_owned()))
+    } else {
+        (probe.find)(&config.shell).ok_or_else(|| {
+            terminal_error(format!(
+                "the shell `{}` set in [shell] shell was not found",
+                config.shell
+            ))
+        })
     }
 }
 
@@ -533,21 +607,26 @@ pub fn plan_linux(command: &str, config: &ShellConfig, probe: &Probe) -> Result<
         }
     };
 
-    let shell = if config.shell.is_empty() {
-        (probe.env)("SHELL")
+    let shell = linux_shell(config, probe)?;
+    let args = shell_args(shell_kind(&shell), &shell, command, config.keep_open);
+    let shell = (!command.is_empty()).then_some((shell, args));
+    Ok(terminal_invocation(&terminal, shell))
+}
+
+/// The shell on Linux: `[shell] shell`, else `$SHELL`, else `sh`.
+fn linux_shell(config: &ShellConfig, probe: &Probe) -> Result<String> {
+    if config.shell.is_empty() {
+        Ok((probe.env)("SHELL")
             .and_then(|shell| (probe.find)(&shell))
-            .unwrap_or_else(|| "sh".to_owned())
+            .unwrap_or_else(|| "sh".to_owned()))
     } else {
         (probe.find)(&config.shell).ok_or_else(|| {
             terminal_error(format!(
                 "the shell `{}` set in [shell] shell was not found",
                 config.shell
             ))
-        })?
-    };
-    let args = shell_args(shell_kind(&shell), &shell, command, config.keep_open);
-    let shell = (!command.is_empty()).then_some((shell, args));
-    Ok(terminal_invocation(&terminal, shell))
+        })
+    }
 }
 
 #[cfg(test)]
@@ -620,6 +699,87 @@ mod tests {
         assert_eq!(shell_kind("cmd.exe"), ShellKind::Cmd);
         assert_eq!(shell_kind("/usr/bin/fish"), ShellKind::Posix);
         assert_eq!(shell_kind("C:\\Git\\bin\\bash.exe"), ShellKind::Posix);
+    }
+
+    /// An absolute path on whichever OS the tests run, with `name` as its
+    /// last component.
+    fn absolute(name: &str) -> std::path::PathBuf {
+        let root = if cfg!(windows) {
+            r"C:\Users\me"
+        } else {
+            "/home/me"
+        };
+        Path::new(root).join(name)
+    }
+
+    #[test]
+    fn changing_directory_is_quoted_for_each_shell() {
+        let dir = absolute("My Dir");
+        let shown = dir.to_string_lossy().into_owned();
+        assert_eq!(
+            cd_command(ShellKind::Posix, &dir).unwrap(),
+            format!("cd '{shown}'")
+        );
+        assert_eq!(
+            cd_command(ShellKind::PowerShell, &dir).unwrap(),
+            format!("Set-Location -LiteralPath '{shown}'")
+        );
+        assert_eq!(
+            cd_command(ShellKind::Cmd, &dir).unwrap(),
+            format!("cd /d \"{shown}\"")
+        );
+    }
+
+    #[test]
+    fn awkward_folder_names_stay_literal() {
+        let quote = absolute("it's");
+        let shown = quote.to_string_lossy().into_owned();
+        assert_eq!(
+            cd_command(ShellKind::Posix, &quote).unwrap(),
+            format!("cd {}", sh_quote(&shown))
+        );
+        // PowerShell doubles every kind of single quote.
+        assert!(cd_command(ShellKind::PowerShell, &quote)
+            .unwrap()
+            .ends_with("it''s'"));
+        assert!(cd_command(ShellKind::PowerShell, &absolute("it\u{2019}s"))
+            .unwrap()
+            .ends_with("it\u{2019}\u{2019}s'"));
+        // cmd cannot take these at all.
+        assert!(cd_command(ShellKind::Cmd, &absolute("100%")).is_err());
+        assert!(cd_command(ShellKind::Cmd, &absolute("a\"b")).is_err());
+        // Nor can any shell take a line break.
+        assert!(cd_command(ShellKind::Posix, &absolute("a\nb")).is_err());
+    }
+
+    #[test]
+    fn changing_directory_needs_an_absolute_path() {
+        assert!(cd_command(ShellKind::Posix, Path::new("relative/dir")).is_err());
+        assert!(cd_command(ShellKind::Posix, Path::new("")).is_err());
+    }
+
+    #[test]
+    fn the_shell_is_chosen_like_the_plans_choose_it() {
+        let find = |program: &str| {
+            ["pwsh.exe", "/bin/zsh"]
+                .contains(&program)
+                .then(|| program.to_owned())
+        };
+        let env = |name: &str| (name == "SHELL").then(|| "/bin/zsh".to_owned());
+        let probe = Probe {
+            find: &find,
+            env: &env,
+        };
+        assert_eq!(
+            windows_shell(&config("", "pwsh.exe", true), &probe).unwrap(),
+            "pwsh.exe"
+        );
+        assert!(windows_shell(&config("", "nope", true), &probe).is_err());
+        assert_eq!(
+            linux_shell(&config("", "", true), &probe).unwrap(),
+            "/bin/zsh"
+        );
+        assert!(linux_shell(&config("", "nope", true), &probe).is_err());
     }
 
     #[test]

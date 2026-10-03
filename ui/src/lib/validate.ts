@@ -72,11 +72,13 @@ export function hotkeyErrors(
   binding: HotkeyBinding,
   all: HotkeyBinding[],
   mainKey: string,
+  actionsKey = "",
 ): HotkeyErrors {
   const errors: HotkeyErrors = {};
   const key = keyId(binding.key);
   if (key === "") errors.key = "Required";
   else if (key === keyId(mainKey)) errors.key = "Same as the main shortcut";
+  else if (key === keyId(actionsKey)) errors.key = "Same as the Universal Actions shortcut";
   else if (all.filter((other) => keyId(other.key) === key).length > 1) errors.key = "Already used";
   if (binding.run != null && binding.run.trim() === "") errors.value = "Enter a result id";
   return errors;
@@ -128,7 +130,7 @@ export function validate(config: Config): Problems {
   for (const errors of engines) count.web += Object.keys(errors).length;
 
   const hotkeys = config.hotkey.map((binding) =>
-    hotkeyErrors(binding, config.hotkey, config.general.hotkey),
+    hotkeyErrors(binding, config.hotkey, config.general.hotkey, config.general.actions_hotkey),
   );
   for (const errors of hotkeys) count.hotkeys += Object.keys(errors).length;
 

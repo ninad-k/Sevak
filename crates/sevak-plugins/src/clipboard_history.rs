@@ -311,6 +311,12 @@ struct Monitor {
 
 impl Monitor {
     fn poll(&mut self, platform: &dyn PlatformProvider, settings: &Settings) -> Option<Captured> {
+        // Universal Actions is borrowing the clipboard to copy the user's
+        // selection: that copy is not something they copied. Nothing is
+        // noted as seen, so the clipboard is looked at again afterwards.
+        if sevak_platform::clipboard::synthetic_copy_in_progress() {
+            return None;
+        }
         let sequence = platform.clipboard_sequence();
         if let Some(sequence) = sequence {
             if self.last_sequence == Some(sequence) {

@@ -5,6 +5,7 @@ use std::path::Path;
 use sevak_core::{AppEntry, IconData, IconSource, LaunchTarget, ShellConfig};
 
 use crate::browsers::BrowserRoot;
+use crate::capture::{CaptureOptions, SelectionCapture};
 use crate::error::Result;
 use crate::paste::{ClipboardRead, ForegroundApp, PasteOutcome, PasteSupport, UNSUPPORTED_REASON};
 use crate::system::{SettingsPage, SystemCommand};
@@ -63,6 +64,12 @@ pub trait PlatformProvider: Send + Sync {
     /// The terminal is detached from Sevak. See [`crate::terminal`].
     fn run_in_terminal(&self, command: &str, config: &ShellConfig) -> Result<()> {
         crate::terminal::run_in_terminal(command, config)
+    }
+
+    /// Opens a terminal window in `dir`, at a shell prompt (it stays open even
+    /// if `[shell] keep_open` is off). `dir` must be an absolute path.
+    fn open_terminal_in(&self, dir: &Path, config: &ShellConfig) -> Result<()> {
+        crate::terminal::open_terminal_in(dir, config)
     }
 
     /// Replaces the clipboard's contents with `text`.
@@ -131,6 +138,16 @@ pub trait PlatformProvider: Send + Sync {
     fn paste_text(&self, text: &str, _restore_clipboard: bool) -> Result<PasteOutcome> {
         crate::clipboard::set_text(text)?;
         Ok(PasteOutcome::CopiedOnly(UNSUPPORTED_REASON.to_owned()))
+    }
+
+    /// Reads what is selected in the app that has focus (Universal Actions):
+    /// the app is asked to copy it, and the clipboard is put back as it was.
+    /// Call it from a background thread, before Sevak's window takes focus.
+    /// See [`crate::capture`].
+    fn capture_selection(&self, _options: &CaptureOptions) -> SelectionCapture {
+        SelectionCapture::Unavailable(
+            "Reading the selection is not supported on this system".to_owned(),
+        )
     }
 
     /// A counter that changes whenever the clipboard does, where the OS has one

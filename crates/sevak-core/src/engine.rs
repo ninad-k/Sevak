@@ -55,6 +55,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::model::{score, ResultItem};
 use crate::plugin::{Plugin, PluginError, PluginResult, ResultsNotifier};
+use crate::selection::Selection;
 use crate::usage::{normalize_query, UsageStore};
 
 /// A keyword route: the plugins the keyword selects, the rest of the input
@@ -446,6 +447,9 @@ impl SearchEngine {
             .plugin(&item.plugin_id)
             .ok_or_else(|| PluginError::Unsupported(item.id.clone()))?;
         guarded(plugin.as_ref(), "execute", || plugin.execute(item))??;
+        if !plugin.tracks_usage() {
+            return Ok(());
+        }
         let mut usage = self.usage_write();
         usage.record(&item.id, query, now);
         if self.options.query_history {
@@ -455,6 +459,22 @@ impl SearchEngine {
             usage.clear_history();
         }
         Ok(())
+    }
+
+    /// The actions every plugin offers for `selection` (Universal Actions), in
+    /// plugin order. A plugin that fails or panics contributes nothing.
+    pub fn selection_actions(&self, selection: &Selection) -> Vec<ResultItem> {
+        let mut seen = std::collections::HashSet::new();
+        self.plugins
+            .iter()
+            .flat_map(|plugin| {
+                guarded(plugin.as_ref(), "selection_actions", || {
+                    plugin.selection_actions(selection)
+                })
+                .unwrap_or_default()
+            })
+            .filter(|item| seen.insert(item.id.clone()))
+            .collect()
     }
 
     /// Copies `item`'s [`ResultItem::copy_text`] (Ctrl+C) through its plugin:
@@ -578,6 +598,9 @@ mod tests {
         refresh_error: Option<String>,
         inputs: Mutex<Vec<String>>,
         keyword_row: Option<ResultItem>,
+        private: bool,
+        selection_items: Vec<ResultItem>,
+        panic_on_selection: bool,
     }
 
     impl Mock {
@@ -596,6 +619,9 @@ mod tests {
                 refresh_error: None,
                 inputs: Mutex::new(Vec::new()),
                 keyword_row: None,
+                private: false,
+                selection_items: Vec::new(),
+                panic_on_selection: false,
             }
         }
 
@@ -626,6 +652,17 @@ mod tests {
 
         fn with_keyword_row(mut self, row: ResultItem) -> Self {
             self.keyword_row = Some(row);
+            self
+        }
+
+        /// Results of this plugin are not recorded in the usage statistics.
+        fn private(mut self) -> Self {
+            self.private = true;
+            self
+        }
+
+        fn with_selection_actions(mut self, items: Vec<ResultItem>) -> Self {
+            self.selection_items = items;
             self
         }
 
@@ -666,6 +703,13 @@ mod tests {
             self.actions.lock().unwrap().push(item.action.clone());
             self.executed.fetch_add(1, AtomicOrdering::SeqCst);
             Ok(())
+        }
+        fn tracks_usage(&self) -> bool {
+            !self.private
+        }
+        fn selection_actions(&self, _selection: &Selection) -> Vec<ResultItem> {
+            assert!(!self.panic_on_selection, "selection panic");
+            self.selection_items.clone()
         }
         fn confirmation(&self, item: &ResultItem) -> Option<String> {
             (item.id.ends_with(":danger")).then(|| format!("Run {}?", item.title))
@@ -1130,6 +1174,49 @@ mod tests {
         let bad_item = item("bad", "b", "B", 1.0);
         assert!(e.execute_at(&bad_item, "x", T0).is_err());
         assert!(e.usage_snapshot().get("bad:b").is_none());
+    }
+
+    #[test]
+    fn private_plugins_leave_no_usage_or_history() {
+        let private = Mock::fixed("secret", &[("a", "A", 1.0)]).private().arc();
+        let e = engine(vec![private.clone()], 8, &[]);
+        e.execute_at(&item("secret", "a", "A", 1.0), "typed text", T0)
+            .unwrap();
+        // It ran...
+        assert_eq!(private.executed.load(AtomicOrdering::SeqCst), 1);
+        // ...and nothing about it was remembered.
+        assert!(e.usage_snapshot().get("secret:a").is_none());
+        assert!(e.usage_snapshot().is_empty());
+        assert!(e.history().is_empty());
+    }
+
+    #[test]
+    fn selection_actions_are_collected_from_every_plugin_in_order() {
+        let first = Mock::fixed("one", &[])
+            .with_selection_actions(vec![item("one", "x", "X", 0.0), item("one", "y", "Y", 0.0)]);
+        let second = Mock::fixed("two", &[]).with_selection_actions(vec![
+            item("two", "z", "Z", 0.0),
+            // A duplicate id is dropped.
+            item("one", "x", "X again", 0.0),
+        ]);
+        let none = Mock::fixed("none", &[("q", "Q", 1.0)]);
+        let e = engine(vec![first.arc(), none.arc(), second.arc()], 8, &[]);
+        let selection = Selection::from_text("hello").unwrap();
+        assert_eq!(
+            ids(&e.selection_actions(&selection)),
+            vec!["one:x", "one:y", "two:z"]
+        );
+    }
+
+    #[test]
+    fn a_panicking_plugin_adds_no_selection_actions() {
+        let mut crashing = Mock::fixed("boom", &[]);
+        crashing.panic_on_selection = true;
+        let fine =
+            Mock::fixed("fine", &[]).with_selection_actions(vec![item("fine", "a", "A", 0.0)]);
+        let e = engine(vec![crashing.arc(), fine.arc()], 8, &[]);
+        let selection = Selection::from_text("hello").unwrap();
+        assert_eq!(ids(&e.selection_actions(&selection)), vec!["fine:a"]);
     }
 
     #[test]

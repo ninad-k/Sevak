@@ -115,7 +115,11 @@ pub fn unhide_app(app: &AppHandle) {
 pub fn unhide_app(_app: &AppHandle) {}
 
 /// Tells the UI the window is gone, so it clears its query for the next show.
+/// The actions for a selection (Universal Actions) are dropped with it.
 pub fn announce_hidden(app: &AppHandle) {
+    if let Some(state) = app.try_state::<AppState>() {
+        state.search.forget_selection();
+    }
     if let Err(err) = app.emit_to(MAIN_LABEL, EVENT_HIDDEN, ()) {
         tracing::warn!("hide: could not emit {EVENT_HIDDEN}: {err}");
     }

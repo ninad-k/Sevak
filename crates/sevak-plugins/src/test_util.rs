@@ -26,6 +26,8 @@ pub struct MockPlatform {
     pub ran_commands: Mutex<Vec<SystemCommand>>,
     pub opened_settings: Mutex<Vec<SettingsPage>>,
     pub terminal_runs: Mutex<Vec<(String, ShellConfig)>>,
+    /// Folders terminals were opened in.
+    pub terminal_dirs: Mutex<Vec<PathBuf>>,
     /// `(text, restore_clipboard)` of every paste.
     pub pasted: Mutex<Vec<(String, bool)>>,
     /// When set, pasting is unavailable for this reason.
@@ -102,6 +104,11 @@ impl PlatformProvider for MockPlatform {
             .lock()
             .unwrap()
             .push((command.to_owned(), config.clone()));
+        Ok(())
+    }
+
+    fn open_terminal_in(&self, dir: &Path, _config: &ShellConfig) -> Result<()> {
+        self.terminal_dirs.lock().unwrap().push(dir.to_path_buf());
         Ok(())
     }
 

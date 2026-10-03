@@ -36,6 +36,11 @@ Built with Rust, [Tauri](https://tauri.app) v2 and Svelte 5. Licensed under
   Press `Ctrl+Enter` / `Shift+Enter` / `Alt+Enter`, or open the action panel
   with `Right` or `Ctrl+K`. `Ctrl+C` copies the result's path, URL or value, and
   `Ctrl+L` shows it as Large Type.
+- **Universal Actions**: select text, a link or files in any app, press
+  `Ctrl+Alt+Space`, and pick what to do: web search, Large Type, copy, paste
+  back as plain text, transform (case, Base64, URL encoding, JSON), calculate,
+  open, show in folder, open a folder in a terminal. See
+  [Universal Actions](#universal-actions).
 - **Path browsing**: type a path (`~/Documents/`, `/etc/`, `C:\Users\`,
   `\\server\share\`) to list that folder, folders first, filtered by what you
   type after the last slash. `Tab` completes the selected entry (folders get a
@@ -112,9 +117,9 @@ Details, Wayland hotkey setup and troubleshooting are in
   sevak --setup-hotkey Super+Space  # or pick a key
   ```
 
-  This registers a GNOME custom shortcut that runs `sevak --toggle`, and one per
-  `[[hotkey]]` entry in your config that runs `sevak --query ...` or
-  `sevak --run ...`.
+  This registers a GNOME custom shortcut that runs `sevak --toggle`, one for the
+  Universal Actions key that runs `sevak --actions`, and one per `[[hotkey]]`
+  entry in your config that runs `sevak --query ...` or `sevak --run ...`.
 - **GNOME's `Alt+Space` conflict**: GNOME binds `Alt+Space` to the window menu.
   `--setup-hotkey` reports conflicts; to free the key, run
   `gsettings set org.gnome.desktop.wm.keybindings activate-window-menu "[]"`,
@@ -129,6 +134,7 @@ Details, Wayland hotkey setup and troubleshooting are in
 | Key | Action |
 |---|---|
 | `Alt+Space` (configurable) | Show or hide Sevak |
+| `Ctrl+Alt+Space` (configurable) | Universal Actions: act on what you have selected in another app, see [below](#universal-actions) |
 | Type | Search |
 | `Up` / `Down` (or `Ctrl+P` / `Ctrl+N`) | Move the selection |
 | `PageUp` / `PageDown` | Move by a page |
@@ -255,6 +261,62 @@ rate and the ECB's publication date. Use ISO codes (`usd`, `eur`, `gbp`,
 `jpy`, `cad`, ...), signs (`€`, `$`, `£`, `¥`; `$` is the US dollar and `¥` the
 yen) or words (`euros`): `50 € to $`, `$100 in eur`.
 
+### Universal Actions
+
+Select something in any app (text, a link, files in a file manager), press
+`Ctrl+Alt+Space` (`general.actions_hotkey`; empty turns it off) and Sevak shows
+what you can do with it. Nothing runs by itself: you always pick an action, with
+`Up` / `Down` and `Enter`, or `Ctrl+1` ... `Ctrl+9`. `Esc` closes it.
+
+| You selected | Actions |
+|---|---|
+| Text | Search with each web engine in `[[web_search]]` (`Search Google for "..."`), show as Large Type, copy, paste as plain text, calculate it if it is a calculation or conversion (`2*(3+4)`, `10 km in mi`), and transform it: Uppercase, Lowercase, Title Case, Trim whitespace, URL-encode, URL-decode, Base64 encode, Base64 decode, Pretty-print JSON, Minify JSON (each only when it applies and changes the text) |
+| One or more URLs (`http://`, `https://`, `mailto:`, `www.`) | Open, copy, Large Type |
+| Files and folders | Open, show in folder, copy path(s), open in terminal (a folder), run as administrator (a Windows program), send to Sevak (fills the search box with the path so you can browse from there) |
+| A path written as text, such as `C:\Users\me\Documents` | The file actions above, then the text actions |
+
+Transformations and the calculator **replace the selection** in the app (Sevak
+pastes over it) where pasting works; `Ctrl+Enter` copies the result instead.
+Where pasting is not possible (Wayland, or macOS without the Accessibility
+permission) they copy. `Shift+Enter` on a web search copies its URL. Each row
+shows what its keys do.
+
+How the selection is read: Sevak remembers the app you are in, saves the
+clipboard, presses `Ctrl+C` (`Cmd+C` on macOS) in that app, waits up to about
+0.3 seconds for the copy, reads the text or the list of files, and puts the
+clipboard back (plain text, HTML and files are restored; an image on the
+clipboard is not). The hotkey's own `Ctrl` / `Alt` keys are waited out first so
+the app sees a plain copy. Sevak's clipboard history does not record this copy.
+The app itself makes the copy, though, so an operating system clipboard history
+(Windows `Win+V`) or another clipboard manager can see it; and a few editors
+copy the whole current line when nothing is selected.
+
+| System | What happens |
+|---|---|
+| Windows | Works in every app except windows running as administrator (Windows blocks key presses sent to them). |
+| macOS | Needs *System Settings > Privacy & Security > Accessibility > Sevak*, the same permission pasting uses. Files in Finder and text both work. |
+| Linux, X11 | The text you have highlighted (the `PRIMARY` selection) is used first, with no key pressed (`[actions] use_primary_selection`). The catch: it is whatever was highlighted last, even if the highlight is gone. Turn the option off to always press `Ctrl+C` instead. Files in the file manager are read from the clipboard. |
+| Linux, Wayland | Applications cannot read another app's selection or press keys, so nothing can be captured. Sevak says so; bind `sevak --actions` with `sevak --setup-hotkey`, copy the text yourself, and set `[actions] use_clipboard_fallback = true` to act on the clipboard. |
+
+Two safeguards. Terminal windows (Windows Terminal, `cmd`, PowerShell, `xterm`,
+`gnome-terminal`, `konsole`, `alacritty`, ...) never receive `Ctrl+C` on Windows
+and Linux because it would interrupt the program running there; select with the
+mouse and use the clipboard fallback instead (or on X11 the `PRIMARY` selection
+already has it). Selections over 256 kB are refused.
+
+```toml
+[general]
+actions_hotkey = "Ctrl+Alt+Space"   # "" turns Universal Actions off
+
+[actions]
+use_primary_selection = true        # Linux X11: read highlighted text without Ctrl+C
+use_clipboard_fallback = false      # act on the clipboard when the selection can't be read
+```
+
+To switch it off entirely, set `actions_hotkey = ""` (or disable the `selection`
+plugin). Details for plugin authors are in
+[docs/plugins.md](docs/plugins.md#universal-actions).
+
 ## Configuration
 
 Sevak creates a commented config file on first run:
@@ -304,9 +366,14 @@ Key options (all optional; defaults shown):
 ```toml
 [general]
 hotkey = "Alt+Space"
+actions_hotkey = "Ctrl+Alt+Space"   # Universal Actions; "" turns it off
 hide_on_blur = true
 launch_at_login = false
 check_for_updates = true
+
+[actions]
+use_primary_selection = true         # Linux X11: read highlighted text without Ctrl+C
+use_clipboard_fallback = false       # act on the clipboard if the selection can't be read
 
 [window]
 width = 720            # 400-1600
@@ -327,7 +394,7 @@ custom_css = ""        # "theme.css", a stylesheet in the config folder
 
 [plugins]
 disabled = []          # "apps", "calculator", "files", "bookmarks", "system", "shell",
-                       # "clipboard", "snippets", "web:<keyword>", "script:<name>"
+                       # "clipboard", "snippets", "selection", "web:<keyword>", "script:<name>"
 
 [calculator]
 currency = false       # true: convert currencies with the ECB's daily rates (network)
@@ -502,11 +569,13 @@ sevak                     Start Sevak and show the search bar
 sevak --toggle            Show the search bar, or hide it if visible
 sevak --query TEXT        Show the search bar with TEXT already typed in
 sevak --run ID            Run the result with this id, without showing the window
+sevak --actions           Universal Actions for what is selected in the app you are using
 sevak --background        Start without showing the window
 sevak --settings          Open the settings window
 sevak --quit              Quit the running instance
 sevak --setup-hotkey [KEY]  Bind KEY (default: config hotkey) to `sevak --toggle` in GNOME,
-                          and the [[hotkey]] entries to --query / --run
+                          the actions_hotkey to --actions, and the [[hotkey]] entries
+                          to --query / --run
 sevak --config PATH       Use PATH as the config folder (combine with any option above)
 sevak -h, --help          Print help
 sevak -V, --version       Print the version
@@ -577,6 +646,14 @@ and only when the saved rates are over a day old (the ECB sees your IP address,
 nothing else is sent; no cookies, no identifiers). The rates are kept in
 `currency-rates.json` in the data folder. With the option off, no such request
 is ever made. Unit conversion is always offline.
+
+Universal Actions reads what you had selected only when you press its shortcut
+(or run `sevak --actions`). To do that it borrows the clipboard for a fraction of a
+second, as described [above](#universal-actions), and puts it back. The
+selection is kept in memory just until Sevak's window hides: it is never
+written to disk (not to `usage.json`, the search history or the clipboard
+history), never logged, and never sent anywhere. Web search actions open your
+browser with the text in the URL, like any web search.
 
 Clipboard history is off unless you turn it on. When on, copied text is stored
 unencrypted in `clipboard-history.json` in Sevak's data folder (readable only by
