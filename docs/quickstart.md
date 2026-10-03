@@ -1,70 +1,82 @@
 # Your first five minutes with Sevak
 
-[← Help center](README.md) · [Full user guide](usage.md)
+A quick walkthrough to get you searching and launching.
 
 ## 1. Install and open
 
-Download a package from [GitHub Releases](https://github.com/ninad-k/Sevak/releases)
-and follow the [platform instructions](install.md). Open Sevak from your
-application menu once. Its tray or menu-bar icon keeps it accessible.
+Download from [GitHub Releases](https://github.com/ninad-k/Sevak/releases) and follow the [platform-specific instructions](install.md).
 
-On Linux Wayland, configure a desktop shortcut first:
-[Wayland shortcut setup](install.md#setting-up-the-hotkey-on-linux).
+On **Linux Wayland**, configure your desktop hotkey first: [Setting up the hotkey on Linux](install.md#setting-up-the-hotkey-on-linux).
+
+Open Sevak once. You'll see a tray or menu-bar icon that keeps it always accessible.
 
 ## 2. Bring up the search bar
 
-Press **Alt+Space**. On macOS, this is **Option+Space**. Type into the search
-bar immediately; press **Esc** when you want to hide it.
+Press **++alt+space++** (++option+space++ on macOS) to open the launcher.
 
 ![An empty Sevak search bar, ready for input](media/launcher-ready.png)
 
-If the key is already used by another application or your desktop, open
-**Settings → General** from Sevak's tray and choose another shortcut.
+Type immediately—the cursor is already in the search box. Press **++esc++** to hide it.
 
-## 3. Open an app
+If ++alt+space++ is already used by another app, open **Settings** from the tray and change it.
 
-Type the name of an app installed on your machine, such as `code` for Visual
-Studio Code. Use **↑ / ↓** to select it and press **Enter** to launch.
+## 3. Launch an app
 
-![Example app results for the query code](media/launcher-apps.png)
+Type the name of an installed app: `code`, `firefox`, `vs code`.
 
-These images use sample results. Your list reflects installed apps and usage.
+Use **++arrow-up++** / **++arrow-down++** to pick the right result, then press **++enter++** to launch.
 
-## 4. Try a calculation
+![Example app search results](media/launcher-apps.png)
 
-Type `12*7`. Sevak shows **84**. Press **Enter** to copy the result, then paste
-it into the document or app you were working in.
+Sevak learns what you use most and ranks results by frequency and recency. Recent searches reappear first.
 
-![Sevak calculates 12 times 7 and offers 84 to copy](media/launcher-calculator.png)
+## 4. Do a quick calculation
 
-You can also try `sqrt(16)`, `2^10` or `(125+75)/4`.
+Type `12*7` and press **++enter++** to copy the result (`84`).
+
+Paste it anywhere. Try `sqrt(16)`, `2^10`, `(125+75)/4`, or `10 km in mi`.
+
+![Sevak calculates 12 times 7 and shows 84 to copy](media/launcher-calculator.png)
+
+Sevak handles arithmetic, unit conversion, and more. See [Calculator](usage.md#calculator).
 
 ## 5. Find a file or search the web
 
-| Type | What happens |
+| Query | Result |
 |---|---|
-| `f project` | Finds matching file/folder names in your indexed folders |
-| `g rust traits` | Offers a Google search; Enter opens your browser |
-| `yt svelte tutorial` | Offers a YouTube search |
-| `gh tauri` | Offers a GitHub search |
+| `f project` | Finds files/folders matching "project" in your indexed folders (default: Desktop, Documents, Downloads) |
+| `g rust traits` | Opens Google with that search in your browser |
+| `yt svelte` | YouTube search |
+| `gh tauri` | GitHub search |
 
-Put a **space after the keyword**. File search initially covers Desktop,
-Documents and Downloads. To include another location, open **Settings → Files**,
-add the folder and click **Save**. Wait for indexing, then search again.
+**Important**: put a space after the keyword (`f `, `g `, `yt `, `gh `).
 
-## Make it comfortable
+![Web search for "svelte tutorial" on YouTube](media/launcher-web.png)
 
-- **General:** choose a shortcut and whether Sevak starts at login.
-- **Appearance:** choose System, Light or Dark.
-- **Search:** set the result limit and fallback web engine.
-- **Plugins:** turn result sources on or off.
-- **Web search:** add your own keyword shortcuts.
-- **Files:** choose folders and indexing depth.
+## Make it yours
 
-[Configuration examples](configuration.md) explain the options. If something
-fails, use the [troubleshooting guide](troubleshooting.md).
+Five quick customizations in **Settings**:
 
-## Watch the workflow
+1. **General**: Change the hotkey and set whether Sevak starts at login
+2. **Appearance**: Choose Light, Dark, or System theme; adjust font size and window width
+3. **Search**: Set the max number of results and fallback web engine
+4. **Files**: Add more folders to search
+5. **Plugins**: Turn features on or off (Calculator, Bookmarks, Clipboard history, etc.)
 
-[12-second vertical walkthrough with captions and subtle sound](media/sevak-12s.mp4).
-The animation uses the real interface components with sample results.
+Click **Save** when done.
+
+More options: [Configuration guide](configuration.md).
+
+## Watch it in action
+
+[12-second workflow demo with captions](media/sevak-12s.mp4) (real interface, sample results).
+
+## What's next?
+
+- **Search like a pro**: [Searching and launching](usage.md) — everything you can search and how results are ranked
+- **All keyboard shortcuts**: [Keyboard reference](keyboard.md)
+- **Universal Actions**: [Selection-based actions](usage.md#universal-actions) — search, transform, calculate or run actions on text, links or files from any app
+- **Deep customization**: [Configuration guide](configuration.md) — hotkeys, themes, custom search engines and more
+- **Stuck?** [Troubleshooting](troubleshooting.md) or [FAQ](faq.md)
+
+**Enjoy!** Sevak is here to save you time.

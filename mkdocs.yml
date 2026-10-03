@@ -1,0 +1,131 @@
+site_name: Sevak Documentation
+site_description: User guide and reference for Sevak, a keyboard-first desktop launcher for Windows, macOS and Linux.
+site_url: https://ninad-k.github.io/Sevak/
+repo_url: https://github.com/ninad-k/Sevak
+repo_name: ninad-k/Sevak
+edit_uri: edit/main/docs/
+copyright: Sevak is licensed under the Apache License 2.0.
+
+docs_dir: docs
+# docs/README.md is the folder's landing page when browsing on github.com;
+# the site's home page is index.md. Media notes are for maintainers.
+exclude_docs: |
+  README.md
+  media/README.md
+  media/sevak-reel/
+  requirements.txt
+
+theme:
+  name: material
+  logo: media/sevak-icon.png
+  favicon: media/sevak-icon.png
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: amber
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: amber
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - navigation.indexes
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+    - toc.follow
+
+extra_css:
+  - stylesheets/extra.css
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.keys
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+plugins:
+  - search
+  # Must stay last: builds /print_page/, the source of the PDF manual.
+  - print-site:
+      add_cover_page: true
+      add_table_of_contents: true
+      toc_depth: 2
+      enumerate_headings: false
+      add_print_site_banner: false
+      print_page_title: Sevak User Guide
+      exclude:
+        - architecture.md
+        - plugins.md
+        - development.md
+        - brand.md
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Install: install.md
+      - Quick start: quickstart.md
+  - User guide:
+      - Searching and launching: usage.md
+      - Keyboard shortcuts: keyboard.md
+      - Settings window: settings.md
+      - Themes: themes.md
+  - Features:
+      - features/index.md
+      - Applications: features/apps.md
+      - Calculator and conversions: features/calculator.md
+      - Web search: features/web-search.md
+      - Files and folders: features/files.md
+      - Browser bookmarks: features/bookmarks.md
+      - Clipboard history: features/clipboard.md
+      - Snippets: features/snippets.md
+      - System commands: features/system.md
+      - Shell commands: features/shell.md
+      - Selection actions: features/selection.md
+      - Script plugins: features/script-plugins.md
+  - Reference:
+      - Configuration file: configuration.md
+      - Command line: cli.md
+      - Files and data: files-and-data.md
+  - Help:
+      - Troubleshooting: troubleshooting.md
+      - FAQ: faq.md
+      - Privacy: privacy.md
+  - Developers:
+      - How Sevak works: architecture.md
+      - Writing plugins: plugins.md
+      - Development: development.md
+      - Name and brand: brand.md

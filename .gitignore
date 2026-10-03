@@ -27,3 +27,6 @@ rustc-ice-*.txt
 node_modules/
 ui/dist/
 src-tauri/gen/schemas/
+
+# Documentation site build output
+site/

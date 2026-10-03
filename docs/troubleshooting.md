@@ -1,35 +1,57 @@
-# Troubleshooting and frequently asked questions
-
-[← Help center](README.md) · [Installation](install.md) · [Configuration](configuration.md)
+# Troubleshooting
 
 ## Start here
 
-1. Confirm Sevak is running: use the tray/menu-bar icon or open it from your
-   application menu.
-2. Check your configured shortcut under **Settings → General**.
-3. Choose **Reload index** after changing installed apps or indexed files.
-4. If the problem persists, open **Settings → Reveal logs folder** and look at
-   the most recent entries.
+Before diving into specific issues, try these first:
 
-## The shortcut does not open Sevak
+1. **Confirm Sevak is running:** Look for the tray icon (Windows/Linux) or menu bar icon (macOS). If it is missing, open Sevak from your application menu or run `sevak` in Terminal.
 
-**Try Show from the tray.** If that opens the launcher, the app is running and
-the problem is likely shortcut registration or a desktop binding.
+2. **Check your hotkey:** Open Settings and look at the configured shortcut under General. Try a different key if the current one is already in use by another app or your desktop.
 
-- Choose a different key combination in Settings if the current one is
-  already in use.
-- On macOS, the default is **Option+Space**.
-- On Linux Wayland, configure a desktop shortcut that runs `sevak --toggle`.
-  On GNOME, `sevak --setup-hotkey` can create it for you.
-- GNOME commonly uses Alt+Space for its window menu. Pick another combination
-  or follow the [hotkey instructions](install.md#setting-up-the-hotkey-on-linux).
+3. **Reload the index:** After installing a new app or changing file search settings, open the tray menu and choose **Reload index**.
+
+4. **Check the logs:** If the problem persists, open Settings → "Reveal logs folder" and look at the most recent log file. Enable debug logging with `SEVAK_LOG=debug sevak` for more detail.
+
+## The hotkey does not work
+
+**Diagnosis:** Open the tray/menu bar icon and click "Show". If the launcher appears, Sevak is running and the hotkey is not registered correctly.
+
+**Try these steps:**
+
+1. **Choose a different key** in Settings → General. Your current key may be in use by another app or your desktop.
+
+2. **macOS:** The default is ++option+space++ (Alt and Option are the same key on Mac). If it doesn't work, Option+Space might be reserved by Spotlight or another app—try a different key.
+
+3. **Linux Wayland (GNOME):** Sevak cannot register global keys on Wayland. Run this command:
+
+   ```bash
+   sevak --setup-hotkey
+   ```
+   
+   This creates a GNOME custom keyboard shortcut. If you get a conflict warning, follow the instructions to free ++alt+space++ or choose another key.
+
+4. **Linux Wayland (other desktops):** Bind ++alt+space++ or another key to `sevak --toggle` in your desktop's keyboard settings (KDE Settings, Sway config, etc.).
+
+5. **Linux X11 on GNOME:** ++alt+space++ is reserved for the window menu. Try ++ctrl+space++ or ++super+space++ (but ++super+space++ switches input sources if you have multiple layouts). Or free ++alt+space++:
+
+   ```bash
+   gsettings set org.gnome.desktop.wm.keybindings activate-window-menu "[]"
+   ```
 
 ## There is no tray icon on Linux
 
-Some GNOME sessions do not provide a tray host. Sevak can still work through
-the hotkey or `sevak --toggle`. See
-[GNOME tray support](install.md#tray-icon-on-gnome-fedora-ubuntu).
-You can open Settings with `sevak --settings` and exit with `sevak --quit`.
+Sevak shows a tray icon through AppIndicator. Some GNOME sessions do not have the AppIndicator extension enabled.
+
+**Ubuntu:** The extension is enabled by default. If there is no tray icon, check that GNOME Extensions are working.
+
+**Fedora:** Install and enable the AppIndicator extension:
+
+```bash
+sudo dnf install gnome-shell-extension-appindicator
+killall -HUP gnome-shell  # or restart GNOME
+```
+
+**Without a tray:** Sevak still works. Use your hotkey to show it, `sevak --quit` to exit, and `sevak --settings` to open Settings.
 
 ## An installed app is missing
 
@@ -77,8 +99,7 @@ Use `g rust traits`, with a space after `g`. Then check that:
 - Its URL starts with HTTP(S) and contains `{query}`.
 - Your custom TOML engine list includes all the default engines you still want.
 
-Defining `[[web_search]]` entries replaces the default list.
-[Complete example](configuration.md#add-a-web-search-keyword).
+Defining `[[web_search]]` entries replaces the default list. See [Web search configuration](configuration.md#web_search) for examples and details.
 
 ## A calculation looks unexpected
 
@@ -98,14 +119,19 @@ Pressing Esc also hides the launcher; **Quit** in the tray stops the app.
 
 ## Settings will not save
 
-Resolve the validation messages in the form. Common causes include duplicate
-web keywords, a URL without `{query}`, an invalid shortcut, or a fallback
-engine that no longer exists. A Save button can also be disabled simply
-because nothing has changed.
+The Settings window shows validation errors if there are problems. Fix them in order:
 
-For hand-edited TOML, check quotes and section names. On a failed reload,
-Sevak retains its current valid configuration. Back up the file before
-attempting a reset; see [data locations](configuration.md#data-and-file-locations).
+**Common issues:**
+
+- Duplicate web search keywords (each must be unique)
+- URL without `{query}` placeholder
+- Invalid or empty hotkey
+- Fallback web search engine that no longer exists
+- Blank fields where text is required
+
+**Hand-edited TOML files:**
+
+Check for syntax errors (unmatched quotes, missing brackets, typos in section names). If the file can't be read, Sevak starts with default settings (or, on **Reload index**, keeps the settings already in use) and writes the reason to the log. See [Files and data](files-and-data.md) for the config path and how to back it up.
 
 ## An update check fails
 
@@ -135,10 +161,15 @@ and folders.
 
 ## Where is my data? Does Sevak collect analytics?
 
-Sevak has no telemetry or analytics. Config, usage history and logs remain
-local. Optional automatic update checks contact GitHub; a web search contacts
-the chosen provider through your browser when you select it.
-[Locations and update settings](configuration.md#data-and-file-locations).
+**No telemetry.** Sevak does not collect analytics. All config, usage history, and logs stay on your machine.
+
+**Network activity:**
+
+- **Optional update checks** (default on): Check GitHub for a new version at startup and daily. Disable with `[general] check_for_updates = false`.
+- **Web searches:** When you run a web search, your browser contacts that search provider (Google, YouTube, GitHub, etc.). Sevak does not proxy or log these.
+- **Currency conversion** (off by default): When enabled, Sevak downloads the European Central Bank's daily rates once per day for currency conversion.
+
+See [Files and data](files-and-data.md) for where everything is stored, and [Configuration](configuration.md) for the settings.
 
 ## Reporting a problem
 
@@ -151,4 +182,4 @@ and include:
 - What you expected and what happened.
 - Relevant recent log lines, with private paths or unrelated data removed.
 
-Send security issues through [SECURITY.md](../SECURITY.md) instead of a public issue.
+Send security issues through [SECURITY.md](https://github.com/ninad-k/Sevak/blob/main/SECURITY.md) instead of a public issue.

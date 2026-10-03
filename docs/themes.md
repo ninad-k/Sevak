@@ -1,76 +1,74 @@
 # Themes and appearance
 
-Sevak follows your system's light or dark mode by default. Everything else is
-optional and lives in the `[appearance]` table of `config.toml` (the Settings
-window, Appearance page, edits the same values).
+Sevak follows your system's light or dark mode by default. Everything else is optional and lives in the `[appearance]` table of `config.toml` (the Settings window, Appearance page, edits the same values).
+
+## Settings
 
 ```toml
 [appearance]
 theme = "system"       # "system", "light" or "dark"
-accent = "#7c3aed"     # "#rrggbb", "#rgb" or "rgb(r, g, b)"; "" keeps the theme's
-font_size = 15         # 12-22, pixels; the size of result titles
-font_family = "Fira Sans, sans-serif"   # "" uses the system font
-opacity = 100          # 30-100, percent opacity of the search bar's background
-radius = 14            # 0-32, corner radius in pixels
-custom_css = "theme.css"   # a stylesheet in the config folder; "" loads none
+accent = ""            # "#rgb", "#rrggbb", "rgb(r, g, b)" or ""; "" uses the theme's accent
+font_size = 15         # 12–22 pixels; the size of result titles
+font_family = ""       # "Fira Sans, sans-serif"; "" uses the system font
+opacity = 100          # 30–100, percent opacity of the search bar's background
+radius = 14            # 0–32, corner radius in pixels
+custom_css = ""        # a stylesheet in the config folder; "" loads none
 ```
 
-Changes apply when you save in Settings, or after "Reload index" in the tray
-menu when you edit the file by hand.
+Changes apply when you save in **Settings**, or after "Reload index" in the tray menu when you edit the file by hand.
 
-## Validation
+## Configuration through Settings
 
-Every value is checked when it is applied. A value that is not valid is ignored
-(that one setting falls back to its default, the rest still apply), a warning is
-written to the log and the warning is shown under Settings, Appearance:
+All these options are available in **Settings → Appearance**. The GUI guides you with hints for each setting.
 
-| Setting | Valid | Default |
+### Validation
+
+Every value is checked when it is applied. A value that is not valid is ignored (that one setting falls back to its default), a warning is written to the log and shown under **Settings → Appearance**:
+
+| Setting | Valid range | Default |
 |---|---|---|
-| `accent` | `#rgb`, `#rrggbb`, `rgb(r, g, b)` (0-255) or empty | empty (the theme's accent) |
-| `font_size` | whole number 12-22 | 15 |
-| `font_family` | names made of letters, digits, spaces and `- _ .`, separated by commas (quotes optional), up to 200 characters | empty (system font) |
-| `opacity` | whole number 30-100 | 100 |
-| `radius` | whole number 0-32 | 14 |
-| `custom_css` | a relative path inside the config folder | empty |
+| `theme` | `"system"`, `"light"` or `"dark"` | `"system"` |
+| `accent` | `#rgb`, `#rrggbb`, `rgb(r, g, b)` or empty | empty (the theme's accent) |
+| `font_size` | whole number 12–22 | 15 |
+| `font_family` | names made of letters, digits, spaces and `- _ .`, separated by commas; up to 200 characters | empty (system font) |
+| `opacity` | whole number 30–100 | 100 |
+| `radius` | whole number 0–32 | 14 |
+| `custom_css` | relative path inside the config folder | empty |
 
-Setting `accent` also derives the related variables: `--accent-strong` (18 %
-darker), `--selected` (the accent at 17 % opacity) and `--on-accent` (black or
-white, whichever reads better on the accent).
+## Accent color
 
-`opacity` fades only the search bar's background; text stays fully opaque. It
-needs a window that can be transparent, which Sevak already uses for its rounded
-corners and shadow. There is no background blur: the operating system's blur
-effects (Acrylic, Mica, vibrancy) would also blur the transparent margin around
-the bar, which shows as a square frame, so Sevak does not offer it.
+Setting `accent` derives related CSS variables:
 
-`font_size` scales the whole search bar (input, subtitles, row height), not only
-the titles. It does not change the Settings window.
+- `--accent-strong`: 18% darker (for hover states)
+- `--selected`: accent at 17% opacity (background of selected result)
+- `--on-accent`: black or white, whichever reads better on the accent
+
+## Opacity and styling
+
+`opacity` fades only the search bar's background; text stays fully opaque. It requires a window that supports transparency, which Sevak uses for rounded corners and shadow anyway.
+
+Sevak does not offer background blur (Acrylic, Mica, vibrancy) because it would blur the transparent margin around the bar, creating a square frame effect.
+
+`font_size` scales the whole search bar (input, subtitles, row height), not only the result titles. It does not affect the Settings window.
+
+`radius` sets corner rounding. `0` = sharp corners; `32` = very rounded.
 
 ## Custom stylesheet
 
-`custom_css` names a file inside the config folder, for example `theme.css`
-next to `config.toml` (or `themes/dark-purple.css`). It is a plain stylesheet
-that is loaded after Sevak's built-in theme and after the settings above, so it
-overrides all of them.
+`custom_css` names a file inside the config folder, for example `theme.css` next to `config.toml` (or `themes/dark-purple.css`). It is a plain CSS stylesheet loaded after Sevak's built-in theme and appearance settings, so it overrides all of them.
 
-Rules:
+### Rules for custom stylesheets
 
-- The path must be relative and stay inside the config folder: no absolute
-  paths, no `..`, and a symlink that points outside the folder is refused.
-- The file must be UTF-8 and at most 64 KiB; otherwise it is ignored with a
-  warning.
-- It is read again whenever the config is reloaded or saved.
-- It cannot load anything from the network: Sevak's content security policy
-  blocks remote stylesheets, fonts and images (this keeps the
-  [privacy promise](../README.md#privacy-and-updates)). Use fonts installed on your system
-  and `data:` URLs.
-- If you keep the config folder in a synced folder
-  ([Config location](configuration.md#keep-the-config-in-a-synced-folder)), your theme travels with it.
+- The path must be relative and stay inside the config folder: no absolute paths, no `..`, and a symlink pointing outside is refused
+- The file must be UTF-8 and at most 64 KiB; otherwise it is ignored with a warning
+- It is read again whenever the config is reloaded (tray menu) or saved (Settings)
+- It cannot load anything from the network: Sevak's content security policy blocks remote stylesheets, fonts and images. Use fonts installed on your system and `data:` URLs
+- If you keep the config folder in a synced folder, your theme travels with it
 
-A theme mostly sets the variables below on `:root`:
+### Example theme
 
 ```css
-/* theme.css: a purple dark theme */
+/* theme.css: purple dark theme */
 :root {
   --bg: #1b1030;
   --fg: #f1e9ff;
@@ -82,14 +80,23 @@ A theme mostly sets the variables below on `:root`:
 }
 ```
 
-The built-in light and dark values are applied with the same specificity as a
-plain `:root` rule, and your file comes later, so `:root { ... }` is enough. To
-change a variable only in one mode, scope it:
+### Scoping to light or dark mode
+
+The built-in light and dark values are applied with the same specificity as a plain `:root` rule, and your file comes later, so `:root { ... }` overrides everything.
+
+To change a variable only in one mode:
 
 ```css
-:root[data-theme="dark"] { --bg: #101010; }            /* theme = "dark" */
-@media (prefers-color-scheme: dark) {                  /* theme = "system" */
-  :root:not([data-theme]) { --bg: #101010; }
+:root[data-theme="dark"] { --bg: #0a0a0a; }        /* when theme = "dark" */
+
+:root[data-theme="light"] { --bg: #fafafa; }       /* when theme = "light" */
+
+@media (prefers-color-scheme: dark) {              /* when theme = "system" and OS is dark */
+  :root:not([data-theme]) { --bg: #0a0a0a; }
+}
+
+@media (prefers-color-scheme: light) {             /* when theme = "system" and OS is light */
+  :root:not([data-theme]) { --bg: #fafafa; }
 }
 ```
 
@@ -97,34 +104,61 @@ change a variable only in one mode, scope it:
 
 Set by the light and dark themes (`ui/src/app.css`):
 
+### Appearance
+
 | Variable | Used for |
 |---|---|
-| `--bg` | Search bar and Settings background |
-| `--fg` | Text |
+| `--bg` | Search bar and Settings window background |
+| `--fg` | Main text color |
 | `--muted` | Secondary text: subtitles, hints, placeholder |
-| `--border` | Hairlines between sections |
-| `--accent` | Caret, buttons, switches, slider thumbs |
-| `--accent-strong` | Hover and focus accent, slider thumbs |
-| `--on-accent` | Text on an accent background |
+| `--border` | Hairlines between sections and form fields |
+| `--accent` | Caret, buttons, switches, slider thumbs, focus rings |
+| `--accent-strong` | Hover and focus states of accented elements |
+| `--on-accent` | Text and icons on an accent background |
 | `--selected` | Background of the selected result row |
 | `--tile` | Background behind result icons |
-| `--kbd-bg`, `--kbd-border` | Key-cap hints such as the `Ctrl+1` labels |
 | `--shadow` | The search bar's drop shadow (a `box-shadow` value) |
-| `--warn`, `--error`, `--ok` | Notices, error messages and success marks |
-| `--surface` | Panels in the Settings window |
-| `--input-bg`, `--input-border` | Form controls in Settings |
-| `--switch-off` | Toggle tracks and slider tracks in Settings |
 
-Set from the appearance settings (override them in your file if you prefer):
+### UI elements
 
-| Variable | Default | From |
+| Variable | Used for |
+|---|---|
+| `--kbd-bg`, `--kbd-border` | Key-cap hints (++ctrl+k++, ++enter++ labels) |
+| `--warn`, `--error`, `--ok` | Notice, error and success message colors |
+| `--surface` | Panels and sections in the Settings window |
+| `--input-bg`, `--input-border` | Text fields and select boxes in Settings |
+| `--switch-off` | Toggle track when off; slider track |
+
+### Computed from settings
+
+These are set automatically from appearance settings (override them in your stylesheet if you prefer):
+
+| Variable | Source | Default |
 |---|---|---|
-| `--font-size` | `15px` | `font_size`: result title size |
-| `--font-scale` | `1` | `font_size` / 15: multiplies the other text sizes and row height |
-| `--radius` | `14px` | `radius`: corner radius of the search bar |
-| `--card-opacity` | `1` | `opacity` / 100: opacity of the bar's background layer |
+| `--font-family` | `font_family` setting | system font |
+| `--font-size` | `font_size` setting | `15px` |
+| `--font-scale` | `font_size` / 15 | multiplies other text sizes and row height |
+| `--radius` | `radius` setting | `14px` |
+| `--card-opacity` | `opacity` / 100 | `1` |
 
-`font-family` is set on `:root` directly.
+## Theme examples
 
-These names are the stable interface for themes. The class names inside the
-page are not and may change between versions.
+Share your theme! Examples could include:
+
+- High-contrast themes for accessibility
+- Seasonal themes (holiday colors, etc.)
+- Themed to match your wallpaper
+- Minimal or dark themes
+
+The class names inside Sevak's UI may change between versions, so override only CSS variables and avoid selectors like `.result` or `.row`.
+
+## More customization
+
+- [Custom hotkeys and keyboard shortcuts](keyboard.md)
+- [Complete settings reference](settings.md)
+- [Configuration guide](configuration.md)
+
+## See also
+
+- [Privacy: custom stylesheets cannot load from the network](privacy.md)
+- [Troubleshooting: appearance warnings and validation errors](troubleshooting.md)

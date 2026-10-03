@@ -7,8 +7,10 @@
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
 [**Download Sevak**](https://github.com/ninad-k/Sevak/releases/latest) ·
-[Quick start](docs/quickstart.md) · [User guide](docs/usage.md) ·
-[Help](docs/troubleshooting.md) · [Contribute](CONTRIBUTING.md)
+[**Documentation**](https://ninad-k.github.io/Sevak/) ·
+[PDF manual](docs/pdf/Sevak-User-Guide.pdf) ·
+[Quick start](docs/quickstart.md) · [Help](docs/troubleshooting.md) ·
+[Contribute](CONTRIBUTING.md)
 
 ![Sevak: a keyboard-first desktop launcher with app search and the Alt+Space shortcut.](docs/media/sevak-overview.png)
 
@@ -196,18 +198,30 @@ and [data locations](docs/configuration.md#data-and-file-locations) for local fi
 
 ## Documentation
 
+The full documentation is published at
+**[ninad-k.github.io/Sevak](https://ninad-k.github.io/Sevak/)**, with search,
+diagrams and light and dark themes. The same user guide is available as a
+single [PDF manual](docs/pdf/Sevak-User-Guide.pdf). The pages are also
+readable right here on GitHub:
+
 | I want to… | Read |
 |---|---|
 | Get started quickly | [Quick start](docs/quickstart.md) |
-| Learn the commands and workflows | [User guide](docs/usage.md) |
-| Change folders, shortcuts, themes or search engines | [Configuration](docs/configuration.md) |
+| Learn searching, launching and the actions panel | [Searching and launching](docs/usage.md) |
+| Look up a keyboard shortcut | [Keyboard shortcuts](docs/keyboard.md) |
+| Use a specific feature (calculator, files, clipboard, snippets…) | [Features](docs/features/index.md) |
+| Change settings in the app | [Settings window](docs/settings.md) |
+| Look up every option in `config.toml` | [Configuration file](docs/configuration.md) |
+| Use Sevak from the command line or scripts | [Command line](docs/cli.md) |
+| Find, back up or reset Sevak's data | [Files and data](docs/files-and-data.md) |
 | Restyle the launcher with your own CSS | [Themes](docs/themes.md) |
-| Fix a shortcut, search or update problem | [Troubleshooting & FAQ](docs/troubleshooting.md) |
+| Fix a shortcut, search or update problem | [Troubleshooting](docs/troubleshooting.md) and [FAQ](docs/faq.md) |
+| Know what touches the network | [Privacy](docs/privacy.md) |
 | Install on another platform | [Installation](docs/install.md) |
-| Understand the name and visual identity | [Brand story](docs/brand.md) |
+| Understand how Sevak works inside | [How Sevak works](docs/architecture.md) |
 | Write a plugin (Rust or a script) | [Plugin guide](docs/plugins.md) |
 | Build, test or package Sevak | [Development](docs/development.md) |
-| Browse every help page | [Documentation index](docs/README.md) |
+| Understand the name and visual identity | [Brand story](docs/brand.md) |
 
 ## Build from source
 

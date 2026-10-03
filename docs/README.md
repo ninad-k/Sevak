@@ -1,34 +1,51 @@
-# Sevak help center
+# Sevak documentation
 
-[← Project overview](../README.md)
+**Read it on the website: [ninad-k.github.io/Sevak](https://ninad-k.github.io/Sevak/)**,
+which adds search, diagrams and light and dark themes. Prefer a single file?
+Download the [PDF manual](pdf/Sevak-User-Guide.pdf).
 
-Sevak is a keyboard-first desktop launcher: open it, type what you need, and
-press Enter to launch an app, open a file or web search, or copy a calculation.
+These Markdown files are the source of the site, and they are readable here
+too:
 
-## New to Sevak?
+## Getting started
 
-1. [Install the app](install.md) for your operating system.
-2. Follow the [five-minute quick start](quickstart.md).
-3. Keep the [keyboard reference](usage.md#keyboard-shortcuts) handy.
-4. [Choose your shortcut, folders and theme](configuration.md).
+- [Install](install.md): packages for Windows, macOS and Linux, and first-run setup
+- [Quick start](quickstart.md): a five-minute tour
 
-## Guides
+## User guide
 
-| Guide | What it covers |
-|---|---|
-| [Quick start](quickstart.md) | First launch, app search, math, files and web search |
-| [User guide](usage.md) | Worked examples, shortcuts, tray actions and CLI |
-| [Configuration](configuration.md) | Settings, TOML, defaults and data locations |
-| [Troubleshooting & FAQ](troubleshooting.md) | Common problems and diagnostics |
-| [Installation](install.md) | Packages, dependencies and platform setup |
-| [Brand story](brand.md) | Meaning of Sevak, logo and product descriptions |
-| [Plugin guide](plugins.md) | Routing and writing a compiled-in extension |
-| [Development](development.md) | Architecture, builds, tests and releases |
-| [Media](media/README.md) | Images, the reel and regeneration instructions |
+- [Searching and launching](usage.md): opening Sevak, ranking, running results, the actions panel
+- [Keyboard shortcuts](keyboard.md): every key in the launcher and Settings
+- [Settings window](settings.md): each tab and what it changes
+- [Themes](themes.md): appearance options and custom CSS
 
-## A visual introduction
+## Features
 
-[![Sevak's open, search, act workflow](media/sevak-workflow.svg)](quickstart.md)
+[Overview](features/index.md) ·
+[Applications](features/apps.md) ·
+[Calculator and conversions](features/calculator.md) ·
+[Web search](features/web-search.md) ·
+[Files and folders](features/files.md) ·
+[Browser bookmarks](features/bookmarks.md) ·
+[Clipboard history](features/clipboard.md) ·
+[Snippets](features/snippets.md) ·
+[System commands](features/system.md) ·
+[Shell commands](features/shell.md) ·
+[Selection actions](features/selection.md) ·
+[Script plugins](features/script-plugins.md)
 
-[Watch the 12-second introduction](media/sevak-12s.mp4), or go directly to
-[troubleshooting](troubleshooting.md) if something is not working.
+## Reference
+
+- [Configuration file](configuration.md): every option in `config.toml`
+- [Command line](cli.md): every flag
+- [Files and data](files-and-data.md): where Sevak keeps its files, backup and reset
+
+## Help
+
+- [Troubleshooting](troubleshooting.md) · [FAQ](faq.md) · [Privacy](privacy.md)
+
+## Developers
+
+- [How Sevak works](architecture.md) · [Writing plugins](plugins.md) ·
+  [Development](development.md) · [Name and brand](brand.md) ·
+  [Media and its regeneration](media/README.md)
