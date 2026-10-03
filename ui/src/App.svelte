@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import Glyph from "./lib/Glyph.svelte";
+  import { applyTheme } from "./lib/theme";
   import {
     execute,
     getStatus,
@@ -205,6 +206,7 @@
       if (s) {
         status = s;
         indexing = s.indexing;
+        applyTheme(s.theme);
       }
     });
 
@@ -217,6 +219,7 @@
       onStatus((s) => {
         status = s;
         indexing = s.indexing;
+        applyTheme(s.theme);
       }),
       onIndex((state) => {
         indexing = state === "indexing";
@@ -264,8 +267,8 @@
 
     {#if hotkeyError}
       <div class="notice" role="status">
-        Shortcut "{accelerator}" is unavailable: {hotkeyError}. Edit config.toml, then choose “Reload
-        index” from the tray.
+        Shortcut "{accelerator}" is unavailable: {hotkeyError}. Choose another one in Settings
+        (tray menu).
       </div>
     {/if}
 

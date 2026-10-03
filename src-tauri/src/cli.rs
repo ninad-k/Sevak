@@ -8,6 +8,7 @@ Options:
       --toggle           Show the search bar, or hide it if it is visible
                          (bind this to a key on Wayland)
       --background       Start without showing the window
+      --settings         Open the settings window
       --quit             Quit the running instance
       --setup-hotkey [KEY]
                          Bind KEY (default: the hotkey from config.toml) to
@@ -22,6 +23,7 @@ pub enum Launch {
     Show,
     Toggle,
     Background,
+    Settings,
     Quit,
 }
 
@@ -48,6 +50,7 @@ where
     let invocation = match first.as_ref() {
         "--toggle" => Invocation::Run(Launch::Toggle),
         "--background" => Invocation::Run(Launch::Background),
+        "--settings" => Invocation::Run(Launch::Settings),
         "--quit" => Invocation::Run(Launch::Quit),
         "-h" | "--help" => Invocation::Help,
         "-V" | "--version" => Invocation::Version,
@@ -112,6 +115,10 @@ mod tests {
             parse_strs(&["--background"]),
             Ok(Invocation::Run(Launch::Background))
         );
+        assert_eq!(
+            parse_strs(&["--settings"]),
+            Ok(Invocation::Run(Launch::Settings))
+        );
         assert_eq!(parse_strs(&["--quit"]), Ok(Invocation::Run(Launch::Quit)));
     }
 
@@ -157,6 +164,10 @@ mod tests {
         assert_eq!(parse_remote(&argv(&["sevak"])), Launch::Show);
         assert_eq!(parse_remote(&argv(&["sevak", "--toggle"])), Launch::Toggle);
         assert_eq!(parse_remote(&argv(&["sevak", "--quit"])), Launch::Quit);
+        assert_eq!(
+            parse_remote(&argv(&["sevak", "--settings"])),
+            Launch::Settings
+        );
         assert_eq!(
             parse_remote(&argv(&["sevak", "--background"])),
             Launch::Background

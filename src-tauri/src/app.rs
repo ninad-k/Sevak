@@ -7,7 +7,7 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent};
 
 use crate::cli::{self, Launch};
 use crate::state::AppState;
-use crate::{commands, hotkey, icons, search, tray, window};
+use crate::{autostart, commands, hotkey, icons, search, settings, tray, window};
 
 pub fn run(
     paths: AppPaths,
@@ -26,10 +26,13 @@ pub fn run(
             match launch {
                 Launch::Show => window::show(app),
                 Launch::Toggle => window::toggle(app),
+                Launch::Settings => settings::open(app),
                 Launch::Background => {}
                 Launch::Quit => quit(app),
             }
-        }));
+        }))
+        .plugin(autostart::plugin())
+        .plugin(tauri_plugin_dialog::init());
     if let Some(plugin) = hotkey::plugin(strategy) {
         builder = builder.plugin(plugin);
     }
@@ -48,7 +51,17 @@ pub fn run(
             commands::get_status,
             commands::set_content_height,
             commands::search,
-            commands::execute
+            commands::execute,
+            settings::get_settings,
+            settings::save_settings,
+            settings::validate_hotkey,
+            settings::suspend_hotkey,
+            settings::resume_hotkey,
+            settings::pick_directory,
+            settings::setup_wayland_hotkey,
+            settings::open_config_file,
+            settings::open_log_dir,
+            settings::close_settings
         ])
         .on_window_event(window::on_window_event)
         .setup(move |app| {
@@ -56,11 +69,14 @@ pub fn run(
             tray::init(handle);
             hotkey::apply(handle);
             window::apply_configured_width(handle);
+            apply_theme(handle);
+            autostart::sync(handle);
             search::start(handle);
             tracing::info!(display = ?server, ?launch, "sevak is ready");
 
             match launch {
                 Launch::Show | Launch::Toggle => window::show(handle),
+                Launch::Settings => settings::open(handle),
                 Launch::Background => {}
                 Launch::Quit => quit(handle),
             }
@@ -97,12 +113,22 @@ pub fn reload(app: &AppHandle) {
 
     hotkey::apply(app);
     window::apply_configured_width(app);
+    apply_theme(app);
+    autostart::sync(app);
     // The index is rebuilt in the background and swapped in when ready.
     search::reload(app, &state.config());
 
-    if let Err(err) = app.emit_to(window::MAIN_LABEL, window::EVENT_STATUS, state.status()) {
+    // Both the launcher and the settings window follow the status.
+    if let Err(err) = app.emit(window::EVENT_STATUS, state.status()) {
         tracing::warn!("could not emit {}: {err}", window::EVENT_STATUS);
     }
+}
+
+/// Applies the configured theme to the native window chrome (title bar, menus).
+/// The web content themes itself from the `theme` field of the status.
+pub fn apply_theme(app: &AppHandle) {
+    let theme = app.state::<AppState>().config().appearance.theme;
+    app.set_theme(settings::window_theme(theme));
 }
 
 /// Saves the usage statistics, then exits. The one way Sevak quits.

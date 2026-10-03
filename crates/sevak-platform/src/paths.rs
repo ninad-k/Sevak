@@ -44,9 +44,47 @@ impl AppPaths {
     }
 }
 
+/// Shows `path` with the home directory abbreviated to `~` (always with `/`
+/// separators, which Sevak's `~` expansion accepts on every platform).
+/// Paths outside the home directory are returned unchanged.
+pub fn home_relative(path: &std::path::Path) -> String {
+    tilde_path(path, dirs::home_dir().as_deref())
+}
+
+fn tilde_path(path: &std::path::Path, home: Option<&std::path::Path>) -> String {
+    let Some(rest) = home.and_then(|home| path.strip_prefix(home).ok()) else {
+        return path.display().to_string();
+    };
+    let parts: Vec<_> = rest
+        .components()
+        .map(|part| part.as_os_str().to_string_lossy().into_owned())
+        .collect();
+    if parts.is_empty() {
+        "~".to_owned()
+    } else {
+        format!("~/{}", parts.join("/"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn home_is_abbreviated() {
+        let home = std::path::Path::new("home").join("me");
+        assert_eq!(tilde_path(&home, Some(&home)), "~");
+        assert_eq!(
+            tilde_path(&home.join("Documents").join("Work"), Some(&home)),
+            "~/Documents/Work"
+        );
+        let elsewhere = std::path::Path::new("data").join("shared");
+        assert_eq!(
+            tilde_path(&elsewhere, Some(&home)),
+            elsewhere.display().to_string()
+        );
+        assert_eq!(tilde_path(&home, None), home.display().to_string());
+    }
 
     #[test]
     fn layout_below_roots() {

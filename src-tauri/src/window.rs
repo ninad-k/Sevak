@@ -10,6 +10,7 @@ use tauri::{
 use crate::state::{lock, AppState};
 
 pub const MAIN_LABEL: &str = "main";
+pub const SETTINGS_LABEL: &str = "settings";
 pub const EVENT_SHOW: &str = "sevak:show";
 pub const EVENT_HIDDEN: &str = "sevak:hidden";
 pub const EVENT_STATUS: &str = "sevak:status";
@@ -52,6 +53,13 @@ pub fn show(app: &AppHandle) {
 }
 
 pub fn hide(app: &AppHandle) {
+    hide_silently(app);
+    announce_hidden(app);
+}
+
+/// Hides the window without telling the UI, so it keeps its query and results.
+/// Used for an optimistic hide that may have to be undone ([`reveal`]).
+pub fn hide_silently(app: &AppHandle) {
     let Some(window) = app.get_webview_window(MAIN_LABEL) else {
         tracing::warn!("hide: main window not found");
         return;
@@ -60,8 +68,31 @@ pub fn hide(app: &AppHandle) {
     if let Err(err) = window.hide() {
         tracing::warn!("hide: window.hide failed: {err}");
     }
+}
+
+/// Tells the UI the window is gone, so it clears its query for the next show.
+pub fn announce_hidden(app: &AppHandle) {
     if let Err(err) = app.emit_to(MAIN_LABEL, EVENT_HIDDEN, ()) {
         tracing::warn!("hide: could not emit {EVENT_HIDDEN}: {err}");
+    }
+}
+
+/// Shows the window again exactly as it was left (after [`hide_silently`]),
+/// without the reset that [`show`] triggers.
+pub fn reveal(app: &AppHandle) {
+    let Some(window) = app.get_webview_window(MAIN_LABEL) else {
+        return;
+    };
+    tracing::info!("revealing window again");
+    position(app, &window);
+    if let Err(err) = window.show() {
+        tracing::warn!("reveal: window.show failed: {err}");
+    }
+    if let Err(err) = window.set_focus() {
+        tracing::warn!("reveal: set_focus failed: {err}");
+    }
+    if let Some(state) = app.try_state::<AppState>() {
+        *lock(&state.last_shown) = Some(Instant::now());
     }
 }
 
@@ -88,6 +119,14 @@ pub fn toggle(app: &AppHandle) {
 
 /// Window events: hide on blur, and keep the resident window alive on close.
 pub fn on_window_event(window: &Window, event: &WindowEvent) {
+    if window.label() == SETTINGS_LABEL {
+        // The shortcut recorder suspends the global hotkey; closing the window
+        // mid-recording must not leave it unregistered.
+        if matches!(event, WindowEvent::Destroyed) {
+            crate::hotkey::apply(window.app_handle());
+        }
+        return;
+    }
     if window.label() != MAIN_LABEL {
         return;
     }

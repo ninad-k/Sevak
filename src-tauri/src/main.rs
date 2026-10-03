@@ -2,12 +2,14 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
+mod autostart;
 mod cli;
 mod commands;
 mod hotkey;
 mod icons;
 mod logging;
 mod search;
+mod settings;
 mod state;
 mod tray;
 mod window;
@@ -142,26 +144,7 @@ fn setup_hotkey_for_platform(hotkey: &str) -> ExitCode {
 
     match gnome::install_shortcut(hotkey, &command) {
         Ok(report) => {
-            let action = if report.reused_existing {
-                "reused"
-            } else {
-                "created"
-            };
-            println!(
-                "GNOME shortcut {action}: {} -> {}",
-                report.accelerator, report.command
-            );
-            println!("  dconf path: {}", report.path);
-            for conflict in &report.conflicts {
-                println!(
-                    "warning: GNOME already binds this key to {} {}; \
-                     GNOME may give that binding precedence.\n  \
-                     To free it, run: {}",
-                    conflict.schema,
-                    conflict.key,
-                    conflict.clear_command()
-                );
-            }
+            print!("{}", report.describe());
             ExitCode::SUCCESS
         }
         Err(err) => {

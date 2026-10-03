@@ -13,10 +13,14 @@ export interface HotkeyStatus {
   error: string | null;
 }
 
+export type ThemeSetting = "system" | "light" | "dark";
+
 export interface Status {
   version: string;
   display: "windows" | "x11" | "wayland" | "unknown";
   hotkey: HotkeyStatus;
+  /** The configured theme; `system` follows `prefers-color-scheme`. */
+  theme: ThemeSetting;
   /** The search index is being (re)built. */
   indexing: boolean;
 }
@@ -74,7 +78,7 @@ export async function setContentHeight(height: number): Promise<void> {
 }
 
 // True inside the Tauri webview; plain-browser `npm run dev` previews use mock data.
-function hasTauri(): boolean {
+export function hasTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 

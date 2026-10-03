@@ -45,6 +45,32 @@ pub struct GnomeSetupReport {
     pub conflicts: Vec<ShortcutConflict>,
 }
 
+impl GnomeSetupReport {
+    /// Multi-line, human-readable summary (CLI output and the settings window).
+    pub fn describe(&self) -> String {
+        let action = if self.reused_existing {
+            "reused"
+        } else {
+            "created"
+        };
+        let mut text = format!(
+            "GNOME shortcut {action}: {} -> {}\n  dconf path: {}\n",
+            self.accelerator, self.command, self.path
+        );
+        for conflict in &self.conflicts {
+            text.push_str(&format!(
+                "warning: GNOME already binds this key to {} {}; \
+                 GNOME may give that binding precedence.\n  \
+                 To free it, run: {}\n",
+                conflict.schema,
+                conflict.key,
+                conflict.clear_command()
+            ));
+        }
+        text
+    }
+}
+
 fn invalid_hotkey(hotkey: &str, reason: impl Into<String>) -> PlatformError {
     PlatformError::InvalidHotkey {
         hotkey: hotkey.to_owned(),
@@ -479,6 +505,38 @@ pub fn install_shortcut(hotkey: &str, command: &str) -> Result<GnomeSetupReport>
     })
 }
 
+/// The settings window's "Set up GNOME shortcut" button.
+///
+/// `Ok` carries the text to show: the install report on GNOME, or manual
+/// instructions on other Linux desktops. `Err` carries the failure followed by
+/// the manual instructions. Off Linux there is nothing to set up.
+pub fn setup_for_ui(hotkey: &str) -> std::result::Result<String, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let command = toggle_command()
+            .map_err(|err| format!("cannot determine the sevak executable: {err}"))?;
+        if !crate::session::is_gnome() {
+            return Ok(format!(
+                "This is not a GNOME session, so the shortcut cannot be installed \
+                 automatically.\n\n{}",
+                manual_instructions(hotkey, &command)
+            ));
+        }
+        match install_shortcut(hotkey, &command) {
+            Ok(report) => Ok(report.describe()),
+            Err(err) => Err(format!(
+                "{err}\n\n{}",
+                manual_instructions(hotkey, &command)
+            )),
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = hotkey;
+        Err("Desktop shortcuts are only managed on Linux.".to_owned())
+    }
+}
+
 /// Runs `gsettings` with `args` (no shell involved) and returns its stdout.
 #[cfg(target_os = "linux")]
 fn gsettings(args: &[&str]) -> Result<String> {
@@ -500,6 +558,26 @@ mod tests {
 
     fn accel(hotkey: &str) -> String {
         to_gnome_accelerator(hotkey).unwrap()
+    }
+
+    #[test]
+    fn report_describes_conflicts_with_their_fix() {
+        let report = GnomeSetupReport {
+            path: "/org/x/custom0/".to_owned(),
+            accelerator: "<Alt>space".to_owned(),
+            command: "sevak --toggle".to_owned(),
+            reused_existing: false,
+            conflicts: vec![ShortcutConflict {
+                schema: "org.gnome.desktop.wm.keybindings".to_owned(),
+                key: "activate-window-menu".to_owned(),
+            }],
+        };
+        let text = report.describe();
+        assert!(text.starts_with("GNOME shortcut created: <Alt>space -> sevak --toggle\n"));
+        assert!(text.contains("dconf path: /org/x/custom0/"));
+        assert!(text.contains(
+            "gsettings set org.gnome.desktop.wm.keybindings activate-window-menu \"[]\""
+        ));
     }
 
     #[test]
