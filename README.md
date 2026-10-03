@@ -1,5 +1,9 @@
 # Sevak
 
+[![CI](https://github.com/ninad-k/Sevak/actions/workflows/ci.yml/badge.svg)](https://github.com/ninad-k/Sevak/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/ninad-k/Sevak)](https://github.com/ninad-k/Sevak/releases/latest)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+
 Sevak (Sanskrit/Hindi *sevak*, "one who serves") is a keyboard-first quick
 launcher for Windows, macOS and Linux. Press a hotkey, type a few letters, press
 Enter. Everything runs locally, there is no telemetry, and the whole thing is
@@ -193,6 +197,13 @@ release process.
 - [docs/install.md](docs/install.md): installation, Wayland, tray, RHEL notes, uninstall
 - [docs/plugins.md](docs/plugins.md): how plugins work and how to write one
 - [docs/development.md](docs/development.md): architecture, testing, releasing
+
+## Contributing
+
+Bug reports, fixes and plugins are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md)
+for the workflow (pull request titles decide the release version) and the
+[Code of Conduct](CODE_OF_CONDUCT.md). Report security problems privately as
+described in [SECURITY.md](SECURITY.md).
 
 ## License
 

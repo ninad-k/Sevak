@@ -1,0 +1,84 @@
+name: Bug report
+description: Something doesn't work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please check the [open issues](https://github.com/ninad-k/Sevak/issues) first.
+        Security problems go to a [private report](https://github.com/ninad-k/Sevak/security/advisories/new) instead.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+      placeholder: |
+        1. Press Alt+Space
+        2. Type "firefox" and press Enter
+        3. Nothing starts; the window shows "..."
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Sevak version
+      description: Run `sevak --version`, or see the release you downloaded.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows 11
+        - Windows 10
+        - macOS (Apple silicon)
+        - macOS (Intel)
+        - Linux, X11 session
+        - Linux, Wayland session
+    validations:
+      required: true
+
+  - type: input
+    id: os-details
+    attributes:
+      label: OS version and desktop
+      description: For example "Windows 11 24H2", "macOS 15.1", "Ubuntu 24.04, GNOME 46".
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install Sevak?
+      options:
+        - Windows installer (.exe)
+        - Windows MSI
+        - macOS .dmg
+        - .deb
+        - .rpm
+        - AppImage
+        - Built from source
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        The newest file in the logs folder: `%APPDATA%\sevak\logs\` (Windows),
+        `~/Library/Application Support/sevak/logs/` (macOS) or `~/.local/share/sevak/logs/` (Linux).
+        Logs can contain search text and file names; remove anything private.
+      render: text
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant config
+      description: The parts of `config.toml` you changed, if any.
+      render: toml
