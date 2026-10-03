@@ -287,14 +287,20 @@ impl Search {
         plugins: Vec<Arc<dyn Plugin>>,
         options: EngineOptions,
     ) -> bool {
-        let mut current = self
-            .engine
-            .write()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if self.reload_generation.load(Ordering::SeqCst) != generation {
-            return false;
-        }
-        *current = Arc::new(current.rebuild(plugins, options));
+        let old = {
+            let mut current = self
+                .engine
+                .write()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if self.reload_generation.load(Ordering::SeqCst) != generation {
+                return false;
+            }
+            let rebuilt = Arc::new(current.rebuild(plugins, options));
+            std::mem::replace(&mut *current, rebuilt)
+        };
+        // The replaced plugins' background work (script plugin processes) stops
+        // now rather than whenever the last in-flight query lets go of them.
+        old.shutdown();
         true
     }
 }

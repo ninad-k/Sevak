@@ -170,7 +170,16 @@
     results = found.results;
     resultsTicket = found.ticket;
     const at = keep === undefined ? -1 : results.findIndex((result) => result.id === keep);
-    selected = at >= 0 ? at : 0;
+    if (at >= 0) {
+      selected = at;
+      // An open action panel stays on its row; its list may have changed.
+      if (panelIndex >= panelEntries.length) panelIndex = 0;
+    } else {
+      selected = 0;
+      // The row the panel was for is gone.
+      panelOpen = false;
+    }
+    // History recall, Tab completion and Large Type are left as they are.
   }
 
   function onInput(e: Event) {
