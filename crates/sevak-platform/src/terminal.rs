@@ -162,6 +162,40 @@ fn shell_kind(shell: &str) -> ShellKind {
     }
 }
 
+/// How a value must be quoted to reach the shell [`run_in_terminal`] starts as
+/// one literal word, with nothing in it interpreted (workflows' Terminal
+/// command node quotes the text it inserts this way).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShellQuoting {
+    /// `sh`, `bash`, `zsh`, `fish`, ...: single quotes.
+    Posix,
+    /// `pwsh` / `powershell`: single quotes, with every kind of single quote
+    /// doubled.
+    PowerShell,
+    /// `cmd.exe`: double quotes, and some characters cannot be quoted at all.
+    Cmd,
+}
+
+impl From<ShellKind> for ShellQuoting {
+    fn from(kind: ShellKind) -> Self {
+        match kind {
+            ShellKind::PowerShell => Self::PowerShell,
+            ShellKind::Cmd => Self::Cmd,
+            ShellKind::Posix => Self::Posix,
+        }
+    }
+}
+
+/// The quoting the shell that [`run_in_terminal`] would start with `config`
+/// needs, found the same way (`[shell] shell`, then `PATH` / `$SHELL`). A
+/// configured shell that is missing is judged by its name (running it fails
+/// anyway). Probes the system; cheap.
+pub fn shell_quoting(config: &ShellConfig) -> ShellQuoting {
+    with_system_probe(|probe| current_shell_kind(config, probe))
+        .unwrap_or_else(|_| shell_kind(&config.shell))
+        .into()
+}
+
 /// The kind of the shell [`run_in_terminal`] would use on this OS.
 fn current_shell_kind(config: &ShellConfig, probe: &Probe) -> Result<ShellKind> {
     #[cfg(windows)]
@@ -1169,6 +1203,27 @@ mod tests {
             inv.args,
             vec!["-e", "zsh", "-c", "make && ./run\nexec 'zsh'"]
         );
+    }
+
+    #[test]
+    fn quoting_follows_the_shell_that_would_run() {
+        // Only looks the shell up; nothing is started.
+        let with = |shell: &str| {
+            shell_quoting(&ShellConfig {
+                shell: shell.to_owned(),
+                ..ShellConfig::default()
+            })
+        };
+        if cfg!(target_os = "macos") {
+            // The login shell runs the command, whatever `[shell] shell` says.
+            assert_eq!(with("pwsh"), ShellQuoting::Posix);
+        } else {
+            // Installed or not, the configured shell decides.
+            assert_eq!(with("cmd.exe"), ShellQuoting::Cmd);
+            assert_eq!(with("pwsh"), ShellQuoting::PowerShell);
+            assert_eq!(with("/bin/bash"), ShellQuoting::Posix);
+        }
+        assert_eq!(ShellQuoting::from(ShellKind::Cmd), ShellQuoting::Cmd);
     }
 
     #[test]

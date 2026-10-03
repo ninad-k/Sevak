@@ -35,7 +35,7 @@ use super::model::{
     Node, NodeKind, Test, TransformOp, Workflow, DEFAULT_SCRIPT_TIMEOUT_MS, ELSE, MAX_DELAY_MS,
     MAX_SCRIPT_TIMEOUT_MS, OUT, THEN,
 };
-use super::template::{expand, Scope, Target};
+use super::template::{expand, expand_command, Scope, Target};
 use super::validate::{compile_regex, valid_variable_name};
 use crate::files::{expand_home, home_dir};
 use crate::script::{resolve_launch, Launch};
@@ -396,8 +396,12 @@ impl Runtime {
             }
             NodeKind::SystemCommand { command } => self.system_command(command.trim())?,
             NodeKind::TerminalCommand { command } => {
+                // Every placeholder is one quoted word for the shell that will
+                // read the line, unless the author wrote `|raw`.
+                let quoting = self.platform.shell_quoting(&self.shell);
+                let line = expand_command(command, &scope, quoting)?;
                 self.platform
-                    .run_in_terminal(&plain(command), &self.shell)
+                    .run_in_terminal(&line, &self.shell)
                     .map_err(|err| format!("could not open a terminal: {err}"))?;
             }
             NodeKind::Copy { text } => {
@@ -1292,6 +1296,61 @@ mod tests {
             *f.sink.views.lock().unwrap(),
             [("Result".to_owned(), "it's!".to_owned())]
         );
+    }
+
+    #[test]
+    fn terminal_commands_quote_placeholders_unless_raw() {
+        let terminal = |id: &str, command: &str| {
+            node(
+                id,
+                NodeKind::TerminalCommand {
+                    command: command.into(),
+                },
+            )
+        };
+        let f = fixture(
+            vec![
+                keyword("k"),
+                terminal("quoted", "grep {query} notes.txt"),
+                terminal("raw", "git {query|raw}"),
+            ],
+            vec![wire("k", "quoted"), wire("quoted", "raw")],
+        );
+        let report = f.runtime.run_blocking("k", Ctx::with_arg("x; rm -rf ~"));
+        assert!(report.errors.is_empty(), "{report:?}");
+        let runs: Vec<String> = f
+            .platform
+            .terminal_runs
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(line, _)| line.clone())
+            .collect();
+        assert_eq!(runs, ["grep 'x; rm -rf ~' notes.txt", "git x; rm -rf ~"]);
+
+        // PowerShell quoting when that is the shell.
+        let f = fixture(
+            vec![keyword("k"), terminal("t", "Write-Output {query}")],
+            vec![wire("k", "t")],
+        );
+        *f.platform.shell_quoting.lock().unwrap() = Some(sevak_platform::ShellQuoting::PowerShell);
+        let report = f.runtime.run_blocking("k", Ctx::with_arg("it's $env:PATH"));
+        assert!(report.errors.is_empty(), "{report:?}");
+        assert_eq!(
+            f.platform.terminal_runs.lock().unwrap()[0].0,
+            "Write-Output 'it''s $env:PATH'"
+        );
+
+        // cmd cannot quote a %: the node fails and nothing runs.
+        let f = fixture(
+            vec![keyword("k"), terminal("t", "echo {query}")],
+            vec![wire("k", "t")],
+        );
+        *f.platform.shell_quoting.lock().unwrap() = Some(sevak_platform::ShellQuoting::Cmd);
+        let report = f.runtime.run_blocking("k", Ctx::with_arg("%PATH%"));
+        assert_eq!(report.errors.len(), 1, "{report:?}");
+        assert!(report.errors[0].message.contains("|raw"), "{report:?}");
+        assert!(f.platform.terminal_runs.lock().unwrap().is_empty());
     }
 
     #[test]

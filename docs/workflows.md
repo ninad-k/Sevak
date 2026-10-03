@@ -211,19 +211,25 @@ Text fields of nodes can use placeholders:
 | `{var:name}` | the **variable** `name` (empty when it was never set) |
 | `{query\|upper}` | filters, left to right |
 
-Filters: `url` (percent-encode), `raw` (leave a link's placeholder as it is),
-`upper`, `lower`, `title`, `trim`, `json` (escape for a JSON string), `sh`
-(quote as one POSIX shell word) and `ps` (quote as one PowerShell string). Other
-text in braces, such as JSON or `${HOME}`, is left alone.
+Filters: `url` (percent-encode), `raw` (insert as it is: no encoding in a link,
+no quoting in a command line), `upper`, `lower`, `title`, `trim`, `json` (escape
+for a JSON string), `sh` (quote as one POSIX shell word) and `ps` (quote as one
+PowerShell string). Other text in braces, such as JSON or `${HOME}`, is left
+alone.
 
 - In **Open URL**, every placeholder is **percent-encoded**, so
   `https://example.com/?q={query}` is safe for any text. A variable that holds a
   whole address needs `|raw`: `{var:site|raw}/search?q={query}`.
-- In **Terminal command** the text goes into a command line that a shell
-  reads, so *quote what you insert*: `grep {query|sh} notes.txt` (macOS and
-  Linux) or `Select-String {query|ps} notes.txt` (PowerShell). A placeholder
-  without a filter is inserted as it is, and text such as `; rm -rf ~` would then
-  be part of the command. Prefer **Run script**, which has no such problem.
+- In **Terminal command**, every placeholder is **quoted as one literal word for
+  the shell that runs the line** (the one `[shell]` picks: single quotes for
+  `sh`, `bash`, `zsh` and the macOS login shell, PowerShell single quotes for
+  `pwsh` and `powershell`, double quotes for `cmd`). So `grep {query} notes.txt`
+  searches for the whole argument even if it is `x; rm -rf ~`, and nothing in it
+  runs. `cmd` cannot quote `"`, `%`, `!` or a line break: an argument with one
+  of them makes the node fail with an error rather than run. To put text into
+  the command line *as commands*, opt out with `|raw` (`git {query|raw}`), and
+  only for text you trust. `|sh` and `|ps` still pick a quoting style by hand.
+  **Run script** passes arguments without any shell and needs none of this.
 - Expanded text is capped at 4 MiB.
 
 The **argument** starts as the trigger's text. **Run script** replaces it with

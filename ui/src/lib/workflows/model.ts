@@ -402,7 +402,7 @@ export const KINDS: KindDef[] = [
         label: "Command line",
         kind: "textarea",
         mono: true,
-        hint: `${PLACEHOLDERS} Quote text you insert: {query|sh} (macOS, Linux) or {query|ps} (PowerShell).`,
+        hint: `${PLACEHOLDERS} Each one is inserted as one quoted word for your shell; {query|raw} inserts it as commands.`,
       },
     ],
     defaults: () => ({ command: "" }),

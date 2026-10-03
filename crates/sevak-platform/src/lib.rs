@@ -60,6 +60,7 @@ pub use provider::PlatformProvider;
 pub use session::{DisplayServer, HotkeyStrategy};
 pub use system::{SettingsPage, SystemCommand};
 pub use tasks::{Drive, ProcessInfo, RunningApp, Task, TaskKind};
+pub use terminal::ShellQuoting;
 
 /// The [`PlatformProvider`] for the operating system Sevak was built for.
 pub fn native_provider() -> Box<dyn PlatformProvider> {

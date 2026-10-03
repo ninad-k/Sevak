@@ -74,6 +74,12 @@ pub trait PlatformProvider: Send + Sync {
         crate::terminal::run_in_terminal(command, config)
     }
 
+    /// How a value must be quoted to be one literal word for the shell
+    /// [`PlatformProvider::run_in_terminal`] would start with `config`.
+    fn shell_quoting(&self, config: &ShellConfig) -> crate::terminal::ShellQuoting {
+        crate::terminal::shell_quoting(config)
+    }
+
     /// Opens a terminal window in `dir`, at a shell prompt (it stays open even
     /// if `[shell] keep_open` is off). `dir` must be an absolute path.
     fn open_terminal_in(&self, dir: &Path, config: &ShellConfig) -> Result<()> {

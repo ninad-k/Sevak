@@ -7,8 +7,8 @@ use sevak_core::{AppEntry, ClipContent, IconData, IconSource, LaunchTarget, Shel
 use sevak_platform::{
     ClipboardMedia, ClipboardRead, Contact, ContactsAccess, DeepLink, Drive, ForegroundApp,
     MediaCommand, MediaRequest, NowPlaying, PasteOutcome, PasteSupport, PlatformError,
-    PlatformProvider, ProcessInfo, Result, RunningApp, SettingsPage, Spelling, SystemCommand, Task,
-    TaskKind,
+    PlatformProvider, ProcessInfo, Result, RunningApp, SettingsPage, ShellQuoting, Spelling,
+    SystemCommand, Task, TaskKind,
 };
 
 #[derive(Default)]
@@ -28,6 +28,8 @@ pub struct MockPlatform {
     pub ran_commands: Mutex<Vec<SystemCommand>>,
     pub opened_settings: Mutex<Vec<SettingsPage>>,
     pub terminal_runs: Mutex<Vec<(String, ShellConfig)>>,
+    /// What `shell_quoting` reports; `None` is POSIX.
+    pub shell_quoting: Mutex<Option<ShellQuoting>>,
     /// Folders terminals were opened in.
     pub terminal_dirs: Mutex<Vec<PathBuf>>,
     /// `(text, restore_clipboard)` of every paste.
@@ -149,6 +151,13 @@ impl PlatformProvider for MockPlatform {
             .unwrap()
             .push((command.to_owned(), config.clone()));
         Ok(())
+    }
+
+    fn shell_quoting(&self, _config: &ShellConfig) -> ShellQuoting {
+        self.shell_quoting
+            .lock()
+            .unwrap()
+            .unwrap_or(ShellQuoting::Posix)
     }
 
     fn open_terminal_in(&self, dir: &Path, _config: &ShellConfig) -> Result<()> {
