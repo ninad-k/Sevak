@@ -62,10 +62,10 @@ Rules:
 - It is read again whenever the config is reloaded or saved.
 - It cannot load anything from the network: Sevak's content security policy
   blocks remote stylesheets, fonts and images (this keeps the
-  [privacy promise](../README.md#privacy)). Use fonts installed on your system
+  [privacy promise](../README.md#privacy-and-updates)). Use fonts installed on your system
   and `data:` URLs.
 - If you keep the config folder in a synced folder
-  ([Config location](../README.md#config-location)), your theme travels with it.
+  ([Config location](configuration.md#keep-the-config-in-a-synced-folder)), your theme travels with it.
 
 A theme mostly sets the variables below on `:root`:
 

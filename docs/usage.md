@@ -1,0 +1,327 @@
+# Using Sevak
+
+[← Help center](README.md) · [Quick start](quickstart.md) · [Configuration](configuration.md)
+
+## Open, search, act
+
+![Open with Alt+Space, type a query, then press Enter](media/sevak-workflow.svg)
+
+Sevak stays in the background after you hide the launcher. Press your shortcut
+to bring it back. Opening it again clears the previous query.
+
+**Enter follows the selected result's action:** apps launch, files open,
+web results open in your browser, and calculations or UUIDs copy text.
+The action hint on the selected row tells you what will happen.
+
+## Applications
+
+Type part of an installed application's name. Fuzzy matching lets a short
+query find a longer name. Review the selected result before pressing Enter;
+use the arrow keys when several applications match.
+
+![Illustrative app search in Sevak](media/launcher-apps.png)
+
+Sources differ by platform: Windows Start Menu shortcuts and packaged apps,
+macOS application bundles, and Linux desktop entries. An executable stored
+arbitrarily may not have a discoverable application entry.
+
+Usage history helps order relevant matches. It does not guarantee a particular
+application is always first. Choose **Reload index** after installing an app
+if it does not appear.
+
+## Calculator
+
+Enter an expression directly; no keyword is required. The answer appears as a
+result, and **Enter copies the number**.
+
+![The expression 12*7 produces a copyable result of 84](media/launcher-calculator.png)
+
+| Expression | Result | Operation |
+|---|---|---|
+| `12*7` | `84` | Multiplication |
+| `(125+75)/4` | `50` | Grouped arithmetic |
+| `2^10` | `1024` | Powers |
+| `sqrt(16)` | `4` | Functions |
+| `5!` | `120` | Factorial |
+| `17%5` | `2` | Remainder |
+
+The `%` operator is **remainder**, not a percentage shortcut. For 15% of 200,
+type `200*15/100`. Results use finite-precision arithmetic and are formatted
+to a limited number of significant digits.
+
+### Unit conversion
+
+Type `<amount> <unit> (in|to|as|=) <unit>`. The amount can be any expression
+(`(2+3) km in m`); Enter copies the result with its unit. Everything works
+offline. `in` also works when you mean inches (`12 in in cm`).
+
+| Category | Examples |
+|---|---|
+| Length | `10 km in mi`, `5'11" to cm`, `3 ft 4 in to cm` (also m, cm, mm, yd, nmi, ly, au) |
+| Mass | `1 kg in lb`, `8 oz to g`, `1 ton in kg` |
+| Temperature | `100 f to c`, `72°F in C`, `0 c to k` |
+| Volume | `3.5 cups to ml`, `1 gal in L`, `1 tbsp in tsp`, `1 imp gal in L`, `2 m3 in L` |
+| Area | `1 acre in m2`, `500 sq ft to m²`, `1 ha in acres` |
+| Speed | `60 mph in km/h`, `10 m/s to knots`, `miles per hour` |
+| Data | `5 GB in MiB`, `100 Mbit to MB`, `1 TiB in GB` |
+| Time | `2 h 30 min in min`, `90 min to h`, `1 yr in days` |
+| Pressure | `1 atm in psi`, `1 bar in kPa`, `760 torr in atm` |
+| Energy | `1 kcal in kJ`, `1 kWh in MJ` |
+| Angle | `180 deg in rad`, `1 turn in deg` |
+
+Where case matters or a word is ambiguous:
+
+- Names, plurals and abbreviations are case-insensitive (`km`, `Km`,
+  `kilometers`), except data units: `MB` is a megabyte and `Mb` a megabit,
+  `B` a byte and `b` a bit. All-lowercase `kb`, `mb`, `gb` mean bytes.
+  `KB`/`MB`/`GB` are powers of 1000; `KiB`/`MiB`/`GiB` powers of 1024.
+- `oz` is a mass ounce, `fl oz` a fluid ounce. `pt`, `qt`, `gal` and `cup` are
+  US customary; use `imp pt` / `imp gal` for imperial. `ton` is the US short
+  ton, `tonne` or `t` the metric one.
+- `m` is meters and `min` minutes. A month is a twelfth of a Julian year.
+- `cal` is the small calorie, `Cal` the food Calorie (1 kcal).
+- `°` and `deg` alone are angles; before a letter they are temperatures.
+- Results keep up to 10 significant digits (`10 km in mi` is `6.213711922 mi`).
+
+### Currency conversion
+
+Off by default. Turn it on under **Settings → Plugins** or set
+`[calculator] currency = true`, then reload. Sevak downloads the European
+Central Bank's daily euro reference rates (30 currencies, no cryptocurrencies)
+in the background at most once a day, never while you type, and keeps them in
+`currency-rates.json`. Until the first download finishes the row says
+"Fetching exchange rates…". Use ISO codes (`usd`, `eur`, `gbp`), signs (`€`,
+`$`, `£`, `¥`; `$` is the US dollar, `¥` the yen) or words (`euros`):
+`100 usd in eur`, `50 € to $`, `$100 in eur`. The subtitle shows the rate and
+the ECB's publication date.
+
+## Files and folders
+
+Type `f ` followed by at least two characters of a file or folder name.
+
+![Sample project file and folder results](media/launcher-files.png)
+
+Sevak searches indexed **names** inside your selected directories, not text
+inside documents. Enter opens a file with its default application or a folder
+in the file manager.
+
+By default:
+
+- Roots are Desktop, Documents and Downloads; depth is 4 levels.
+- Dot-files and dot-folders are excluded.
+- File results may also appear in ordinary searches.
+- Generated/cache directories such as `node_modules`, `.git`, `target`,
+  `__pycache__`, `.cache`, `venv`, `.venv` and `AppData` are skipped.
+
+The file index is capped at 100,000 entries. Keep roots focused. Use
+**Settings → Files** to change roots and depth, then Save. Choose **Reload
+index** after files move or when a recent change is not reflected.
+
+### Browsing a path
+
+Type a path to list a folder directly: `~/Documents/`, `/etc/`, `C:\Users\`
+or `\\server\share\`. Entries are filtered by what you type after the last
+slash, folders first. **Tab** completes the selected entry (folders get a
+trailing slash so you can keep drilling down), **Shift+Tab** goes up one
+folder, and Enter opens the entry. In ordinary searches this needs
+`files.global = true`; after `f ` it always works. Slow or unreachable drives
+never freeze typing.
+
+## Bookmarks
+
+Type `b ` and part of a bookmark's title or address. Sevak reads the bookmarks
+of Chrome, Edge, Brave, Vivaldi, Chromium, Opera, Firefox, LibreWolf and Zen,
+across every profile, read-only. The same address saved in several browsers
+appears once, with the browsers listed in the subtitle. Enter opens it in your
+default browser. Bookmarks also appear in ordinary searches unless
+`bookmarks.global = false`; pick browsers with `bookmarks.browsers`.
+
+## Result actions
+
+Most results can be used in more than one way. The row under the list shows
+what the modifiers do for the selected result:
+
+| Result | `Ctrl+Enter` | `Shift+Enter` | `Alt+Enter` |
+|---|---|---|---|
+| Application | Show in folder | Copy path | Run as administrator (Windows, not Store apps) |
+| File or folder | Show in folder | Copy path | |
+| Web search | | Copy URL | |
+
+Press `→` (with the caret at the end of the text) or `Ctrl+K` to open the
+**action panel**, which lists every action; `↑`/`↓` and Enter pick one, `Esc`
+or `←` closes it. `Ctrl+C` copies the selected result's path, URL or value, and
+`Ctrl+L` shows it as **Large Type** across the screen; any key dismisses it.
+
+## System commands
+
+Type a command's name, as you would an app (two or more letters). Only the
+commands that work on your machine are listed.
+
+| Command (aliases) | Windows | macOS | Linux |
+|---|---|---|---|
+| Lock screen (`lock`) | `LockWorkStation` | `pmset displaysleepnow` | `loginctl lock-session` |
+| Sleep (`suspend`) | `SetSuspendState` | `pmset sleepnow` | `systemctl suspend` |
+| Hibernate | `shutdown /h`, if hibernation is on | not offered | `systemctl hibernate`, if swap is set up |
+| Restart (`reboot`) | `shutdown /r /t 0` | System Events | `systemctl reboot` |
+| Shut down (`shutdown`, `power off`) | `shutdown /s /t 0` | System Events | `systemctl poweroff` |
+| Log out (`logout`, `sign out`) | `shutdown /l` | System Events | `gnome-session-quit`, KDE `qdbus`, or `loginctl terminate-session` |
+| Empty Recycle Bin / Trash | `SHEmptyRecycleBin` | Finder | `gio trash --empty` |
+| Settings pages (`bluetooth`, `display`, `wifi`, `sound`, `network`, `power`…) | `ms-settings:` | System Settings panes | `gnome-control-center <panel>`, if installed |
+
+Restart, shut down, log out and empty trash ask for confirmation first. On
+macOS the first use asks permission to control System Events or Finder, and
+Lock only locks when "Require password" is set to immediately (the default).
+Turn confirmation off or hide commands in [`[system]`](configuration.md#system-commands).
+
+## Terminal commands
+
+`> git status` (or `>git status`, no space needed) shows "Run `git status` in
+terminal"; Enter opens your terminal and runs it. Nothing runs until you press
+Enter. `>` alone lists your recent commands and an "Open terminal" row.
+
+| OS | Terminal (auto-detected) | Shell |
+|---|---|---|
+| Windows | Windows Terminal (`wt`), else a console window | `pwsh`, else `powershell`, else `cmd` |
+| macOS | Terminal.app (`terminal = "iterm"` for iTerm2) | your login shell |
+| Linux | `$TERMINAL`, `x-terminal-emulator`, `gnome-terminal`, `konsole`, `kitty`, `alacritty`, `wezterm`, `foot`, `xterm` | `$SHELL`, else `sh` |
+
+Commands run in a non-interactive shell, so aliases from `.bashrc` and similar
+are not available. Recent commands are kept in `usage.json`.
+[Choose a terminal or shell](configuration.md#terminal-commands).
+
+## Paste, clipboard history and snippets
+
+**Pasting.** Results from `cb` and `s` paste into the app that had focus when
+you opened Sevak: Sevak hides, brings that window back and presses Ctrl+V
+(Cmd+V on macOS).
+
+- **Windows**: works everywhere except windows running as administrator.
+- **macOS**: needs *System Settings → Privacy & Security → Accessibility →
+  Sevak*; without it Sevak copies instead and the row says so. Layouts that
+  move the `V` key (such as Dvorak) do not paste.
+- **Linux X11**: works. **Wayland**: Sevak can only copy.
+
+**Clipboard history** (`cb <text>`) is off by default; turn it on with
+`[clipboard] enabled = true`. It keeps recent copied *text* (newest first) and
+never records content that password managers mark as secret (Windows and
+macOS), copies made in apps listed in `ignore_apps`, very long text, images,
+files, or Sevak's own pastes. On Linux there is no secret marker, so use
+`ignore_apps`. Type `cb clear` to show a "Clear clipboard history" row.
+
+**Snippets** (`s <name>`) paste text from your
+[`[[snippet]]` entries](configuration.md#snippets). Placeholders are filled in
+when you press Enter:
+
+| Placeholder | Result |
+|---|---|
+| `{date}`, `{time}`, `{datetime}` | `2026-10-03`, `14:05`, `2026-10-03 14:05` |
+| `{date:FORMAT}` | Custom [strftime](https://docs.rs/chrono/latest/chrono/format/strftime/index.html) format, e.g. `{date:%d %B %Y}` (also `{time:..}`, `{datetime:..}`) |
+| `{clipboard}` | The clipboard's text |
+| `{uuid}` | A new random UUID |
+| `{{` and `}}` | A literal `{` and `}` |
+
+Expanding a snippet's keyword as you type in other apps is not supported.
+
+## Web search
+
+![Google keyword search from Sevak](media/launcher-web.png)
+
+| Keyword | Provider | Example |
+|---|---|---|
+| `g` | Google | `g rust traits` |
+| `yt` | YouTube | `yt svelte tutorial` |
+| `gh` | GitHub | `gh tauri` |
+
+A keyword needs a following space. Bare `g` is an ordinary query; `g rust
+traits` selects Google. Enter opens the constructed URL in your browser,
+where the provider receives your terms.
+
+When an ordinary query produces no results, Sevak can offer a fallback web
+search. The default is `g`; change or disable it under **Settings → Search**,
+or list several (`fallback_web_search = ["g", "yt"]`).
+Typing just a keyword (`g`) offers a row that **Tab** completes to `g `.
+[Add a custom web keyword](configuration.md#add-a-web-search-keyword).
+
+## Search history
+
+On an empty search bar, `↑` and `↓` step through the last 50 searches you
+ran, newest first; typing leaves history. Turn it off with
+`search.query_history = false`, which also deletes the stored searches.
+
+## UUID example plugin
+
+When enabled, type `uuid ` for a UUID, `uuid 5` for several choices, or
+`uuid upper` for uppercase output. Enter copies the selected value.
+See the [worked UUID example](plugins.md#writing-a-built-in-plugin).
+
+## Script plugins
+
+Add your own keywords without building Sevak: put a folder with a
+`plugin.toml` and a script (Python, PowerShell, Node, anything) in the
+`plugins` folder next to `config.toml`, then choose **Reload index**. Sevak asks
+once whether to allow a new plugin, and again if its command changes. Scripts
+run with your permissions and are not sandboxed, so install only plugins you
+trust. A one-shot script that prints
+[Alfred Script Filter JSON](https://www.alfredapp.com/help/workflows/inputs/script-filter/json/)
+lets many existing Alfred scripts work. Three examples are in
+[`examples/plugins/`](../examples/plugins); the full guide is in
+[plugins.md](plugins.md#external-plugins).
+
+## Keyboard shortcuts
+
+| Key | Action |
+|---|---|
+| `Alt+Space` (macOS: `Option+Space`) | Show or hide; configurable |
+| `↑` / `↓` | Previous / next result |
+| `Ctrl+P` / `Ctrl+N` | Alternative previous / next keys |
+| `PageUp` / `PageDown` | Move by a page |
+| `Enter` | Execute the selected result |
+| `Ctrl+Enter` / `Shift+Enter` / `Alt+Enter` | Run an [alternative action](#result-actions) |
+| `→` (caret at the end) or `Ctrl+K` | Open the action panel |
+| `Tab` | Complete the input to the selected result |
+| `Shift+Tab` | Go up one folder while browsing a path |
+| `↑` / `↓` on an empty bar | Recall earlier searches |
+| `Ctrl+C` (no text selected) | Copy the selected result's path, URL or value |
+| `Ctrl+L` | Show the selected result as Large Type |
+| `Ctrl+1` … `Ctrl+9` | Execute the corresponding result |
+| `Esc` | Hide the launcher (or close the action panel) |
+
+On macOS, `Command` takes the place of `Ctrl`.
+The global launcher shortcut is configured separately; you can also add
+[custom hotkeys](configuration.md#custom-hotkeys).
+
+## Tray and menu-bar actions
+
+| Menu item | Purpose |
+|---|---|
+| Show | Open the launcher |
+| Settings | Open the settings window |
+| Reload index | Re-read config and rebuild app, file and bookmark indexes; load new script plugins |
+| Check for updates | Check GitHub Releases on demand |
+| Quit | Exit Sevak |
+
+With hide-on-blur enabled, clicking another window hides the launcher.
+Hiding does not quit it. Desktops without a tray can use the hotkey and CLI.
+
+## Command line
+
+These examples assume `sevak` is on your command path. Otherwise, use the
+installed executable's full path.
+
+```sh
+sevak                       # Open the launcher
+sevak --toggle              # Toggle the launcher
+sevak --query "> "          # Open the launcher with text already typed
+sevak --run system:lock     # Run a result by id without showing the launcher
+sevak --background          # Start without showing the launcher
+sevak --settings            # Open Settings
+sevak --quit                # Quit the running instance
+sevak --setup-hotkey        # Configure GNOME shortcuts on Linux (also [[hotkey]] entries)
+sevak --setup-hotkey Ctrl+Space
+sevak --config ~/Dropbox/sevak   # Use another config folder (combine with any option)
+sevak --help
+sevak --version
+```
+
+Only one instance runs at a time; subsequent invocations forward their action.
+`--config` only applies to the instance that starts Sevak.

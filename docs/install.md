@@ -1,5 +1,7 @@
 # Installing Sevak
 
+[← Help center](README.md) · [Quick start](quickstart.md) · [Troubleshooting](troubleshooting.md)
+
 Download packages from the [Releases page](https://github.com/ninad-k/Sevak/releases).
 Release builds are currently **unsigned**.
 

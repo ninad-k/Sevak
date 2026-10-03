@@ -1,0 +1,23 @@
+1
+00:00:00,000 --> 00:00:01,800
+Sevak: your desktop, at your service.
+“One who serves.”
+
+2
+00:00:01,800 --> 00:00:04,000
+Press Alt + Space to open Sevak.
+
+3
+00:00:04,000 --> 00:00:06,800
+Type an app name.
+Choose a result. Enter launches it.
+
+4
+00:00:06,800 --> 00:00:09,400
+Type 12*7 to calculate 84.
+Enter copies the answer.
+
+5
+00:00:09,400 --> 00:00:12,000
+Apps. Files. Math. Web.
+Back to your flow.

@@ -1,5 +1,7 @@
 # Sevak plugins
 
+[← Help center](README.md) · [Development](development.md) · [Configuration](configuration.md)
+
 Everything Sevak shows in its result list comes from a plugin: installed apps,
 the calculator, web search, files. This document explains how a query flows
 through them, how to write and register a built-in plugin, and how to add
@@ -212,7 +214,7 @@ process, so plugins must never panic.
   `PluginRegistry::builtin().instantiate(..)`.
 - `catalog(&config, platform)` returns a `PluginInfo { id, name, description,
   keyword, enabled }` for **every** instance, disabled ones included (it is
-  `Serialize`, snake_case). The planned settings UI uses it for its toggles.
+  `Serialize`, snake_case). The settings UI uses it for its toggles.
 
 To disable plugins, list ids in `config.toml` (`<config dir>/sevak/config.toml`),
 then choose "Reload index" in the tray (or restart):

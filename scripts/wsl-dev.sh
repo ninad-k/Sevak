@@ -46,10 +46,20 @@ export XDG_CURRENT_DESKTOP="${XDG_CURRENT_DESKTOP:-WSLg}"
 
 sync_tree() {
     mkdir -p "$DEST"
+    # .claude/ holds agent worktrees with their own target/ dirs: huge, and
+    # irrelevant to the build.
+    local status=0
     rsync -a --delete \
-        --exclude '/.git/' --exclude '/.idea/' --exclude '/target/' \
+        --exclude '/.git/' --exclude '/.idea/' --exclude '/.claude/' --exclude '/target/' \
         --exclude 'node_modules/' --exclude '/ui/dist/' --exclude '/src-tauri/gen/' \
-        "$SRC/" "$DEST/"
+        --exclude '*.log' \
+        "$SRC/" "$DEST/" || status=$?
+    # 24 = some source files vanished mid-copy (an editor or build running on
+    # the Windows side); the mirror is still usable.
+    if [ "$status" -ne 0 ] && [ "$status" -ne 24 ]; then
+        log "rsync failed (exit $status)"
+        exit "$status"
+    fi
     # Files written by Windows tools may carry CRLF; scripts need LF.
     find "$DEST/scripts" -name '*.sh' -exec sed -i 's/\r$//' {} +
     cd "$DEST"

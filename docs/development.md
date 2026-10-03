@@ -1,5 +1,7 @@
 # Developing Sevak
 
+[← Help center](README.md) · [Plugin guide](plugins.md)
+
 ## Layout
 
 ```
@@ -36,16 +38,45 @@ examples/plugins        example script plugins (Python, PowerShell, Node)
                                       |  execute -> actions
                                       v
                                sevak-platform::PlatformProvider
-                                      Windows / Linux implementations
+                                      Windows / macOS / Linux implementations
 ```
 
 `sevak-core` and `sevak-plugins` are platform independent; only
-`sevak-platform` has `cfg(windows)` / `cfg(target_os = "linux")` code. How a
+`sevak-platform` contains the OS-specific backends. How a
 query flows through plugins and how to add one is in [plugins.md](plugins.md).
 
 ## Running
 
-Prerequisites are in the [README](../README.md#build-from-source).
+Use **Rust 1.90+**, **Node.js 22+**, and the native dependencies for your platform:
+
+| Platform | Native prerequisites |
+|---|---|
+| Windows | Microsoft C++ Build Tools with the Desktop development with C++ workload; WebView2 runtime |
+| macOS | Xcode Command Line Tools (`xcode-select --install`) |
+| Ubuntu / Debian | WebKitGTK 4.1, AppIndicator and the development packages below |
+| Fedora | WebKitGTK 4.1, AppIndicator and the development packages below |
+
+The Linux commands mirror this repository's CI setup. On Ubuntu / Debian:
+
+```sh
+sudo apt-get update
+sudo apt-get install -y --no-install-recommends \
+  build-essential curl file patchelf \
+  libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+  libxdo-dev libssl-dev
+```
+
+On Fedora:
+
+```sh
+sudo dnf install -y \
+  git tar gzip xz curl file gcc gcc-c++ make patchelf pkgconf-pkg-config \
+  webkit2gtk4.1-devel libayatana-appindicator-gtk3-devel \
+  openssl-devel librsvg2-devel libxdo-devel
+```
+
+See [Tauri's prerequisites](https://v2.tauri.app/start/prerequisites/) for
+platform setup details. Then run from the repository root:
 
 ```sh
 npm ci
@@ -60,13 +91,15 @@ embed `ui/dist`; `tauri build` enables it for you.
 
 ## Tests and lint
 
-CI runs exactly these (on Windows and Ubuntu 22.04, plus a Fedora container):
+CI runs these checks on Windows, macOS and Ubuntu 22.04. A Fedora container
+also builds and tests the Rust workspace:
 
 ```sh
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 npm run check
+npm run build
 ```
 
 ### Linux code from a Windows machine
