@@ -48,7 +48,10 @@
   onclick={onrun}
 >
   <span class="tile">
-    {#if item.icon?.kind === "url" && !broken}
+    {#if item.glyph}
+      <!-- A Grid View tile's picture (an emoji) when the row is shown in a list. -->
+      <span class="emoji">{item.glyph}</span>
+    {:else if item.icon?.kind === "url" && !broken}
       <img
         src={item.icon.url}
         width="32"
@@ -115,6 +118,11 @@
     width: var(--icon-size, 32px);
     height: var(--icon-size, 32px);
     object-fit: contain;
+  }
+
+  .emoji {
+    font-size: calc(var(--icon-size, 32px) * 0.65);
+    line-height: 1;
   }
 
   /* The built-in glyphs are 20 px at the default icon size. */
