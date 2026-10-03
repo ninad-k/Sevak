@@ -24,7 +24,7 @@ export function mockSearch(query: string): ResultDto[] {
 export function mockSettings(): SettingsDto {
   return {
     config: {
-      general: { hotkey: "Alt+Space", hide_on_blur: true, launch_at_login: false },
+      general: { hotkey: "Alt+Space", hide_on_blur: true, launch_at_login: false, check_for_updates: true },
       window: { width: 720 },
       linux: { wayland_use_xwayland: true },
       search: { max_results: 8, fallback_web_search: "g" },

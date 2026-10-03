@@ -12,7 +12,12 @@ export interface WebSearchEngine {
 
 /** Mirrors `sevak_core::Config` (serde defaults make every field present). */
 export interface Config {
-  general: { hotkey: string; hide_on_blur: boolean; launch_at_login: boolean };
+  general: {
+    hotkey: string;
+    hide_on_blur: boolean;
+    launch_at_login: boolean;
+    check_for_updates: boolean;
+  };
   window: { width: number };
   linux: { wayland_use_xwayland: boolean };
   search: { max_results: number; fallback_web_search: string };

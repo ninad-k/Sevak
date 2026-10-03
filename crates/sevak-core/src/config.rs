@@ -31,6 +31,10 @@ hide_on_blur = true
 # Start Sevak in the background when you log in.
 launch_at_login = false
 
+# Check GitHub for a new version at startup and once a day. Updates are only
+# installed after you agree. This is the only request Sevak makes on its own.
+check_for_updates = true
+
 [window]
 # Width of the search window in logical pixels (400-1600).
 width = 720
@@ -126,6 +130,8 @@ pub struct GeneralConfig {
     pub hotkey: String,
     pub hide_on_blur: bool,
     pub launch_at_login: bool,
+    /// Look for a new release at startup and daily (asks before installing).
+    pub check_for_updates: bool,
 }
 
 impl Default for GeneralConfig {
@@ -134,6 +140,7 @@ impl Default for GeneralConfig {
             hotkey: "Alt+Space".to_owned(),
             hide_on_blur: true,
             launch_at_login: false,
+            check_for_updates: true,
         }
     }
 }
