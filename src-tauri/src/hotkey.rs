@@ -35,6 +35,12 @@ pub fn plugin(strategy: HotkeyStrategy) -> Option<tauri::plugin::TauriPlugin<Wry
 pub fn apply(app: &AppHandle) -> HotkeyStatus {
     let state = app.state::<AppState>();
     let accelerator = state.config().general.hotkey;
+    // The key that currently works, to fall back to if the new one cannot be used.
+    let previous = {
+        let current = state.hotkey.read().unwrap_or_else(|p| p.into_inner());
+        (current.mode == HotkeyMode::Global && current.error.is_none())
+            .then(|| current.accelerator.clone())
+    };
 
     let status = match state.display.hotkey_strategy() {
         HotkeyStrategy::External => {
@@ -49,7 +55,7 @@ pub fn apply(app: &AppHandle) -> HotkeyStatus {
             }
         }
         HotkeyStrategy::InApp => {
-            let error = register(app, &accelerator).err();
+            let error = register(app, &accelerator, previous.as_deref()).err();
             match &error {
                 None => tracing::info!("registered global hotkey {accelerator}"),
                 Some(err) => tracing::warn!("could not register hotkey {accelerator}: {err}"),
@@ -69,11 +75,27 @@ pub fn apply(app: &AppHandle) -> HotkeyStatus {
     status
 }
 
-fn register(app: &AppHandle, accelerator: &str) -> Result<(), String> {
-    let shortcuts = app.global_shortcut();
-    shortcuts.unregister_all().map_err(|err| err.to_string())?;
+/// Binds `accelerator` in place of whatever is registered. If it cannot be
+/// parsed or registered, `previous` (the key that worked until now) stays bound,
+/// so a typo in `config.toml` never leaves Sevak without a hotkey.
+fn register(app: &AppHandle, accelerator: &str, previous: Option<&str>) -> Result<(), String> {
+    let still_active = |err: String| match previous {
+        Some(previous) if previous != accelerator => format!("{err}; {previous} still works"),
+        _ => err,
+    };
+    // Parse before touching the current registration.
     let shortcut: Shortcut = accelerator
         .parse()
-        .map_err(|err| format!("invalid hotkey \"{accelerator}\": {err}"))?;
-    shortcuts.register(shortcut).map_err(|err| err.to_string())
+        .map_err(|err| still_active(format!("invalid hotkey \"{accelerator}\": {err}")))?;
+
+    let shortcuts = app.global_shortcut();
+    shortcuts.unregister_all().map_err(|err| err.to_string())?;
+    if let Err(err) = shortcuts.register(shortcut) {
+        let restored = previous
+            .and_then(|previous| previous.parse::<Shortcut>().ok())
+            .is_some_and(|previous| shortcuts.register(previous).is_ok());
+        let err = err.to_string();
+        return Err(if restored { still_active(err) } else { err });
+    }
+    Ok(())
 }
