@@ -52,6 +52,14 @@ pub trait Plugin: Send + Sync {
         self.keyword().is_none()
     }
 
+    /// A row offered when the user has typed exactly this plugin's keyword
+    /// without a trailing space (`g`), so Tab can complete it to `g `. Shown
+    /// below real matches; its `autocomplete` is the full replacement input.
+    /// `None` by default.
+    fn keyword_row(&self) -> Option<ResultItem> {
+        None
+    }
+
     /// Returns results for `input`. Called on a worker thread for every
     /// keystroke, so it must be fast (well under a millisecond for typical
     /// inputs) and must never block on I/O; keep indexes in memory.

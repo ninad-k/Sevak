@@ -23,6 +23,12 @@ Built with Rust, [Tauri](https://tauri.app) v2 and Svelte 5. Licensed under
 - **File search**: `f <name>` searches files and folders under the folders you
   choose (Desktop, Documents and Downloads by default). Optionally also shown
   for plain queries.
+- **Path browsing**: type a path (`~/Documents/`, `/etc/`, `C:\Users\`,
+  `\\server\share\`) to list that folder, folders first, filtered by what you
+  type after the last slash. `Tab` completes the selected entry (folders get a
+  trailing slash so you can keep drilling down).
+- **Search history**: `Up` and `Down` on an empty search bar recall the last
+  searches you ran.
 - **Frequency and recency ranking**: results you pick often and recently rise
   to the top, per query.
 - **Plugin system**: every result source is a plugin; there is a worked example
@@ -80,6 +86,9 @@ Details, Wayland hotkey setup and troubleshooting are in
 | `Up` / `Down` (or `Ctrl+P` / `Ctrl+N`) | Move the selection |
 | `PageUp` / `PageDown` | Move by a page |
 | `Enter` | Run the selected result |
+| `Tab` | Complete the input to the selected result (a keyword such as `g` becomes `g `, a folder gets a trailing slash) |
+| `Shift+Tab` | Go up one folder while browsing a path |
+| `Up` / `Down` on an empty search bar | Recall earlier searches (newest first); typing leaves history, `Ctrl+P` / `Ctrl+N` still move the selection |
 | `Ctrl+1` ... `Ctrl+9` | Run the Nth visible result |
 | `Esc` | Hide Sevak |
 
@@ -94,8 +103,11 @@ Keywords (type the keyword, then a space):
 | `uuid`, `uuid 5`, `uuid upper` | Generate random UUIDs and copy one (example plugin) |
 
 Anything else searches apps (and files, if `files.global` is on); an
-expression like `12*7` shows the calculator. When nothing matches, the fallback
-web search (`g` by default) is offered.
+expression like `12*7` shows the calculator. A path starting with `~/`, `/`, a
+drive (`C:\`) or `\\server\share\` browses that folder (for plain queries this
+needs `files.global`; after `f ` it always works). Typing just a keyword (`g`)
+offers a row you can complete with `Tab`. When nothing matches, the fallback
+web search (`g` by default; several can be listed) is offered.
 
 The tray menu has Show, Settings (opens the settings window), Reload index
 (re-reads the config and rescans apps and files) and Quit.
@@ -109,7 +121,8 @@ Sevak creates a commented config file on first run:
 | Windows | `%APPDATA%\sevak\config.toml` |
 | Linux | `~/.config/sevak/config.toml` |
 
-Usage statistics are in `usage.json` and logs in `logs/`, both under
+Usage statistics (and your last 50 searches, see `query_history`) are in
+`usage.json` and logs in `logs/`, both under
 `%APPDATA%\sevak\` (Windows) or `~/.local/share/sevak/` (Linux).
 
 Key options (all optional; defaults shown):
@@ -126,7 +139,8 @@ width = 720            # 400-1600
 
 [search]
 max_results = 8        # 1-20
-fallback_web_search = "g"
+fallback_web_search = "g"   # or a list, shown in order: ["g", "yt", "gh"]
+query_history = true       # Up/Down on an empty search bar recalls past searches
 
 [appearance]
 theme = "system"       # "system", "light" or "dark"
@@ -171,8 +185,9 @@ to the running instance.
 
 ## Privacy
 
-Sevak has no telemetry or analytics. Config, usage statistics and logs stay on
-your machine. Sevak makes one kind of request on its own: at startup and once a
+Sevak has no telemetry or analytics. Config, usage statistics, your recent
+searches (turn them off with `search.query_history = false`, which also deletes
+them) and logs stay on your machine. Sevak makes one kind of request on its own: at startup and once a
 day it downloads `latest.json` from this repository's GitHub Releases to see if
 there is a new version (GitHub sees your IP address, nothing else is sent).
 Turn it off with `general.check_for_updates = false` or in Settings; "Check

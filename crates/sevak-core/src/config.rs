@@ -48,9 +48,12 @@ wayland_use_xwayland = true
 [search]
 # Number of results shown (1-20).
 max_results = 8
-# Keyword of the web search engine offered when nothing else matches
-# ("" to disable).
+# Keyword of the web search engine offered when nothing else matches ("" to
+# disable). A list offers several, in order: ["g", "yt", "gh"].
 fallback_web_search = "g"
+# Up/Down on an empty search box recalls the last 50 searches you ran. They are
+# kept in usage.json in the data folder; false stops recording and forgets them.
+query_history = true
 
 [appearance]
 # "system", "light" or "dark".
@@ -176,17 +179,95 @@ impl Default for LinuxConfig {
 #[serde(default)]
 pub struct SearchConfig {
     pub max_results: usize,
-    /// Keyword of the `[[web_search]]` engine offered when nothing matched;
+    /// Keyword(s) of the `[[web_search]]` engines offered when nothing matched;
     /// empty disables the fallback.
-    pub fallback_web_search: String,
+    pub fallback_web_search: FallbackSearch,
+    /// Remember executed queries so Up/Down can recall them.
+    pub query_history: bool,
 }
 
 impl Default for SearchConfig {
     fn default() -> Self {
         Self {
             max_results: 8,
-            fallback_web_search: "g".to_owned(),
+            fallback_web_search: FallbackSearch::single("g"),
+            query_history: true,
         }
+    }
+}
+
+/// `fallback_web_search`: one keyword written as a string (`"g"`, the original
+/// form) or several written as a list (`["g", "yt"]`). Both forms read and
+/// write back as they were written, so saving never rewrites the user's choice.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FallbackSearch {
+    keywords: Vec<String>,
+    /// Written as a list rather than a string.
+    list: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(untagged)]
+enum FallbackRepr {
+    One(String),
+    Many(Vec<String>),
+}
+
+impl FallbackSearch {
+    /// One keyword in string form; `""` disables the fallback.
+    pub fn single(keyword: impl Into<String>) -> Self {
+        Self::from_repr(FallbackRepr::One(keyword.into()))
+    }
+
+    /// Several keywords in list form, tried in this order.
+    pub fn list(keywords: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        Self::from_repr(FallbackRepr::Many(
+            keywords.into_iter().map(Into::into).collect(),
+        ))
+    }
+
+    /// The keywords in order: trimmed, without blanks or case-insensitive repeats.
+    pub fn keywords(&self) -> &[String] {
+        &self.keywords
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.keywords.is_empty()
+    }
+
+    fn from_repr(repr: FallbackRepr) -> Self {
+        let (raw, list) = match repr {
+            FallbackRepr::One(keyword) => (vec![keyword], false),
+            FallbackRepr::Many(keywords) => (keywords, true),
+        };
+        let mut keywords: Vec<String> = Vec::new();
+        for keyword in raw {
+            let keyword = keyword.trim();
+            let repeated = keywords.iter().any(|k| k.eq_ignore_ascii_case(keyword));
+            if !keyword.is_empty() && !repeated {
+                keywords.push(keyword.to_owned());
+            }
+        }
+        Self { keywords, list }
+    }
+}
+
+impl Serialize for FallbackSearch {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        if self.list {
+            self.keywords.serialize(serializer)
+        } else {
+            self.keywords
+                .first()
+                .map_or("", String::as_str)
+                .serialize(serializer)
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for FallbackSearch {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        FallbackRepr::deserialize(deserializer).map(Self::from_repr)
     }
 }
 
@@ -400,7 +481,6 @@ impl Config {
     pub fn normalized(mut self) -> Self {
         self.window.width = self.window.width.clamp(MIN_WINDOW_WIDTH, MAX_WINDOW_WIDTH);
         self.search.max_results = self.search.max_results.clamp(1, MAX_RESULTS_LIMIT);
-        self.search.fallback_web_search = self.search.fallback_web_search.trim().to_owned();
         // Engines without a keyword or a `{query}` placeholder cannot work.
         self.web_search
             .retain(|engine| !engine.keyword.trim().is_empty() && engine.url.contains("{query}"));
@@ -727,6 +807,88 @@ url = "https://example.com"
         let hotkey = text.find("hotkey = ").unwrap();
         let hide = text.find("hide_on_blur").unwrap();
         assert!(general < hotkey && hotkey < hide);
+    }
+
+    fn fallbacks(text: &str) -> Vec<String> {
+        Config::from_toml_str(text)
+            .unwrap()
+            .search
+            .fallback_web_search
+            .keywords()
+            .to_vec()
+    }
+
+    #[test]
+    fn fallback_accepts_a_string_or_a_list() {
+        assert_eq!(fallbacks(""), ["g"]);
+        assert_eq!(
+            fallbacks("[search]\nfallback_web_search = \" yt \"\n"),
+            ["yt"]
+        );
+        assert!(fallbacks("[search]\nfallback_web_search = \"\"\n").is_empty());
+        assert_eq!(
+            fallbacks("[search]\nfallback_web_search = [\"g\", \"yt\", \"G\", \" \", \"gh\"]\n"),
+            ["g", "yt", "gh"]
+        );
+        assert!(fallbacks("[search]\nfallback_web_search = []\n").is_empty());
+        assert!(Config::from_toml_str("[search]\nfallback_web_search = 3\n").is_err());
+    }
+
+    #[test]
+    fn fallback_round_trips_through_json_in_either_form() {
+        let one = FallbackSearch::single("g");
+        assert_eq!(serde_json::to_string(&one).unwrap(), "\"g\"");
+        let many = FallbackSearch::list(["g", "yt"]);
+        assert_eq!(serde_json::to_string(&many).unwrap(), "[\"g\",\"yt\"]");
+        for value in [
+            one,
+            many,
+            FallbackSearch::single(""),
+            FallbackSearch::list(["g"]),
+        ] {
+            let json = serde_json::to_string(&value).unwrap();
+            assert_eq!(
+                serde_json::from_str::<FallbackSearch>(&json).unwrap(),
+                value
+            );
+        }
+    }
+
+    #[test]
+    fn saving_keeps_the_fallback_form_and_its_comments() {
+        let mut config = Config::default();
+        // Unchanged: a list of one stays a list, the file stays byte-identical.
+        let existing = DEFAULT_CONFIG_TOML.replace(
+            "fallback_web_search = \"g\"",
+            "fallback_web_search = [\"g\"]",
+        );
+        config.search.fallback_web_search = FallbackSearch::list(["g"]);
+        assert_eq!(saved(Some(&existing), &config), existing);
+
+        config.search.fallback_web_search = FallbackSearch::list(["g", "yt", "gh"]);
+        config.search.query_history = false;
+        let text = saved(Some(&existing), &config);
+        assert!(
+            text.contains("fallback_web_search = [\"g\", \"yt\", \"gh\"]"),
+            "{text}"
+        );
+        assert!(text.contains("# disable). A list offers several"), "{text}");
+        assert!(text.contains("query_history = false"), "{text}");
+        assert_eq!(Config::from_toml_str(&text).unwrap(), config);
+
+        // Back to the string form.
+        config.search.fallback_web_search = FallbackSearch::single("yt");
+        let text = saved(Some(&text), &config);
+        assert!(text.contains("fallback_web_search = \"yt\""), "{text}");
+    }
+
+    #[test]
+    fn query_history_defaults_on_and_is_added_to_older_files() {
+        assert!(Config::default().search.query_history);
+        let old = "[search]\nmax_results = 8\n";
+        assert!(Config::from_toml_str(old).unwrap().search.query_history);
+        let text = saved(Some(old), &Config::default());
+        assert!(text.contains("query_history = true"), "{text}");
     }
 
     #[test]

@@ -45,6 +45,8 @@ pub struct ResultDto {
     pub subtitle: String,
     pub icon: Option<IconDto>,
     pub plugin_id: String,
+    /// What Tab turns the input into, when the plugin offers a completion.
+    pub autocomplete: Option<String>,
     /// `launch`, `open_path`, `open_url`, `copy_text` or `custom`.
     pub action: &'static str,
 }
@@ -69,6 +71,7 @@ fn to_dtos(icons: Vec<Option<IconDto>>, items: &[ResultItem]) -> Vec<ResultDto> 
             subtitle: item.subtitle.clone(),
             icon,
             plugin_id: item.plugin_id.clone(),
+            autocomplete: item.autocomplete.clone(),
             action: action_kind(&item.action),
         })
         .collect()
@@ -105,6 +108,13 @@ pub async fn search(app: AppHandle, query: String) -> SearchResponse {
         ticket,
         results: dtos,
     }
+}
+
+/// Executed queries, most recent first, for Up/Down recall on an empty input
+/// (empty when `[search] query_history` is off).
+#[tauri::command]
+pub fn query_history(state: State<'_, AppState>) -> Vec<String> {
+    state.search.engine().history()
 }
 
 /// Executes result `id` of search `ticket`, the result set the UI is showing.

@@ -53,6 +53,7 @@ pub fn run(
             commands::set_content_height,
             commands::search,
             commands::execute,
+            commands::query_history,
             settings::get_settings,
             settings::save_settings,
             settings::validate_hotkey,

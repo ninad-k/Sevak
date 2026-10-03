@@ -145,11 +145,12 @@ pub fn validate(config: &Config, strategy: HotkeyStrategy) -> Result<(), String>
         }
     }
 
-    let fallback = config.search.fallback_web_search.trim();
-    if !fallback.is_empty() && !keywords.contains(&fallback.to_lowercase()) {
-        return Err(format!(
-            "The fallback search engine \"{fallback}\" is not defined."
-        ));
+    for fallback in config.search.fallback_web_search.keywords() {
+        if !keywords.contains(&fallback.to_lowercase()) {
+            return Err(format!(
+                "The fallback search engine \"{fallback}\" is not defined."
+            ));
+        }
     }
 
     let files_keyword = config.files.keyword.trim();
@@ -294,7 +295,7 @@ pub fn window_theme(theme: Theme) -> Option<tauri::Theme> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sevak_core::config::WebSearchEngine;
+    use sevak_core::config::{FallbackSearch, WebSearchEngine};
 
     fn engine(keyword: &str, url: &str) -> WebSearchEngine {
         WebSearchEngine {
@@ -362,12 +363,16 @@ mod tests {
     #[test]
     fn fallback_must_exist_or_be_empty() {
         let mut config = Config::default();
-        config.search.fallback_web_search = "nope".to_owned();
+        config.search.fallback_web_search = FallbackSearch::single("nope");
         assert!(check(&config).is_err());
-        config.search.fallback_web_search = String::new();
+        config.search.fallback_web_search = FallbackSearch::single("");
         assert_eq!(check(&config), Ok(()));
-        config.search.fallback_web_search = "yt".to_owned();
+        config.search.fallback_web_search = FallbackSearch::single("yt");
         assert_eq!(check(&config), Ok(()));
+        config.search.fallback_web_search = FallbackSearch::list(["g", "yt"]);
+        assert_eq!(check(&config), Ok(()));
+        config.search.fallback_web_search = FallbackSearch::list(["g", "nope"]);
+        assert!(check(&config).unwrap_err().contains("nope"));
     }
 
     #[test]

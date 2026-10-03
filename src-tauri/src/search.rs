@@ -35,14 +35,16 @@ struct IndexEvent {
 }
 
 fn engine_options(config: &Config) -> EngineOptions {
-    let keyword = &config.search.fallback_web_search;
     EngineOptions {
         max_results: config.search.max_results,
-        fallback_plugins: if keyword.is_empty() {
-            Vec::new()
-        } else {
-            vec![format!("web:{keyword}")]
-        },
+        fallback_plugins: config
+            .search
+            .fallback_web_search
+            .keywords()
+            .iter()
+            .map(|keyword| format!("web:{keyword}"))
+            .collect(),
+        query_history: config.search.query_history,
     }
 }
 

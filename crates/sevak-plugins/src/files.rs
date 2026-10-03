@@ -1,15 +1,18 @@
-//! File and folder search over a pre-built in-memory index.
+//! File and folder search over a pre-built in-memory index, plus browsing of a
+//! typed path (`~/Documents/rep`), which lists that one directory live.
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
 use sevak_core::config::FilesConfig;
+use sevak_core::model::score;
 use sevak_core::{Action, FuzzyQuery, IconSource, Plugin, PluginResult, ResultItem};
 use sevak_platform::PlatformProvider;
 use walkdir::{DirEntry, WalkDir};
 
 use crate::actions::execute_action;
+use crate::path_browse::{self, DirReader, PathQuery};
 
 /// Hard limit on indexed entries, to bound memory and per-query work.
 pub const MAX_INDEX_ENTRIES: usize = 100_000;
@@ -32,6 +35,11 @@ const EXACT_NAME_BONUS: f64 = 120.0;
 const EXACT_STEM_BONUS: f64 = 100.0;
 const PREFIX_BONUS: f64 = 40.0;
 
+/// Path-browsing rows rank above everything else (they are what was typed
+/// for), folders above files, and by match quality within each group.
+const BROWSE_FOLDER_BONUS: f64 = 2000.0;
+const BROWSE_MAX_MATCH: f64 = 1900.0;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileEntry {
     pub name: String,
@@ -46,6 +54,7 @@ pub struct FilesPlugin {
     home: Option<PathBuf>,
     platform: Arc<dyn PlatformProvider>,
     index: RwLock<Arc<Vec<FileEntry>>>,
+    dirs: DirReader,
 }
 
 impl FilesPlugin {
@@ -67,6 +76,7 @@ impl FilesPlugin {
             home,
             platform,
             index: RwLock::new(Arc::new(Vec::new())),
+            dirs: DirReader::default(),
         }
     }
 
@@ -84,8 +94,82 @@ impl FilesPlugin {
             .unwrap_or_else(|poisoned| poisoned.into_inner()) = Arc::new(entries);
     }
 
+    /// Lists the directory named by a typed path, filtered by its last segment.
+    /// Folders come first; hidden entries only with `include_hidden` or when the
+    /// typed segment itself starts with a dot.
+    fn browse(&self, typed: &PathQuery) -> Vec<ResultItem> {
+        let Some(entries) = self.dirs.list(&typed.dir) else {
+            return Vec::new();
+        };
+        let show_hidden = self.config.include_hidden || typed.filter.starts_with('.');
+        let mut query = FuzzyQuery::for_paths(&typed.filter);
+
+        let mut scored: Vec<(f64, String, usize)> = Vec::new();
+        for (i, entry) in entries.iter().enumerate() {
+            if !show_hidden && entry.name.starts_with('.') {
+                continue;
+            }
+            let matched = if query.is_empty() {
+                0.0
+            } else {
+                match query.score(&entry.name) {
+                    Some(s) => f64::from(s) + name_bonus(&entry.name, &typed.filter),
+                    None => continue,
+                }
+            };
+            let folder = if entry.is_dir {
+                BROWSE_FOLDER_BONUS
+            } else {
+                0.0
+            };
+            let total = score::KEYWORD + folder + matched.min(BROWSE_MAX_MATCH);
+            scored.push((total, entry.name.to_lowercase(), i));
+        }
+        // Directories can be large: order fully (best first, then by name, so an
+        // unfiltered listing is alphabetical) and keep the head.
+        scored.sort_by(|a, b| b.0.total_cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+        scored.truncate(MAX_CANDIDATES);
+
+        scored
+            .into_iter()
+            .map(|(score, _, i)| {
+                let entry = &entries[i];
+                let path = typed.dir.join(&entry.name);
+                // Folders end in the separator the user typed, so Tab keeps drilling.
+                let completion = if entry.is_dir {
+                    format!("{}{}{}", typed.typed_dir, entry.name, typed.sep)
+                } else {
+                    format!("{}{}", typed.typed_dir, entry.name)
+                };
+                self.row(&entry.name, path, entry.is_dir, score)
+                    .with_autocomplete(completion)
+            })
+            .collect()
+    }
+
+    fn row(&self, name: &str, path: PathBuf, is_dir: bool, score: f64) -> ResultItem {
+        let path_string = path.to_string_lossy().into_owned();
+        let icon = if cfg!(windows) {
+            IconSource::Shell {
+                parsing_name: path_string.clone(),
+            }
+        } else if is_dir {
+            IconSource::builtin("folder")
+        } else {
+            IconSource::builtin("file")
+        };
+        let subtitle = subtitle(&path, self.home.as_deref());
+        ResultItem::new("files", &path_string, name, Action::OpenPath { path })
+            .with_subtitle(subtitle)
+            .with_icon(icon)
+            .with_score(score)
+    }
+
     fn search(&self, input: &str) -> Vec<ResultItem> {
         let input = input.trim();
+        if let Some(typed) = path_browse::parse(input, self.home.as_deref(), cfg!(windows)) {
+            return self.browse(&typed);
+        }
         if input.chars().count() < MIN_QUERY_CHARS {
             return Vec::new();
         }
@@ -113,27 +197,7 @@ impl FilesPlugin {
             .into_iter()
             .map(|(score, i)| {
                 let entry = &index[i];
-                let path_string = entry.path.to_string_lossy().into_owned();
-                let icon = if cfg!(windows) {
-                    IconSource::Shell {
-                        parsing_name: path_string.clone(),
-                    }
-                } else if entry.is_dir {
-                    IconSource::builtin("folder")
-                } else {
-                    IconSource::builtin("file")
-                };
-                ResultItem::new(
-                    "files",
-                    &path_string,
-                    &entry.name,
-                    Action::OpenPath {
-                        path: entry.path.clone(),
-                    },
-                )
-                .with_subtitle(subtitle(&entry.path, self.home.as_deref()))
-                .with_icon(icon)
-                .with_score(score)
+                self.row(&entry.name, entry.path.clone(), entry.is_dir, score)
             })
             .collect()
     }
@@ -718,5 +782,130 @@ mod tests {
                 per_query.as_secs_f64() * 1000.0
             );
         }
+    }
+
+    /// A plugin that browses `root`, referring to it as `~` (the home directory).
+    fn browsing(root: &Path, include_hidden: bool) -> FilesPlugin {
+        let mut config = config_for(&[]);
+        config.include_hidden = include_hidden;
+        FilesPlugin::with_home(config, MockPlatform::empty(), Some(root.to_path_buf()))
+    }
+
+    fn sample_tree() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        touch(&dir.path().join("Documents/report.txt"));
+        touch(&dir.path().join("Documents/reports/q1.txt"));
+        touch(&dir.path().join("Downloads/setup.exe"));
+        touch(&dir.path().join("notes.md"));
+        touch(&dir.path().join(".hidden/x"));
+        touch(&dir.path().join(".bashrc"));
+        dir
+    }
+
+    #[test]
+    fn typed_home_path_lists_folders_first_then_files() {
+        let dir = sample_tree();
+        let plugin = browsing(dir.path(), false);
+        let found = plugin.query("~/");
+        let names: Vec<_> = found.iter().map(|r| r.title.as_str()).collect();
+        assert_eq!(names, ["Documents", "Downloads", "notes.md"]);
+        assert!(found.iter().all(|r| r.score >= score::KEYWORD));
+        assert!(found[0].score > found[2].score);
+        assert_eq!(
+            found[0].action,
+            Action::OpenPath {
+                path: dir.path().join("Documents")
+            }
+        );
+        assert_eq!(found[0].subtitle, "~");
+    }
+
+    #[test]
+    fn typed_path_filters_by_the_last_segment() {
+        let dir = sample_tree();
+        let plugin = browsing(dir.path(), false);
+        let found = plugin.query("~/Documents/rep");
+        let names: Vec<_> = found.iter().map(|r| r.title.as_str()).collect();
+        assert_eq!(names, ["reports", "report.txt"]);
+        assert!(plugin.query("~/Documents/zzz").is_empty());
+        // Fuzzy, like the rest of the search.
+        assert_eq!(titles(&plugin, "~/Dow"), ["Downloads"]);
+        assert_eq!(titles(&plugin, "~/dwn"), ["Downloads"]);
+        // A missing directory is simply empty; browsing never falls back to the index.
+        assert!(plugin.query("~/Nowhere/").is_empty());
+    }
+
+    #[test]
+    fn hidden_entries_follow_the_setting_or_a_typed_dot() {
+        let dir = sample_tree();
+        let shown = |plugin: &FilesPlugin, query: &str| titles(plugin, query);
+
+        let plugin = browsing(dir.path(), false);
+        assert!(!shown(&plugin, "~/").contains(&".bashrc".to_owned()));
+        assert_eq!(shown(&plugin, "~/.")[..2], [".hidden", ".bashrc"]);
+
+        let plugin = browsing(dir.path(), true);
+        let all = shown(&plugin, "~/");
+        assert!(all.contains(&".hidden".to_owned()) && all.contains(&".bashrc".to_owned()));
+    }
+
+    #[test]
+    fn tab_completion_drills_into_folders_with_the_typed_separator() {
+        let dir = sample_tree();
+        let plugin = browsing(dir.path(), false);
+        let found = plugin.query("~/Doc");
+        assert_eq!(found[0].title, "Documents");
+        assert_eq!(found[0].autocomplete.as_deref(), Some("~/Documents/"));
+
+        let found = plugin.query("~/Documents/reports/q");
+        assert_eq!(
+            found[0].autocomplete.as_deref(),
+            Some("~/Documents/reports/q1.txt"),
+            "files complete to their name"
+        );
+        // The completion browses straight into the folder.
+        let inside = plugin.query("~/Documents/");
+        assert_eq!(inside[0].title, "reports");
+        assert_eq!(inside[1].title, "report.txt");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn backslash_paths_keep_their_separator() {
+        let dir = sample_tree();
+        let plugin = browsing(dir.path(), false);
+        let found = plugin.query("~\\Doc");
+        assert_eq!(found[0].autocomplete.as_deref(), Some("~\\Documents\\"));
+        let absolute = format!("{}\\Dow", dir.path().display());
+        let found = plugin.query(&absolute);
+        assert_eq!(found[0].title, "Downloads");
+        assert_eq!(
+            found[0].autocomplete.as_deref(),
+            Some(format!("{}\\Downloads\\", dir.path().display()).as_str())
+        );
+    }
+
+    #[test]
+    fn absolute_paths_work_and_plain_queries_still_use_the_index() {
+        let dir = sample_tree();
+        let mut config = config_for(&[dir.path()]);
+        config.include_hidden = false;
+        let plugin = indexed(config, Some(dir.path().to_path_buf()));
+        let typed = format!("{}{}Docu", dir.path().display(), std::path::MAIN_SEPARATOR);
+        let found = plugin.query(&typed);
+        assert_eq!(found[0].title, "Documents");
+        assert_eq!(found.len(), 1);
+        // No separator-led input: unchanged index search.
+        assert!(titles(&plugin, "setup").contains(&"setup.exe".to_owned()));
+        assert!(plugin.query("1/2").is_empty());
+    }
+
+    #[test]
+    fn path_browsing_does_not_need_the_index() {
+        let dir = sample_tree();
+        // Never refreshed.
+        let plugin = browsing(dir.path(), false);
+        assert!(plugin.snapshot().is_empty());
+        assert_eq!(titles(&plugin, "~/notes"), ["notes.md"]);
     }
 }

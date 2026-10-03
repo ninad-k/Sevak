@@ -20,7 +20,12 @@ export interface Config {
   };
   window: { width: number };
   linux: { wayland_use_xwayland: boolean };
-  search: { max_results: number; fallback_web_search: string };
+  search: {
+    max_results: number;
+    /** One engine keyword, or several (config.toml accepts a string or a list). */
+    fallback_web_search: string | string[];
+    query_history: boolean;
+  };
   appearance: { theme: ThemeSetting };
   plugins: { disabled: string[] };
   files: {
@@ -156,3 +161,8 @@ async function simple(command: string): Promise<string | null> {
 export const openConfigFile = () => simple("open_config_file");
 export const openLogDir = () => simple("open_log_dir");
 export const closeSettings = () => simple("close_settings");
+
+/** The fallback engine keywords in order, whichever form the config uses. */
+export function fallbackList(value: string | string[]): string[] {
+  return (Array.isArray(value) ? value : [value]).map((k) => k.trim()).filter((k) => k !== "");
+}

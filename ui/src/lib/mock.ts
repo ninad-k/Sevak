@@ -17,6 +17,10 @@ const rows: ResultDto[] = [
   { id: "m:10", title: "Tenth row", subtitle: "Scrolls the list", icon: null, plugin_id: "apps", action: "launch" },
 ];
 
+export function mockHistory(): string[] {
+  return ["g rust traits", "chrome", "~/Documents/"];
+}
+
 export function mockSearch(query: string): ResultDto[] {
   return query.trim() === "none" ? [] : rows;
 }
@@ -27,7 +31,7 @@ export function mockSettings(): SettingsDto {
       general: { hotkey: "Alt+Space", hide_on_blur: true, launch_at_login: false, check_for_updates: true },
       window: { width: 720 },
       linux: { wayland_use_xwayland: true },
-      search: { max_results: 8, fallback_web_search: "g" },
+      search: { max_results: 8, fallback_web_search: "g", query_history: true },
       appearance: { theme: "system" },
       plugins: { disabled: ["uuid"] },
       files: {
