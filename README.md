@@ -76,6 +76,7 @@ They show the workflow rather than measured search or launch times.
 | Paste earlier clipboard text, images or files | `cb invoice` | Pastes into the app you were using (opt-in) |
 | Paste a snippet | `s sig` | Pastes the snippet with `{date}` etc. filled in |
 | Generate a UUID | `uuid ` or `uuid 5` | Copies a UUID when the plugin is enabled |
+| Pick an emoji | `:heart` or `emoji thumbs up` | Pastes the selected emoji from a grid |
 
 App results depend on what is installed. File search covers the folders you
 choose and matches **names**, not document contents. Put a space after a
@@ -87,6 +88,11 @@ Sevak also includes:
   `Ctrl+Alt+Space`, and pick: web search, Large Type, transform (case,
   Base64, URL encoding, JSON) and paste back, calculate, open, show in folder,
   open in a terminal. [How it works →](docs/usage.md#universal-actions)
+- **Preview, Text View and Grid View** — tap `Shift` or press `Ctrl+Y` to
+  see what a result is (file contents, images, folders, links, snippets)
+  without opening it; `Ctrl+T` reads a long text in full; picture-like results
+  such as emoji are shown as a grid of tiles.
+  [How it works →](docs/usage.md#preview-text-view-and-grid-view)
 - **Result actions** — `Ctrl+Enter` shows a file or app in its folder,
   `Shift+Enter` copies its path or URL, `Alt+Enter` runs an app as
   administrator (Windows); `→` or `Ctrl+K` lists every action. `Ctrl+C` copies
@@ -156,6 +162,9 @@ After installing, follow [Your first five minutes with Sevak](docs/quickstart.md
 | `Tab` / `Shift+Tab` | Complete the input to the selected result / go up one folder |
 | `↑` / `↓` on an empty bar | Recall earlier searches |
 | `Ctrl+C` / `Ctrl+L` | Copy the selected result / show it as Large Type |
+| `Shift` (tap) or `Ctrl+Y` | Show or hide the preview pane for the selected result |
+| `Ctrl+T` | Open the selected result's long text in the Text View (`Esc` or `←` returns) |
+| `←` `→` `↑` `↓` | Move between tiles when results are shown as a grid |
 | `Ctrl+Alt+Space` (in any app) | Universal Actions for what you have selected; configurable |
 | `Ctrl+1` … `Ctrl+9` | Run the corresponding result when available |
 | `Esc` | Hide the launcher |
@@ -185,6 +194,8 @@ There are explicit network uses:
 - Currency conversion, if you turn it on (`[calculator] currency`, off by
   default), downloads the European Central Bank's daily reference rates at
   most once a day. Unit conversion is always offline.
+- The preview pane reads the selected file or folder from your disk, only while
+  it is open; links are shown as addresses and never fetched.
 - Universal Actions reads your selection only when you press its shortcut, by
   briefly borrowing the clipboard and restoring it. The selection is never
   written to disk, logged or sent anywhere (web search actions open your browser

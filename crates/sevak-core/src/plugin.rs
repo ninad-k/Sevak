@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use thiserror::Error;
 
-use crate::model::ResultItem;
+use crate::model::{PreviewHint, ResultItem};
 use crate::selection::Selection;
 
 pub type PluginResult<T> = Result<T, PluginError>;
@@ -99,6 +99,17 @@ pub trait Plugin: Send + Sync {
     /// default. Same cost rules as [`Plugin::query`].
     fn selection_actions(&self, _selection: &Selection) -> Vec<ResultItem> {
         Vec::new()
+    }
+
+    /// What the preview pane (and Text View) should show for `item`, when the
+    /// plugin can say it better than the item's action does: a snippet with
+    /// its placeholders filled in, an emoji with its keywords. Called lazily,
+    /// on a worker thread, only for the one row the user asks to preview, so
+    /// unlike [`Plugin::query`] it may do a little work (it must still not
+    /// block for long). `None` by default: the shell then uses the item's own
+    /// [`ResultItem::preview`] or derives one from its action.
+    fn preview(&self, _item: &ResultItem) -> Option<PreviewHint> {
+        None
     }
 
     /// Hands the plugin the keys (the part of a result id after `<plugin id>:`)

@@ -13,13 +13,13 @@ crates/sevak-platform   OS access: launching, icons, app scanning, clipboard, pa
                         shortcut setup (Windows, macOS and Linux backends)
 crates/sevak-plugins    built-in plugins: apps, calculator (+ units, currency), files, bookmarks,
                         web search, system commands, shell, clipboard history, snippets,
-                        uuid example; the script plugin host (external plugins)
+                        emoji picker (data/emoji.tsv), uuid example; the script plugin host (external plugins)
 src-tauri               the Tauri shell: window, hotkeys (main, Universal Actions + [[hotkey]] entries), tray, CLI,
                         --query / --run handling (direct.rs), script plugin approval, IPC
                         commands, bundling config
 ui                      Svelte 5 + Vite frontend (builds to ui/dist)
 packaging/linux         desktop-entry template used by the .deb and .rpm
-scripts                 icon generator, WSL Linux test runner
+scripts                 icon generator, emoji list generator, WSL Linux test runner
 docs                    plugins, install, development
 examples/plugins        example script plugins (Python, PowerShell, Node)
 .github/workflows       ci.yml, release.yml

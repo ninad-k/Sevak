@@ -10,6 +10,7 @@ pub mod engine;
 pub mod fuzzy;
 pub mod model;
 pub mod plugin;
+pub mod preview;
 pub mod selection;
 pub mod theme;
 pub mod usage;
@@ -21,8 +22,8 @@ pub use config::{
 pub use engine::{EngineOptions, SearchEngine};
 pub use fuzzy::FuzzyQuery;
 pub use model::{
-    Action, AppEntry, ClipContent, IconData, IconSource, LaunchTarget, Modifier, ResultItem,
-    SecondaryAction,
+    Action, AppEntry, ClipContent, IconData, IconSource, LaunchTarget, Modifier, PreviewHint,
+    ResultItem, SecondaryAction, ViewHint,
 };
 pub use plugin::{Plugin, PluginError, PluginResult, ResultsNotifier};
 pub use selection::{Selection, SelectionKind};

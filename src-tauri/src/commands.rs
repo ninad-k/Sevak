@@ -3,7 +3,8 @@
 use std::time::Instant;
 
 use serde::Serialize;
-use sevak_core::{Action, Modifier, PluginError, ResultItem};
+use sevak_core::preview::{self, PreviewContent, TextViewContent};
+use sevak_core::{Action, Modifier, PluginError, ResultItem, ViewHint};
 use tauri::{AppHandle, LogicalSize, Manager, State, WebviewWindow};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
@@ -32,10 +33,13 @@ pub fn set_content_height(window: WebviewWindow, state: State<'_, AppState>, hei
         return;
     }
     let width = f64::from(state.config().window.width);
-    let size = LogicalSize::new(width, height.clamp(MIN_HEIGHT, MAX_HEIGHT));
-    if let Err(err) = window.set_size(size) {
+    let height = height.clamp(MIN_HEIGHT, MAX_HEIGHT);
+    if let Err(err) = window.set_size(LogicalSize::new(width, height)) {
         tracing::warn!("set_content_height: set_size failed: {err}");
     }
+    // A tall preview, text or grid must not run off the bottom of the screen;
+    // a short window goes back to its usual place.
+    window::keep_on_screen(&window, height);
 }
 
 /// Large Type: `true` stretches the window over the screen, `false` restores
@@ -68,6 +72,14 @@ pub struct ResultDto {
     pub secondary: Vec<SecondaryDto>,
     /// What Ctrl+C copies for this row (path, URL or value), if anything.
     pub copy_text: Option<String>,
+    /// The row is a tile of the Grid View (drawn as one when every row is).
+    pub tile: bool,
+    /// The tile's picture when it is text (an emoji) rather than the icon.
+    pub glyph: Option<String>,
+    /// The row has a text to open in the Text View (Ctrl+T).
+    pub text_view: bool,
+    /// Enter opens the Text View instead of running the action.
+    pub text_on_enter: bool,
 }
 
 /// A secondary action as the UI sees it; its payload stays in the shell.
@@ -114,6 +126,13 @@ pub(crate) fn to_dtos(icons: Vec<Option<IconDto>>, items: &[ResultItem]) -> Vec<
                 })
                 .collect(),
             copy_text: item.copy_text(),
+            tile: item.is_tile(),
+            glyph: match &item.view {
+                Some(ViewHint::Grid { glyph }) => glyph.clone(),
+                _ => None,
+            },
+            text_view: preview::has_text_view(item),
+            text_on_enter: matches!(item.view, Some(ViewHint::Text { on_enter: true, .. })),
         })
         .collect()
 }
@@ -149,6 +168,39 @@ pub async fn search(app: AppHandle, query: String) -> SearchResponse {
         ticket,
         results: dtos,
     }
+}
+
+/// What the preview pane shows for result `id` of search `ticket`. It reads
+/// only what that result refers to (see `sevak_core::preview` for the limits),
+/// on a blocking thread so a slow disk never stalls the window. The page asks
+/// for the selected row only, and again when the selection moves.
+#[tauri::command]
+pub async fn preview(app: AppHandle, id: String, ticket: u64) -> Result<PreviewContent, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let search = &app.state::<AppState>().search;
+        let Some((item, _query)) = search.result(ticket, &id) else {
+            return Err("result expired".to_owned());
+        };
+        let hint = search.engine().preview_hint(&item);
+        Ok(preview::produce(&item, hint))
+    })
+    .await
+    .map_err(|err| format!("the preview did not finish: {err}"))?
+}
+
+/// The full text of result `id` of search `ticket` for the Text View (Ctrl+T).
+#[tauri::command]
+pub async fn text_view(app: AppHandle, id: String, ticket: u64) -> Result<TextViewContent, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let search = &app.state::<AppState>().search;
+        let Some((item, _query)) = search.result(ticket, &id) else {
+            return Err("result expired".to_owned());
+        };
+        let hint = search.engine().preview_hint(&item);
+        preview::text_view(&item, hint).ok_or_else(|| "this result has no text to show".to_owned())
+    })
+    .await
+    .map_err(|err| format!("the text did not load: {err}"))?
 }
 
 /// Executed queries, most recent first, for Up/Down recall on an empty input

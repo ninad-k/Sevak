@@ -28,9 +28,10 @@ use sevak_core::{Config, Plugin};
 use sevak_platform::PlatformProvider;
 
 use crate::clipboard_history::default_history_path;
+use crate::emoji::Trigger;
 use crate::{
-    AppsPlugin, BookmarksPlugin, CalculatorPlugin, ClipboardPlugin, FilesPlugin, SelectionPlugin,
-    ShellPlugin, SnippetsPlugin, SystemPlugin, UuidPlugin, WebSearchPlugin,
+    AppsPlugin, BookmarksPlugin, CalculatorPlugin, ClipboardPlugin, EmojiPlugin, FilesPlugin,
+    SelectionPlugin, ShellPlugin, SnippetsPlugin, SystemPlugin, UuidPlugin, WebSearchPlugin,
 };
 
 /// Builds the instances of one plugin family.
@@ -108,7 +109,7 @@ impl PluginRegistry {
     }
 
     /// Apps, calculator, web search, files, bookmarks, system commands, shell,
-    /// clipboard history, snippets, Universal Actions and the example UUID
+    /// clipboard history, snippets, emoji, Universal Actions and the example UUID
     /// plugin, in that order.
     /// Order matters only for tie-breaking and logging.
     pub fn builtin() -> Self {
@@ -206,6 +207,25 @@ impl PluginRegistry {
                     &config.paste,
                     platform.clone(),
                 ))]
+            },
+        ));
+        registry.register(PluginDescriptor::new(
+            "emoji",
+            "Emoji picker",
+            "Type `emoji ` or `:` and a name to pick an emoji from a grid; Enter pastes it. Works offline.",
+            |config, platform| {
+                vec![
+                    Arc::new(EmojiPlugin::new(
+                        Trigger::Word,
+                        &config.paste,
+                        platform.clone(),
+                    )),
+                    Arc::new(EmojiPlugin::new(
+                        Trigger::Colon,
+                        &config.paste,
+                        platform.clone(),
+                    )),
+                ]
             },
         ));
         registry.register(PluginDescriptor::new(
@@ -331,6 +351,7 @@ mod tests {
                 "shell",
                 "clipboard",
                 "snippets",
+                "emoji",
                 "selection",
                 "uuid"
             ]
@@ -353,6 +374,8 @@ mod tests {
                 "shell",
                 "clipboard",
                 "snippets",
+                "emoji:word",
+                "emoji:colon",
                 "selection",
                 "uuid"
             ]
@@ -373,6 +396,8 @@ mod tests {
                 "shell",
                 "clipboard",
                 "snippets",
+                "emoji:word",
+                "emoji:colon",
                 "selection",
                 "uuid"
             ]
@@ -394,6 +419,8 @@ mod tests {
                 "shell",
                 "clipboard",
                 "snippets",
+                "emoji:word",
+                "emoji:colon",
                 "selection"
             ]
         );
@@ -402,7 +429,7 @@ mod tests {
     #[test]
     fn unknown_disabled_ids_are_ignored() {
         let config = config_disabling(&["nope"]);
-        assert_eq!(ids(&PluginRegistry::builtin(), &config).len(), 13);
+        assert_eq!(ids(&PluginRegistry::builtin(), &config).len(), 15);
     }
 
     #[test]
@@ -424,6 +451,8 @@ mod tests {
                 ("shell", true),
                 ("clipboard", true),
                 ("snippets", true),
+                ("emoji:word", true),
+                ("emoji:colon", true),
                 ("selection", true),
                 ("uuid", true),
             ]

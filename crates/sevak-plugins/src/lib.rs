@@ -11,6 +11,8 @@
 //! | `shell`          | [`ShellPlugin`]                         | `>`     | no     |
 //! | `clipboard`      | [`ClipboardPlugin`] (opt-in history)    | `cb`    | no     |
 //! | `snippets`       | [`SnippetsPlugin`]                      | `s`     | no     |
+//! | `emoji:word`    | [`EmojiPlugin`] (grid of tiles)         | `emoji` | no     |
+//! | `emoji:colon`    | [`EmojiPlugin`] (same, shorter keyword) | `:`     | no     |
 //! | `selection`      | [`SelectionPlugin`] (Universal Actions) | none    | no     |
 //! | `uuid`           | [`UuidPlugin`] (a tutorial example)     | `uuid`  | no     |
 //!
@@ -33,6 +35,7 @@ pub mod calculator;
 pub mod clipboard_history;
 mod clipboard_store;
 pub mod currency;
+pub mod emoji;
 pub mod example_uuid;
 pub mod files;
 pub mod path_browse;
@@ -53,6 +56,7 @@ pub use apps::AppsPlugin;
 pub use bookmarks::BookmarksPlugin;
 pub use calculator::CalculatorPlugin;
 pub use clipboard_history::ClipboardPlugin;
+pub use emoji::EmojiPlugin;
 pub use example_uuid::UuidPlugin;
 pub use files::FilesPlugin;
 pub use registry::{PluginDescriptor, PluginFactory, PluginInfo, PluginRegistry};
@@ -106,6 +110,8 @@ mod tests {
                 "shell",
                 "clipboard",
                 "snippets",
+                "emoji:word",
+                "emoji:colon",
                 "selection",
                 "uuid"
             ]
@@ -127,6 +133,8 @@ mod tests {
                 "shell",
                 "clipboard",
                 "snippets",
+                "emoji:word",
+                "emoji:colon",
                 "selection",
                 "uuid"
             ]

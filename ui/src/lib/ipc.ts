@@ -79,6 +79,46 @@ export interface ResultDto {
   secondary: SecondaryDto[];
   /** What Ctrl+C copies for this row, if anything. */
   copy_text: string | null;
+  /** The row is a tile of the Grid View (shown as one when every row is). */
+  tile?: boolean;
+  /** The tile's picture when it is text (an emoji) rather than the icon. */
+  glyph?: string | null;
+  /** The row has a text to open in the Text View (Ctrl+T). */
+  text_view?: boolean;
+  /** Enter opens the Text View instead of running the action. */
+  text_on_enter?: boolean;
+}
+
+export interface MetaRow {
+  label: string;
+  value: string;
+}
+
+/** The main content of the preview pane. */
+export type PreviewBody =
+  | { kind: "none" }
+  | { kind: "text"; text: string; truncated: boolean }
+  | { kind: "image"; src: string }
+  | { kind: "folder"; entries: { name: string; dir: boolean }[]; truncated: boolean }
+  | { kind: "url"; url: string };
+
+/** What the preview pane draws for one result. */
+export interface PreviewContent {
+  title: string;
+  subtitle: string;
+  body: PreviewBody;
+  meta: MetaRow[];
+  /** Seconds since the unix epoch. */
+  modified: number | null;
+  /** Why there is no (or only a partial) preview. */
+  note: string | null;
+}
+
+/** The full text of a result, for the Text View. */
+export interface TextViewContent {
+  title: string;
+  text: string;
+  truncated: boolean;
 }
 
 export type IndexState = "indexing" | "ready";
@@ -142,6 +182,37 @@ export async function search(query: string): Promise<SearchResponse | null> {
     return await invoke<SearchResponse>("search", { query });
   } catch (err) {
     console.warn("[ipc] search failed:", err);
+    return null;
+  }
+}
+
+/**
+ * What the preview pane shows for result `id` of search `ticket`. The shell
+ * reads only what that result refers to; `null` when it could not.
+ */
+export async function preview(id: string, ticket: number): Promise<PreviewContent | null> {
+  if (import.meta.env.DEV && !hasTauri()) {
+    const { mockPreview } = await import("./mock");
+    return mockPreview(id);
+  }
+  try {
+    return await invoke<PreviewContent>("preview", { id, ticket });
+  } catch (err) {
+    console.warn("[ipc] preview failed:", err);
+    return null;
+  }
+}
+
+/** The full text of result `id` for the Text View, or `null`. */
+export async function textView(id: string, ticket: number): Promise<TextViewContent | null> {
+  if (import.meta.env.DEV && !hasTauri()) {
+    const { mockTextView } = await import("./mock");
+    return mockTextView(id);
+  }
+  try {
+    return await invoke<TextViewContent>("text_view", { id, ticket });
+  } catch (err) {
+    console.warn("[ipc] text_view failed:", err);
     return null;
   }
 }
