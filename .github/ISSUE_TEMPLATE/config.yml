@@ -1,5 +1,11 @@
 blank_issues_enabled: true
 contact_links:
+  - name: Ask a question
+    url: https://github.com/ninad-k/Sevak/discussions/categories/q-a
+    about: How do I...? Setup and usage questions get answered in Discussions.
+  - name: Share an idea or show your setup
+    url: https://github.com/ninad-k/Sevak/discussions
+    about: Early ideas, plugins and workflows. Open a feature request once an idea is concrete.
   - name: Report a security vulnerability
     url: https://github.com/ninad-k/Sevak/security/advisories/new
     about: Please report security problems privately, not as a public issue.

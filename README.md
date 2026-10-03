@@ -229,5 +229,7 @@ Bug reports, documentation improvements and plugins are welcome. Read
 [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md).
 Include your Sevak version, operating system and reproduction steps in issue
 reports. Report security issues through [SECURITY.md](SECURITY.md).
+Questions and ideas are welcome in
+[Discussions](https://github.com/ninad-k/Sevak/discussions).
 
 [Apache License 2.0](LICENSE) · Built with Rust, Tauri and Svelte.
