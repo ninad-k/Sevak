@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use sevak_core::config::WebSearchEngine;
 use sevak_core::model::score;
-use sevak_core::{Action, IconSource, Plugin, PluginResult, ResultItem};
+use sevak_core::{Action, IconSource, Modifier, Plugin, PluginResult, ResultItem};
 use sevak_platform::PlatformProvider;
 
 use crate::actions::execute_action;
@@ -103,6 +103,11 @@ impl Plugin for WebSearchPlugin {
             format!("Search {} for \u{201c}{terms}\u{201d}", self.name),
             Action::OpenUrl { url: url.clone() },
         )
+        .with_secondary(
+            "Copy URL",
+            Some(Modifier::Shift),
+            Action::CopyText { text: url.clone() },
+        )
         .with_subtitle(url)
         .with_icon(icon)
         .with_score(score::KEYWORD)]
@@ -179,6 +184,27 @@ mod tests {
         assert_eq!(item.icon, Some(IconSource::builtin("web")));
         assert_eq!(item.score, score::KEYWORD);
         assert_eq!(item.action, Action::OpenUrl { url: url.into() });
+    }
+
+    #[test]
+    fn search_result_can_copy_its_url() {
+        let platform = MockPlatform::empty();
+        let plugin = google(platform.clone());
+        let item = plugin.query("rust").remove(0);
+        assert_eq!(item.secondary.len(), 1);
+        assert_eq!(item.secondary[0].label, "Copy URL");
+        assert_eq!(item.secondary[0].modifier, Some(Modifier::Shift));
+        assert_eq!(
+            item.secondary[0].action,
+            Action::CopyText {
+                text: "https://www.google.com/search?q=rust".into()
+            }
+        );
+        // The Ctrl+C text is the URL as well.
+        assert_eq!(
+            item.copy_text().as_deref(),
+            Some("https://www.google.com/search?q=rust")
+        );
     }
 
     #[test]

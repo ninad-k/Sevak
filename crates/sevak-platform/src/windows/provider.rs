@@ -62,36 +62,28 @@ impl PlatformProvider for WindowsProvider {
     }
 
     fn launch(&self, target: &LaunchTarget) -> Result<()> {
-        let _com = ComGuard::new();
-        allow_foreground_handoff();
-        match target {
-            LaunchTarget::Shortcut { path } => {
-                shell_execute_in("open", path.as_os_str(), None, None)?;
-            }
-            LaunchTarget::PackagedApp { app_user_model_id } => {
-                let name = format!(r"shell:AppsFolder\{app_user_model_id}");
-                shell_execute_in("open", name.as_ref(), None, None)?;
-            }
-            LaunchTarget::Executable {
-                path,
-                args,
-                working_dir,
-            } => {
-                let parameters = (!args.is_empty()).then(|| OsString::from(join_args(args)));
-                shell_execute_in(
-                    "open",
-                    path.as_os_str(),
-                    parameters.as_deref(),
-                    working_dir.as_deref().map(|dir| dir.as_os_str()),
-                )?;
-            }
-            LaunchTarget::DesktopEntry { .. } => {
-                return Err(PlatformError::Unsupported(
-                    "launching .desktop entries on Windows",
-                ));
-            }
+        launch_with_verb("open", target)
+    }
+
+    fn can_run_as_admin(&self) -> bool {
+        true
+    }
+
+    fn launch_as_admin(&self, target: &LaunchTarget) -> Result<()> {
+        // Packaged (Store) apps have no `runas` verb: they always run as the user.
+        if matches!(target, LaunchTarget::PackagedApp { .. }) {
+            return Err(PlatformError::Unsupported(
+                "running Store apps as administrator",
+            ));
         }
-        Ok(())
+        launch_with_verb("runas", target).map_err(|err| match err {
+            // Declining the UAC prompt surfaces as "access denied".
+            PlatformError::Os { message, .. } if message == "access denied" => PlatformError::Os {
+                operation: "run as administrator",
+                message: "administrator permission was not granted".to_owned(),
+            },
+            other => other,
+        })
     }
 
     fn load_icon(&self, source: &IconSource, size: u32) -> Result<IconData> {
@@ -103,6 +95,41 @@ impl PlatformProvider for WindowsProvider {
             )),
         }
     }
+}
+
+/// Starts `target` through the shell with `verb`: `open`, or `runas` to ask
+/// for elevation (the user then sees the UAC prompt).
+fn launch_with_verb(verb: &str, target: &LaunchTarget) -> Result<()> {
+    let _com = ComGuard::new();
+    allow_foreground_handoff();
+    match target {
+        LaunchTarget::Shortcut { path } => {
+            shell_execute_in(verb, path.as_os_str(), None, None)?;
+        }
+        LaunchTarget::PackagedApp { app_user_model_id } => {
+            let name = format!(r"shell:AppsFolder\{app_user_model_id}");
+            shell_execute_in(verb, name.as_ref(), None, None)?;
+        }
+        LaunchTarget::Executable {
+            path,
+            args,
+            working_dir,
+        } => {
+            let parameters = (!args.is_empty()).then(|| OsString::from(join_args(args)));
+            shell_execute_in(
+                verb,
+                path.as_os_str(),
+                parameters.as_deref(),
+                working_dir.as_deref().map(|dir| dir.as_os_str()),
+            )?;
+        }
+        LaunchTarget::DesktopEntry { .. } => {
+            return Err(PlatformError::Unsupported(
+                "launching .desktop entries on Windows",
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Joins arguments into a single command-line string that
@@ -190,6 +217,20 @@ mod tests {
         ));
         assert!(matches!(
             provider.load_icon(&IconSource::builtin("app"), 32),
+            Err(PlatformError::Unsupported(_))
+        ));
+    }
+
+    #[test]
+    fn administrator_launch_is_offered_but_never_for_store_apps() {
+        let provider = WindowsProvider::new();
+        assert!(provider.can_run_as_admin());
+        // Refused before any shell call, so no UAC prompt appears in tests.
+        let store_app = LaunchTarget::PackagedApp {
+            app_user_model_id: "Microsoft.WindowsCalculator_8wekyb3d8bbwe!App".into(),
+        };
+        assert!(matches!(
+            provider.launch_as_admin(&store_app),
             Err(PlatformError::Unsupported(_))
         ));
     }

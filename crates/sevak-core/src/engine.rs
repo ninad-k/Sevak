@@ -305,6 +305,36 @@ impl SearchEngine {
         Ok(())
     }
 
+    /// Like [`SearchEngine::execute`], but runs the item's `index`th secondary
+    /// action instead of its primary one. The owning plugin sees the item with
+    /// that action as its `action` (and no secondary actions), so plugins need
+    /// no extra code to support it. Usage is recorded for the item, as if the
+    /// user had picked it.
+    pub fn execute_secondary(
+        &self,
+        item: &ResultItem,
+        index: usize,
+        query: &str,
+    ) -> PluginResult<()> {
+        self.execute_secondary_at(item, index, query, unix_now())
+    }
+
+    pub fn execute_secondary_at(
+        &self,
+        item: &ResultItem,
+        index: usize,
+        query: &str,
+        now: u64,
+    ) -> PluginResult<()> {
+        let secondary = item.secondary.get(index).ok_or_else(|| {
+            PluginError::Message(format!("{} has no action number {index}", item.id))
+        })?;
+        let mut derived = item.clone();
+        derived.action = secondary.action.clone();
+        derived.secondary.clear();
+        self.execute_at(&derived, query, now)
+    }
+
     /// A copy of the usage statistics, to save from another thread.
     pub fn usage_snapshot(&self) -> UsageStore {
         self.usage_read().clone()
@@ -337,7 +367,7 @@ mod tests {
     use std::sync::Mutex;
 
     use super::*;
-    use crate::model::Action;
+    use crate::model::{Action, Modifier};
 
     const T0: u64 = 1_700_000_000;
 
@@ -350,6 +380,7 @@ mod tests {
         query_fn: QueryFn,
         fail_execute: bool,
         executed: AtomicUsize,
+        actions: Mutex<Vec<Action>>,
         refresh_error: Option<String>,
         inputs: Mutex<Vec<String>>,
     }
@@ -366,6 +397,7 @@ mod tests {
                 query_fn: Box::new(query_fn),
                 fail_execute: false,
                 executed: AtomicUsize::new(0),
+                actions: Mutex::new(Vec::new()),
                 refresh_error: None,
                 inputs: Mutex::new(Vec::new()),
             }
@@ -427,7 +459,7 @@ mod tests {
             if self.fail_execute {
                 return Err(PluginError::Message("boom".into()));
             }
-            let _ = item;
+            self.actions.lock().unwrap().push(item.action.clone());
             self.executed.fetch_add(1, AtomicOrdering::SeqCst);
             Ok(())
         }
@@ -773,6 +805,35 @@ mod tests {
         let bad_item = item("bad", "b", "B", 1.0);
         assert!(e.execute_at(&bad_item, "x", T0).is_err());
         assert!(e.usage_snapshot().get("bad:b").is_none());
+    }
+
+    #[test]
+    fn execute_secondary_runs_that_action_and_records_the_item() {
+        let ok = Mock::fixed("ok", &[("a", "A", 1.0)]).arc();
+        let e = engine(vec![ok.clone()], 8, &[]);
+        let reveal = Action::RevealPath {
+            path: "/tmp/a".into(),
+        };
+        let with = item("ok", "a", "A", 1.0)
+            .with_secondary("Reveal", Some(Modifier::Ctrl), reveal.clone())
+            .with_secondary("Again", None, reveal.clone());
+
+        e.execute_secondary_at(&with, 1, "Foo", T0).unwrap();
+        assert_eq!(*ok.actions.lock().unwrap(), vec![reveal]);
+        // Usage is keyed by the item, not by the action that ran.
+        assert_eq!(e.usage_snapshot().get("ok:a").unwrap().count, 1);
+    }
+
+    #[test]
+    fn execute_secondary_rejects_an_unknown_index_without_recording() {
+        let ok = Mock::fixed("ok", &[("a", "A", 1.0)]).arc();
+        let e = engine(vec![ok.clone()], 8, &[]);
+        let err = e
+            .execute_secondary_at(&item("ok", "a", "A", 1.0), 0, "x", T0)
+            .unwrap_err();
+        assert!(matches!(err, PluginError::Message(_)));
+        assert_eq!(ok.executed.load(AtomicOrdering::SeqCst), 0);
+        assert!(e.usage_snapshot().is_empty());
     }
 
     #[test]

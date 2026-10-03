@@ -15,6 +15,8 @@ pub mod usage;
 pub use config::{Config, ConfigError, ConfigOrigin, GeneralConfig, LinuxConfig, WindowConfig};
 pub use engine::{EngineOptions, SearchEngine};
 pub use fuzzy::FuzzyQuery;
-pub use model::{Action, AppEntry, IconData, IconSource, LaunchTarget, ResultItem};
+pub use model::{
+    Action, AppEntry, IconData, IconSource, LaunchTarget, Modifier, ResultItem, SecondaryAction,
+};
 pub use plugin::{Plugin, PluginError, PluginResult};
 pub use usage::{UsageEntry, UsageError, UsageStore};

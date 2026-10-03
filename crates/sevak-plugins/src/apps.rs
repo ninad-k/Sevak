@@ -3,7 +3,8 @@
 use std::sync::{Arc, RwLock};
 
 use sevak_core::{
-    Action, AppEntry, FuzzyQuery, IconSource, Plugin, PluginError, PluginResult, ResultItem,
+    Action, AppEntry, FuzzyQuery, IconSource, LaunchTarget, Modifier, Plugin, PluginError,
+    PluginResult, ResultItem,
 };
 use sevak_platform::PlatformProvider;
 
@@ -68,6 +69,41 @@ fn name_bonus(name_lower: &str, query_lower: &str) -> f64 {
     }
 }
 
+/// Adds the secondary actions an application supports: Ctrl+Enter shows it in
+/// the file manager, Shift+Enter copies its path, Alt+Enter runs it as
+/// administrator (only where the platform can).
+fn with_app_actions(item: ResultItem, target: &LaunchTarget, can_run_as_admin: bool) -> ResultItem {
+    let mut item = item;
+    if let Some(path) = target.path() {
+        item = item
+            .with_secondary(
+                "Show in folder",
+                Some(Modifier::Ctrl),
+                Action::RevealPath {
+                    path: path.to_path_buf(),
+                },
+            )
+            .with_secondary(
+                "Copy path",
+                Some(Modifier::Shift),
+                Action::CopyText {
+                    text: path.to_string_lossy().into_owned(),
+                },
+            );
+    }
+    // Store apps cannot be elevated.
+    if can_run_as_admin && !matches!(target, LaunchTarget::PackagedApp { .. }) {
+        item = item.with_secondary(
+            "Run as administrator",
+            Some(Modifier::Alt),
+            Action::RunAsAdmin {
+                target: target.clone(),
+            },
+        );
+    }
+    item
+}
+
 impl Plugin for AppsPlugin {
     fn id(&self) -> &str {
         "apps"
@@ -121,11 +157,12 @@ impl Plugin for AppsPlugin {
         scored.sort_by(|a, b| b.0.total_cmp(&a.0));
         scored.truncate(MAX_CANDIDATES);
 
+        let can_run_as_admin = self.platform.can_run_as_admin();
         scored
             .into_iter()
             .map(|(score, app)| {
                 let entry = &app.entry;
-                ResultItem::new(
+                let item = ResultItem::new(
                     "apps",
                     &entry.id,
                     &entry.name,
@@ -146,7 +183,8 @@ impl Plugin for AppsPlugin {
                         .clone()
                         .unwrap_or_else(|| IconSource::builtin("app")),
                 )
-                .with_score(score)
+                .with_score(score);
+                with_app_actions(item, &entry.target, can_run_as_admin)
             })
             .collect()
     }
@@ -187,7 +225,6 @@ mod tests {
 
     use super::*;
     use crate::test_util::MockPlatform;
-    use sevak_core::LaunchTarget;
 
     fn app(id: &str, name: &str, keywords: &[&str], description: Option<&str>) -> AppEntry {
         AppEntry {
@@ -313,6 +350,104 @@ mod tests {
         plugin.refresh().unwrap();
         assert!(plugin.query("firefox").is_empty());
         assert_eq!(plugin.query("xterm").len(), 1);
+    }
+
+    fn secondary_summary(item: &ResultItem) -> Vec<(&str, Option<Modifier>)> {
+        item.secondary
+            .iter()
+            .map(|s| (s.label.as_str(), s.modifier))
+            .collect()
+    }
+
+    #[test]
+    fn apps_offer_reveal_and_copy_path() {
+        let (plugin, _) = plugin_with(fixture());
+        let item = plugin.query("firefox").remove(0);
+        assert_eq!(
+            secondary_summary(&item),
+            [
+                ("Show in folder", Some(Modifier::Ctrl)),
+                ("Copy path", Some(Modifier::Shift)),
+            ]
+        );
+        assert_eq!(
+            item.secondary[0].action,
+            Action::RevealPath {
+                path: PathBuf::from("/bin/firefox")
+            }
+        );
+        assert_eq!(
+            item.secondary[1].action,
+            Action::CopyText {
+                text: PathBuf::from("/bin/firefox").to_string_lossy().into_owned()
+            }
+        );
+        assert_eq!(item.copy_text(), item.secondary[1].action.copy_text());
+    }
+
+    #[test]
+    fn run_as_administrator_only_where_the_platform_supports_it() {
+        let platform = MockPlatform::with_admin();
+        *platform.apps.lock().unwrap() = fixture();
+        let plugin = AppsPlugin::new(platform.clone());
+        plugin.refresh().unwrap();
+        let item = plugin.query("firefox").remove(0);
+        let admin = item.secondary.last().unwrap();
+        assert_eq!(admin.label, "Run as administrator");
+        assert_eq!(admin.modifier, Some(Modifier::Alt));
+
+        plugin
+            .execute(&ResultItem {
+                action: admin.action.clone(),
+                ..item.clone()
+            })
+            .unwrap();
+        assert_eq!(platform.elevated.lock().unwrap().len(), 1);
+        assert!(platform.launched.lock().unwrap().is_empty());
+
+        let (plain, _) = plugin_with(fixture());
+        let item = plain.query("firefox").remove(0);
+        assert!(item
+            .secondary
+            .iter()
+            .all(|s| s.modifier != Some(Modifier::Alt)));
+    }
+
+    #[test]
+    fn packaged_apps_have_no_path_actions_and_cannot_be_elevated() {
+        let mut store_app = app("calc", "Calculator", &[], None);
+        store_app.target = LaunchTarget::PackagedApp {
+            app_user_model_id: "Microsoft.Calc!App".into(),
+        };
+        let platform = MockPlatform::with_admin();
+        *platform.apps.lock().unwrap() = vec![store_app];
+        let plugin = AppsPlugin::new(platform);
+        plugin.refresh().unwrap();
+        let item = plugin.query("calculator").remove(0);
+        assert!(item.secondary.is_empty());
+        assert_eq!(item.copy_text(), None);
+    }
+
+    #[test]
+    fn mac_bundles_reveal_the_app_not_open() {
+        let mut safari = app("safari", "Safari", &[], None);
+        safari.target = LaunchTarget::Executable {
+            path: PathBuf::from("/usr/bin/open"),
+            args: vec!["-a".into(), "/Applications/Safari.app".into()],
+            working_dir: None,
+        };
+        let (plugin, _) = plugin_with(vec![safari]);
+        let item = plugin.query("safari").remove(0);
+        assert_eq!(
+            item.secondary[0].action,
+            Action::RevealPath {
+                path: PathBuf::from("/Applications/Safari.app")
+            }
+        );
+        assert_eq!(
+            item.copy_text().as_deref(),
+            Some("/Applications/Safari.app")
+        );
     }
 
     #[test]

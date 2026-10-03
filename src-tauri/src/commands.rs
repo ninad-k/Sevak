@@ -3,7 +3,7 @@
 use std::time::Instant;
 
 use serde::Serialize;
-use sevak_core::{Action, ResultItem};
+use sevak_core::{Action, Modifier, ResultItem};
 use tauri::{AppHandle, LogicalSize, Manager, State, WebviewWindow};
 
 use crate::icons::IconDto;
@@ -37,6 +37,19 @@ pub fn set_content_height(window: WebviewWindow, state: State<'_, AppState>, hei
     }
 }
 
+/// Large Type: `true` stretches the window over the screen, `false` restores
+/// it. An error means the window could not be stretched; the UI then shows the
+/// text inside the launcher instead.
+#[tauri::command]
+pub fn set_large_type(app: AppHandle, on: bool) -> Result<(), String> {
+    if on {
+        window::enter_large_type(&app)
+    } else {
+        window::leave_large_type(&app);
+        Ok(())
+    }
+}
+
 /// One row of search results as the UI sees it.
 #[derive(Debug, Serialize)]
 pub struct ResultDto {
@@ -45,8 +58,21 @@ pub struct ResultDto {
     pub subtitle: String,
     pub icon: Option<IconDto>,
     pub plugin_id: String,
-    /// `launch`, `open_path`, `open_url`, `copy_text` or `custom`.
+    /// `launch`, `open_path`, `open_url`, `copy_text`, `reveal_path`,
+    /// `run_as_admin` or `custom`.
     pub action: &'static str,
+    /// Secondary actions, in the order `execute`'s `action` index refers to.
+    pub secondary: Vec<SecondaryDto>,
+    /// What Ctrl+C copies for this row (path, URL or value), if anything.
+    pub copy_text: Option<String>,
+}
+
+/// A secondary action as the UI sees it; its payload stays in the shell.
+#[derive(Debug, Serialize)]
+pub struct SecondaryDto {
+    pub label: String,
+    pub modifier: Option<Modifier>,
+    pub kind: &'static str,
 }
 
 fn action_kind(action: &Action) -> &'static str {
@@ -56,6 +82,8 @@ fn action_kind(action: &Action) -> &'static str {
         Action::OpenUrl { .. } => "open_url",
         Action::CopyText { .. } => "copy_text",
         Action::Custom { .. } => "custom",
+        Action::RevealPath { .. } => "reveal_path",
+        Action::RunAsAdmin { .. } => "run_as_admin",
     }
 }
 
@@ -70,6 +98,16 @@ fn to_dtos(icons: Vec<Option<IconDto>>, items: &[ResultItem]) -> Vec<ResultDto> 
             icon,
             plugin_id: item.plugin_id.clone(),
             action: action_kind(&item.action),
+            secondary: item
+                .secondary
+                .iter()
+                .map(|s| SecondaryDto {
+                    label: s.label.clone(),
+                    modifier: s.modifier,
+                    kind: action_kind(&s.action),
+                })
+                .collect(),
+            copy_text: item.copy_text(),
         })
         .collect()
 }
@@ -108,27 +146,60 @@ pub async fn search(app: AppHandle, query: String) -> SearchResponse {
 }
 
 /// Executes result `id` of search `ticket`, the result set the UI is showing.
+/// `action` is the index of one of the result's secondary actions; without it
+/// the primary action runs.
 ///
 /// Actions that hand over to another program (launch, open a path or URL) hide
 /// the window *first*: the platform call can take a second (a slow `.lnk`), and
 /// the user's intent is already clear. If it then fails the window comes back
 /// as it was, with the error. Copying is instant and keeps the old order.
 #[tauri::command]
-pub async fn execute(app: AppHandle, id: String, ticket: u64) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || run_execute(&app, &id, ticket))
+pub async fn execute(
+    app: AppHandle,
+    id: String,
+    ticket: u64,
+    action: Option<usize>,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || run_execute(&app, &id, ticket, action))
         .await
         .map_err(|err| format!("the action did not finish: {err}"))?
+}
+
+/// Copies the most useful text of result `id` of search `ticket` (Ctrl+C):
+/// its path, URL or value. Like Enter on a calculator result, it hides the
+/// window afterwards. Not a launch, so usage statistics are untouched.
+#[tauri::command]
+pub async fn copy_result(app: AppHandle, id: String, ticket: u64) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let Some((item, _query)) = state.search.result(ticket, &id) else {
+        return Err("result expired".to_owned());
+    };
+    let Some(text) = item.copy_text() else {
+        return Err("nothing to copy for this result".to_owned());
+    };
+    sevak_platform::clipboard::set_text(&text).map_err(|err| err.to_string())?;
+    window::hide(&app);
+    Ok(())
 }
 
 /// Whether the action leaves Sevak for another program.
 fn hands_over(action: &Action) -> bool {
     matches!(
         action,
-        Action::Launch { .. } | Action::OpenPath { .. } | Action::OpenUrl { .. }
+        Action::Launch { .. }
+            | Action::OpenPath { .. }
+            | Action::OpenUrl { .. }
+            | Action::RevealPath { .. }
+            | Action::RunAsAdmin { .. }
     )
 }
 
-fn run_execute(app: &AppHandle, id: &str, ticket: u64) -> Result<(), String> {
+fn run_execute(
+    app: &AppHandle,
+    id: &str,
+    ticket: u64,
+    choice: Option<usize>,
+) -> Result<(), String> {
     let state = app.state::<AppState>();
     let search = &state.search;
     let Some((item, query)) = search.result(ticket, id) else {
@@ -136,13 +207,27 @@ fn run_execute(app: &AppHandle, id: &str, ticket: u64) -> Result<(), String> {
         return Err("result expired".to_owned());
     };
 
-    let optimistic = hands_over(&item.action);
+    let action = match choice {
+        None => &item.action,
+        Some(index) => match item.secondary.get(index) {
+            Some(secondary) => &secondary.action,
+            None => {
+                tracing::warn!(id, index, "execute: no such action");
+                return Err("that action is not available".to_owned());
+            }
+        },
+    };
+    let optimistic = hands_over(action);
     if optimistic {
         window::hide_silently(app);
     }
 
     let started = Instant::now();
-    match search.engine().execute(&item, &query) {
+    let outcome = match choice {
+        None => search.engine().execute(&item, &query),
+        Some(index) => search.engine().execute_secondary(&item, index, &query),
+    };
+    match outcome {
         Ok(()) => {
             tracing::info!(
                 id,

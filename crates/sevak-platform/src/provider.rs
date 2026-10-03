@@ -25,6 +25,26 @@ pub trait PlatformProvider: Send + Sync {
         crate::open::open_path(path)
     }
 
+    /// Shows `path` selected in the system file manager (its parent folder
+    /// opens with the item highlighted where the file manager supports it).
+    fn reveal_path(&self, path: &Path) -> Result<()> {
+        crate::open::reveal_path(path)
+    }
+
+    /// Whether [`PlatformProvider::launch_as_admin`] can work here. Plugins
+    /// offer "Run as administrator" only when this is true.
+    fn can_run_as_admin(&self) -> bool {
+        false
+    }
+
+    /// Starts an application elevated (Windows: the `runas` verb, which shows
+    /// the UAC prompt). Unsupported where `can_run_as_admin` is false.
+    fn launch_as_admin(&self, _target: &LaunchTarget) -> Result<()> {
+        Err(crate::error::PlatformError::Unsupported(
+            "running as administrator",
+        ))
+    }
+
     /// Opens an `http(s)://` or `mailto:` URL with the default handler.
     fn open_url(&self, url: &str) -> Result<()> {
         crate::open::open_url(url)
