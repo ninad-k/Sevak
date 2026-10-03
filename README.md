@@ -35,17 +35,10 @@ Built with Rust, [Tauri](https://tauri.app) v2 and Svelte 5. Licensed under
 
 ## Install
 
-With a package manager:
-
-| Platform | Command |
-|---|---|
-| Windows (winget) | `winget install NinadKulkarni.Sevak` |
-| Windows (Scoop) | `scoop bucket add ninad-k https://github.com/ninad-k/scoop-bucket` then `scoop install sevak` |
-| macOS (Homebrew) | `brew install --cask ninad-k/tap/sevak` |
-| Arch Linux (AUR) | `yay -S sevak-bin` (or any AUR helper) |
-
-Or download the installer for your platform from the
-[Releases page](https://github.com/ninad-k/Sevak/releases):
+Download the installer for your platform from the
+[Releases page](https://github.com/ninad-k/Sevak/releases). Sevak then keeps
+itself up to date. Packages for winget, Scoop, Homebrew and the AUR are coming
+soon ([#12](https://github.com/ninad-k/Sevak/issues/12)).
 
 | Platform | Package |
 |---|---|
