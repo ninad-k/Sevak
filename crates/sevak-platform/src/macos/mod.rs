@@ -2,6 +2,8 @@
 //! standard application folders, launched and opened through `/usr/bin/open`.
 
 mod capture;
+mod contacts;
+mod dictionary;
 mod paste;
 
 use std::collections::HashSet;
@@ -13,6 +15,7 @@ use std::time::Instant;
 use sevak_core::{AppEntry, IconData, IconSource, LaunchTarget};
 
 use crate::capture::{CaptureOptions, SelectionCapture};
+use crate::contacts::{Contact, ContactsAccess};
 use crate::error::{PlatformError, Result};
 use crate::icon_file;
 use crate::paste::{ClipboardRead, ForegroundApp, PasteOutcome, PasteSupport};
@@ -102,6 +105,22 @@ impl PlatformProvider for MacProvider {
 
     fn read_clipboard(&self) -> Result<ClipboardRead> {
         paste::read_clipboard()
+    }
+
+    fn contacts_access(&self) -> ContactsAccess {
+        contacts::status()
+    }
+
+    fn request_contacts_access(&self) -> Result<ContactsAccess> {
+        contacts::request()
+    }
+
+    fn system_contacts(&self) -> Result<Vec<Contact>> {
+        contacts::read_contacts()
+    }
+
+    fn system_definition(&self, word: &str) -> Option<String> {
+        dictionary::definition(word)
     }
 }
 

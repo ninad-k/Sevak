@@ -327,6 +327,7 @@ mod tests {
                     action: "copy_text",
                     secondary: Vec::new(),
                     copy_text: Some("my password".into()),
+                    large_text: None,
                 },
                 window: None,
             }],

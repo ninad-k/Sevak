@@ -152,7 +152,15 @@ Bundle settings are the `bundle` object in `src-tauri/tauri.conf.json`:
   ad-hoc signed (`bundle.macOS.signingIdentity: "-"`), not notarized.
   `app.macOSPrivateApi` (and Tauri's `macos-private-api` feature) give the
   launcher its transparent window.
+- macOS: `src-tauri/Info.plist` is merged into the app's `Info.plist` by Tauri. It
+  holds `NSContactsUsageDescription`; macOS ends an app that reads Contacts
+  without it, so keep it while the contacts plugin uses the Contacts framework.
 - Installers are not code-signed yet.
+- `crates/sevak-plugins/data/wordnet-en.z` is the bundled dictionary (about 2.7
+  MB), generated from Princeton WordNet 3.0 by `scripts/build-dictionary.py`
+  (`python scripts/build-dictionary.py <path to WordNet-3.0>`, Python 3, no
+  dependencies). Regenerate it only to change what is kept; its licence notice is
+  inside the file and in `THIRD_PARTY_NOTICES.md`.
 
 ## CI
 

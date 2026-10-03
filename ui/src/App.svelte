@@ -528,7 +528,7 @@
       openPanel();
     } else if (ctrl && !e.shiftKey && lower === "l") {
       e.preventDefault();
-      if (current && !e.repeat) void openLargeType(current.title);
+      if (current && !e.repeat) void openLargeType(current.large_text ?? current.title);
     } else if (
       ctrl &&
       !e.shiftKey &&

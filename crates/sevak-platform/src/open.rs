@@ -3,6 +3,7 @@
 use std::ffi::OsStr;
 use std::path::Path;
 
+use crate::deep_link::DeepLink;
 use crate::error::{PlatformError, Result};
 
 /// Opens a file or folder with the default handler.
@@ -39,6 +40,14 @@ pub fn open_url(url: &str) -> Result<()> {
         ));
     }
     open_target(OsStr::new(url))
+}
+
+/// Opens a link from the closed [`DeepLink`] list (`tel:`, 1Password and macOS
+/// Contacts links). This is deliberately not [`open_url`]: that function stays
+/// limited to web and mail links, and a `DeepLink` can only be built from the
+/// validated pieces its constructors accept.
+pub fn open_deep_link(link: &DeepLink) -> Result<()> {
+    open_target(OsStr::new(link.as_str()))
 }
 
 /// Opens a text file (such as `config.toml`) for editing.

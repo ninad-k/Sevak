@@ -5,8 +5,8 @@ use std::sync::{Arc, Mutex};
 
 use sevak_core::{AppEntry, IconData, IconSource, LaunchTarget, ShellConfig};
 use sevak_platform::{
-    ClipboardRead, ForegroundApp, PasteOutcome, PasteSupport, PlatformError, PlatformProvider,
-    Result, SettingsPage, SystemCommand,
+    ClipboardRead, Contact, ContactsAccess, DeepLink, ForegroundApp, PasteOutcome, PasteSupport,
+    PlatformError, PlatformProvider, Result, SettingsPage, Spelling, SystemCommand,
 };
 
 #[derive(Default)]
@@ -38,6 +38,18 @@ pub struct MockPlatform {
     pub clipboard_sequence: Mutex<Option<u64>>,
     /// What `read_clipboard` returns; `None` makes it fail like a busy clipboard.
     pub clipboard_read: Mutex<Option<ClipboardRead>>,
+    /// URLs of the `DeepLink`s opened.
+    pub opened_links: Mutex<Vec<String>>,
+    /// What `contacts_access` reports; `None` is "unsupported".
+    pub contacts_access: Mutex<Option<ContactsAccess>>,
+    /// What `request_contacts_access` switches `contacts_access` to.
+    pub contacts_after_request: Mutex<Option<ContactsAccess>>,
+    pub system_contacts: Mutex<Vec<Contact>>,
+    pub evolution_dbs: Mutex<Vec<PathBuf>>,
+    /// What `system_definition` answers, by word.
+    pub definitions: Mutex<Vec<(String, String)>>,
+    /// What `system_spelling` answers, by word.
+    pub spellings: Mutex<Vec<(String, Spelling)>>,
 }
 
 impl MockPlatform {
@@ -168,5 +180,52 @@ impl PlatformProvider for MockPlatform {
             .unwrap()
             .clone()
             .ok_or(PlatformError::Unsupported("a busy clipboard"))
+    }
+
+    fn open_link(&self, link: &DeepLink) -> Result<()> {
+        self.opened_links
+            .lock()
+            .unwrap()
+            .push(link.as_str().to_owned());
+        Ok(())
+    }
+
+    fn contacts_access(&self) -> ContactsAccess {
+        self.contacts_access
+            .lock()
+            .unwrap()
+            .clone()
+            .unwrap_or(ContactsAccess::Unsupported)
+    }
+
+    fn request_contacts_access(&self) -> Result<ContactsAccess> {
+        if let Some(after) = self.contacts_after_request.lock().unwrap().clone() {
+            *self.contacts_access.lock().unwrap() = Some(after);
+        }
+        Ok(self.contacts_access())
+    }
+
+    fn system_contacts(&self) -> Result<Vec<Contact>> {
+        Ok(self.system_contacts.lock().unwrap().clone())
+    }
+
+    fn evolution_address_books(&self) -> Vec<PathBuf> {
+        self.evolution_dbs.lock().unwrap().clone()
+    }
+
+    fn system_definition(&self, word: &str) -> Option<String> {
+        let definitions = self.definitions.lock().unwrap();
+        definitions
+            .iter()
+            .find(|(w, _)| w == word)
+            .map(|(_, d)| d.clone())
+    }
+
+    fn system_spelling(&self, word: &str) -> Option<Spelling> {
+        let spellings = self.spellings.lock().unwrap();
+        spellings
+            .iter()
+            .find(|(w, _)| w == word)
+            .map(|(_, s)| s.clone())
     }
 }

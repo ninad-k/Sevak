@@ -8,7 +8,10 @@
 pub mod browsers;
 pub mod capture;
 pub mod clipboard;
+pub mod contacts;
+pub mod deep_link;
 pub mod desktop_entry;
+pub mod dictionary;
 pub mod error;
 pub mod gnome;
 pub mod icon_file;
@@ -35,6 +38,9 @@ compile_error!("Sevak supports Windows, macOS and Linux only");
 
 pub use browsers::{BrowserFamily, BrowserRoot};
 pub use capture::{CaptureOptions, SelectionCapture};
+pub use contacts::{Contact, ContactsAccess};
+pub use deep_link::DeepLink;
+pub use dictionary::Spelling;
 pub use error::{PlatformError, Result};
 pub use paste::{ClipboardRead, ForegroundApp, PasteOutcome, PasteSupport};
 pub use paths::AppPaths;

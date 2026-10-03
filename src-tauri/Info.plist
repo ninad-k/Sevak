@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Merged into the app's Info.plist by Tauri. macOS ends an app that reads
+	     contacts without this text, so it must stay even though nothing is read
+	     unless [contacts] enabled = true and the user allows it. -->
+	<key>NSContactsUsageDescription</key>
+	<string>Sevak searches your contacts when you enable the Contacts plugin. They stay in memory and are never sent anywhere.</string>
+</dict>
+</plist>

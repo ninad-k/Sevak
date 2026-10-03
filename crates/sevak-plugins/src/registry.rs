@@ -29,8 +29,9 @@ use sevak_platform::PlatformProvider;
 
 use crate::clipboard_history::default_history_path;
 use crate::{
-    AppsPlugin, BookmarksPlugin, CalculatorPlugin, ClipboardPlugin, FilesPlugin, SelectionPlugin,
-    ShellPlugin, SnippetsPlugin, SystemPlugin, UuidPlugin, WebSearchPlugin,
+    AppsPlugin, BookmarksPlugin, CalculatorPlugin, ClipboardPlugin, ContactsPlugin,
+    DictionaryPlugin, FilesPlugin, OnePasswordPlugin, SelectionPlugin, ShellPlugin, SnippetsPlugin,
+    SystemPlugin, UuidPlugin, WebSearchPlugin,
 };
 
 /// Builds the instances of one plugin family.
@@ -108,8 +109,8 @@ impl PluginRegistry {
     }
 
     /// Apps, calculator, web search, files, bookmarks, system commands, shell,
-    /// clipboard history, snippets, Universal Actions and the example UUID
-    /// plugin, in that order.
+    /// clipboard history, snippets, Universal Actions, contacts, 1Password,
+    /// the dictionary and the example UUID plugin, in that order.
     /// Order matters only for tie-breaking and logging.
     pub fn builtin() -> Self {
         let mut registry = Self::new();
@@ -213,6 +214,31 @@ impl PluginRegistry {
             "Universal Actions",
             "Offers actions (search, transform, copy, open) for text, URLs or files you selected in another app; see actions_hotkey.",
             |config, platform| vec![Arc::new(SelectionPlugin::new(config, platform.clone()))],
+        ));
+        registry.register(PluginDescriptor::new(
+            "contacts",
+            "Contacts",
+            "Type `c` or `@` to find people by name, email, phone or company. Off until [contacts] enabled = true.",
+            |config, platform| ContactsPlugin::instances(&config.contacts, platform.clone()),
+        ));
+        registry.register(PluginDescriptor::new(
+            "1password",
+            "1Password",
+            "Type `1p` to open a login's website or its 1Password item (titles only, never passwords). Needs the op tool; off until [onepassword] enabled = true.",
+            |config, platform| {
+                vec![Arc::new(OnePasswordPlugin::new(
+                    &config.onepassword,
+                    platform.clone(),
+                ))]
+            },
+        ));
+        registry.register(PluginDescriptor::new(
+            "dict",
+            "Dictionary and spelling",
+            "Type `define <word>` for definitions and `spell <word>` for corrections, offline.",
+            |config, platform| {
+                DictionaryPlugin::instances(&config.dictionary, &config.paste, platform.clone())
+            },
         ));
         registry.register(PluginDescriptor::new(
             "uuid",
@@ -332,6 +358,9 @@ mod tests {
                 "clipboard",
                 "snippets",
                 "selection",
+                "contacts",
+                "1password",
+                "dict",
                 "uuid"
             ]
         );
@@ -354,6 +383,11 @@ mod tests {
                 "clipboard",
                 "snippets",
                 "selection",
+                "contacts",
+                "contacts:at",
+                "1password",
+                "dict",
+                "dict:spell",
                 "uuid"
             ]
         );
@@ -374,6 +408,11 @@ mod tests {
                 "clipboard",
                 "snippets",
                 "selection",
+                "contacts",
+                "contacts:at",
+                "1password",
+                "dict",
+                "dict:spell",
                 "uuid"
             ]
         );
@@ -394,7 +433,12 @@ mod tests {
                 "shell",
                 "clipboard",
                 "snippets",
-                "selection"
+                "selection",
+                "contacts",
+                "contacts:at",
+                "1password",
+                "dict",
+                "dict:spell"
             ]
         );
     }
@@ -402,7 +446,7 @@ mod tests {
     #[test]
     fn unknown_disabled_ids_are_ignored() {
         let config = config_disabling(&["nope"]);
-        assert_eq!(ids(&PluginRegistry::builtin(), &config).len(), 13);
+        assert_eq!(ids(&PluginRegistry::builtin(), &config).len(), 18);
     }
 
     #[test]
@@ -425,6 +469,11 @@ mod tests {
                 ("clipboard", true),
                 ("snippets", true),
                 ("selection", true),
+                ("contacts", true),
+                ("contacts:at", true),
+                ("1password", true),
+                ("dict", true),
+                ("dict:spell", true),
                 ("uuid", true),
             ]
         );

@@ -18,7 +18,10 @@ tracing.workspace = true
 [target.'cfg(windows)'.dependencies]
 png = "0.18"
 windows = { workspace = true, features = [
+    "ApplicationModel_Contacts",
+    "Foundation_Collections",
     "Win32_Foundation",
+    "Win32_Globalization",
     "Win32_Graphics_Gdi",
     "Win32_Storage_FileSystem",
     "Win32_System_Com",
@@ -59,6 +62,11 @@ objc2-core-graphics = { version = "0.3", default-features = false, features = [
     "CGEventTypes",
     "CGRemoteOperation",
 ] }
+
+# Contacts framework (CNContactStore) for the contacts plugin.
+block2 = "0.6"
+objc2-contacts = "0.3"
+objc2-foundation = "0.3"
 
 [target.'cfg(windows)'.dev-dependencies]
 tempfile = "3"

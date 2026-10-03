@@ -81,7 +81,7 @@ custom_css = ""
 [plugins]
 # Ids of built-in plugins to turn off: "apps", "calculator", "files",
 # "bookmarks", "system", "shell", "clipboard", "snippets", "selection"
-# (Universal Actions), "web:<keyword>".
+# (Universal Actions), "contacts", "1password", "dict", "web:<keyword>".
 disabled = []
 
 [calculator]
@@ -168,6 +168,47 @@ max_item_bytes = 65536
 # Matched case-insensitively against the program or app name.
 ignore_apps = []
 
+[contacts]
+# Search your contacts ("c <name>" or "@name"): copy an email or phone number,
+# write an email, call (tel: link), or open the card. Off by default. Contacts
+# are read into memory only; nothing is written to disk or sent anywhere.
+enabled = false
+# Keyword (the "@" keyword always works too). "" keeps the default.
+keyword = "c"
+# Also read the system address book: macOS Contacts (asks for permission the
+# first time you use it), the Windows People store and Evolution's local
+# address books on Linux.
+use_system = true
+# vCard files (.vcf) or folders of them, e.g. ["~/contacts.vcf", "~/Contacts"].
+# This works everywhere and needs no permission.
+vcard_files = []
+
+[onepassword]
+# Search your 1Password logins ("1p github"): Enter opens the item's website,
+# the action panel opens it in the 1Password app or copies the username. Needs
+# the official `op` command-line tool, signed in (1Password > Settings >
+# Developer > "Integrate with 1Password CLI"). Only titles, websites and
+# usernames are read, never passwords or one-time codes. Off by default.
+enabled = false
+keyword = "1p"
+# Path to the `op` program. "" looks on PATH and in the usual install folders.
+op_path = ""
+# Which account to use when several are signed in: its address (my.1password.com),
+# short name or ID. "" uses op's default.
+account = ""
+# How long the list of logins is kept in memory before `1p` refreshes it.
+cache_minutes = 10
+
+[dictionary]
+# "define <word>" shows definitions and "spell <word>" suggests corrections, all
+# offline. macOS uses its Dictionary and Windows its spell checker; elsewhere a
+# bundled English dictionary (WordNet) is used. Turn it off with "dict" in
+# [plugins] disabled.
+define_keyword = "define"
+spell_keyword = "spell"
+# false always uses the bundled dictionary and word list.
+use_system = true
+
 # Snippets ("s <name>"): text you paste often. Placeholders: {date}, {time},
 # {datetime}, {date:%d %B %Y}, {clipboard}, {uuid}; write {{ and }} for literal
 # braces. "keyword" is optional and also matches the search.
@@ -231,6 +272,9 @@ pub struct Config {
     pub paste: PasteConfig,
     pub actions: ActionsConfig,
     pub clipboard: ClipboardConfig,
+    pub contacts: ContactsConfig,
+    pub onepassword: OnePasswordConfig,
+    pub dictionary: DictionaryConfig,
     /// `[[snippet]]` entries. Edited by hand only: saves from the settings
     /// window leave them untouched (see `merge_document`).
     pub snippet: Vec<Snippet>,
@@ -257,6 +301,9 @@ impl Default for Config {
             paste: PasteConfig::default(),
             actions: ActionsConfig::default(),
             clipboard: ClipboardConfig::default(),
+            contacts: ContactsConfig::default(),
+            onepassword: OnePasswordConfig::default(),
+            dictionary: DictionaryConfig::default(),
             snippet: Vec::new(),
             web_search: WebSearchEngine::defaults(),
             hotkeys: Vec::new(),
@@ -628,6 +675,78 @@ impl Default for ClipboardConfig {
     }
 }
 
+/// The contacts plugin (`c` / `@`). Opt-in: nothing is read unless `enabled`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ContactsConfig {
+    pub enabled: bool,
+    pub keyword: String,
+    /// Also read the system address book (macOS Contacts, Windows People,
+    /// Evolution on Linux).
+    pub use_system: bool,
+    /// `.vcf` files and folders of them; `~` is the home folder.
+    pub vcard_files: Vec<String>,
+}
+
+impl Default for ContactsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            keyword: "c".to_owned(),
+            use_system: true,
+            vcard_files: Vec::new(),
+        }
+    }
+}
+
+/// The 1Password plugin (`1p`). Opt-in: the `op` tool is never started unless
+/// `enabled`, and then only when the user types the keyword.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct OnePasswordConfig {
+    pub enabled: bool,
+    pub keyword: String,
+    /// Path to `op`; empty searches `PATH` and the usual install folders.
+    pub op_path: String,
+    /// Account address, shorthand or ID passed to `op --account`; empty uses
+    /// op's default.
+    pub account: String,
+    /// Minutes the list of logins is kept before it is refreshed.
+    pub cache_minutes: u32,
+}
+
+impl Default for OnePasswordConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            keyword: "1p".to_owned(),
+            op_path: String::new(),
+            account: String::new(),
+            cache_minutes: 10,
+        }
+    }
+}
+
+/// The dictionary plugin (`define`, `spell`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DictionaryConfig {
+    pub define_keyword: String,
+    pub spell_keyword: String,
+    /// Prefer the OS dictionary and spell checker where there is one.
+    pub use_system: bool,
+}
+
+impl Default for DictionaryConfig {
+    fn default() -> Self {
+        Self {
+            define_keyword: "define".to_owned(),
+            spell_keyword: "spell".to_owned(),
+            use_system: true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SystemConfig {
@@ -854,6 +973,23 @@ impl Config {
         self.clipboard
             .ignore_apps
             .retain(|app| !app.trim().is_empty());
+        for (keyword, default) in [
+            (&mut self.contacts.keyword, "c"),
+            (&mut self.onepassword.keyword, "1p"),
+            (&mut self.dictionary.define_keyword, "define"),
+            (&mut self.dictionary.spell_keyword, "spell"),
+        ] {
+            *keyword = keyword.trim().to_owned();
+            if keyword.is_empty() || keyword.contains(char::is_whitespace) {
+                *keyword = default.to_owned();
+            }
+        }
+        self.contacts
+            .vcard_files
+            .retain(|path| !path.trim().is_empty());
+        self.onepassword.op_path = self.onepassword.op_path.trim().to_owned();
+        self.onepassword.account = self.onepassword.account.trim().to_owned();
+        self.onepassword.cache_minutes = self.onepassword.cache_minutes.clamp(1, 24 * 60);
         // A snippet needs a name to be found by and text to paste.
         self.snippet
             .retain(|snippet| !snippet.name.trim().is_empty() && !snippet.text.is_empty());
@@ -1060,6 +1196,27 @@ mod tests {
     fn default_template_matches_default_struct() {
         let parsed = Config::from_toml_str(DEFAULT_CONFIG_TOML).expect("template parses");
         assert_eq!(parsed, Config::default());
+    }
+
+    #[test]
+    fn integrations_are_opt_in_and_normalized() {
+        let defaults = Config::default();
+        assert!(!defaults.contacts.enabled);
+        assert!(!defaults.onepassword.enabled);
+        assert_eq!(defaults.dictionary.define_keyword, "define");
+
+        let config = Config::from_toml_str(
+            "[contacts]\nenabled = true\nkeyword = \"  \"\nvcard_files = [\"a.vcf\", \" \"]\n\
+             [onepassword]\nkeyword = \"two words\"\ncache_minutes = 0\nop_path = \" /bin/op \"\n",
+        )
+        .unwrap()
+        .normalized();
+        assert!(config.contacts.enabled);
+        assert_eq!(config.contacts.keyword, "c");
+        assert_eq!(config.contacts.vcard_files, ["a.vcf"]);
+        assert_eq!(config.onepassword.keyword, "1p");
+        assert_eq!(config.onepassword.cache_minutes, 1);
+        assert_eq!(config.onepassword.op_path, "/bin/op");
     }
 
     #[test]

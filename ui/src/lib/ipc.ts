@@ -79,6 +79,8 @@ export interface ResultDto {
   secondary: SecondaryDto[];
   /** What Ctrl+C copies for this row, if anything. */
   copy_text: string | null;
+  /** What Ctrl+L shows as Large Type instead of the title (a phone number, say). */
+  large_text?: string | null;
 }
 
 export type IndexState = "indexing" | "ready";

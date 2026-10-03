@@ -68,6 +68,8 @@ pub struct ResultDto {
     pub secondary: Vec<SecondaryDto>,
     /// What Ctrl+C copies for this row (path, URL or value), if anything.
     pub copy_text: Option<String>,
+    /// What Ctrl+L shows as Large Type when it is not the title.
+    pub large_text: Option<String>,
 }
 
 /// A secondary action as the UI sees it; its payload stays in the shell.
@@ -113,6 +115,7 @@ pub(crate) fn to_dtos(icons: Vec<Option<IconDto>>, items: &[ResultItem]) -> Vec<
                 })
                 .collect(),
             copy_text: item.copy_text(),
+            large_text: item.large_text.clone(),
         })
         .collect()
 }

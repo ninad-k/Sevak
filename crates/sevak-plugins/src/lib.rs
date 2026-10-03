@@ -12,6 +12,9 @@
 //! | `clipboard`      | [`ClipboardPlugin`] (opt-in history)    | `cb`    | no     |
 //! | `snippets`       | [`SnippetsPlugin`]                      | `s`     | no     |
 //! | `selection`      | [`SelectionPlugin`] (Universal Actions) | none    | no     |
+//! | `contacts`       | [`ContactsPlugin`] (opt-in; also `contacts:at`) | `c`, `@` | no |
+//! | `1password`      | [`OnePasswordPlugin`] (opt-in)          | `1p`    | no     |
+//! | `dict`           | [`DictionaryPlugin`] (also `dict:spell`) | `define`, `spell` | no |
 //! | `uuid`           | [`UuidPlugin`] (a tutorial example)     | `uuid`  | no     |
 //!
 //! Script plugins (`script:<name>`, from `<config dir>/plugins/`) are loaded by
@@ -31,9 +34,12 @@ pub mod apps;
 pub mod bookmarks;
 pub mod calculator;
 pub mod clipboard_history;
+pub mod contacts;
 pub mod currency;
+pub mod dictionary;
 pub mod example_uuid;
 pub mod files;
+pub mod onepassword;
 pub mod path_browse;
 pub mod registry;
 pub mod script;
@@ -52,8 +58,11 @@ pub use apps::AppsPlugin;
 pub use bookmarks::BookmarksPlugin;
 pub use calculator::CalculatorPlugin;
 pub use clipboard_history::ClipboardPlugin;
+pub use contacts::ContactsPlugin;
+pub use dictionary::DictionaryPlugin;
 pub use example_uuid::UuidPlugin;
 pub use files::FilesPlugin;
+pub use onepassword::OnePasswordPlugin;
 pub use registry::{PluginDescriptor, PluginFactory, PluginInfo, PluginRegistry};
 pub use script::{ScriptPlugin, ScriptPluginHost};
 pub use selection::SelectionPlugin;
@@ -64,7 +73,8 @@ pub use web_search::WebSearchPlugin;
 
 /// Instantiates every enabled built-in plugin (`apps`, `calculator`, one
 /// `web:<keyword>` per `[[web_search]]` engine, `files`, `bookmarks`, `system`,
-/// `shell`, `clipboard`, `snippets`, `selection`, `uuid`).
+/// `shell`, `clipboard`, `snippets`, `selection`, `contacts`, `1password`,
+/// `dict`, `uuid`).
 ///
 /// Shorthand for `PluginRegistry::builtin().instantiate(config, platform)`.
 ///
@@ -106,6 +116,11 @@ mod tests {
                 "clipboard",
                 "snippets",
                 "selection",
+                "contacts",
+                "contacts:at",
+                "1password",
+                "dict",
+                "dict:spell",
                 "uuid"
             ]
         );
@@ -127,6 +142,11 @@ mod tests {
                 "clipboard",
                 "snippets",
                 "selection",
+                "contacts",
+                "contacts:at",
+                "1password",
+                "dict",
+                "dict:spell",
                 "uuid"
             ]
         );

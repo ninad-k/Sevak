@@ -1,11 +1,14 @@
 //! The OS abstraction the rest of Sevak programs against.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use sevak_core::{AppEntry, IconData, IconSource, LaunchTarget, ShellConfig};
 
 use crate::browsers::BrowserRoot;
 use crate::capture::{CaptureOptions, SelectionCapture};
+use crate::contacts::{Contact, ContactsAccess};
+use crate::deep_link::DeepLink;
+use crate::dictionary::Spelling;
 use crate::error::Result;
 use crate::paste::{ClipboardRead, ForegroundApp, PasteOutcome, PasteSupport, UNSUPPORTED_REASON};
 use crate::system::{SettingsPage, SystemCommand};
@@ -164,5 +167,55 @@ pub trait PlatformProvider: Send + Sync {
             text: crate::clipboard::read_text()?,
             sensitive: false,
         })
+    }
+
+    /// Opens a link from the closed [`DeepLink`] list (`tel:`, 1Password,
+    /// macOS Contacts). Separate from [`PlatformProvider::open_url`], which
+    /// stays limited to web and mail links.
+    fn open_link(&self, link: &DeepLink) -> Result<()> {
+        crate::open::open_deep_link(link)
+    }
+
+    /// Whether Sevak may read the OS address book (macOS Contacts). Cheap and
+    /// never asks the user anything. Systems without a readable address book
+    /// say [`ContactsAccess::Unsupported`]; the contacts plugin then relies on
+    /// vCard files.
+    fn contacts_access(&self) -> ContactsAccess {
+        ContactsAccess::Unsupported
+    }
+
+    /// Shows the OS question "allow Sevak to access your contacts?" and waits
+    /// for the answer (macOS). Call it from a background thread, and only
+    /// because the user asked for it.
+    fn request_contacts_access(&self) -> Result<ContactsAccess> {
+        Ok(self.contacts_access())
+    }
+
+    /// Reads the OS address book (macOS Contacts, Windows People). Slow; call it
+    /// from a background thread, and only when
+    /// [`PlatformProvider::contacts_access`] is [`ContactsAccess::Granted`].
+    /// Systems without one return an empty list.
+    fn system_contacts(&self) -> Result<Vec<Contact>> {
+        Ok(Vec::new())
+    }
+
+    /// Evolution Data Server address books (`contacts.db` files; Linux). Only
+    /// paths, nothing is read.
+    fn evolution_address_books(&self) -> Vec<PathBuf> {
+        crate::contacts::evolution_databases()
+    }
+
+    /// The definition of `word` from the OS dictionary (macOS Dictionary
+    /// Services), as plain text, or `None` if the OS has no dictionary or no
+    /// entry. Offline and quick.
+    fn system_definition(&self, _word: &str) -> Option<String> {
+        None
+    }
+
+    /// Spell-checks one word with the OS spell checker (Windows `ISpellChecker`).
+    /// `None` where the OS has none, or when it could not answer in time; the
+    /// dictionary plugin then uses its own word list.
+    fn system_spelling(&self, _word: &str) -> Option<Spelling> {
+        None
     }
 }

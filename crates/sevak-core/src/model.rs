@@ -34,6 +34,10 @@ pub struct ResultItem {
     /// keyword route the engine prefixes the typed keyword.
     #[serde(default)]
     pub autocomplete: Option<String>,
+    /// What Large Type (Ctrl+L) shows for this row instead of its title: a
+    /// phone number for a contact, say. `None` shows the title.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub large_text: Option<String>,
 }
 
 impl ResultItem {
@@ -54,6 +58,7 @@ impl ResultItem {
             action,
             secondary: Vec::new(),
             autocomplete: None,
+            large_text: None,
         }
     }
 
@@ -79,6 +84,13 @@ impl ResultItem {
     #[must_use]
     pub fn with_autocomplete(mut self, text: impl Into<String>) -> Self {
         self.autocomplete = Some(text.into());
+        self
+    }
+
+    /// Sets the text Large Type shows (see [`ResultItem::large_text`]).
+    #[must_use]
+    pub fn with_large_text(mut self, text: impl Into<String>) -> Self {
+        self.large_text = Some(text.into());
         self
     }
 

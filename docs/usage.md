@@ -295,6 +295,97 @@ On an empty search bar, `↑` and `↓` step through the last 50 searches you
 ran, newest first; typing leaves history. Turn it off with
 `search.query_history = false`, which also deletes the stored searches.
 
+## Contacts
+
+Search your address book with `c ` or `@`: `c ada`, `@lovelace`, `c 555 0100`.
+The plugin is **off by default**. Turn it on in `config.toml` and choose
+**Reload index**:
+
+```toml
+[contacts]
+enabled = true
+vcard_files = ["~/contacts.vcf"]   # optional: .vcf files or folders of them
+```
+
+Names, e-mail addresses, phone numbers and company names are searched. Each row
+shows the person with their main address, number and company.
+
+| Key | What it does |
+|---|---|
+| `Enter` | Copies the e-mail address (the phone number if there is no address) |
+| `Ctrl+Enter` | Writes an e-mail (opens your mail program) |
+| `Shift+Enter` | Copies the phone number |
+| `Alt+Enter` | Calls the number (`tel:`, handled by whichever phone app you have) |
+| `Ctrl+L` | Shows the phone number as Large Type |
+| `→` or `Ctrl+K` | Lists these and more: open the contact card (macOS), copy other addresses and numbers |
+
+Where the contacts come from:
+
+| | Source |
+|---|---|
+| Everywhere | vCard (`.vcf`) files and folders listed in `vcard_files`. Export one from your address book, Outlook, Google Contacts or a phone. No permission needed. |
+| macOS | The Contacts app. The first time you type `c`, a row asks to allow access; press Enter and answer macOS's question. Until you do, only vCard files are searched. |
+| Windows | The People store behind the Mail and People apps. If your account's contacts are not in it, export a vCard file instead. |
+| Linux | Evolution's local address books (`~/.local/share/evolution/addressbook`). Other address books: export a vCard file. |
+
+Set `use_system = false` to read vCard files only. Contacts are loaded into
+memory when Sevak starts and every ten minutes, never written to disk, never
+logged and never sent anywhere. Searches and picks in this plugin are kept out
+of the search history and usage statistics, so no names end up in `usage.json`.
+
+## 1Password
+
+`1p github` finds your 1Password logins by title or website. It uses the
+official [1Password command-line tool (`op`)](https://developer.1password.com/docs/cli/get-started/),
+so install it and, in the 1Password app, turn on *Settings → Developer →
+Integrate with 1Password CLI*. The plugin is **off by default**:
+
+```toml
+[onepassword]
+enabled = true
+```
+
+| Key | What it does |
+|---|---|
+| `Enter` | Opens the login's website in your browser (opens the item in 1Password if it has no website) |
+| `Ctrl+Enter` | Opens the item in the 1Password app |
+| `Shift+Enter` | Copies the username, when 1Password lists one |
+| `→` or `Ctrl+K` | Also: copy the website address |
+
+**Sevak never reads a password, one-time code, note or any other secret.** It
+asks `op` only for the list of logins (`op item list --categories Login`), which
+contains titles, vault names, website addresses and usernames, and keeps that
+list in memory. To fill in a password, open the item in 1Password. What you
+search for and pick here is kept out of the search history and usage statistics.
+
+`op` runs only when you type `1p` followed by a space, never at startup or while
+you type a normal search. The first time (and again after `cache_minutes`,
+default 10) 1Password may ask you to unlock with Touch ID, Windows Hello or your
+system password; the row says "Asking 1Password…" until it answers. If you
+dismiss the prompt, Sevak does not ask again by itself: press Enter on the
+"Try again" row. With several accounts, set `account` to the one to use.
+
+## Dictionary and spelling
+
+`define serendipity` shows the meanings of a word, one row each with its part of
+speech; Enter copies the definition (`Shift+Enter` copies it with the word) and
+`Ctrl+L` shows it large. For a word that is not found, "Did you mean" rows offer
+close words; `Tab` looks one up.
+
+`spell recieve` lists corrections, best first. Enter **pastes** the right
+spelling into the app you were using (`Ctrl+Enter` copies it; where pasting is
+not possible Enter copies). Typing a whole sentence checks it and corrects the
+first wrong word. Capitalization is kept: `Recieve` gives `Receive`.
+
+Everything is offline. macOS uses its own Dictionary for `define`, Windows its
+spell checker for `spell`, and otherwise Sevak uses a bundled English dictionary
+(WordNet, about 3 MB in the program). On Linux the word lists in
+`/usr/share/hunspell` also count as correct spellings. Inflected forms are
+explained through their base word (`running` shows `run`). The words you look up
+are not saved in the search history. Set `[dictionary] use_system = false` to
+always use the bundled data, or add `dict` to `[plugins] disabled` to turn it
+off.
+
 ## UUID example plugin
 
 When enabled, type `uuid ` for a UUID, `uuid 5` for several choices, or

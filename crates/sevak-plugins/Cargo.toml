@@ -1,6 +1,6 @@
 [package]
 name = "sevak-plugins"
-description = "Sevak built-in plugins: applications, calculator and conversions, web search, file search, bookmarks, system commands, terminal commands, clipboard history, snippets and an example plugin."
+description = "Sevak built-in plugins: applications, calculator and conversions, web search, file search, bookmarks, system commands, terminal commands, clipboard history, snippets, contacts, 1Password, a dictionary and an example plugin."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -36,6 +36,9 @@ rusqlite = { version = "0.40", features = ["bundled"] }
 # Local date and time for snippet placeholders (no timezone database needed).
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 walkdir = "2"
+# Unpacks the bundled WordNet dictionary (zlib) for `define` and `spell`; pure
+# Rust, already in the dependency tree through flate2 and png.
+miniz_oxide = "0.8"
 # Daily ECB exchange rates for the opt-in currency conversion (see `currency`).
 # Same crates and TLS backend (rustls + ring) the updater already links; the
 # blocking client runs on a plain background thread, never on the typing path.
