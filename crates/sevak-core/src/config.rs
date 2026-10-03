@@ -176,6 +176,24 @@ ignore_apps = []
 # keyword = "sig"
 # text = "Best regards,\nNinad"
 
+[snippets]
+# Expand snippets as you type in any app (a snippet needs a "keyword"). OFF by
+# default: while on, Sevak watches your keystrokes (in memory only, last 64
+# characters, never stored or logged) to notice a keyword. See "Privacy" in the
+# README. Not available on Wayland.
+auto_expand = false
+# Typed before every keyword, e.g. ";" so that ";sig" expands and "sig" does not.
+prefix = ""
+# "immediate" expands the moment the keyword is typed; "delimiter" waits for a
+# space or punctuation mark, which is kept after the text.
+expand_on = "immediate"
+# false: "SIG" and "sig" both expand.
+case_sensitive = true
+# Never expand in these apps (program or app name, case-insensitive).
+ignore_apps = []
+# Terminal windows are skipped unless this is on.
+expand_in_terminals = false
+
 # Web search engines: type "<keyword> <terms>". "{query}" is replaced by the
 # URL-encoded terms. Defining any [[web_search]] entry replaces this list.
 [[web_search]]
@@ -231,6 +249,8 @@ pub struct Config {
     pub paste: PasteConfig,
     pub actions: ActionsConfig,
     pub clipboard: ClipboardConfig,
+    /// `[snippets]`: expanding snippet keywords as you type.
+    pub snippets: SnippetsConfig,
     /// `[[snippet]]` entries. Edited by hand only: saves from the settings
     /// window leave them untouched (see `merge_document`).
     pub snippet: Vec<Snippet>,
@@ -257,6 +277,7 @@ impl Default for Config {
             paste: PasteConfig::default(),
             actions: ActionsConfig::default(),
             clipboard: ClipboardConfig::default(),
+            snippets: SnippetsConfig::default(),
             snippet: Vec::new(),
             web_search: WebSearchEngine::defaults(),
             hotkeys: Vec::new(),
@@ -628,6 +649,48 @@ impl Default for ClipboardConfig {
     }
 }
 
+/// When a typed keyword is replaced.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ExpandOn {
+    /// The moment the last character of the keyword is typed.
+    #[default]
+    Immediate,
+    /// When a space or punctuation mark follows the keyword. Also what any
+    /// unrecognised value in the file means: the cautious choice.
+    #[serde(other)]
+    Delimiter,
+}
+
+/// Expanding `[[snippet]]` keywords as you type, in any app. Opt-in: no key is
+/// observed unless `auto_expand` is set.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SnippetsConfig {
+    pub auto_expand: bool,
+    /// Put in front of every keyword (`;` makes `;sig` expand and `sig` not).
+    pub prefix: String,
+    pub expand_on: ExpandOn,
+    pub case_sensitive: bool,
+    /// Apps in which nothing is observed or expanded (program or app names).
+    pub ignore_apps: Vec<String>,
+    /// Expand in terminal windows too.
+    pub expand_in_terminals: bool,
+}
+
+impl Default for SnippetsConfig {
+    fn default() -> Self {
+        Self {
+            auto_expand: false,
+            prefix: String::new(),
+            expand_on: ExpandOn::Immediate,
+            case_sensitive: true,
+            ignore_apps: Vec::new(),
+            expand_in_terminals: false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SystemConfig {
@@ -852,6 +915,10 @@ impl Config {
             .max_item_bytes
             .clamp(1, MAX_CLIPBOARD_ITEM_BYTES_LIMIT);
         self.clipboard
+            .ignore_apps
+            .retain(|app| !app.trim().is_empty());
+        self.snippets.prefix = self.snippets.prefix.trim().to_owned();
+        self.snippets
             .ignore_apps
             .retain(|app| !app.trim().is_empty());
         // A snippet needs a name to be found by and text to paste.
@@ -1258,6 +1325,46 @@ text = ""
         assert_eq!(config.snippet[0].keyword.as_deref(), Some("sig"));
         assert_eq!(config.snippet[0].text, "Regards\nNinad");
         assert_eq!(config.snippet[1].keyword, None);
+    }
+
+    #[test]
+    fn snippet_expansion_is_off_by_default() {
+        let snippets = Config::default().snippets;
+        assert!(!snippets.auto_expand);
+        assert_eq!(snippets.prefix, "");
+        assert_eq!(snippets.expand_on, ExpandOn::Immediate);
+        assert!(snippets.case_sensitive);
+        assert!(snippets.ignore_apps.is_empty());
+        assert!(!snippets.expand_in_terminals);
+    }
+
+    #[test]
+    fn snippet_expansion_settings_parse_and_normalize() {
+        let config = Config::from_toml_str(
+            r#"
+[snippets]
+auto_expand = true
+prefix = " ; "
+expand_on = "delimiter"
+case_sensitive = false
+ignore_apps = ["KeePassXC", "  "]
+expand_in_terminals = true
+"#,
+        )
+        .unwrap();
+        let snippets = config.snippets;
+        assert!(snippets.auto_expand);
+        assert_eq!(snippets.prefix, ";");
+        assert_eq!(snippets.expand_on, ExpandOn::Delimiter);
+        assert!(!snippets.case_sensitive);
+        assert_eq!(snippets.ignore_apps, ["KeePassXC"]);
+        assert!(snippets.expand_in_terminals);
+    }
+
+    #[test]
+    fn an_unknown_expand_on_means_delimiter_not_a_broken_file() {
+        let config = Config::from_toml_str("[snippets]\nexpand_on = \"whenever\"\n").unwrap();
+        assert_eq!(config.snippets.expand_on, ExpandOn::Delimiter);
     }
 
     #[test]

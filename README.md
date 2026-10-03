@@ -75,6 +75,7 @@ They show the workflow rather than measured search or launch times.
 | Run a terminal command | `> git status` | Opens your terminal and runs it |
 | Paste earlier clipboard text | `cb invoice` | Pastes into the app you were using (opt-in) |
 | Paste a snippet | `s sig` | Pastes the snippet with `{date}` etc. filled in |
+| Expand a snippet as you type | `;sig` in any app | Replaces it with the snippet (opt-in; watches keystrokes while on) |
 | Generate a UUID | `uuid ` or `uuid 5` | Copies a UUID when the plugin is enabled |
 
 App results depend on what is installed. File search covers the folders you
@@ -187,6 +188,12 @@ There are explicit network uses:
   briefly borrowing the clipboard and restoring it. The selection is never
   written to disk, logged or sent anywhere (web search actions open your browser
   with the text, like any web search).
+- Expanding snippets as you type (`[snippets] auto_expand`, off by default)
+  watches your keystrokes while it is on, to notice a snippet keyword. Only the
+  last 64 characters are kept, in memory, and are wiped constantly; they are never
+  stored, logged or sent anywhere, and Sevak's own windows, terminals, apps you
+  list in `ignore_apps` and detectable password boxes are skipped.
+  [Details →](docs/usage.md#expand-snippets-as-you-type)
 - Script plugins you install and allow run with your permissions; what they do
   on the network is up to them. Sevak never downloads plugins itself.
 

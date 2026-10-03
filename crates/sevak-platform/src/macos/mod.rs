@@ -2,6 +2,7 @@
 //! standard application folders, launched and opened through `/usr/bin/open`.
 
 mod capture;
+mod expand;
 mod paste;
 
 use std::collections::HashSet;
@@ -15,6 +16,7 @@ use sevak_core::{AppEntry, IconData, IconSource, LaunchTarget};
 use crate::capture::{CaptureOptions, SelectionCapture};
 use crate::error::{PlatformError, Result};
 use crate::icon_file;
+use crate::keyboard::{KeyListener, KeyListenerSupport, KeySink, TypingTarget};
 use crate::paste::{ClipboardRead, ForegroundApp, PasteOutcome, PasteSupport};
 use crate::process::spawn_detached_in;
 use crate::provider::PlatformProvider;
@@ -90,6 +92,31 @@ impl PlatformProvider for MacProvider {
 
     fn paste_text(&self, text: &str, restore_clipboard: bool) -> Result<PasteOutcome> {
         paste::paste_text(text, restore_clipboard)
+    }
+
+    fn key_listener_support(&self) -> KeyListenerSupport {
+        expand::key_listener_support()
+    }
+
+    fn request_key_listener_permission(&self) {
+        expand::request_key_listener_permission();
+    }
+
+    fn start_key_listener(&self, sink: KeySink) -> Result<KeyListener> {
+        expand::start(sink)
+    }
+
+    fn typing_target(&self) -> TypingTarget {
+        expand::typing_target()
+    }
+
+    fn replace_typed_text(
+        &self,
+        delete: usize,
+        text: &str,
+        still_current: &dyn Fn() -> bool,
+    ) -> Result<bool> {
+        expand::replace_typed_text(delete, text, still_current)
     }
 
     fn capture_selection(&self, options: &CaptureOptions) -> SelectionCapture {

@@ -16,7 +16,7 @@ the running app then reloads the saved configuration.
 | Hotkeys | Extra global keys that type a query or run a result |
 | Appearance | Theme, launcher width, accent color, font, size, opacity, radius, custom stylesheet |
 | Search | Result limit, fallback web engines, search history |
-| Plugins | Available result sources (including script plugins) and currency conversion |
+| Plugins | Available result sources (including script plugins), currency conversion and snippet expansion as you type |
 | Web search | Keywords, provider names and URL templates |
 | Files | Indexed folders, depth, dot-files and global file results |
 | Linux | Wayland-related options when applicable |
@@ -176,6 +176,26 @@ text = "Best regards,\nNinad\n{date}"
 Settings never reformats hand-written `[[snippet]]` entries.
 [Placeholders](usage.md#paste-clipboard-history-and-snippets).
 
+To expand a snippet's `keyword` as you type in any app, turn on
+`[snippets] auto_expand`. It is **off by default** because it makes Sevak watch
+your keystrokes (in memory only; see
+[what is kept](usage.md#expand-snippets-as-you-type)):
+
+```toml
+[snippets]
+auto_expand = false        # true: watch typing for snippet keywords
+prefix = ""                # typed before every keyword, e.g. ";" (no spaces)
+expand_on = "immediate"    # "immediate", or "delimiter" (a space or punctuation follows)
+case_sensitive = true      # false: "SIG" and "sig" both expand
+ignore_apps = []           # never watch these apps, e.g. ["KeePassXC", "Firefox"]
+expand_in_terminals = false
+```
+
+`ignore_apps` matches the program or app name case-insensitively, like
+[`[clipboard] ignore_apps`](#clipboard-history-and-pasting). An unknown
+`expand_on` value is treated as `"delimiter"`. Reloading applies changes; the
+hook is removed when `auto_expand` is turned off.
+
 ### Currency conversion
 
 ```toml
@@ -293,6 +313,9 @@ available in the tray menu. Update installation requires your agreement.
 | `shell.terminal` / `shell` / `keep_open` | `""` / `""` / `true` | Empty auto-detects |
 | `clipboard.enabled` | `false` | Clipboard history is opt-in |
 | `paste.restore_clipboard` | `false` | Restore the clipboard after pasting |
+| `snippets.auto_expand` | `false` | Expand snippet keywords as you type; watches keystrokes |
+| `snippets.prefix` / `expand_on` / `case_sensitive` | `""` / `"immediate"` / `true` | Typed before keywords; when to expand; exact case |
+| `snippets.ignore_apps` / `expand_in_terminals` | `[]` / `false` | Apps never watched; also expand in terminals |
 | `files.directories` | Desktop, Documents, Downloads under `~` | Replaced when explicitly set |
 | `files.max_depth` | `4` | Settings accepts 0–32 |
 | `files.include_hidden` | `false` | Include dot-files and dot-folders |

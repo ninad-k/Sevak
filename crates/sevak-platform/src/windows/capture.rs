@@ -48,29 +48,35 @@ fn held_modifiers() -> Vec<VIRTUAL_KEY> {
         .collect()
 }
 
+/// Waits for the user to let go of Ctrl, Alt, Shift and Win, and if they are
+/// still down after [`MODIFIER_TIMEOUT`], lets go of them for the app.
+pub(super) fn wait_for_modifier_release() {
+    let deadline = Instant::now() + MODIFIER_TIMEOUT;
+    loop {
+        let held = held_modifiers();
+        if held.is_empty() {
+            return;
+        }
+        if Instant::now() >= deadline {
+            // Still held (a stuck or very slow release): let go of them
+            // for the app, or it would see Ctrl+Alt+C.
+            let ups: Vec<INPUT> = held.iter().map(|key| key_input(*key, true)).collect();
+            if let Err(err) = send_inputs(&ups) {
+                tracing::debug!("could not release the modifier keys: {err}");
+            }
+            return;
+        }
+        sleep(Duration::from_millis(10));
+    }
+}
+
 impl CaptureDriver for WindowsCapture {
     fn foreground_app(&self) -> Option<ForegroundApp> {
         paste::foreground_app()
     }
 
     fn release_modifiers(&self) {
-        let deadline = Instant::now() + MODIFIER_TIMEOUT;
-        loop {
-            let held = held_modifiers();
-            if held.is_empty() {
-                return;
-            }
-            if Instant::now() >= deadline {
-                // Still held (a stuck or very slow release): let go of them
-                // for the app, or it would see Ctrl+Alt+C.
-                let ups: Vec<INPUT> = held.iter().map(|key| key_input(*key, true)).collect();
-                if let Err(err) = send_inputs(&ups) {
-                    tracing::debug!("could not release the hotkey's modifiers: {err}");
-                }
-                return;
-            }
-            sleep(Duration::from_millis(10));
-        }
+        wait_for_modifier_release();
     }
 
     fn press_copy(&self) -> Result<()> {

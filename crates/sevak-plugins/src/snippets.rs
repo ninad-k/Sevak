@@ -26,8 +26,8 @@
 //! Placeholders are filled in when you press Enter, not while you type, so
 //! `{time}` is the time of the paste and `{clipboard}` is read only then.
 //!
-//! Typing a snippet's keyword in any app and having it expand in place would need
-//! a global keyboard hook; that is not part of Sevak (yet).
+//! Typing a snippet's keyword in any app and having it expand in place is the
+//! opt-in `[snippets] auto_expand` feature; see [`crate::snippet_expansion`].
 
 use std::fmt::Write as _;
 use std::sync::Arc;

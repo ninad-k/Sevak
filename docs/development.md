@@ -9,7 +9,8 @@ Cargo.toml              workspace: crates/* and src-tauri
 crates/sevak-core       config, theme (appearance settings to CSS), fuzzy matcher, search engine,
                         usage stats, Plugin trait
 crates/sevak-platform   OS access: launching, icons, app scanning, clipboard, pasting into the
-                        previous app, capturing the selection (Universal Actions), paths, terminal launching, hotkey strategy, GNOME
+                        previous app, capturing the selection (Universal Actions), watching typed
+                        keywords and replacing them (snippet expansion), paths, terminal launching, hotkey strategy, GNOME
                         shortcut setup (Windows, macOS and Linux backends)
 crates/sevak-plugins    built-in plugins: apps, calculator (+ units, currency), files, bookmarks,
                         web search, system commands, shell, clipboard history, snippets,

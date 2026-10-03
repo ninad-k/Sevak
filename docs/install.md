@@ -52,6 +52,9 @@ Intel), open it and drag Sevak into Applications.
   and say "Copies to clipboard". If you update Sevak and pasting stops, remove
   Sevak from that list and add it again (the build is ad-hoc signed, so macOS
   may treat each version as a new app).
+- Expanding snippets as you type (opt-in, `[snippets] auto_expand`) also needs
+  **Input Monitoring** to see the keys; macOS asks the first time, and Sevak
+  must be restarted after you allow it.
 
 ## Ubuntu 22.04+ / Debian
 

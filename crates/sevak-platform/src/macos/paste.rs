@@ -48,6 +48,11 @@ fn frontmost() -> Option<objc2::rc::Retained<NSRunningApplication>> {
     NSWorkspace::sharedWorkspace().frontmostApplication()
 }
 
+/// Process id of the frontmost app.
+pub(super) fn frontmost_pid() -> Option<i32> {
+    frontmost().map(|app| app.processIdentifier())
+}
+
 fn app_of(app: &NSRunningApplication) -> Option<ForegroundApp> {
     let bundle = app.bundleIdentifier().map(|id| id.to_string());
     let name = app

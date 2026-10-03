@@ -43,6 +43,8 @@ export interface Status {
   theme: ThemeSetting;
   /** The search index is being (re)built. */
   indexing: boolean;
+  /** Snippet expansion as you type: running, or why not. */
+  snippet_expansion: { active: boolean; problem: string | null };
 }
 
 export type ActionKind =

@@ -90,6 +90,28 @@ where you need it.
 Sevak uses finite-precision arithmetic. Invalid expressions and operations
 such as division by zero do not produce a valid copyable answer.
 
+## A snippet does not expand as I type
+
+Expansion is off until you turn it on (**Settings → Plugins**, or
+`[snippets] auto_expand = true`), and the snippet needs a `keyword`. Then:
+
+- Type the keyword in one go, with your `prefix` if you set one. Clicking,
+  arrow keys, Enter, Escape, shortcuts and switching windows make Sevak forget
+  what you typed. Without a prefix a keyword only works at the start of a word.
+- With `expand_on = "delimiter"` finish with a space or punctuation mark.
+- Sevak does nothing in its own windows, in terminals (set
+  `expand_in_terminals = true`), in apps listed in `ignore_apps`, in a password
+  box, or in windows running as administrator when Sevak is not.
+- **macOS:** allow Sevak under *Privacy & Security → Input Monitoring* and
+  *Accessibility*, then quit and start Sevak again. Settings shows what is
+  missing.
+- **Linux Wayland:** not possible; Wayland does not allow it. Use X11 or
+  paste snippets with `s <name>`.
+- Security software may block or warn about the keyboard hook; allow Sevak.
+  Turning the setting off removes the hook.
+
+[How expansion works and what it watches](usage.md#expand-snippets-as-you-type).
+
 ## The launcher disappears
 
 This is expected with **Hide on blur** enabled: the launcher hides when

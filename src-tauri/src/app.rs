@@ -10,7 +10,8 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent};
 use crate::cli::{self, Launch};
 use crate::state::AppState;
 use crate::{
-    autostart, commands, direct, hotkey, icons, search, selection, settings, tray, updater, window,
+    autostart, commands, direct, expansion, hotkey, icons, search, selection, settings, tray,
+    updater, window,
 };
 
 pub fn run(
@@ -89,6 +90,7 @@ pub fn run(
             apply_theme(handle);
             autostart::sync(handle);
             search::start(handle);
+            expansion::apply(handle);
             updater::start(handle);
             tracing::info!(display = ?server, ?launch, "sevak is ready");
 
@@ -139,6 +141,7 @@ pub fn reload(app: &AppHandle) {
     autostart::sync(app);
     // The index is rebuilt in the background and swapped in when ready.
     search::reload(app, &state.config());
+    expansion::apply(app);
 
     // Both the launcher and the settings window follow the status.
     if let Err(err) = app.emit(window::EVENT_STATUS, state.status()) {
@@ -171,6 +174,7 @@ pub fn apply_theme(app: &AppHandle) {
 /// Saves the usage statistics, then exits. The one way Sevak quits.
 pub fn quit(app: &AppHandle) {
     tracing::info!("quitting");
+    expansion::stop();
     search::save_usage(app);
     search::shutdown(app);
     app.exit(0);

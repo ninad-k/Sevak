@@ -7,6 +7,7 @@ use sevak_core::{AppEntry, IconData, IconSource, LaunchTarget, ShellConfig};
 use crate::browsers::BrowserRoot;
 use crate::capture::{CaptureOptions, SelectionCapture};
 use crate::error::Result;
+use crate::keyboard::{KeyListener, KeyListenerSupport, KeySink, TypingTarget};
 use crate::paste::{ClipboardRead, ForegroundApp, PasteOutcome, PasteSupport, UNSUPPORTED_REASON};
 use crate::system::{SettingsPage, SystemCommand};
 
@@ -138,6 +139,55 @@ pub trait PlatformProvider: Send + Sync {
     fn paste_text(&self, text: &str, _restore_clipboard: bool) -> Result<PasteOutcome> {
         crate::clipboard::set_text(text)?;
         Ok(PasteOutcome::CopiedOnly(UNSUPPORTED_REASON.to_owned()))
+    }
+
+    /// Whether [`PlatformProvider::start_key_listener`] can work right now (it
+    /// can change at runtime: macOS needs a permission the user may grant
+    /// later). Cheap.
+    fn key_listener_support(&self) -> KeyListenerSupport {
+        KeyListenerSupport::Unavailable(crate::keyboard::UNSUPPORTED_REASON.to_owned())
+    }
+
+    /// Asks the OS to show its permission prompt for watching the keyboard
+    /// (macOS Input Monitoring), so the user can grant it. Called when
+    /// [`PlatformProvider::key_listener_support`] says a permission is missing.
+    fn request_key_listener_permission(&self) {}
+
+    /// Starts reporting what is typed in other apps (snippet expansion; see
+    /// [`crate::keyboard`]). Observes keystrokes until the returned
+    /// [`KeyListener`] is dropped, so only call it when the user has turned
+    /// the feature on.
+    fn start_key_listener(&self, _sink: KeySink) -> Result<KeyListener> {
+        Err(crate::error::PlatformError::Unsupported(
+            "watching the keyboard",
+        ))
+    }
+
+    /// Where the next typed character would land: the app, whether it is one of
+    /// Sevak's own windows, whether the focused control hides what is typed.
+    /// Called on keystrokes of an active key listener, so it must be cheap.
+    fn typing_target(&self) -> TypingTarget {
+        TypingTarget::default()
+    }
+
+    /// Removes the last `delete` characters typed into the app in front and
+    /// pastes `text` instead, restoring the clipboard afterwards (snippet
+    /// expansion). Blocks for a few hundred milliseconds; call it from a
+    /// background thread.
+    ///
+    /// `still_current` is asked just before any key is pressed: if it says
+    /// `false` (the user typed more since the keyword was seen) nothing is
+    /// deleted and the result is `Ok(false)`; `Ok(true)` means the text was
+    /// replaced.
+    fn replace_typed_text(
+        &self,
+        _delete: usize,
+        _text: &str,
+        _still_current: &dyn Fn() -> bool,
+    ) -> Result<bool> {
+        Err(crate::error::PlatformError::Unsupported(
+            "replacing typed text",
+        ))
     }
 
     /// Reads what is selected in the app that has focus (Universal Actions):

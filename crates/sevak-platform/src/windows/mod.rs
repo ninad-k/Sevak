@@ -2,7 +2,9 @@
 
 mod capture;
 mod com;
+mod expand;
 mod icons;
+mod keyhook_expand;
 mod packaged;
 mod paste;
 mod provider;

@@ -49,6 +49,17 @@ pub(crate) fn capture_selection(_options: &CaptureOptions) -> SelectionCapture {
 
 struct MacCapture;
 
+/// Waits for the user to let go of Control, Option, Shift and Command. The key
+/// events Sevak posts carry exactly the flags they need, so a modifier still down
+/// cannot leak into them; waiting is only for the apps that read the physical
+/// modifier state as well.
+pub(super) fn wait_for_modifier_release() {
+    let deadline = Instant::now() + MODIFIER_TIMEOUT;
+    while modifiers_down() && Instant::now() < deadline {
+        sleep(Duration::from_millis(10));
+    }
+}
+
 impl CaptureDriver for MacCapture {
     fn foreground_app(&self) -> Option<ForegroundApp> {
         paste::foreground_app()
@@ -60,13 +71,7 @@ impl CaptureDriver for MacCapture {
     }
 
     fn release_modifiers(&self) {
-        // The key event below carries exactly the Command flag, so a modifier
-        // still down cannot leak into it; waiting is only for the apps that
-        // read the physical modifier state as well.
-        let deadline = Instant::now() + MODIFIER_TIMEOUT;
-        while modifiers_down() && Instant::now() < deadline {
-            sleep(Duration::from_millis(10));
-        }
+        wait_for_modifier_release();
     }
 
     fn press_copy(&self) -> Result<()> {
