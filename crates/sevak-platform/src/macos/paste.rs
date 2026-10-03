@@ -39,7 +39,7 @@ const FOCUS_TIMEOUT: Duration = Duration::from_millis(500);
 const NEEDS_ACCESSIBILITY: &str =
     "Allow Sevak in System Settings > Privacy & Security > Accessibility to paste";
 
-fn accessibility_granted() -> bool {
+pub(super) fn accessibility_granted() -> bool {
     // SAFETY: a plain C call without arguments.
     unsafe { AXIsProcessTrusted() != 0 }
 }

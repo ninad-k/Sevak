@@ -11,6 +11,7 @@ mod icons;
 mod logging;
 mod script_plugins;
 mod search;
+mod selection;
 mod settings;
 mod state;
 mod tray;
@@ -108,9 +109,9 @@ fn run(launch: Launch, config_override: Option<&Path>) -> anyhow::Result<()> {
     app::run(paths, server, config, launch)
 }
 
-/// `sevak --setup-hotkey [KEY]`: binds KEY to `sevak --toggle`, and the
-/// config's `[[hotkey]]` entries to `--query` / `--run`, where the desktop owns
-/// global shortcuts (GNOME on Wayland).
+/// `sevak --setup-hotkey [KEY]`: binds KEY to `sevak --toggle`, the actions
+/// hotkey to `--actions`, and the config's `[[hotkey]]` entries to `--query` /
+/// `--run`, where the desktop owns global shortcuts (GNOME on Wayland).
 fn setup_hotkey(key: Option<String>, config_override: Option<&Path>) -> ExitCode {
     let config = AppPaths::resolve_with_config(config_override)
         .ok()

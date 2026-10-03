@@ -31,12 +31,15 @@ export interface Appearance {
 export interface Config {
   general: {
     hotkey: string;
+    /** Shortcut for Universal Actions; empty turns it off. */
+    actions_hotkey: string;
     hide_on_blur: boolean;
     launch_at_login: boolean;
     check_for_updates: boolean;
   };
   window: { width: number };
   linux: { wayland_use_xwayland: boolean };
+  actions: { use_primary_selection: boolean; use_clipboard_fallback: boolean };
   search: {
     max_results: number;
     /** One engine keyword, or several (config.toml accepts a string or a list). */

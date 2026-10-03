@@ -6,12 +6,15 @@ use std::time::Instant;
 
 use sevak_core::{AppEntry, IconData, IconSource, LaunchTarget};
 
+use crate::capture::{CaptureOptions, SelectionCapture};
 use crate::error::{PlatformError, Result};
 use crate::paste::{ClipboardRead, ForegroundApp, PasteOutcome, PasteSupport};
 use crate::provider::PlatformProvider;
 
 use super::com::ComGuard;
-use super::{allow_foreground_handoff, icons, packaged, paste, shell_execute_in, shortcuts};
+use super::{
+    allow_foreground_handoff, capture, icons, packaged, paste, shell_execute_in, shortcuts,
+};
 
 pub(crate) struct WindowsProvider;
 
@@ -111,6 +114,10 @@ impl PlatformProvider for WindowsProvider {
 
     fn paste_text(&self, text: &str, restore_clipboard: bool) -> Result<PasteOutcome> {
         paste::paste_text(text, restore_clipboard)
+    }
+
+    fn capture_selection(&self, options: &CaptureOptions) -> SelectionCapture {
+        capture::capture_selection(options)
     }
 
     fn clipboard_sequence(&self) -> Option<u64> {

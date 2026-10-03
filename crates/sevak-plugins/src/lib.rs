@@ -11,6 +11,7 @@
 //! | `shell`          | [`ShellPlugin`]                         | `>`     | no     |
 //! | `clipboard`      | [`ClipboardPlugin`] (opt-in history)    | `cb`    | no     |
 //! | `snippets`       | [`SnippetsPlugin`]                      | `s`     | no     |
+//! | `selection`      | [`SelectionPlugin`] (Universal Actions) | none    | no     |
 //! | `uuid`           | [`UuidPlugin`] (a tutorial example)     | `uuid`  | no     |
 //!
 //! Script plugins (`script:<name>`, from `<config dir>/plugins/`) are loaded by
@@ -36,6 +37,7 @@ pub mod files;
 pub mod path_browse;
 pub mod registry;
 pub mod script;
+pub mod selection;
 pub mod shell;
 pub mod snippets;
 pub mod system;
@@ -54,6 +56,7 @@ pub use example_uuid::UuidPlugin;
 pub use files::FilesPlugin;
 pub use registry::{PluginDescriptor, PluginFactory, PluginInfo, PluginRegistry};
 pub use script::{ScriptPlugin, ScriptPluginHost};
+pub use selection::SelectionPlugin;
 pub use shell::ShellPlugin;
 pub use snippets::SnippetsPlugin;
 pub use system::SystemPlugin;
@@ -61,7 +64,7 @@ pub use web_search::WebSearchPlugin;
 
 /// Instantiates every enabled built-in plugin (`apps`, `calculator`, one
 /// `web:<keyword>` per `[[web_search]]` engine, `files`, `bookmarks`, `system`,
-/// `shell`, `clipboard`, `snippets`, `uuid`).
+/// `shell`, `clipboard`, `snippets`, `selection`, `uuid`).
 ///
 /// Shorthand for `PluginRegistry::builtin().instantiate(config, platform)`.
 ///
@@ -102,6 +105,7 @@ mod tests {
                 "shell",
                 "clipboard",
                 "snippets",
+                "selection",
                 "uuid"
             ]
         );
@@ -122,6 +126,7 @@ mod tests {
                 "shell",
                 "clipboard",
                 "snippets",
+                "selection",
                 "uuid"
             ]
         );

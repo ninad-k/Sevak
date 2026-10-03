@@ -361,6 +361,8 @@ pub enum CustomTarget {
     Query(String),
     /// `sevak --run <id>`: run a result without showing Sevak.
     Run(String),
+    /// `sevak --actions`: Universal Actions for what is selected.
+    Actions,
 }
 
 /// A `[[hotkey]]` entry to bind in the desktop.
@@ -377,6 +379,7 @@ impl CustomShortcut {
         match &self.target {
             CustomTarget::Query(text) => format!("{executable} --query {}", shell_quote(text)),
             CustomTarget::Run(id) => format!("{executable} --run {}", shell_quote(id)),
+            CustomTarget::Actions => format!("{executable} --actions"),
         }
     }
 
@@ -391,6 +394,7 @@ impl CustomShortcut {
         let (what, text) = match &self.target {
             CustomTarget::Query(text) => ("query", text),
             CustomTarget::Run(id) => ("run", id),
+            CustomTarget::Actions => return "Sevak universal actions".to_owned(),
         };
         let text: String = text.chars().take(40).collect();
         format!("Sevak {what}: {text}")
@@ -726,6 +730,15 @@ mod tests {
             tricky.command_for("sevak"),
             "sevak --query 'it'\\''s $HOME; rm'"
         );
+        let actions = CustomShortcut {
+            hotkey: "Ctrl+Alt+Space".to_owned(),
+            target: CustomTarget::Actions,
+        };
+        assert_eq!(
+            actions.command_for("/usr/bin/sevak"),
+            "/usr/bin/sevak --actions"
+        );
+        assert_eq!(actions.name(), "Sevak universal actions");
         let long = CustomShortcut {
             hotkey: "F1".to_owned(),
             target: CustomTarget::Run("x".repeat(100)),

@@ -29,6 +29,12 @@ pub fn percent_encode(input: &str) -> String {
     out
 }
 
+/// The URL that searches for `terms` with the engine whose URL template is
+/// `template` (its `{query}` replaced by the percent-encoded terms).
+pub fn search_url(template: &str, terms: &str) -> String {
+    template.replace(PLACEHOLDER, &percent_encode(terms))
+}
+
 /// One search engine from `[[web_search]]`.
 pub struct WebSearchPlugin {
     id: String,
@@ -53,8 +59,7 @@ impl WebSearchPlugin {
     }
 
     fn url_for(&self, terms: &str) -> String {
-        self.url_template
-            .replace(PLACEHOLDER, &percent_encode(terms))
+        search_url(&self.url_template, terms)
     }
 
     /// The row for a keyword with no terms yet; Enter opens the engine's page.

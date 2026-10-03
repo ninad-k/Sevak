@@ -6,6 +6,7 @@
 //! need cfg gates.
 
 pub mod browsers;
+pub mod capture;
 pub mod clipboard;
 pub mod desktop_entry;
 pub mod error;
@@ -33,6 +34,7 @@ mod windows;
 compile_error!("Sevak supports Windows, macOS and Linux only");
 
 pub use browsers::{BrowserFamily, BrowserRoot};
+pub use capture::{CaptureOptions, SelectionCapture};
 pub use error::{PlatformError, Result};
 pub use paste::{ClipboardRead, ForegroundApp, PasteOutcome, PasteSupport};
 pub use paths::AppPaths;

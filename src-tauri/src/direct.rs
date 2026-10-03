@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 use tauri::{AppHandle, Manager};
 
+use crate::selection::SelectionPayload;
 use crate::state::AppState;
 use crate::window;
 
@@ -22,11 +23,13 @@ pub struct ShowPayload {
     pub query: Option<String>,
     /// A message to show instead of results.
     pub error: Option<String>,
+    /// The actions for what was selected in another app (Universal Actions).
+    pub selection: Option<SelectionPayload>,
 }
 
 impl ShowPayload {
     fn is_empty(&self) -> bool {
-        self.query.is_none() && self.error.is_none()
+        self.query.is_none() && self.error.is_none() && self.selection.is_none()
     }
 }
 
@@ -84,7 +87,7 @@ pub fn open_with_query(app: &AppHandle, query: String) {
         app,
         ShowPayload {
             query: Some(query),
-            error: None,
+            ..ShowPayload::default()
         },
     );
 }
@@ -114,8 +117,8 @@ pub fn run_result(app: &AppHandle, id: String) {
             window::show_with(
                 &app,
                 ShowPayload {
-                    query: None,
                     error: Some(reason),
+                    ..ShowPayload::default()
                 },
             );
         }
@@ -155,7 +158,7 @@ mod tests {
     fn query(text: &str) -> ShowPayload {
         ShowPayload {
             query: Some(text.to_owned()),
-            error: None,
+            ..ShowPayload::default()
         }
     }
 

@@ -40,13 +40,13 @@ fn x_error(operation: &'static str, err: impl std::fmt::Display) -> PlatformErro
     }
 }
 
-struct X {
-    conn: RustConnection,
-    root: Window,
+pub(super) struct X {
+    pub(super) conn: RustConnection,
+    pub(super) root: Window,
 }
 
 impl X {
-    fn connect() -> Result<Self> {
+    pub(super) fn connect() -> Result<Self> {
         let (conn, screen) = RustConnection::connect(None).map_err(|e| x_error("X11", e))?;
         let root = conn.setup().roots[screen].root;
         Ok(Self { conn, root })
@@ -122,7 +122,7 @@ impl X {
     }
 
     /// The keycode that produces `keysym`, from the current keyboard mapping.
-    fn keycode_for(&self, keysym: u32) -> Option<u8> {
+    pub(super) fn keycode_for(&self, keysym: u32) -> Option<u8> {
         let setup = self.conn.setup();
         let (min, max) = (setup.min_keycode, setup.max_keycode);
         let reply = self
@@ -140,7 +140,7 @@ impl X {
             .map(|index| min + index)
     }
 
-    fn fake_key(&self, keycode: u8, press: bool) -> Result<()> {
+    pub(super) fn fake_key(&self, keycode: u8, press: bool) -> Result<()> {
         let kind = if press {
             xproto::KEY_PRESS_EVENT
         } else {

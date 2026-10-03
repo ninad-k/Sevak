@@ -183,6 +183,21 @@ Settings never reformats hand-written `[[snippet]]` entries.
 currency = false       # true: convert currencies with the ECB's daily rates (network)
 ```
 
+### Universal Actions
+
+```toml
+[general]
+actions_hotkey = "Ctrl+Alt+Space"   # "" turns Universal Actions off
+
+[actions]
+use_primary_selection = true        # Linux X11: read highlighted text without Ctrl+C
+use_clipboard_fallback = false      # act on the clipboard when the selection can't be read
+```
+
+`Ctrl+Alt+Space` can type a no-break space on some AltGr keyboard layouts;
+pick another key if it does. On Wayland, `sevak --setup-hotkey` binds the key
+to `sevak --actions`. [How it works](usage.md#universal-actions).
+
 ### Keep the config in a synced folder
 
 Point Sevak at a config folder in Dropbox, iCloud Drive, OneDrive or a git
@@ -239,7 +254,7 @@ disabled = ["uuid", "web:yt"]
 An instance ID such as `web:yt` disables that engine. A family ID such as
 `web` disables every engine in that family. Available built-in families are
 `apps`, `calculator`, `web`, `files`, `bookmarks`, `system`, `shell`,
-`clipboard`, `snippets` and `uuid`. Script plugins use `script:<name>`, or
+`clipboard`, `snippets`, `selection` (Universal Actions) and `uuid`. Script plugins use `script:<name>`, or
 `script` for all of them.
 [Plugin details](plugins.md#registry-and-enablingdisabling).
 
@@ -259,6 +274,8 @@ available in the tray menu. Update installation requires your agreement.
 | Setting | Default | Notes |
 |---|---|---|
 | `general.hotkey` | `"Alt+Space"` | Configurable launcher shortcut |
+| `general.actions_hotkey` | `"Ctrl+Alt+Space"` | Universal Actions; empty turns it off |
+| `actions.use_primary_selection` / `use_clipboard_fallback` | `true` / `false` | Linux X11 highlight; clipboard when capture fails |
 | `general.hide_on_blur` | `true` | Hide when another window takes focus |
 | `general.launch_at_login` | `false` | Start with the desktop session |
 | `general.check_for_updates` | `true` | Automatic GitHub update checks |
