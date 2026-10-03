@@ -12,5 +12,7 @@ Installers:
   - Architecture: x64
     InstallerUrl: https://github.com/ninad-k/Sevak/releases/download/v{{version}}/{{file:nsis}}
     InstallerSha256: {{SHA256:nsis}}
+    # The NSIS installer's Add/Remove Programs key (HKCU\...\Uninstall\Sevak).
+    ProductCode: Sevak
 ManifestType: installer
 ManifestVersion: 1.9.0
