@@ -1,7 +1,5 @@
 # Developing Sevak
 
-[← Help center](README.md) · [Plugin guide](plugins.md)
-
 ## Layout
 
 ```
@@ -251,3 +249,62 @@ releasing, put `[skip release]` in the merge commit message; pushes that only
 touch Markdown, `docs/` or `LICENSE` never release.
 
 Preview the next version locally with `node scripts/release-version.mjs next`.
+
+## Documentation site
+
+The user and developer guide is built with MkDocs Material and published to GitHub Pages.
+
+**Editing:**
+
+- Documentation source: `docs/` (Markdown files)
+- Site configuration: `mkdocs.yml`
+- Extra CSS: `docs/stylesheets/extra.css`
+- Media (screenshots, images): `docs/media/`
+
+**Preview locally:**
+
+```sh
+pip install -r docs/requirements.txt
+mkdocs serve
+# Open http://127.0.0.1:8000 in your browser
+```
+
+**Strict build (no warnings):**
+
+```sh
+mkdocs build --strict -f mkdocs.yml
+```
+
+**PDF manual:**
+
+The documentation is also exported to PDF (`Sevak-User-Guide.pdf`) for download:
+
+```sh
+mkdocs build                    # Generates the site to site/
+npm run docs:pdf               # Builds the PDF (see scripts/docs-pdf.mjs)
+# Output: docs/pdf/Sevak-User-Guide.pdf
+```
+
+The PDF script requires Chrome or Chromium; set `CHROME_PATH` if it's not in the default location.
+
+**Publishing:**
+
+The site is built and deployed to [GitHub Pages](https://ninad-k.github.io/Sevak/) by `.github/workflows/docs.yml` on every push to `main`.
+
+**Linux testing in WSL:**
+
+For contributors on Windows, test the Linux code without a Linux machine:
+
+```sh
+# From the Windows project root, type these in PowerShell:
+# The scripts bootstrap Rust and Zig inside WSL, no sudo needed.
+
+wsl -d Ubuntu -- bash /mnt/d/PProjects/Sevak/scripts/wsl-setup.sh    # First-time setup
+wsl -d Ubuntu -- bash /mnt/d/PProjects/Sevak/scripts/wsl-dev.sh      # Build and test
+
+# Or run specific cargo commands:
+wsl -d Ubuntu -- bash /mnt/d/PProjects/Sevak/scripts/wsl-linux-test.sh test -p sevak-platform
+wsl -d Ubuntu -- bash /mnt/d/PProjects/Sevak/scripts/wsl-linux-test.sh clippy -p sevak-platform --all-targets
+```
+
+See the header of `scripts/wsl-linux-test.sh` for more options.

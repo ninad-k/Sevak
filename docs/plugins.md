@@ -1,7 +1,5 @@
 # Sevak plugins
 
-[← Help center](README.md) · [Development](development.md) · [Configuration](configuration.md)
-
 Everything Sevak shows in its result list comes from a plugin: installed apps,
 the calculator, web search, files. This document explains how a query flows
 through them, how to write and register a built-in plugin, and how to add
@@ -281,7 +279,7 @@ appear (down-weighted like files) for plain queries.
   the user-data folders that exist, per OS (Windows `%LOCALAPPDATA%` /
   `%APPDATA%`, macOS `~/Library/Application Support`, Linux `~/.config`,
   `~/.mozilla` plus Flatpak and Snap copies).
-- **Chromium family** (Chrome, Edge, Brave, Vivaldi, Chromium, Opera, Opera GX):
+- **Chromium family** (Chrome, Edge, Brave, Vivaldi, Chromium, Opera, Opera GX on Windows and macOS):
   the `Bookmarks` JSON file of every profile folder.
 - **Firefox family** (Firefox, LibreWolf, Zen): `places.sqlite` of every profile
   in `profiles.ini`. Firefox keeps the database locked, so Sevak copies it and
@@ -552,7 +550,7 @@ mode runs many existing **Alfred Script Filter** scripts unchanged.
 
 ### Quick start
 
-1. Copy a folder from [`examples/plugins/`](../examples/plugins) into the
+1. Copy a folder from [`examples/plugins/`](https://github.com/ninad-k/Sevak/tree/main/examples/plugins) into the
    plugins folder, which sits next to `config.toml`:
 
    | OS | Plugins folder |

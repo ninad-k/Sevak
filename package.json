@@ -8,7 +8,8 @@
     "build": "vite build --config ui/vite.config.ts",
     "check": "svelte-check --tsconfig ui/tsconfig.json",
     "icons": "node scripts/generate-icons.mjs",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "docs:pdf": "node scripts/docs-pdf.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.1"

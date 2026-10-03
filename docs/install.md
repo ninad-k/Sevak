@@ -1,9 +1,10 @@
 # Installing Sevak
 
-[← Help center](README.md) · [Quick start](quickstart.md) · [Troubleshooting](troubleshooting.md)
+Download Sevak for your operating system from the [Releases page](https://github.com/ninad-k/Sevak/releases).
 
-Download packages from the [Releases page](https://github.com/ninad-k/Sevak/releases).
-Release builds are currently **unsigned**.
+!!! warning "Unsigned builds"
+
+    Release builds are currently unsigned. Your OS may show a security warning on first run. This is normal; see the platform-specific instructions below.
 
 ## Package managers (coming soon)
 
@@ -19,145 +20,189 @@ installs keep Sevak's own updater, which those package managers recognise.
 
 ## Windows 10 / 11
 
-| File | Notes |
-|---|---|
-| `Sevak_<version>_x64-setup.exe` (NSIS) | Recommended. Installs per user into `%LOCALAPPDATA%`; no administrator rights needed. Start Menu folder: "Sevak". |
-| `Sevak_<version>_x64_en-US.msi` (WiX) | Per-machine install (needs administrator rights), for managed deployments. The MSI upgrade code is fixed, so newer MSIs upgrade older ones. |
+1. Download the installer from [Releases](https://github.com/ninad-k/Sevak/releases):
+   - **`Sevak_<version>_x64-setup.exe`** (recommended): Per-user install, no admin rights needed.
+   - **`Sevak_<version>_x64_en-US.msi`**: Per-machine install for enterprise deployments. Needs administrator rights; MSI updates are automatic.
 
-- Because the installers are unsigned, Windows SmartScreen may show "Windows
-  protected your PC". Choose "More info" then "Run anyway".
-- Sevak needs the Microsoft **WebView2** runtime. It is preinstalled on Windows
-  11 and current Windows 10; if missing, the installer downloads the
-  Evergreen bootstrapper from Microsoft (internet needed during install).
-- Uninstall from Settings, Apps. Your config and usage data in
-  `%APPDATA%\sevak\` are kept; delete the folder to remove them.
+2. Run the installer and follow the prompts.
+
+3. After installation, Sevak appears in your Start Menu and runs in the background at startup.
+
+!!! warning "SmartScreen warning"
+
+    Windows SmartScreen may show "Windows protected your PC" because the installer is unsigned. Click "More info", then "Run anyway" to proceed.
+
+!!! info "WebView2 runtime"
+
+    Sevak uses Microsoft WebView2. On Windows 11 and recent Windows 10 versions it is already installed. If it is missing, the installer automatically downloads it from Microsoft (internet required).
+
+**Uninstall:** Open Settings → Apps → Installed apps, find Sevak, and click Uninstall. Your config and data in `%APPDATA%\sevak\` are preserved; see [Files and data](files-and-data.md) to delete them.
 
 ## macOS 11+
 
-Download `Sevak_<version>_universal.dmg` (runs natively on Apple silicon and
-Intel), open it and drag Sevak into Applications.
+1. Download `Sevak_<version>_universal.dmg` from [Releases](https://github.com/ninad-k/Sevak/releases).
+   - The .dmg runs natively on Apple silicon and Intel Macs.
 
-- The app is not notarized by Apple yet, so the first launch is blocked with
-  "Apple could not verify Sevak". Open **System Settings → Privacy & Security**,
-  scroll down and click **Open Anyway** (or run
-  `xattr -dr com.apple.quarantine /Applications/Sevak.app`).
-- Sevak lives in the menu bar (no Dock icon). The default hotkey is
-  `Alt+Space` (Option+Space); change it in Settings.
-- File search asks for permission the first time it indexes Desktop, Documents
-  or Downloads. Decline and remove those folders in Settings if you don't use it.
-- Config and usage data: `~/Library/Application Support/sevak/`.
-- Pasting from clipboard history and snippets sends Cmd+V to the app you were
-  using, which macOS only allows once you turn Sevak on under **System Settings
-  → Privacy & Security → Accessibility**. Until then those results copy instead
-  and say "Copies to clipboard". If you update Sevak and pasting stops, remove
-  Sevak from that list and add it again (the build is ad-hoc signed, so macOS
-  may treat each version as a new app).
+2. Open the .dmg and drag Sevak into Applications.
+
+3. Open Applications and click Sevak to launch it.
+
+!!! warning "Gatekeeper warning"
+
+    macOS blocks the first launch with "Apple could not verify Sevak" because the app is not notarized.
+    
+    Click **Open Anyway** in System Settings → Privacy & Security (scroll down to find it).
+    
+    Alternatively, run in Terminal:
+    ```bash
+    xattr -dr com.apple.quarantine /Applications/Sevak.app
+    ```
+
+### Usage
+
+- **Menu bar:** Sevak lives in your menu bar (top-right), not the Dock.
+- **Hotkey:** The default is ++alt+space++ (Option+Space). Change it in Settings or the config file.
+- **File search permissions:** Sevak asks for permission to index Desktop, Documents and Downloads. Decline if you don't use file search; remove those folders in Settings.
+- **Pasting:** Clipboard history and snippets require Accessibility permission to paste with Cmd+V. Without it, they copy to the clipboard instead.
+  - Go to System Settings → Privacy & Security → Accessibility and add Sevak.
+  - If pasting stops after updating, remove Sevak and re-add it (ad-hoc signed builds are treated as new apps).
+
+**Uninstall:** Delete `/Applications/Sevak.app`. Config and data remain at `~/Library/Application Support/sevak/`; see [Files and data](files-and-data.md) to delete them.
 
 ## Ubuntu 22.04+ / Debian
 
-```sh
+Download `Sevak_<version>_amd64.deb` from [Releases](https://github.com/ninad-k/Sevak/releases), then install:
+
+```bash
 sudo apt install ./Sevak_<version>_amd64.deb
 ```
 
-Dependencies (WebKitGTK 4.1, GTK 3, `libayatana-appindicator3-1`, glib tools)
-are pulled in by apt. Then start "Sevak" from the application menu, or run `sevak`.
+Start Sevak from your application menu, or run:
+
+```bash
+sevak
+```
+
+**Uninstall:**
+
+```bash
+sudo apt remove sevak
+```
 
 ## Fedora 39+
 
-```sh
+Download `Sevak-<version>-1.x86_64.rpm` from [Releases](https://github.com/ninad-k/Sevak/releases), then install:
+
+```bash
 sudo dnf install ./Sevak-<version>-1.x86_64.rpm
 ```
 
-Dependencies include `webkit2gtk4.1`, `gtk3`, `libayatana-appindicator-gtk3`
-and `glib2`.
+**Uninstall:**
+
+```bash
+sudo dnf remove Sevak
+```
 
 ## AppImage (other distributions)
 
-```sh
+Download `Sevak_<version>_amd64.AppImage` from [Releases](https://github.com/ninad-k/Sevak/releases), then run:
+
+```bash
 chmod +x Sevak_<version>_amd64.AppImage
 ./Sevak_<version>_amd64.AppImage
 ```
 
-AppImages need FUSE 2 (`libfuse2` on Ubuntu/Debian, `fuse-libs` on Fedora). If
-you cannot install it, run with `--appimage-extract-and-run`. The AppImage is
-built on Ubuntu 22.04 and needs glibc 2.35 or newer. Install the AppImage
-somewhere permanent before using `sevak --setup-hotkey`, since the shortcut
-runs the command it was set up from.
+!!! info "Requirements"
+
+    AppImages need FUSE 2 (install `libfuse2` on Ubuntu/Debian, `fuse-libs` on Fedora).
+    
+    If you cannot install FUSE, extract and run instead:
+    ```bash
+    ./Sevak_<version>_amd64.AppImage --appimage-extract-and-run
+    ```
+    
+    The AppImage is built on Ubuntu 22.04 and requires glibc 2.35 or newer.
+
+!!! tip "Permanent installation"
+
+    Install the AppImage somewhere permanent (not `/tmp` or a temporary folder) before using `sevak --setup-hotkey`, since desktop shortcuts store the full path to the executable.
 
 ## Setting up the hotkey on Linux
 
-- **X11** sessions: `Alt+Space` (the `general.hotkey` setting) works directly.
-- **Wayland** sessions: applications cannot grab global keys. On GNOME run:
+### X11 sessions
 
-  ```sh
-  sevak --setup-hotkey              # uses the hotkey from config.toml
-  sevak --setup-hotkey Ctrl+Space   # or choose another
-  ```
+Sevak registers hotkeys directly. Your configured hotkey (default ++alt+space++) works out of the box.
 
-  It adds a GNOME custom keyboard shortcut that runs `sevak --toggle`, plus one
-  for every `[[hotkey]]` entry in `config.toml` (running `sevak --query '<text>'`
-  or `sevak --run <id>`; see the README's "Custom hotkeys"). On
-  other desktops (KDE, Sway, ...) bind a key to `sevak --toggle` yourself in
-  the desktop's keyboard settings.
-- The same command also binds the Universal Actions key
-  (`general.actions_hotkey`, default `Ctrl+Alt+Space`) to `sevak --actions`. On
-  Wayland that command cannot read another app's selection; see the README's
-  "Universal Actions" for the clipboard fallback.
-- **GNOME binds `Alt+Space` to the window menu.** `--setup-hotkey` warns when a
-  GNOME shortcut already uses the key. Either free it:
+### Wayland sessions
 
-  ```sh
-  gsettings set org.gnome.desktop.wm.keybindings activate-window-menu "[]"
-  ```
+Applications cannot grab global keys on Wayland. Sevak provides `sevak --setup-hotkey` to ask the desktop to handle keys:
 
-  or pick another key (`Ctrl+Space`, `Super+Space`, `Ctrl+Alt+Space`). Note
-  that `Super+Space` switches input sources on GNOME when several layouts
-  are configured.
-- By default, on Wayland Sevak draws its window through XWayland so that it can
-  center itself and take focus (`linux.wayland_use_xwayland = true`).
+**On GNOME:**
 
-## Tray icon on GNOME (Fedora, Ubuntu)
+```bash
+sevak --setup-hotkey              # use hotkey from config.toml
+sevak --setup-hotkey "Ctrl+Space" # or choose a different key
+```
 
-Sevak shows a tray icon (Show, Settings, Reload index, Quit) through the
-AppIndicator protocol. Ubuntu ships an AppIndicator extension enabled. Stock
-Fedora GNOME does not: install **"AppIndicator and KStatusNotifierItem
-Support"** (package `gnome-shell-extension-appindicator`, or from
-extensions.gnome.org) and enable it. Without a tray Sevak still runs; use the
-hotkey, and `sevak --quit` to exit.
+This creates GNOME custom keyboard shortcuts for:
+
+- Main hotkey (`[general] hotkey`) → `sevak --toggle`
+- Universal Actions hotkey (`[general] actions_hotkey`) → `sevak --actions`
+- Each `[[hotkey]]` entry in config.toml → `sevak --query '<text>'` or `sevak --run <id>`
+
+After editing `config.toml`, run `--setup-hotkey` again to update shortcuts. Delete old shortcuts in GNOME Settings → Keyboard Shortcuts if you remove config entries.
+
+**On other desktops (KDE, Sway, etc.):**
+
+Bind a key to `sevak --toggle` in your desktop's keyboard settings. The `--setup-hotkey` command only works on GNOME.
+
+!!! warning "GNOME Alt+Space conflict"
+
+    GNOME binds ++alt+space++ to the window menu by default, which blocks Sevak's hotkey.
+    
+    Choose a different key (e.g. ++ctrl+space++, ++super+space++, ++ctrl+alt+space++) or free ++alt+space++:
+    
+    ```bash
+    gsettings set org.gnome.desktop.wm.keybindings activate-window-menu "[]"
+    ```
+    
+    Note: ++super+space++ switches input sources if you have multiple keyboard layouts configured.
+
+### Wayland rendering
+
+By default, Sevak uses XWayland (X11 compatibility layer) on Wayland to position itself and take focus reliably. You can use the native Wayland backend instead by setting `[linux] wayland_use_xwayland = false` in your config, though the window may appear off-centre or not accept input.
+
+## Tray icon on GNOME (Ubuntu and Fedora)
+
+Sevak displays a tray icon through the AppIndicator protocol.
+
+**Ubuntu:** The AppIndicator extension is enabled by default. You should see the tray icon.
+
+**Fedora:** Install the AppIndicator extension:
+
+```bash
+sudo dnf install gnome-shell-extension-appindicator
+```
+
+Then enable it in GNOME Extensions or at extensions.gnome.org, or restart GNOME Shell:
+
+```bash
+killall -HUP gnome-shell
+```
+
+**Without a tray:** Sevak still runs. Use the hotkey to show it, and run `sevak --quit` to exit. Open Settings with `sevak --settings`.
 
 ## Red Hat Enterprise Linux 9 and clones (Rocky, AlmaLinux)
 
-**The prebuilt packages do not run on RHEL 9 / Rocky 9 / AlmaLinux 9.**
+!!! warning "Not supported on RHEL 9 / Rocky 9 / AlmaLinux 9"
 
-Sevak uses Tauri v2, which needs the WebKitGTK **4.1** API
-(`webkit2gtk4.1`). Findings, from distribution package listings and reports of
-others (not verified by installing on an EL9 machine):
+    Prebuilt packages do not work on EL9. Sevak uses Tauri v2, which requires WebKitGTK 4.1 (`webkit2gtk4.1`). EL9 distributions only ship WebKitGTK 4.0 (`webkit2gtk3`), which is not compatible and is not available in any EL9 repository (BaseOS, AppStream, CRB, or EPEL 9).
+    
+    The AppImage also fails to run on EL9 (compiled against glibc 2.35, EL9 has 2.34).
 
-- RHEL 9, Rocky 9 and AlmaLinux 9 ship only `webkit2gtk3` (the 4.0 API).
-  `webkit2gtk4.1` is in none of BaseOS, AppStream, CRB or EPEL 9, so the `.rpm`
-  cannot satisfy its dependency.
-- `libayatana-appindicator-gtk3` is available from EPEL 9 (0.5.94), so the tray
-  library itself is not the problem.
-- The AppImage bundles its own WebKit but is built against glibc 2.35 and EL9
-  has glibc 2.34, so it fails to start.
-- AlmaLinux 10 reportedly carries `webkit2gtk4.1` in EPEL 10, so the `.rpm`
-  is expected to work on EL10 clones with EPEL enabled (also unverified; RHEL 10
-  proper is not confirmed).
+**Workarounds on EL9:**
 
-Options on EL9: run Sevak in a Fedora or Ubuntu container (for example
-distrobox) with display access, build from source on a newer distribution, or
-use Fedora/Ubuntu. "EL10 with EPEL" is the realistic enterprise-Linux target.
-
-## Troubleshooting
-
-- **Nothing happens when I press the hotkey on Linux**: you are probably on
-  Wayland. Run `sevak --setup-hotkey`.
-- **Updates**: Sevak checks for a new version at startup and daily and asks
-  before installing it (tray menu: "Check for updates"). Turn this off with
-  `general.check_for_updates = false` or in Settings. On Windows the update runs
-  the installer in passive mode; for `.deb` and `.rpm` installs you are asked
-  for your password.
-- **Logs**: `%APPDATA%\sevak\logs\` (Windows),
-  `~/Library/Application Support/sevak/logs/` (macOS), `~/.local/share/sevak/logs/` (Linux).
-- **Start in the background at login**: set `general.launch_at_login = true`, or
-  add `sevak --background` to your session's autostart.
+- Run Sevak in a **Fedora or Ubuntu container** (e.g. distrobox) with display access.
+- **Build from source** on a Fedora or newer distribution.
+- Use **Fedora or Ubuntu** directly.
+- Wait for **EL10 with EPEL**: AlmaLinux 10 reportedly ships `webkit2gtk4.1` in EPEL 10, so the `.rpm` is expected to work on EL10 clones.

@@ -1,8 +1,6 @@
 # The name and identity of Sevak
 
-[← Help center](README.md)
-
-![Sevak logo: an amber S-shaped flame and dark wordmark](../assets/brand/sevak-logo-concept.png)
+![Sevak logo: an amber S-shaped flame and dark wordmark](https://raw.githubusercontent.com/ninad-k/Sevak/main/assets/brand/sevak-logo-concept.png)
 
 ## Meaning
 
@@ -43,13 +41,13 @@ documentation and larger placements.
 
 ## Assets
 
-- [Application icon source](../assets/sevak-icon.png)
-- [Logo and wordmark](../assets/brand/sevak-logo-concept.png)
-- [Social preview](../assets/brand/social-preview.png) (1280×640, the
+- [Application icon source](https://raw.githubusercontent.com/ninad-k/Sevak/main/assets/sevak-icon.png)
+- [Logo and wordmark](https://raw.githubusercontent.com/ninad-k/Sevak/main/assets/brand/sevak-logo-concept.png)
+- [Social preview](https://raw.githubusercontent.com/ninad-k/Sevak/main/assets/brand/social-preview.png) (1280×640, the
   repository's link preview; upload changes under Settings → Social preview,
   as GitHub has no API for it)
 - [Documentation images and reel](media/README.md)
-- [Original design notes](../assets/brand/design-notes.txt)
+- [Original design notes](https://github.com/ninad-k/Sevak/blob/main/assets/brand/design-notes.txt)
 
 Run `npm run icons` after updating the canonical icon. Documentation images
 have a separate [regeneration workflow](media/README.md#regenerate-the-media).
