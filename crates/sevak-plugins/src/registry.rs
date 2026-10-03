@@ -27,7 +27,9 @@ use serde::Serialize;
 use sevak_core::{Config, Plugin};
 use sevak_platform::PlatformProvider;
 
-use crate::{AppsPlugin, CalculatorPlugin, FilesPlugin, UuidPlugin, WebSearchPlugin};
+use crate::{
+    AppsPlugin, BookmarksPlugin, CalculatorPlugin, FilesPlugin, UuidPlugin, WebSearchPlugin,
+};
 
 /// Builds the instances of one plugin family.
 ///
@@ -103,7 +105,7 @@ impl PluginRegistry {
         Self::default()
     }
 
-    /// Apps, calculator, web search, files and the example UUID plugin, in that
+    /// Apps, calculator, web search, files, bookmarks and the example UUID plugin, in that
     /// order. Order matters only for tie-breaking and logging.
     pub fn builtin() -> Self {
         let mut registry = Self::new();
@@ -140,6 +142,17 @@ impl PluginRegistry {
             |config, platform| {
                 vec![Arc::new(FilesPlugin::new(
                     config.files.clone(),
+                    platform.clone(),
+                ))]
+            },
+        ));
+        registry.register(PluginDescriptor::new(
+            "bookmarks",
+            "Bookmarks",
+            "Finds bookmarks in your browsers (read from disk; nothing is sent anywhere).",
+            |config, platform| {
+                vec![Arc::new(BookmarksPlugin::new(
+                    config.bookmarks.clone(),
                     platform.clone(),
                 ))]
             },
@@ -249,7 +262,10 @@ mod tests {
             .iter()
             .map(|d| d.id)
             .collect();
-        assert_eq!(families, ["apps", "calculator", "web", "files", "uuid"]);
+        assert_eq!(
+            families,
+            ["apps", "calculator", "web", "files", "bookmarks", "uuid"]
+        );
     }
 
     #[test]
@@ -263,6 +279,7 @@ mod tests {
                 "web:yt",
                 "web:gh",
                 "files",
+                "bookmarks",
                 "uuid"
             ]
         );
@@ -273,7 +290,7 @@ mod tests {
         let config = config_disabling(&["web"]);
         assert_eq!(
             ids(&PluginRegistry::builtin(), &config),
-            ["apps", "calculator", "files", "uuid"]
+            ["apps", "calculator", "files", "bookmarks", "uuid"]
         );
     }
 
@@ -282,14 +299,21 @@ mod tests {
         let config = config_disabling(&["web:yt", "uuid"]);
         assert_eq!(
             ids(&PluginRegistry::builtin(), &config),
-            ["apps", "calculator", "web:g", "web:gh", "files"]
+            [
+                "apps",
+                "calculator",
+                "web:g",
+                "web:gh",
+                "files",
+                "bookmarks"
+            ]
         );
     }
 
     #[test]
     fn unknown_disabled_ids_are_ignored() {
         let config = config_disabling(&["nope"]);
-        assert_eq!(ids(&PluginRegistry::builtin(), &config).len(), 7);
+        assert_eq!(ids(&PluginRegistry::builtin(), &config).len(), 8);
     }
 
     #[test]
@@ -306,6 +330,7 @@ mod tests {
                 ("web:yt", false),
                 ("web:gh", true),
                 ("files", false),
+                ("bookmarks", true),
                 ("uuid", true),
             ]
         );

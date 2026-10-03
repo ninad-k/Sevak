@@ -30,6 +30,7 @@ export interface Config {
     keyword: string;
     global: boolean;
   };
+  bookmarks: { browsers: string[]; keyword: string; global: boolean };
   web_search: WebSearchEngine[];
 }
 

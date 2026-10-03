@@ -4,6 +4,7 @@ use std::path::Path;
 
 use sevak_core::{AppEntry, IconData, IconSource, LaunchTarget};
 
+use crate::browsers::BrowserRoot;
 use crate::error::Result;
 
 /// Everything Sevak needs from the operating system to find and start things.
@@ -38,5 +39,12 @@ pub trait PlatformProvider: Send + Sync {
     /// Replaces the clipboard's contents with `text`.
     fn set_clipboard_text(&self, text: &str) -> Result<()> {
         crate::clipboard::set_text(text)
+    }
+
+    /// The user-data folders of the web browsers installed for this user (only
+    /// those that exist on disk), for the bookmarks plugin. Cheap: no file is
+    /// read.
+    fn browser_roots(&self) -> Vec<BrowserRoot> {
+        crate::browsers::detect_roots()
     }
 }

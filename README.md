@@ -23,6 +23,10 @@ Built with Rust, [Tauri](https://tauri.app) v2 and Svelte 5. Licensed under
 - **File search**: `f <name>` searches files and folders under the folders you
   choose (Desktop, Documents and Downloads by default). Optionally also shown
   for plain queries.
+- **Bookmark search**: `b <text>` searches the bookmarks of Chrome, Edge,
+  Brave, Vivaldi, Chromium, Opera, Firefox, LibreWolf and Zen, across all
+  profiles, matching titles and URLs. Read locally and read-only. Optionally
+  also shown for plain queries.
 - **Frequency and recency ranking**: results you pick often and recently rise
   to the top, per query.
 - **Plugin system**: every result source is a plugin; there is a worked example
@@ -91,14 +95,16 @@ Keywords (type the keyword, then a space):
 | `yt <terms>` | YouTube search |
 | `gh <terms>` | GitHub search |
 | `f <name>` | Search files and folders only |
+| `b <text>` | Search browser bookmarks only |
 | `uuid`, `uuid 5`, `uuid upper` | Generate random UUIDs and copy one (example plugin) |
 
-Anything else searches apps (and files, if `files.global` is on); an
+Anything else searches apps (and files and bookmarks, if `files.global` /
+`bookmarks.global` are on); an
 expression like `12*7` shows the calculator. When nothing matches, the fallback
 web search (`g` by default) is offered.
 
 The tray menu has Show, Settings (opens the settings window), Reload index
-(re-reads the config and rescans apps and files) and Quit.
+(re-reads the config and rescans apps, files and bookmarks) and Quit.
 
 ## Configuration
 
@@ -132,13 +138,18 @@ fallback_web_search = "g"
 theme = "system"       # "system", "light" or "dark"
 
 [plugins]
-disabled = []          # "apps", "calculator", "files", "web:<keyword>"
+disabled = []          # "apps", "calculator", "files", "bookmarks", "web:<keyword>"
 
 [files]
 directories = ["~/Desktop", "~/Documents", "~/Downloads"]
 max_depth = 4
 include_hidden = false
 keyword = "f"
+global = true
+
+[bookmarks]
+browsers = []          # [] = every browser found, or e.g. ["chrome", "firefox"]
+keyword = "b"
 global = true
 
 [linux]
@@ -178,6 +189,10 @@ there is a new version (GitHub sees your IP address, nothing else is sent).
 Turn it off with `general.check_for_updates = false` or in Settings; "Check
 for updates" in the tray menu still works on demand. Updates are signed and
 only installed after you agree.
+
+The bookmarks plugin reads your browsers' bookmark files from disk (Firefox's
+database is read from a temporary copy that is deleted again) and never writes
+to them or sends them anywhere.
 
 Otherwise, the only network traffic is your browser opening a web search URL
 when you pick a web search result. (On Windows, the installer may download the

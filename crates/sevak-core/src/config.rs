@@ -72,6 +72,16 @@ keyword = "f"
 # Also show (lower-ranked) file results for plain queries.
 global = true
 
+[bookmarks]
+# Browsers whose bookmarks are searchable; [] means every browser found.
+# Names: "chrome", "edge", "brave", "vivaldi", "chromium", "opera", "opera-gx",
+# "firefox", "librewolf", "zen". All profiles of each browser are read.
+browsers = []
+# Type "<keyword> <text>" to search only bookmarks.
+keyword = "b"
+# Also show (lower-ranked) bookmark results for plain queries.
+global = true
+
 # Web search engines: type "<keyword> <terms>". "{query}" is replaced by the
 # URL-encoded terms. Defining any [[web_search]] entry replaces this list.
 [[web_search]]
@@ -104,6 +114,7 @@ pub struct Config {
     pub appearance: AppearanceConfig,
     pub plugins: PluginsConfig,
     pub files: FilesConfig,
+    pub bookmarks: BookmarksConfig,
     pub web_search: Vec<WebSearchEngine>,
 }
 
@@ -117,6 +128,7 @@ impl Default for Config {
             appearance: AppearanceConfig::default(),
             plugins: PluginsConfig::default(),
             files: FilesConfig::default(),
+            bookmarks: BookmarksConfig::default(),
             web_search: WebSearchEngine::defaults(),
         }
     }
@@ -241,6 +253,26 @@ impl Default for FilesConfig {
             max_depth: 4,
             include_hidden: false,
             keyword: "f".to_owned(),
+            global: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BookmarksConfig {
+    /// Browser ids to read (`chrome`, `firefox`, ...); empty means every
+    /// browser found. The ids are defined by the platform layer.
+    pub browsers: Vec<String>,
+    pub keyword: String,
+    pub global: bool,
+}
+
+impl Default for BookmarksConfig {
+    fn default() -> Self {
+        Self {
+            browsers: Vec::new(),
+            keyword: "b".to_owned(),
             global: true,
         }
     }
@@ -613,6 +645,21 @@ url = "https://example.com"
         assert_eq!(config.appearance.theme, Theme::Dark);
         assert!(!config.plugins.is_enabled("files"));
         assert!(config.plugins.is_enabled("apps"));
+    }
+
+    #[test]
+    fn bookmarks_section_parses_with_defaults() {
+        let config = Config::from_toml_str(
+            "[bookmarks]\nbrowsers = [\"firefox\", \"chrome\"]\nkeyword = \"bm\"\n",
+        )
+        .unwrap();
+        assert_eq!(config.bookmarks.browsers, ["firefox", "chrome"]);
+        assert_eq!(config.bookmarks.keyword, "bm");
+        assert!(config.bookmarks.global);
+
+        let config = Config::from_toml_str("").unwrap();
+        assert!(config.bookmarks.browsers.is_empty());
+        assert_eq!(config.bookmarks.keyword, "b");
     }
 
     #[test]

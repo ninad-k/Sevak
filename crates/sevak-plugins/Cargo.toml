@@ -1,6 +1,6 @@
 [package]
 name = "sevak-plugins"
-description = "Sevak built-in plugins: applications, calculator, web search, file search and an example plugin."
+description = "Sevak built-in plugins: applications, calculator, web search, file search, bookmarks and an example plugin."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,11 +11,13 @@ rust-version.workspace = true
 sevak-core.workspace = true
 sevak-platform.workspace = true
 serde.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
 tracing.workspace = true
 # OS random bytes for the example UUID plugin (see `example_uuid`).
 getrandom = "0.4"
+# Reads (a private copy of) Firefox's `places.sqlite` for the bookmarks plugin.
+# `bundled` compiles SQLite from source, so no system library is needed; it only
+# needs the C compiler that Tauri's own build already requires.
+rusqlite = { version = "0.40", features = ["bundled"] }
 walkdir = "2"
-
-[dev-dependencies]
-serde_json.workspace = true
-tempfile.workspace = true
