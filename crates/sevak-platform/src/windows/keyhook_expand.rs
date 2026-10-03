@@ -42,9 +42,9 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, DispatchMessageW, GetMessageW, PeekMessageW, PostThreadMessageW,
     SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx, HC_ACTION, KBDLLHOOKSTRUCT,
-    LLKHF_INJECTED, LLKHF_LOWER_IL_INJECTED, MSG, PM_NOREMOVE, WH_KEYBOARD_LL, WH_MOUSE_LL,
-    WM_KEYDOWN, WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_NCLBUTTONDOWN, WM_NCRBUTTONDOWN, WM_QUIT,
-    WM_RBUTTONDOWN, WM_SYSKEYDOWN, WM_USER, WM_XBUTTONDOWN,
+    KBDLLHOOKSTRUCT_FLAGS, LLKHF_INJECTED, LLKHF_LOWER_IL_INJECTED, MSG, PM_NOREMOVE,
+    WH_KEYBOARD_LL, WH_MOUSE_LL, WM_KEYDOWN, WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_NCLBUTTONDOWN,
+    WM_NCRBUTTONDOWN, WM_QUIT, WM_RBUTTONDOWN, WM_SYSKEYDOWN, WM_USER, WM_XBUTTONDOWN,
 };
 
 use crate::error::{PlatformError, Result};
@@ -67,20 +67,12 @@ const VK_PACKET: u32 = 0xE7;
 /// Backspaces and paste are never mistaken for typing.
 pub(super) const OWN_EXTRA_INFO: usize = 0x5345_5641;
 
-/// Debug builds can be told to treat injected key events as typing, so the
-/// feature can be driven by a script (`SendInput`) in a manual test. Release
-/// builds have no such switch: injected events are always ignored.
-#[cfg(debug_assertions)]
-static ACCEPT_INJECTED: AtomicBool = AtomicBool::new(false);
-
-#[cfg(debug_assertions)]
-fn accept_injected() -> bool {
-    ACCEPT_INJECTED.load(Ordering::SeqCst)
-}
-
-#[cfg(not(debug_assertions))]
-fn accept_injected() -> bool {
-    false
+/// Whether a key event is not the user's typing: Sevak's own (stamped with
+/// [`OWN_EXTRA_INFO`]) or injected by any program (`SendInput`, remote tools,
+/// automation). Injected events are always ignored, in every build: nothing
+/// but real key presses can make Sevak expand a snippet.
+fn is_ignored(flags: KBDLLHOOKSTRUCT_FLAGS, extra_info: usize) -> bool {
+    extra_info == OWN_EXTRA_INFO || flags.0 & (LLKHF_INJECTED.0 | LLKHF_LOWER_IL_INJECTED.0) != 0
 }
 
 /// Only one hook pair can be installed at a time.
@@ -298,8 +290,7 @@ fn on_key(message: u32, info: &KBDLLHOOKSTRUCT) {
     if message != WM_KEYDOWN && message != WM_SYSKEYDOWN {
         return;
     }
-    let injected = info.flags.0 & (LLKHF_INJECTED.0 | LLKHF_LOWER_IL_INJECTED.0) != 0;
-    if info.dwExtraInfo == OWN_EXTRA_INFO || (injected && !accept_injected()) {
+    if is_ignored(info.flags, info.dwExtraInfo) {
         return;
     }
     let mut guard = STATE
@@ -372,11 +363,6 @@ type Started = std::result::Result<u32, String>;
 /// Installs the hooks on a thread of their own (a low-level hook is called
 /// through that thread's message loop) and returns the handle that removes them.
 pub(crate) fn start(sink: KeySink) -> Result<KeyListener> {
-    #[cfg(debug_assertions)]
-    ACCEPT_INJECTED.store(
-        std::env::var_os("SEVAK_TEST_ACCEPT_INJECTED_KEYS").is_some(),
-        Ordering::SeqCst,
-    );
     if ACTIVE.swap(true, Ordering::SeqCst) {
         return Err(PlatformError::Os {
             operation: "SetWindowsHookExW",
@@ -616,109 +602,19 @@ mod tests {
         assert_eq!(dead.feed(chars("e")), [KeyEvent::Char('e')]);
     }
 
-    /// The whole path with a real window: the hook sees `SendInput` keys (this
-    /// debug-build switch lets it), a stand-in matcher spots "sig", and
-    /// `replace_typed_text` swaps it for other text in the focused edit control.
-    /// Needs an interactive desktop, steals focus for a moment and overwrites the
-    /// clipboard text briefly (it is restored): `cargo test -p sevak-platform
-    /// typing_a_keyword_is_replaced_in_a_real_window -- --ignored`
     #[test]
-    #[ignore = "needs an interactive desktop"]
-    fn typing_a_keyword_is_replaced_in_a_real_window() {
-        use std::sync::mpsc;
-        use std::time::Duration;
-        use windows::core::{w, PCWSTR};
-        use windows::Win32::UI::Input::KeyboardAndMouse::{VK_G, VK_I, VK_S, VK_SPACE, VK_X};
-        use windows::Win32::UI::WindowsAndMessaging::{
-            CreateWindowExW, DestroyWindow, DispatchMessageW, GetMessageW, GetWindowTextW,
-            PostMessageW, TranslateMessage, MSG, WINDOW_EX_STYLE, WM_CLOSE, WS_OVERLAPPEDWINDOW,
-            WS_VISIBLE,
-        };
-
-        use super::super::paste::{focus, hwnd_to_int, int_to_hwnd, key_input, send_inputs};
-
-        const TITLE: &str = "sevak expand target";
-        let (tx, rx) = mpsc::channel();
-        let window = std::thread::spawn(move || unsafe {
-            let title: Vec<u16> = TITLE.encode_utf16().chain([0]).collect();
-            let hwnd = CreateWindowExW(
-                WINDOW_EX_STYLE(0),
-                w!("EDIT"),
-                PCWSTR(title.as_ptr()),
-                WS_OVERLAPPEDWINDOW | WS_VISIBLE,
-                100,
-                100,
-                400,
-                200,
-                None,
-                None,
-                None,
-                None,
-            )
-            .expect("create an edit window");
-            tx.send(hwnd_to_int(hwnd)).unwrap();
-            let mut message = MSG::default();
-            while GetMessageW(&mut message, None, 0, 0).as_bool() {
-                let _ = TranslateMessage(&message);
-                DispatchMessageW(&message);
-            }
-            let _ = DestroyWindow(hwnd);
-        });
-        let target = int_to_hwnd(rx.recv().unwrap());
-        assert!(focus(target).is_ok(), "could not focus the window");
-
-        // A matcher in miniature: the last characters typed, and a signal when
-        // they end with the keyword.
-        let (found_tx, found_rx) = mpsc::channel();
-        let typed = Mutex::new(String::new());
-        std::env::set_var("SEVAK_TEST_ACCEPT_INJECTED_KEYS", "1");
-        let listener = start(Box::new(move |event| {
-            let mut typed = typed.lock().unwrap();
-            match event {
-                KeyEvent::Char(c) => typed.push(c),
-                KeyEvent::Backspace => {
-                    typed.pop();
-                }
-                KeyEvent::Reset => typed.clear(),
-            }
-            if typed.ends_with("sig") {
-                typed.clear();
-                let _ = found_tx.send(());
-            }
-        }))
-        .expect("the hooks install");
-
-        let press = |key| {
-            send_inputs(&[key_input(key, false), key_input(key, true)]).unwrap();
-            std::thread::sleep(Duration::from_millis(30));
-        };
-        for key in [VK_X, VK_SPACE, VK_S, VK_I, VK_G] {
-            press(key);
-        }
-        let fired = found_rx.recv_timeout(Duration::from_secs(3)).is_ok();
-        if fired {
-            let done = super::super::expand::replace_typed_text(3, "Best regards", &|| true);
-            assert!(done.unwrap());
-        }
-        std::thread::sleep(Duration::from_millis(200));
-
-        let mut buffer = [0u16; 128];
-        let len = unsafe { GetWindowTextW(target, &mut buffer) } as usize;
-        let text = String::from_utf16_lossy(&buffer[..len.min(buffer.len())]);
-        drop(listener);
-        unsafe {
-            let _ = PostMessageW(
-                Some(target),
-                WM_CLOSE,
-                Default::default(),
-                Default::default(),
-            );
-        }
-        drop(window);
-
-        assert!(fired, "the hook never reported the keyword");
-        // Typed at the caret, in front of the title text the control started with.
-        assert_eq!(text, format!("x Best regards{TITLE}"));
+    fn injected_and_own_key_events_are_always_ignored() {
+        let none = KBDLLHOOKSTRUCT_FLAGS(0);
+        assert!(!is_ignored(none, 0), "a real key press is typing");
+        assert!(is_ignored(LLKHF_INJECTED, 0));
+        assert!(is_ignored(LLKHF_LOWER_IL_INJECTED, 0));
+        assert!(is_ignored(
+            KBDLLHOOKSTRUCT_FLAGS(LLKHF_INJECTED.0 | LLKHF_LOWER_IL_INJECTED.0),
+            7
+        ));
+        // Sevak's own events, injected or not.
+        assert!(is_ignored(none, OWN_EXTRA_INFO));
+        assert!(is_ignored(LLKHF_INJECTED, OWN_EXTRA_INFO));
     }
 
     /// Installs the real hooks and checks that they come up and go down again,
