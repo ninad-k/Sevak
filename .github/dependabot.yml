@@ -19,6 +19,11 @@ updates:
       interval: monthly
     commit-message:
       prefix: "chore(deps)"
+    ignore:
+      # svelte-check (npm run check) declares a peer range below TypeScript 7,
+      # so a major bump fails `npm ci`. Remove once svelte-check supports it.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
     groups:
       npm:
         patterns: ["*"]
