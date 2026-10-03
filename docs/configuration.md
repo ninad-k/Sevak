@@ -30,6 +30,13 @@ from the tray or restart Sevak.
 You can keep a small config: missing fields use defaults. Settings preserves
 existing comments when saving. Back up the file before a large manual edit.
 
+Every keyword is one word, and no two searches may share one: the configurable
+keywords (`[files]` `keyword` / `index_keyword` / `content_keyword`,
+`[bookmarks]`, `[tasks]`, `[media]`, `[contacts]`, `[onepassword]`,
+`[dictionary]` `define_keyword` / `spell_keyword`), the fixed ones (`>`, `cb`,
+`s`, `emoji`, `:`, `@`, `uuid`) and your web search keywords. Settings refuses to
+save a clash. An empty keyword turns that keyword off.
+
 ## Common recipes
 
 ### Change the shortcut
