@@ -152,6 +152,53 @@ Press `→` (with the caret at the end of the text) or `Ctrl+K` to open the
 or `←` closes it. `Ctrl+C` copies the selected result's path, URL or value, and
 `Ctrl+L` shows it as **Large Type** across the screen; any key dismisses it.
 
+## Preview, Text View and Grid View
+
+**Preview pane.** Tap `Shift` (press and release it alone) or press `Ctrl+Y`
+(`Cmd+Y` on macOS) to open a pane under the list that shows what the selected
+result is. It follows the selection as you move; tap `Shift` or press `Ctrl+Y`
+again, or `Esc`, to close it (the first `Esc` closes the pane, the next hides
+Sevak). It shows:
+
+| Result | The pane shows |
+|---|---|
+| Text and code files | The first 64 KB in a monospace font, with size and modified date |
+| Images (PNG, JPEG, GIF, WebP, SVG, BMP, ICO; up to 4 MB) | The picture and its pixel size |
+| PDFs and other binary files | Kind, size, path and modified date (pages are not rendered) |
+| Folders | The first 100 entries, folders first, and the item count |
+| Applications | Kind, path or launch command, and the version when it is cheap to read (macOS apps) |
+| Web results and bookmarks | The address, title and site. Nothing is fetched from the network |
+| Snippets | The text as Enter would paste it, with `{date}` and the other placeholders filled in |
+| Clipboard history entries | The copied text |
+| Calculator and conversions | The result and the calculation |
+| Emoji | The emoji large, with its name, keywords and code points |
+
+The pane reads only the file or folder the selected result refers to, only
+when it is open, and never reads network locations (`\\server\share`). The
+window grows to make room and shrinks back when you close the pane; near the
+bottom of a small screen it moves up so the pane stays visible.
+
+**Text View.** A result that carries a long text (a long or multi-line
+clipboard entry, a snippet, a script plugin's output) can be opened in a
+scrollable, taller view with `Ctrl+T`. `↑` `↓` `PageUp` `PageDown` `Home` `End`
+scroll; `Ctrl+C` copies the text, `Enter` runs the result as usual, and `Esc`
+or `←` goes back to the list. Rows that exist only to show text (marked by
+the script that produced them) open the Text View on `Enter`.
+
+**Grid View.** Plugins that offer pictures show their results as a grid of
+tiles instead of a list, when every result of a search is a tile. Move with
+`←` `→` `↑` `↓` (`PageUp`/`PageDown` jump three rows), `Enter` runs the
+selected tile, `Ctrl+K` opens its actions, and the preview pane (`Shift` or
+`Ctrl+Y`) works as for list rows. The grid shows up to 60 tiles. Built in:
+
+- **Emoji picker.** Type `:` and a name (`:heart`, `:thumbs up`) or `emoji `
+  and a name. Enter pastes the emoji into the app you were using (it copies it
+  where pasting is unavailable); `Shift+Enter` copies it instead. About 1,900
+  emoji are bundled, found by name and keywords, offline. Skin-tone variants
+  are not listed: apps apply their own tone setting. Turn it off by adding
+  `"emoji"` to `[plugins] disabled`.
+- Script plugins can request tiles too: see [plugins.md](plugins.md#views-text-and-grid).
+
 ## System commands
 
 Type a command's name, as you would an app (two or more letters). Only the
@@ -330,8 +377,11 @@ lets many existing Alfred scripts work. Three examples are in
 | `↑` / `↓` on an empty bar | Recall earlier searches |
 | `Ctrl+C` (no text selected) | Copy the selected result's path, URL or value |
 | `Ctrl+L` | Show the selected result as Large Type |
+| `Shift` (tap) or `Ctrl+Y` | Show or hide the [preview pane](#preview-text-view-and-grid-view) |
+| `Ctrl+T` | Open the selected result's long text in the Text View |
+| `←` `→` `↑` `↓` in a grid | Move between tiles ([Grid View](#preview-text-view-and-grid-view)) |
 | `Ctrl+1` … `Ctrl+9` | Execute the corresponding result |
-| `Esc` | Hide the launcher (or close the action panel) |
+| `Esc` | Hide the launcher (or close the preview, action panel or Text View first) |
 
 On macOS, `Command` takes the place of `Ctrl`.
 The global launcher shortcut is configured separately; you can also add

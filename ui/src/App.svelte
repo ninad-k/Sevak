@@ -1,6 +1,9 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import Glyph from "./lib/Glyph.svelte";
+  import GridView from "./lib/GridView.svelte";
+  import PreviewPane from "./lib/PreviewPane.svelte";
+  import TextView from "./lib/TextView.svelte";
   import { applyAppearance } from "./lib/appearance";
   import { parentPath } from "./lib/path";
   import { applyTheme } from "./lib/theme";
@@ -15,17 +18,21 @@
     onResultsUpdated,
     onShow,
     onStatus,
+    preview,
     queryHistory,
     search,
     setContentHeight,
     setLargeType,
     takePendingShow,
+    textView,
     type Modifier,
+    type PreviewContent,
     type ResultDto,
     type SelectionActionDto,
     type SelectionPayload,
     type ShowPayload,
     type Status,
+    type TextViewContent,
     type WindowAction,
   } from "./lib/ipc";
 
@@ -61,6 +68,21 @@
   let largeFont = $state(96);
   /** Tags each open/close so a slow window resize cannot resurrect a dismissed Large Type. */
   let largeSeq = 0;
+
+  /** The preview pane (Shift tap / Ctrl+Y) under the list; it follows the selection. */
+  let previewOpen = $state(false);
+  let previewContent = $state<PreviewContent | null>(null);
+  let previewLoading = $state(false);
+  let previewSeq = 0;
+  /** When a lone Shift went down (0: none, or another key came between). */
+  let shiftDownAt = 0;
+  /** The Text View (Ctrl+T): the selected row's long text, full height. */
+  let textViewOpen = $state(false);
+  let textContent = $state<TextViewContent | null>(null);
+  let textSeq = 0;
+  let textViewEl: ReturnType<typeof TextView> | undefined = $state();
+  /** Columns of the Grid View, measured by the grid. */
+  let gridCols = $state(1);
 
   interface PanelEntry {
     label: string;
@@ -101,6 +123,12 @@
         : [],
   );
   const modifierHints = $derived(current?.secondary.filter((s) => s.modifier !== null) ?? []);
+  /** Every result asks to be a tile: show them as a grid instead of a list. */
+  const gridMode = $derived(results.length > 0 && results.every((result) => result.tile));
+  /** The pane is shown (it gives way to the action panel, Large Type and the Text View). */
+  const paneVisible = $derived(
+    previewOpen && !!current && !panelOpen && largeText === null && !textViewOpen,
+  );
 
   const hotkeyError = $derived(status?.hotkey.error ?? null);
   const accelerator = $derived(status?.hotkey.accelerator ?? "");
@@ -146,6 +174,9 @@
     panelOpen = false;
     selection = null;
     closeLargeType();
+    previewOpen = false;
+    previewContent = null;
+    closeTextView(false);
     historyPos = -1;
     query = "";
     results = [];
@@ -389,6 +420,96 @@
     }
   }
 
+  /** Shift tap / Ctrl+Y: show or hide the preview pane for the selected row. */
+  function togglePreview() {
+    if (selection || largeText !== null || textViewOpen) return;
+    if (previewOpen) {
+      previewOpen = false;
+    } else if (current) {
+      previewOpen = true;
+    }
+  }
+
+  // The pane follows the selection. A short delay keeps a held arrow key from
+  // reading a file for every row it passes over; the old content stays on
+  // screen (dimmed) until the new one arrives.
+  $effect(() => {
+    if (!previewOpen || !current) return;
+    const id = current.id;
+    const ticket = resultsTicket;
+    const mine = ++previewSeq;
+    previewLoading = true;
+    const timer = setTimeout(() => {
+      void preview(id, ticket).then((content) => {
+        if (mine !== previewSeq) return;
+        previewContent = content;
+        previewLoading = false;
+      });
+    }, 60);
+    return () => clearTimeout(timer);
+  });
+
+  /** Ctrl+T (or Enter on a text-only row): the row's long text in the Text View. */
+  async function openTextView() {
+    const item = current;
+    if (!item?.text_view || selection) return;
+    const mine = ++textSeq;
+    textViewOpen = true;
+    textContent = null;
+    panelOpen = false;
+    const text = await textView(item.id, resultsTicket);
+    if (mine !== textSeq) return;
+    textContent = text ?? { title: item.title, text: "There is nothing to show.", truncated: false };
+  }
+
+  /** Back to the list (Esc or Left); `refocus` puts the caret back in the search box. */
+  function closeTextView(refocus = true) {
+    textSeq++;
+    if (!textViewOpen) return;
+    textViewOpen = false;
+    textContent = null;
+    if (refocus) void tick().then(() => focusInput());
+  }
+
+  /** Arrow keys, PageUp/PageDown, Home and End scroll the Text View. */
+  function scrollTextView(key: string): boolean {
+    switch (key) {
+      case "ArrowDown":
+        textViewEl?.scrollBy(48);
+        return true;
+      case "ArrowUp":
+        textViewEl?.scrollBy(-48);
+        return true;
+      case "PageDown":
+        textViewEl?.scrollBy("page");
+        return true;
+      case "PageUp":
+        textViewEl?.scrollBy("-page");
+        return true;
+      case "Home":
+        textViewEl?.scrollToEdge(false);
+        return true;
+      case "End":
+        textViewEl?.scrollToEdge(true);
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  /** Grid View arrows: moves by whole rows (`dy`) or tiles (`dx`), staying inside the grid. */
+  function gridMove(dx: number, dy: number) {
+    const n = results.length;
+    if (n === 0) return;
+    let next = selected + dx + dy * gridCols;
+    if (dy > 0 && next >= n) {
+      // A short last row: Down from the row above lands on its last tile.
+      const lastRow = Math.floor((n - 1) / gridCols) * gridCols;
+      next = selected >= lastRow ? selected : n - 1;
+    }
+    void select(Math.max(0, Math.min(n - 1, next)), true);
+  }
+
   async function openLargeType(text: string) {
     const mine = ++largeSeq;
     // The selection's actions come back when Large Type is dismissed.
@@ -448,6 +569,10 @@
     selected = index;
     if (!reveal) return;
     await tick();
+    if (gridMode) {
+      document.getElementById(`result-${selected}`)?.scrollIntoView({ block: "nearest" });
+      return;
+    }
     const row = list?.children[selected] as HTMLElement | undefined;
     if (!list || !row) return;
     if (selected === 0) list.scrollTop = 0;
@@ -468,7 +593,22 @@
     if (n > 0) void select(Math.min(n - 1, Math.max(0, selected + delta)), true);
   }
 
+  /** Shift released soon after it went down alone: a tap, which toggles the preview. */
+  function onKeyup(e: KeyboardEvent) {
+    if (e.key !== "Shift") return;
+    const tapped = shiftDownAt > 0 && performance.now() - shiftDownAt < 450;
+    shiftDownAt = 0;
+    if (tapped && !e.isComposing) togglePreview();
+  }
+
   function onKeydown(e: KeyboardEvent) {
+    // A lone Shift is a candidate tap. Any other key meanwhile (Shift+Enter, a
+    // capital letter, Alt+Shift switching the keyboard layout) or key repeat
+    // (holding Shift) makes it not one.
+    shiftDownAt =
+      e.key === "Shift" && !e.repeat && !e.ctrlKey && !e.altKey && !e.metaKey
+        ? performance.now()
+        : 0;
     if (e.isComposing) return;
     const key = e.key;
     const ctrl = (e.ctrlKey || e.metaKey) && !e.altKey;
@@ -481,6 +621,35 @@
       e.preventDefault();
       closeLargeType();
       return;
+    }
+
+    if (textViewOpen) {
+      if (key === "Escape" || (key === "ArrowLeft" && !e.shiftKey) || (ctrl && lower === "t")) {
+        e.preventDefault();
+        closeTextView();
+        return;
+      } else if (!ctrl && !e.altKey && !e.shiftKey && scrollTextView(key)) {
+        e.preventDefault();
+        return;
+      } else if (key === "Enter") {
+        e.preventDefault();
+        const modifier = modifierOf(e);
+        if (modifier === null) void run(selected);
+        else runModified(modifier);
+        return;
+      } else if (ctrl && !e.shiftKey && lower === "c") {
+        // Text the user selected with the mouse copies as usual; otherwise the
+        // row's text goes to the clipboard.
+        if (!window.getSelection()?.toString()) {
+          e.preventDefault();
+          void copySelected();
+        }
+        return;
+      } else if (["Control", "Shift", "Alt", "Meta"].includes(key)) {
+        return;
+      }
+      // Typing and the like go back to the list and act as usual.
+      closeTextView();
     }
 
     if (panelOpen) {
@@ -519,7 +688,25 @@
 
     if (key === "Escape") {
       e.preventDefault();
-      void hideWindow();
+      // The preview pane closes first; a second Esc hides the launcher.
+      if (previewOpen) previewOpen = false;
+      else void hideWindow();
+    } else if (ctrl && !e.shiftKey && lower === "y") {
+      e.preventDefault();
+      if (!e.repeat) togglePreview();
+    } else if (ctrl && !e.shiftKey && lower === "t") {
+      e.preventDefault();
+      if (!e.repeat) void openTextView();
+    } else if (
+      gridMode &&
+      (key === "ArrowLeft" || key === "ArrowRight") &&
+      !ctrl &&
+      !e.altKey &&
+      !e.shiftKey
+    ) {
+      // In a grid the sideways arrows walk the tiles (Ctrl+K opens the actions).
+      e.preventDefault();
+      gridMove(key === "ArrowRight" ? 1 : -1, 0);
     } else if (key === "ArrowRight" && current && rightArrowIsFree(e)) {
       e.preventDefault();
       openPanel();
@@ -554,20 +741,25 @@
       complete(e.shiftKey);
     } else if (key === "ArrowDown" || (ctrl && lower === "n")) {
       e.preventDefault();
-      move(1);
+      if (gridMode) gridMove(0, 1);
+      else move(1);
     } else if (key === "ArrowUp" || (ctrl && lower === "p")) {
       e.preventDefault();
-      move(-1);
+      if (gridMode) gridMove(0, -1);
+      else move(-1);
     } else if (key === "PageDown") {
       e.preventDefault();
-      page(7);
+      if (gridMode) gridMove(0, 3);
+      else page(7);
     } else if (key === "PageUp") {
       e.preventDefault();
-      page(-7);
+      if (gridMode) gridMove(0, -3);
+      else page(-7);
     } else if (key === "Enter") {
       e.preventDefault();
       const modifier = modifierOf(e);
-      if (modifier === null) void run(selected);
+      if (modifier === null && current?.text_on_enter) void openTextView();
+      else if (modifier === null) void run(selected);
       else runModified(modifier);
     } else if (ctrl && /^[1-9]$/.test(key)) {
       e.preventDefault();
@@ -680,7 +872,7 @@
   });
 </script>
 
-<svelte:window onkeydown={onKeydown} onfocus={() => focusInput()} oncontextmenu={onContextMenu} />
+<svelte:window onkeydown={onKeydown} onkeyup={onKeyup} onfocus={() => focusInput()} oncontextmenu={onContextMenu} />
 
 <main class="shell" bind:this={shell}>
   <div class="card" class:covered={largeFull}>
@@ -719,10 +911,23 @@
       </div>
     {/if}
 
+    {#if gridMode && !textViewOpen}
+      <GridView
+        items={results}
+        {selected}
+        verb={current ? verb(current) : ""}
+        compact={paneVisible}
+        bind:columns={gridCols}
+        onhover={(i) => (selected = i)}
+        onrun={(i) => void run(i)}
+      />
+    {:else if !gridMode}
     <div
       id="results"
       class="results"
       class:empty={results.length === 0}
+      class:compact={paneVisible}
+      class:hidden={textViewOpen}
       role="listbox"
       aria-label="Results"
       bind:this={list}
@@ -771,6 +976,19 @@
         </div>
       {/each}
     </div>
+    {/if}
+
+    {#if textViewOpen}
+      <TextView bind:this={textViewEl} content={textContent} {mac} />
+    {:else if paneVisible}
+      <PreviewPane
+        content={previewContent}
+        loading={previewLoading}
+        glyph={current?.glyph ?? null}
+        hasTextView={!!current?.text_view}
+        {mac}
+      />
+    {/if}
 
     {#if panelOpen && largeText === null && (selection || current)}
       <div
@@ -811,7 +1029,7 @@
           </div>
         {/each}
       </div>
-    {:else if current && (current.secondary.length > 0 || current.autocomplete)}
+    {:else if current && !textViewOpen && (current.secondary.length > 0 || current.autocomplete)}
       <div class="hints" aria-hidden="true">
         <span class="chips">
           {#if current.autocomplete}
@@ -931,8 +1149,14 @@
     border-top: 1px solid var(--border);
   }
 
-  .results.empty {
+  .results.empty,
+  .results.hidden {
     display: none;
+  }
+
+  /* A preview pane is open below: fewer rows, so the window stays short. */
+  .results.compact {
+    max-height: calc(var(--row-height) * 4.5 + 12px);
   }
 
   .row {

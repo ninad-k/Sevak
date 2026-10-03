@@ -34,6 +34,17 @@ pub struct ResultItem {
     /// keyword route the engine prefixes the typed keyword.
     #[serde(default)]
     pub autocomplete: Option<String>,
+    /// What the preview pane (Shift / Ctrl+Y) shows for this row when what its
+    /// action refers to is not enough. `None` for most plugins: the shell then
+    /// derives the preview from the action (a file's contents, a URL, the text
+    /// to copy or paste). Add with [`ResultItem::with_preview`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview: Option<PreviewHint>,
+    /// How the UI should present this row: as a tile in a grid, or with a
+    /// long text for the Text View. `None` is an ordinary list row. Add with
+    /// [`ResultItem::with_view`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub view: Option<ViewHint>,
 }
 
 impl ResultItem {
@@ -54,6 +65,8 @@ impl ResultItem {
             action,
             secondary: Vec::new(),
             autocomplete: None,
+            preview: None,
+            view: None,
         }
     }
 
@@ -80,6 +93,35 @@ impl ResultItem {
     pub fn with_autocomplete(mut self, text: impl Into<String>) -> Self {
         self.autocomplete = Some(text.into());
         self
+    }
+
+    /// Sets what the preview pane shows (see [`ResultItem::preview`]).
+    #[must_use]
+    pub fn with_preview(mut self, preview: PreviewHint) -> Self {
+        self.preview = Some(preview);
+        self
+    }
+
+    /// Sets how the row is presented (see [`ResultItem::view`]).
+    #[must_use]
+    pub fn with_view(mut self, view: ViewHint) -> Self {
+        self.view = Some(view);
+        self
+    }
+
+    /// Shows this row as a tile in the Grid View, with `glyph` (an emoji, a
+    /// short symbol) as the tile's picture; without one the row's icon is the
+    /// picture. The title is the tile's label.
+    #[must_use]
+    pub fn as_tile(self, glyph: Option<&str>) -> Self {
+        self.with_view(ViewHint::Grid {
+            glyph: glyph.map(str::to_owned),
+        })
+    }
+
+    /// Whether this row asks to be a tile in the Grid View.
+    pub fn is_tile(&self) -> bool {
+        matches!(self.view, Some(ViewHint::Grid { .. }))
     }
 
     /// Adds a secondary action. `modifier` is the key held with Enter to run it
@@ -118,6 +160,38 @@ impl ResultItem {
     pub fn copy_text(&self) -> Option<String> {
         self.action.copy_text()
     }
+}
+
+/// What the preview pane shows for a result (see [`ResultItem::preview`]).
+///
+/// Paths in a hint are never read on the UI's say-so: the shell reads only
+/// what the result it holds refers to, with size limits (see
+/// [`crate::preview`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum PreviewHint {
+    /// Text, shown as it is (monospace, scrollable).
+    Text { text: String },
+    /// A file or folder: its contents, a picture, a listing or its details.
+    Path { path: PathBuf },
+    /// A link: the address and title only. Nothing is fetched from the network.
+    Url { url: String, title: Option<String> },
+    /// Labelled facts: a calculation's expression and result, an emoji's name.
+    Details { rows: Vec<(String, String)> },
+}
+
+/// How a result wants to be presented (see [`ResultItem::view`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ViewHint {
+    /// A long text for the scrollable Text View (Ctrl+T), instead of the
+    /// one-line row. With `on_enter`, Enter opens the view rather than running
+    /// the action: for rows that exist only to show text, such as a script's
+    /// output.
+    Text { text: String, on_enter: bool },
+    /// A tile in the Grid View, drawn when every result of a search is a tile.
+    /// `glyph` is the picture (an emoji); without one the row's icon is drawn.
+    Grid { glyph: Option<String> },
 }
 
 /// A modifier key held together with Enter to pick a secondary action. The UI
@@ -406,6 +480,36 @@ mod tests {
             }),
             None
         );
+    }
+
+    #[test]
+    fn preview_and_view_hints_are_optional_and_round_trip() {
+        let plain = ResultItem::new("p", "k", "T", Action::CopyText { text: "x".into() });
+        assert_eq!((&plain.preview, &plain.view), (&None, &None));
+        let json = serde_json::to_string(&plain).unwrap();
+        assert!(
+            !json.contains("preview") && !json.contains("view"),
+            "{json}"
+        );
+
+        let rich = plain
+            .with_preview(PreviewHint::Details {
+                rows: vec![("Name".into(), "grinning face".into())],
+            })
+            .as_tile(Some("😀"));
+        assert!(rich.is_tile());
+        let json = serde_json::to_string(&rich).unwrap();
+        assert!(json.contains(r#""kind":"details""#), "{json}");
+        assert!(json.contains(r#""kind":"grid""#), "{json}");
+        assert_eq!(serde_json::from_str::<ResultItem>(&json).unwrap(), rich);
+
+        let text = ResultItem::new("p", "k", "T", Action::CopyText { text: "x".into() }).with_view(
+            ViewHint::Text {
+                text: "long".into(),
+                on_enter: true,
+            },
+        );
+        assert!(!text.is_tile());
     }
 
     #[test]

@@ -62,6 +62,8 @@ pub fn run(
             commands::search,
             commands::execute,
             commands::copy_result,
+            commands::preview,
+            commands::text_view,
             commands::set_large_type,
             commands::query_history,
             direct::take_pending_show,

@@ -254,7 +254,8 @@ disabled = ["uuid", "web:yt"]
 An instance ID such as `web:yt` disables that engine. A family ID such as
 `web` disables every engine in that family. Available built-in families are
 `apps`, `calculator`, `web`, `files`, `bookmarks`, `system`, `shell`,
-`clipboard`, `snippets`, `selection` (Universal Actions) and `uuid`. Script plugins use `script:<name>`, or
+`clipboard`, `snippets`, `emoji` (the emoji picker; `emoji:word` and `emoji:colon`
+are its two keywords), `selection` (Universal Actions) and `uuid`. Script plugins use `script:<name>`, or
 `script` for all of them.
 [Plugin details](plugins.md#registry-and-enablingdisabling).
 

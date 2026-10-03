@@ -1,7 +1,14 @@
 // Dev-only fixtures so the UI can be previewed in a plain browser (`npm run dev`)
 // where there is no Rust backend. Never imported in production builds.
 
-import type { ResultDto, SecondaryDto, SelectionActionDto, SelectionPayload } from "./ipc";
+import type {
+  PreviewContent,
+  ResultDto,
+  SecondaryDto,
+  SelectionActionDto,
+  SelectionPayload,
+  TextViewContent,
+} from "./ipc";
 import type { SettingsDto } from "./settings-ipc";
 
 const appActions: SecondaryDto[] = [
@@ -11,6 +18,106 @@ const appActions: SecondaryDto[] = [
 ];
 const fileActions: SecondaryDto[] = appActions.slice(0, 2);
 const noExtras = { secondary: [], copy_text: null };
+
+const longText = [
+  "Dear team,",
+  "",
+  "Thanks for the quick turnaround on the quarterly figures. A few notes before the review on Thursday:",
+  "",
+  "  1. Revenue is up 8.4% quarter over quarter, driven mostly by the new annual plans.",
+  "  2. Support volume dropped for the third month in a row; the new onboarding guide seems to be working.",
+  "  3. The infrastructure bill came in 6% under forecast after the storage clean-up.",
+  "",
+  "Please send corrections by Wednesday noon so they can go into the deck. If anything looks off, reply here",
+  "rather than editing the spreadsheet directly, because several people are building on it.",
+  "",
+  "Open questions for Thursday:",
+  "  - Do we keep the discount for annual renewals next quarter?",
+  "  - Who owns the migration of the legacy reports?",
+  "  - Is the new region launch still on for November?",
+  "",
+  "Best regards,",
+  "Ninad",
+].join("\n");
+
+/** A small picture for the image preview (an SVG, so the fixture stays text). */
+const sunset = `data:image/svg+xml;utf8,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1e1b4b"/><stop offset=".55" stop-color="#f97316"/><stop offset="1" stop-color="#fde68a"/></linearGradient></defs><rect width="640" height="360" fill="url(#g)"/><circle cx="320" cy="230" r="64" fill="#fff7ed"/><rect y="270" width="640" height="90" fill="#0f172a"/></svg>',
+)}`;
+
+/** The emoji of the grid preview: `[glyph, name, keywords]`. */
+const emoji: [string, string, string][] = [
+  ["😀", "grinning face", "happy smile"],
+  ["😂", "face with tears of joy", "lol laugh"],
+  ["🙂", "slightly smiling face", "smile"],
+  ["😉", "winking face", "wink"],
+  ["😍", "smiling face with heart-eyes", "love"],
+  ["😎", "smiling face with sunglasses", "cool"],
+  ["🤔", "thinking face", "hmm"],
+  ["😴", "sleeping face", "zzz"],
+  ["😭", "loudly crying face", "sad"],
+  ["😡", "enraged face", "angry"],
+  ["👍", "thumbs up", "yes like"],
+  ["👎", "thumbs down", "no dislike"],
+  ["👏", "clapping hands", "applause"],
+  ["🙏", "folded hands", "thanks please"],
+  ["💪", "flexed biceps", "strong"],
+  ["👀", "eyes", "look"],
+  ["❤️", "red heart", "love"],
+  ["💔", "broken heart", "sad"],
+  ["🔥", "fire", "hot lit"],
+  ["✨", "sparkles", "shiny"],
+  ["🎉", "party popper", "celebrate"],
+  ["💯", "hundred points", "perfect"],
+  ["✅", "check mark button", "done yes"],
+  ["❌", "cross mark", "no wrong"],
+  ["⚠️", "warning", "caution"],
+  ["🚀", "rocket", "launch ship"],
+  ["🐛", "bug", "insect"],
+  ["💡", "light bulb", "idea"],
+  ["📌", "pushpin", "pin"],
+  ["📎", "paperclip", "attach"],
+  ["📅", "calendar", "date"],
+  ["☕", "hot beverage", "coffee"],
+  ["🍕", "pizza", "food"],
+  ["🌈", "rainbow", "weather"],
+  ["⭐", "star", "favorite"],
+  ["🎯", "bullseye", "target"],
+];
+
+function emojiRows(words: string): ResultDto[] {
+  const terms = words.toLowerCase().split(/\s+/).filter(Boolean);
+  return emoji
+    .filter(([, name, keywords]) => terms.every((t) => `${name} ${keywords}`.includes(t)))
+    .map(([glyph, name]) => ({
+      id: `emoji:word:${glyph}`,
+      title: name,
+      subtitle: `${glyph} · Enter to paste`,
+      icon: null,
+      plugin_id: "emoji:word",
+      action: "paste_text" as const,
+      secondary: [{ label: "Copy emoji", modifier: "shift" as const, kind: "copy_text" as const }],
+      copy_text: glyph,
+      tile: true,
+      glyph,
+    }));
+}
+
+const sampleCode = `//! Sevak's launcher window.
+use tauri::{AppHandle, Manager};
+
+pub fn toggle(app: &AppHandle) {
+    let visible = app
+        .get_webview_window("main")
+        .and_then(|window| window.is_visible().ok())
+        .unwrap_or(false);
+    if visible {
+        hide(app);
+    } else {
+        show(app);
+    }
+}
+`;
 
 const rows: ResultDto[] = [
   { id: "m:chrome", title: "Google Chrome", subtitle: "Application", icon: { kind: "builtin", name: "app" }, plugin_id: "apps", action: "launch", secondary: appActions, copy_text: "C:/ProgramData/Start Menu/Google Chrome.lnk" },
@@ -22,6 +129,10 @@ const rows: ResultDto[] = [
   { id: "m:broken", title: "Broken icon app", subtitle: "Falls back to the app glyph", icon: { kind: "url", url: "http://sevak-icon.localhost/0000000000000000" }, plugin_id: "apps", action: "launch", ...noExtras },
   { id: "m:shell", title: "Run `git status` in terminal", subtitle: "Runs only when you press Enter", icon: { kind: "builtin", name: "terminal" }, plugin_id: "shell", action: "custom", ...noExtras },
   { id: "m:plugin", title: "Custom plugin result", subtitle: "Plugin", icon: { kind: "builtin", name: "plugin" }, plugin_id: "x", action: "custom", ...noExtras },
+  { id: "m:code", title: "window.rs", subtitle: "D:/Projects/sevak/src-tauri/src/window.rs", icon: { kind: "builtin", name: "file" }, plugin_id: "files", action: "open_path", secondary: fileActions, copy_text: "D:/Projects/sevak/src-tauri/src/window.rs" },
+  { id: "m:image", title: "sunset.svg", subtitle: "C:/Users/someone/Pictures/sunset.svg", icon: { kind: "builtin", name: "file" }, plugin_id: "files", action: "open_path", secondary: fileActions, copy_text: "C:/Users/someone/Pictures/sunset.svg" },
+  { id: "m:long", title: "Dear team, thanks for the quick turnaround on the quarterly figures and…", subtitle: "Copied 12 minutes ago · Enter to paste", icon: { kind: "builtin", name: "copy" }, plugin_id: "clipboard", action: "paste_text", secondary: [], copy_text: longText, text_view: true },
+  { id: "m:output", title: "Disk usage report", subtitle: "Enter to read the output", icon: { kind: "builtin", name: "terminal" }, plugin_id: "script:disk", action: "copy_text", secondary: [], copy_text: longText, text_view: true, text_on_enter: true },
   { id: "m:9", title: "Ninth row", subtitle: "Scrolls the list", icon: null, plugin_id: "apps", action: "launch", ...noExtras },
   { id: "m:10", title: "Tenth row", subtitle: "Scrolls the list", icon: null, plugin_id: "apps", action: "launch", ...noExtras },
 ];
@@ -73,7 +184,82 @@ export function mockHistory(): string[] {
 }
 
 export function mockSearch(query: string): ResultDto[] {
-  return query.trim() === "none" ? [] : rows;
+  const text = query.trim();
+  if (text === "none") return [];
+  // The emoji picker: `:smile` or `emoji smile` shows a grid.
+  const grid = /^(?::|emoji\s)\s*(.*)$/.exec(text);
+  if (grid) return emojiRows(grid[1]);
+  return rows;
+}
+
+/** Previews of the fixtures above, shaped like the shell's `preview` answer. */
+export function mockPreview(id: string): PreviewContent | null {
+  const base = { modified: 1_790_000_000, note: null };
+  const row = rows.find((r) => r.id === id) ?? mockSearch(":").find((r) => r.id === id);
+  if (!row) return null;
+  const common = { title: row.title, subtitle: row.subtitle, ...base };
+  switch (id) {
+    case "m:file":
+      return { ...common, body: { kind: "none" }, note: "No preview for this kind of file", meta: [
+        { label: "Kind", value: "Excel workbook" },
+        { label: "Size", value: "184.3 KB" },
+        { label: "Path", value: row.copy_text ?? "" },
+      ] };
+    case "m:image":
+      return { ...common, body: { kind: "image", src: sunset }, meta: [
+        { label: "Kind", value: "SVG image" },
+        { label: "Size", value: "612 bytes" },
+        { label: "Path", value: row.copy_text ?? "" },
+      ] };
+    case "m:folder":
+      return { ...common, body: { kind: "folder", truncated: false, entries: [
+        { name: "sevak", dir: true },
+        { name: "website", dir: true },
+        { name: "notes", dir: true },
+        { name: "archive", dir: true },
+        { name: "main.rs", dir: false },
+        { name: "README.md", dir: false },
+        { name: "todo.txt", dir: false },
+        { name: "budget.xlsx", dir: false },
+      ] }, meta: [
+        { label: "Kind", value: "Folder" },
+        { label: "Items", value: "8" },
+        { label: "Path", value: row.copy_text ?? "" },
+      ] };
+    case "m:web":
+      return { ...common, body: { kind: "url", url: row.copy_text ?? "" }, meta: [{ label: "Site", value: "www.google.com" }] };
+    case "m:copy":
+      return { ...common, body: { kind: "none" }, meta: [
+        { label: "Result", value: "8" },
+        { label: "Calculation", value: "2 + 2 * 3" },
+      ] };
+    case "m:long":
+    case "m:output":
+      return { ...common, body: { kind: "text", text: longText, truncated: false }, meta: [] };
+    case "m:chrome":
+    case "m:calc":
+      return { ...common, body: { kind: "none" }, meta: [
+        { label: "Kind", value: "Application" },
+        { label: "Shortcut", value: "C:/ProgramData/Microsoft/Windows/Start Menu/Programs/" + row.title + ".lnk" },
+      ] };
+    case "m:code":
+      return { ...common, body: { kind: "text", text: sampleCode, truncated: true }, meta: [] };
+  }
+  if (row.glyph) {
+    const found = emoji.find(([glyph]) => glyph === row.glyph);
+    return { ...common, body: { kind: "none" }, meta: [
+      { label: "Name", value: row.title },
+      { label: "Keywords", value: (found?.[2] ?? "").split(" ").join(", ") },
+      { label: "Code points", value: [...row.glyph].map((c) => `U+${c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}`).join(" ") },
+    ] };
+  }
+  return { ...common, body: { kind: "none" }, meta: [] };
+}
+
+export function mockTextView(id: string): TextViewContent | null {
+  const row = rows.find((r) => r.id === id);
+  if (!row?.text_view) return null;
+  return { title: row.title, text: `${longText}\n\n${longText}`, truncated: false };
 }
 
 export function mockSettings(): SettingsDto {
