@@ -7,6 +7,8 @@ use serde::Serialize;
 use sevak_core::Config;
 use sevak_platform::{AppPaths, DisplayServer};
 
+use crate::search::Search;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum HotkeyMode {
@@ -29,12 +31,15 @@ pub struct Status {
     pub version: String,
     pub display: String,
     pub hotkey: HotkeyStatus,
+    /// The search index is being (re)built.
+    pub indexing: bool,
 }
 
 pub struct AppState {
     pub paths: AppPaths,
     pub display: DisplayServer,
     pub config: RwLock<Config>,
+    pub search: Search,
     pub hotkey: RwLock<HotkeyStatus>,
     /// When the window was last shown.
     pub last_shown: Mutex<Option<Instant>>,
@@ -49,9 +54,11 @@ impl AppState {
             mode: HotkeyMode::Global,
             error: None,
         };
+        let search = Search::new(&paths, &config);
         Self {
             paths,
             display,
+            search,
             config: RwLock::new(config),
             hotkey: RwLock::new(hotkey),
             last_shown: Mutex::new(None),
@@ -77,6 +84,7 @@ impl AppState {
             version: env!("CARGO_PKG_VERSION").to_owned(),
             display: self.display.as_str().to_owned(),
             hotkey,
+            indexing: self.search.is_indexing(),
         }
     }
 }

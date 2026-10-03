@@ -13,6 +13,7 @@ tauri-build.workspace = true
 [dependencies]
 sevak-core.workspace = true
 sevak-platform.workspace = true
+sevak-plugins.workspace = true
 
 anyhow.workspace = true
 serde.workspace = true

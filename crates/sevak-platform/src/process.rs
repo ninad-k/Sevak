@@ -3,7 +3,7 @@
 
 use std::env;
 use std::ffi::OsStr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use crate::error::{PlatformError, Result};
@@ -30,13 +30,30 @@ pub fn find_in_path(program: &str) -> Option<PathBuf> {
     })
 }
 
-fn detached_command<S: AsRef<OsStr>>(program: &str, args: &[S]) -> Command {
+/// Applies the environment children must start with.
+///
+/// On Wayland, Sevak sets `GDK_BACKEND=x11` in its own process so that its
+/// window runs under XWayland (see [`crate::session::prefer_xwayland`]). If
+/// children inherited that, every application launched from Sevak would also be
+/// forced onto XWayland (blurry on fractional scaling, no native Wayland
+/// features). So when Sevak set the variable itself, it is removed here.
+fn apply_child_env(command: &mut Command, xwayland_forced: bool) {
+    if xwayland_forced {
+        command.env_remove("GDK_BACKEND");
+    }
+}
+
+fn detached_command<S: AsRef<OsStr>>(program: &str, args: &[S], cwd: Option<&Path>) -> Command {
     let mut command = Command::new(program);
     command
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
+    if let Some(cwd) = cwd {
+        command.current_dir(cwd);
+    }
+    apply_child_env(&mut command, crate::session::xwayland_forced());
     command
 }
 
@@ -47,14 +64,24 @@ fn spawn_error(program: &str, err: std::io::Error) -> PlatformError {
     }
 }
 
+/// Spawns `program` fully detached; see [`spawn_detached_in`].
+pub fn spawn_detached<S: AsRef<OsStr>>(program: &str, args: &[S]) -> Result<()> {
+    spawn_detached_in(program, args, None)
+}
+
 /// Spawns `program` fully detached: null stdio, its own process group (so a
 /// Ctrl+C or SIGHUP aimed at Sevak does not reach it), and a reaper thread that
-/// waits on the child so it never lingers as a zombie.
+/// waits on the child so it never lingers as a zombie. `cwd` is the working
+/// directory, if not Sevak's own.
 #[cfg(unix)]
-pub fn spawn_detached<S: AsRef<OsStr>>(program: &str, args: &[S]) -> Result<()> {
+pub fn spawn_detached_in<S: AsRef<OsStr>>(
+    program: &str,
+    args: &[S],
+    cwd: Option<&Path>,
+) -> Result<()> {
     use std::os::unix::process::CommandExt;
 
-    let mut child = detached_command(program, args)
+    let mut child = detached_command(program, args, cwd)
         .process_group(0)
         .spawn()
         .map_err(|err| spawn_error(program, err))?;
@@ -75,15 +102,20 @@ pub fn spawn_detached<S: AsRef<OsStr>>(program: &str, args: &[S]) -> Result<()> 
 }
 
 /// Spawns `program` fully detached: null stdio, no inherited console and its own
-/// process group. Windows has no zombies, so the child is not waited on.
+/// process group. Windows has no zombies, so the child is not waited on. `cwd`
+/// is the working directory, if not Sevak's own.
 #[cfg(windows)]
-pub fn spawn_detached<S: AsRef<OsStr>>(program: &str, args: &[S]) -> Result<()> {
+pub fn spawn_detached_in<S: AsRef<OsStr>>(
+    program: &str,
+    args: &[S],
+    cwd: Option<&Path>,
+) -> Result<()> {
     use std::os::windows::process::CommandExt;
 
     const DETACHED_PROCESS: u32 = 0x0000_0008;
     const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
 
-    detached_command(program, args)
+    detached_command(program, args, cwd)
         .creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
         .spawn()
         .map(drop)
@@ -126,6 +158,19 @@ mod tests {
     #[test]
     fn finds_sh() {
         assert!(find_in_path("sh").is_some());
+    }
+
+    #[test]
+    fn gdk_backend_is_removed_only_when_sevak_forced_it() {
+        let removed = |forced: bool| {
+            let mut command = Command::new("x");
+            apply_child_env(&mut command, forced);
+            command
+                .get_envs()
+                .any(|(key, value)| key == "GDK_BACKEND" && value.is_none())
+        };
+        assert!(removed(true));
+        assert!(!removed(false));
     }
 
     #[test]

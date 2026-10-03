@@ -7,7 +7,7 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent};
 
 use crate::cli::{self, Launch};
 use crate::state::AppState;
-use crate::{commands, hotkey, tray, window};
+use crate::{commands, hotkey, icons, search, tray, window};
 
 pub fn run(
     paths: AppPaths,
@@ -27,7 +27,7 @@ pub fn run(
                 Launch::Show => window::show(app),
                 Launch::Toggle => window::toggle(app),
                 Launch::Background => {}
-                Launch::Quit => app.exit(0),
+                Launch::Quit => quit(app),
             }
         }));
     if let Some(plugin) = hotkey::plugin(strategy) {
@@ -36,10 +36,19 @@ pub fn run(
 
     builder
         .manage(state)
+        .register_asynchronous_uri_scheme_protocol(icons::SCHEME, |ctx, request, responder| {
+            let app = ctx.app_handle().clone();
+            // Icon extraction is slow (COM, decoding): never on the caller's thread.
+            tauri::async_runtime::spawn_blocking(move || {
+                responder.respond(icons::respond(&app, request.uri().path()));
+            });
+        })
         .invoke_handler(tauri::generate_handler![
             commands::hide_window,
             commands::get_status,
-            commands::set_content_height
+            commands::set_content_height,
+            commands::search,
+            commands::execute
         ])
         .on_window_event(window::on_window_event)
         .setup(move |app| {
@@ -47,12 +56,13 @@ pub fn run(
             tray::init(handle);
             hotkey::apply(handle);
             window::apply_configured_width(handle);
+            search::start(handle);
             tracing::info!(display = ?server, ?launch, "sevak is ready");
 
             match launch {
                 Launch::Show | Launch::Toggle => window::show(handle),
                 Launch::Background => {}
-                Launch::Quit => handle.exit(0),
+                Launch::Quit => quit(handle),
             }
             Ok(())
         })
@@ -87,9 +97,17 @@ pub fn reload(app: &AppHandle) {
 
     hotkey::apply(app);
     window::apply_configured_width(app);
-    // Phase 2 rebuilds the search index here.
+    // The index is rebuilt in the background and swapped in when ready.
+    search::reload(app, &state.config());
 
     if let Err(err) = app.emit_to(window::MAIN_LABEL, window::EVENT_STATUS, state.status()) {
         tracing::warn!("could not emit {}: {err}", window::EVENT_STATUS);
     }
+}
+
+/// Saves the usage statistics, then exits. The one way Sevak quits.
+pub fn quit(app: &AppHandle) {
+    tracing::info!("quitting");
+    search::save_usage(app);
+    app.exit(0);
 }
