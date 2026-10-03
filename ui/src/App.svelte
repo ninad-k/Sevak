@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
+  import FileBufferStrip from "./lib/FileBufferStrip.svelte";
   import Glyph from "./lib/Glyph.svelte";
   import GridView from "./lib/GridView.svelte";
   import PreviewPane from "./lib/PreviewPane.svelte";
@@ -10,9 +11,16 @@
   import {
     copyResult,
     execute,
+    fileBufferAdd,
+    fileBufferClear,
+    fileBufferGet,
+    fileBufferRemove,
+    fileBufferRun,
+    fileBufferSelection,
     getStatus,
     hasTauri,
     hideWindow,
+    onBufferProgress,
     onHidden,
     onIndex,
     onResultsUpdated,
@@ -25,6 +33,10 @@
     setLargeType,
     takePendingShow,
     textView,
+    type BufferDestination,
+    type BufferDto,
+    type BufferNote,
+    type BufferProgress,
     type Modifier,
     type PreviewContent,
     type ResultDto,
@@ -84,6 +96,22 @@
   /** Columns of the Grid View, measured by the grid. */
   let gridCols = $state(1);
 
+  /**
+   * The file buffer: files and folders collected from the file results
+   * (Alt+Up / Alt+Down) to act on together. The shell owns the list; this is
+   * the copy last reported.
+   */
+  let fileBuffer = $state<BufferDto>({ items: [], actions: [] });
+  /** The panel is listing the buffer's actions rather than the row's. */
+  let bufferPanel = $state(false);
+  /** Move to… / Copy to… is waiting for a folder to be typed or picked. */
+  let destination = $state<{ key: string; label: string } | null>(null);
+  /** A buffer action is running (the shell does one at a time). */
+  let bufferBusy = $state(false);
+  let bufferProgress = $state<BufferProgress | null>(null);
+  /** How the last buffer action ended. */
+  let bufferNote = $state<BufferNote | null>(null);
+
   interface PanelEntry {
     label: string;
     /** Muted text after the label: a preview of what the action produces. */
@@ -95,10 +123,30 @@
     verb?: string;
     /** The other modifier + Enter shortcuts of the action (Universal Actions). */
     extras?: { modifier: Modifier; label: string }[];
+    /** A file buffer action, by key. */
+    bufferKey?: string;
+    /** Entries that are not a result action: collect the row, open the buffer's actions, ... */
+    special?: "buffer_add" | "buffer_actions" | "buffer_more";
+  }
+
+  /** A row of the file results (not bookmarks or apps): what can be collected. */
+  function isFileRow(item: ResultDto | undefined): item is ResultDto {
+    return !!item && item.plugin_id === "files" && item.action === "open_path";
+  }
+
+  /** A folder row of a browsed path: the rows Move to… / Copy to… can choose. */
+  function isFolderRow(item: ResultDto): boolean {
+    return isFileRow(item) && /[\\/]$/.test(item.autocomplete ?? "");
+  }
+
+  /** While a destination is wanted, only folders are worth listing. */
+  function forDestination(found: ResultDto[]): ResultDto[] {
+    return destination ? found.filter(isFolderRow) : found;
   }
 
   const current = $derived<ResultDto | undefined>(results[selected]);
   const mac = $derived(status?.display === "macos");
+  const altKey = $derived(mac ? "⌥" : "Alt+");
   const panelEntries = $derived<PanelEntry[]>(
     selection
       ? selection.actions.map((action) => ({
@@ -111,16 +159,55 @@
             s.modifier ? [{ modifier: s.modifier, label: s.label }] : [],
           ),
         }))
-      : current
+      : bufferPanel
         ? [
-            { label: verb(current), modifier: null, index: null },
-            ...current.secondary.map((s, index) => ({
-              label: s.label,
-              modifier: s.modifier,
-              index,
+            ...fileBuffer.actions.map((action) => ({
+              label: action.label,
+              detail: action.destination ? "then choose a folder" : undefined,
+              modifier: null,
+              index: null,
+              bufferKey: action.key,
             })),
+            {
+              label: "More file actions…",
+              detail: "open with, reveal, share…",
+              modifier: null,
+              index: null,
+              special: "buffer_more" as const,
+            },
           ]
-        : [],
+        : current
+          ? [
+              { label: verb(current), modifier: null, index: null },
+              ...current.secondary.map((s, index) => ({
+                label: s.label,
+                modifier: s.modifier,
+                index,
+              })),
+              ...(isFileRow(current)
+                ? [
+                    {
+                      label: "Add to file buffer",
+                      detail: `${altKey}↑ or ${altKey}↓`,
+                      modifier: null,
+                      index: null,
+                      special: "buffer_add" as const,
+                    },
+                  ]
+                : []),
+              ...(fileBuffer.items.length > 0
+                ? [
+                    {
+                      label: `File buffer actions (${fileBuffer.items.length})…`,
+                      detail: `${altKey}→`,
+                      modifier: null,
+                      index: null,
+                      special: "buffer_actions" as const,
+                    },
+                  ]
+                : []),
+            ]
+          : [],
   );
   const modifierHints = $derived(current?.secondary.filter((s) => s.modifier !== null) ?? []);
   /** Every result asks to be a tile: show them as a grid instead of a list. */
@@ -141,6 +228,11 @@
       !error &&
       results.every((result) => result.plugin_id.startsWith("web:")),
   );
+
+  // The buffer's action list only exists while the panel is open.
+  $effect(() => {
+    if (!panelOpen) bufferPanel = false;
+  });
 
   let lastHeight = -1;
   /** Tags every search; a response is applied only if it is still the latest. */
@@ -173,6 +265,8 @@
     searchSeq++; // drop any search still in flight
     panelOpen = false;
     selection = null;
+    destination = null;
+    bufferNote = null;
     closeLargeType();
     previewOpen = false;
     previewContent = null;
@@ -188,6 +282,7 @@
   /** The window is being shown; `payload` can prefill the query or carry an error. */
   function applyShow(payload: ShowPayload | null) {
     reset();
+    void refreshBuffer();
     if (payload?.selection) {
       openSelection(payload.selection);
       return;
@@ -242,7 +337,7 @@
     }
     const found = await search(text);
     if (mine !== searchSeq || found === null) return;
-    results = found.results;
+    results = forDestination(found.results);
     resultsTicket = found.ticket;
     selected = 0;
     panelOpen = false;
@@ -260,7 +355,7 @@
     const found = await search(text);
     if (mine !== searchSeq || found === null) return;
     const keep = results[selected]?.id;
-    results = found.results;
+    results = forDestination(found.results);
     resultsTicket = found.ticket;
     const at = keep === undefined ? -1 : results.findIndex((result) => result.id === keep);
     if (at >= 0) {
@@ -327,6 +422,10 @@
 
   /** Runs row `index`: its primary action, or secondary action number `action`. */
   async function run(index: number, action?: number) {
+    if (destination) {
+      void chooseDestination(index, false);
+      return;
+    }
     const item = results[index];
     if (!item || executing) return;
     executing = true;
@@ -367,7 +466,23 @@
       void runSelection(selection.actions[k], modifier);
       return;
     }
+    if (entry.special === "buffer_actions") {
+      openBufferPanel();
+      return;
+    }
+    if (entry.special === "buffer_more") {
+      void moreFileActions();
+      return;
+    }
     panelOpen = false;
+    if (entry.special === "buffer_add") {
+      void collect(0);
+      return;
+    }
+    if (entry.bufferKey) {
+      void startBufferAction(entry.bufferKey);
+      return;
+    }
     void run(selected, entry.index ?? undefined);
   }
 
@@ -400,6 +515,160 @@
       leaveSelection();
       prefill(action.query);
     }
+  }
+
+  async function refreshBuffer() {
+    const found = await fileBufferGet();
+    if (found) fileBuffer = found;
+  }
+
+  /**
+   * Alt+Up / Alt+Down: the selected file or folder goes into the buffer, and the
+   * selection moves on (`delta` 0 stays, for the action panel's entry).
+   */
+  async function collect(delta: number) {
+    const item = current;
+    const ticket = resultsTicket;
+    if (!isFileRow(item) || bufferBusy) return;
+    bufferNote = null;
+    if (delta !== 0) move(delta);
+    const found = await fileBufferAdd(item.id, ticket);
+    if (typeof found === "string") error = found;
+    else fileBuffer = found;
+  }
+
+  async function removeFromBuffer(index?: number) {
+    if (bufferBusy) return;
+    bufferNote = null;
+    const found = await fileBufferRemove(index);
+    if (found) fileBuffer = found;
+  }
+
+  async function clearBuffer() {
+    if (bufferBusy) return;
+    bufferNote = null;
+    const found = await fileBufferClear();
+    if (found) fileBuffer = found;
+  }
+
+  function openBufferPanel() {
+    if (fileBuffer.items.length === 0 || bufferBusy) return;
+    selection = null;
+    bufferPanel = true;
+    panelIndex = 0;
+    panelOpen = true;
+  }
+
+  /**
+   * The Alt+arrow keys of the file buffer. Returns false for a key that is not
+   * the buffer's to handle right now (so the input keeps it).
+   */
+  function onBufferKey(e: KeyboardEvent): boolean {
+    if (destination) return false;
+    const filled = fileBuffer.items.length > 0;
+    switch (e.key) {
+      case "ArrowUp":
+      case "ArrowDown":
+        if (!isFileRow(current)) return false;
+        void collect(e.key === "ArrowUp" ? -1 : 1);
+        return true;
+      case "ArrowLeft":
+        if (!filled) return false;
+        void removeFromBuffer();
+        return true;
+      case "ArrowRight":
+        if (!filled) return false;
+        openBufferPanel();
+        return true;
+      case "Backspace":
+      case "Delete":
+        if (!filled) return false;
+        void clearBuffer();
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  /** A picked buffer action: ask for a folder first when it needs one. */
+  async function startBufferAction(key: string) {
+    const action = fileBuffer.actions.find((a) => a.key === key);
+    if (!action || bufferBusy) return;
+    bufferNote = null;
+    error = null;
+    if (action.destination) {
+      destination = { key, label: action.label };
+      historyPos = -1;
+      setQuery("~/");
+      focusInput();
+      return;
+    }
+    await runBufferAction(key, null);
+  }
+
+  /**
+   * Runs a buffer action in the shell. Resolves to false when it did not run
+   * (an error, or the confirmation was declined).
+   */
+  async function runBufferAction(key: string, to: BufferDestination | null): Promise<boolean> {
+    if (bufferBusy) return false;
+    bufferBusy = true;
+    bufferNote = null;
+    bufferProgress = null;
+    try {
+      const outcome = await fileBufferRun(key, to);
+      if (typeof outcome === "string") {
+        error = outcome;
+        return false;
+      }
+      fileBuffer = outcome.buffer;
+      if (outcome.declined) return false;
+      if (!outcome.hidden && outcome.message) {
+        bufferNote = { text: outcome.message, error: !outcome.ok };
+      }
+      return true;
+    } finally {
+      bufferBusy = false;
+      bufferProgress = null;
+    }
+  }
+
+  /**
+   * Move to… / Copy to… got its folder: the highlighted folder row, or with
+   * `typed` the path as typed (a keyword in front of it is ignored).
+   */
+  async function chooseDestination(index: number, typed: boolean) {
+    const wanted = destination;
+    if (!wanted || bufferBusy) return;
+    const row = results[index];
+    const path = query.trim().replace(/^\S+\s+(?=(~[\\/]|[\\/]|[A-Za-z]:[\\/]))/, "");
+    let to: BufferDestination;
+    if (!typed && row && isFolderRow(row)) {
+      to = { kind: "result", id: row.id, ticket: resultsTicket };
+    } else if (path !== "") {
+      to = { kind: "text", text: path };
+    } else {
+      error = "Pick a folder first.";
+      return;
+    }
+    error = null;
+    if (await runBufferAction(wanted.key, to)) leaveDestination();
+  }
+
+  function leaveDestination() {
+    destination = null;
+    setQuery("");
+  }
+
+  /** The Universal Actions list for the collected files. */
+  async function moreFileActions() {
+    const found = await fileBufferSelection();
+    if (typeof found === "string") {
+      error = found;
+      leaveSelection();
+      return;
+    }
+    openSelection(found);
   }
 
   function onPanelMove(e: MouseEvent, k: number) {
@@ -686,6 +955,23 @@
       leaveSelection();
     }
 
+    if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && onBufferKey(e)) {
+      e.preventDefault();
+      return;
+    }
+    // Esc closes the innermost thing first: an open preview pane, then the
+    // folder picker of Move to… / Copy to…, then the launcher.
+    if (destination && key === "Escape" && !previewOpen) {
+      e.preventDefault();
+      leaveDestination();
+      return;
+    }
+    if (destination && key === "Enter") {
+      e.preventDefault();
+      void chooseDestination(selected, e.ctrlKey || e.metaKey);
+      return;
+    }
+
     if (key === "Escape") {
       e.preventDefault();
       // The preview pane closes first; a second Esc hides the launcher.
@@ -787,6 +1073,9 @@
   }
 
   function verb(item: ResultDto): string {
+    if (destination && isFolderRow(item)) {
+      return destination.label.startsWith("Move") ? "Move here" : "Copy here";
+    }
     if (item.plugin_id.startsWith("web:")) return "Search";
     switch (item.action) {
       case "launch":
@@ -824,6 +1113,7 @@
 
   onMount(() => {
     focusInput(true);
+    void refreshBuffer();
 
     const resizeObserver = new ResizeObserver(reportHeight);
     if (shell) resizeObserver.observe(shell);
@@ -851,11 +1141,24 @@
         indexing = state === "indexing";
       }),
       onResultsUpdated(() => void refreshResults()),
+      onBufferProgress((progress) => {
+        if (bufferBusy) bufferProgress = progress;
+      }),
     ];
 
     // Browser preview only: `/#selection` shows the Universal Actions panel.
     if (import.meta.env.DEV && !hasTauri() && location.hash === "#selection") {
       void import("./lib/mock").then(({ mockSelection }) => openSelection(mockSelection()));
+    }
+
+    // Browser preview only: `/#buffer` starts with some collected files, and
+    // `/#buffer-dest` with Move to… waiting for a folder.
+    if (import.meta.env.DEV && !hasTauri() && location.hash.startsWith("#buffer")) {
+      void import("./lib/mock").then(async ({ mockBuffer }) => {
+        fileBuffer = mockBuffer.seed();
+        setQuery("report");
+        if (location.hash === "#buffer-dest") await startBufferAction("move_to");
+      });
     }
 
     // A query sent while the window was still loading (`sevak --query` at startup).
@@ -910,6 +1213,15 @@
         (tray menu).
       </div>
     {/if}
+
+    <FileBufferStrip
+      items={fileBuffer.items}
+      progress={bufferProgress}
+      note={bufferNote}
+      destination={destination && { label: destination.label, count: fileBuffer.items.length }}
+      {mac}
+      onremove={(index) => void removeFromBuffer(index)}
+    />
 
     {#if gridMode && !textViewOpen}
       <GridView
@@ -990,17 +1302,23 @@
       />
     {/if}
 
-    {#if panelOpen && largeText === null && (selection || current)}
+    {#if panelOpen && largeText === null && (selection || bufferPanel || current)}
       <div
         class="panel"
-        class:scroll={!!selection}
+        class:scroll={!!selection || bufferPanel}
         role="menu"
-        aria-label="Actions for {selection ? selection.title : current?.title}"
+        aria-label="Actions for {selection
+          ? selection.title
+          : bufferPanel
+            ? 'the file buffer'
+            : current?.title}"
         bind:this={panelEl}
       >
         <div class="panel-title">
           {#if selection}
             {selection.title}{#if selection.subtitle}: <span class="quote">{selection.subtitle}</span>{/if}
+          {:else if bufferPanel}
+            File buffer: {fileBuffer.items.length === 1 ? "1 item" : `${fileBuffer.items.length} items`}
           {:else}
             Actions for {current?.title}
           {/if}
@@ -1029,7 +1347,7 @@
           </div>
         {/each}
       </div>
-    {:else if current && !textViewOpen && (current.secondary.length > 0 || current.autocomplete)}
+    {:else if current && !textViewOpen && !destination && (current.secondary.length > 0 || current.autocomplete)}
       <div class="hints" aria-hidden="true">
         <span class="chips">
           {#if current.autocomplete}
@@ -1040,6 +1358,9 @@
               <span class="chip"><kbd>{combo(hint.modifier)}</kbd>{hint.label}</span>
             {/if}
           {/each}
+          {#if isFileRow(current) && !destination}
+            <span class="chip"><kbd>{altKey}↑↓</kbd>Collect</span>
+          {/if}
         </span>
         {#if current.secondary.length > 0}
           <span class="chip more"><kbd>→</kbd>Actions</span>

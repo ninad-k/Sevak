@@ -619,6 +619,35 @@ telling the user, in the approval dialog, that the plugin will see their
 selection. Until then a script plugin cannot read it, and a selection is never
 passed to any script.
 
+## The file buffer
+
+Not a plugin: a collection of the paths of `files` results (`Alt+Up` /
+`Alt+Down` in the launcher) that the user acts on together. The logic is
+`sevak_plugins::file_buffer`:
+
+- `FileBuffer` holds the paths (ordered, each once, at most `MAX_ITEMS`).
+- `BufferAction` names what can be done (`OpenAll`, `ShowInFolder`,
+  `CopyPaths`, `CopyFiles`, `MoveTo`, `CopyTo`, `Trash`, `Zip`,
+  `OpenInTerminal`); `confirmation` returns the question to ask first, and
+  `run(context, action, items, destination, progress)` does it and returns an
+  `Outcome` (how many worked, the first failure, which items were used up).
+- `file_buffer::ops` is the disk work: `copy_items`, `move_items`,
+  `trash_items`, `zip_items`. Nothing overwrites or deletes for good; name
+  clashes become `name (2).ext` (`unique_path`), and every batch reports
+  per-item failures instead of stopping.
+- The OS parts are on `PlatformProvider`: `move_to_trash(path)` (Windows
+  `SHFileOperationW` with `FOF_ALLOWUNDO`, macOS `NSFileManager`
+  `trashItemAtURL`, Linux `gio trash`) and `set_clipboard_files(paths)`.
+  `MockPlatform` records both (`trashed`, `trash_refuses`, `clipboard_files`),
+  so tests never touch a real trash; tests that copy or move use a temp dir.
+
+The shell (`src-tauri/src/file_buffer.rs`) keeps the buffer in `AppState`, so the
+page can only add a result it was shown (a ticket and an id, never a path). It
+asks for the confirmation, hides the launcher for the actions that hand over to
+another program, runs everything off the UI thread and sends
+`sevak:buffer-progress` events. In a browser preview (`npm run dev`) the page
+uses `mockBuffer` from `ui/src/lib/mock.ts`; open `/#buffer` or `/#buffer-dest`.
+
 ## External plugins
 
 You can add a keyword plugin without building Sevak: drop a folder with a

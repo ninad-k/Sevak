@@ -154,6 +154,11 @@ use_primary_selection = true
 # Accessibility permission), act on the current clipboard contents instead.
 use_clipboard_fallback = false
 
+[file_buffer]
+# The file buffer (Alt+Up / Alt+Down on a file result collects it). By default it
+# is emptied whenever the launcher hides; true keeps what you collected.
+keep_between_shows = false
+
 [clipboard]
 # Clipboard history ("cb <text>"). Off by default: turning it on makes Sevak
 # watch the clipboard and keep what you copy in clipboard-history.json in its
@@ -238,6 +243,7 @@ pub struct Config {
     pub paste: PasteConfig,
     pub actions: ActionsConfig,
     pub clipboard: ClipboardConfig,
+    pub file_buffer: FileBufferConfig,
     /// `[[snippet]]` entries. Edited by hand only: saves from the settings
     /// window leave them untouched (see `merge_document`).
     pub snippet: Vec<Snippet>,
@@ -264,6 +270,7 @@ impl Default for Config {
             paste: PasteConfig::default(),
             actions: ActionsConfig::default(),
             clipboard: ClipboardConfig::default(),
+            file_buffer: FileBufferConfig::default(),
             snippet: Vec::new(),
             web_search: WebSearchEngine::defaults(),
             hotkeys: Vec::new(),
@@ -609,6 +616,14 @@ impl Default for ActionsConfig {
             use_clipboard_fallback: false,
         }
     }
+}
+
+/// The file buffer: files collected from the results to act on together.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FileBufferConfig {
+    /// Keep the collected files when the launcher hides (else it is emptied).
+    pub keep_between_shows: bool,
 }
 
 /// The clipboard history plugin (`cb`). Opt-in: nothing is watched or stored
@@ -1198,6 +1213,18 @@ url = "https://example.com"
         assert_eq!(config.clipboard.max_items, 200);
         assert!(!config.paste.restore_clipboard);
         assert!(config.snippet.is_empty());
+    }
+
+    #[test]
+    fn the_file_buffer_is_emptied_when_the_window_hides_unless_asked() {
+        assert!(!Config::default().file_buffer.keep_between_shows);
+        let config = Config::from_toml_str(
+            "[file_buffer]
+keep_between_shows = true
+",
+        )
+        .unwrap();
+        assert!(config.file_buffer.keep_between_shows);
     }
 
     #[test]

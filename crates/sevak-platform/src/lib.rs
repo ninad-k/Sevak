@@ -23,6 +23,7 @@ pub mod provider;
 pub mod session;
 pub mod system;
 pub mod terminal;
+pub mod trash;
 
 #[cfg(target_os = "linux")]
 mod linux;

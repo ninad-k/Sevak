@@ -37,6 +37,7 @@ mod clipboard_store;
 pub mod currency;
 pub mod emoji;
 pub mod example_uuid;
+pub mod file_buffer;
 pub mod files;
 pub mod path_browse;
 pub mod registry;

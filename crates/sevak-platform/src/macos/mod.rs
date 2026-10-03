@@ -3,6 +3,7 @@
 
 mod capture;
 mod paste;
+pub(crate) mod trash;
 
 use std::collections::HashSet;
 use std::fs;

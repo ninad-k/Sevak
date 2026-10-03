@@ -180,7 +180,10 @@ fn resolve(
 
 /// Asks the plugins for the actions, stores them under a fresh ticket and
 /// describes them for the launcher.
-fn payload_for(app: &AppHandle, selection: &Selection) -> Result<SelectionPayload, String> {
+pub(crate) fn payload_for(
+    app: &AppHandle,
+    selection: &Selection,
+) -> Result<SelectionPayload, String> {
     let state = app.state::<AppState>();
     let search = &state.search;
     let items = search.engine().selection_actions(selection);
