@@ -2,7 +2,9 @@
 //!
 //! Wayland applications cannot grab global keys, so Sevak lets the desktop own
 //! the shortcut: it registers a custom shortcut that runs `sevak --toggle`, and
-//! the already-running instance shows or hides its window.
+//! the already-running instance shows or hides its window. The config's
+//! `[[hotkey]]` entries get shortcuts of their own that run
+//! `sevak --query <text>` or `sevak --run <id>`.
 //!
 //! Everything except [`install_shortcut`] is pure string handling, compiled on
 //! every platform so it can be unit-tested anywhere.
@@ -340,11 +342,59 @@ pub fn shell_quote(s: &str) -> String {
 /// Inside an AppImage `current_exe` points into a mount that changes on every
 /// run, so the stable `$APPIMAGE` path is preferred.
 pub fn toggle_command() -> Result<String> {
+    Ok(format!("{} --toggle", executable_quoted()?))
+}
+
+/// The shell-quoted path of the sevak executable (see [`toggle_command`]).
+fn executable_quoted() -> Result<String> {
     let exe = match std::env::var_os("APPIMAGE").filter(|v| !v.is_empty()) {
         Some(appimage) => std::path::PathBuf::from(appimage),
         None => std::env::current_exe()?,
     };
-    Ok(format!("{} --toggle", shell_quote(&exe.to_string_lossy())))
+    Ok(shell_quote(&exe.to_string_lossy()))
+}
+
+/// What a custom (`[[hotkey]]`) shortcut does.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CustomTarget {
+    /// `sevak --query <text>`: open Sevak with the text typed in.
+    Query(String),
+    /// `sevak --run <id>`: run a result without showing Sevak.
+    Run(String),
+}
+
+/// A `[[hotkey]]` entry to bind in the desktop.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CustomShortcut {
+    /// Accelerator in Sevak's syntax (`Ctrl+Alt+T`).
+    pub hotkey: String,
+    pub target: CustomTarget,
+}
+
+impl CustomShortcut {
+    /// The command the desktop shortcut runs, given the quoted executable.
+    fn command_for(&self, executable: &str) -> String {
+        match &self.target {
+            CustomTarget::Query(text) => format!("{executable} --query {}", shell_quote(text)),
+            CustomTarget::Run(id) => format!("{executable} --run {}", shell_quote(id)),
+        }
+    }
+
+    /// The command the desktop shortcut runs.
+    pub fn command(&self) -> Result<String> {
+        Ok(self.command_for(&executable_quoted()?))
+    }
+
+    /// Name shown in GNOME's keyboard settings.
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    fn name(&self) -> String {
+        let (what, text) = match &self.target {
+            CustomTarget::Query(text) => ("query", text),
+            CustomTarget::Run(id) => ("run", id),
+        };
+        let text: String = text.chars().take(40).collect();
+        format!("Sevak {what}: {text}")
+    }
 }
 
 /// Human-readable steps for binding `command` by hand on any desktop.
@@ -414,13 +464,37 @@ fn first_free_path(existing: &[String]) -> String {
         .expect("an unbounded range always yields a free path")
 }
 
-/// Registers (or updates) a GNOME custom shortcut running `command`.
+/// Registers (or updates) the GNOME custom shortcut that runs `command`
+/// (`sevak --toggle`).
 ///
 /// Idempotent: an existing entry whose command mentions `sevak` and ends in
 /// `--toggle` is updated instead of adding a duplicate. Other GNOME shortcuts
 /// that use the same keys are reported but never changed.
 #[cfg(target_os = "linux")]
 pub fn install_shortcut(hotkey: &str, command: &str) -> Result<GnomeSetupReport> {
+    install_entry("Sevak", hotkey, command, &|existing| {
+        existing.to_ascii_lowercase().contains("sevak") && existing.trim_end().ends_with("--toggle")
+    })
+}
+
+/// Registers (or updates) the GNOME custom shortcut for a `[[hotkey]]` entry.
+/// An existing entry running exactly the same command gets its key updated.
+#[cfg(target_os = "linux")]
+pub fn install_custom_shortcut(shortcut: &CustomShortcut) -> Result<GnomeSetupReport> {
+    let command = shortcut.command()?;
+    install_entry(&shortcut.name(), &shortcut.hotkey, &command, &|existing| {
+        existing == command
+    })
+}
+
+/// Shared by the installers: `is_ours` recognises an earlier entry to reuse.
+#[cfg(target_os = "linux")]
+fn install_entry(
+    name: &str,
+    hotkey: &str,
+    command: &str,
+    is_ours: &dyn Fn(&str) -> bool,
+) -> Result<GnomeSetupReport> {
     const LIST_SCHEMA: &str = "org.gnome.settings-daemon.plugins.media-keys";
     const LIST_KEY: &str = "custom-keybindings";
     const ENTRY_SCHEMA: &str = "org.gnome.settings-daemon.plugins.media-keys.custom-keybinding";
@@ -443,9 +517,7 @@ pub fn install_shortcut(hotkey: &str, command: &str) -> Result<GnomeSetupReport>
     let existing = paths.iter().find(|path| {
         let schema_path = format!("{ENTRY_SCHEMA}:{path}");
         match gsettings(&["get", &schema_path, "command"]) {
-            Ok(out) => parse_gvariant_string(&out).is_some_and(|cmd| {
-                cmd.to_ascii_lowercase().contains("sevak") && cmd.trim_end().ends_with("--toggle")
-            }),
+            Ok(out) => parse_gvariant_string(&out).is_some_and(|cmd| is_ours(&cmd)),
             Err(err) => {
                 tracing::debug!(%path, %err, "could not read custom keybinding");
                 false
@@ -457,12 +529,7 @@ pub fn install_shortcut(hotkey: &str, command: &str) -> Result<GnomeSetupReport>
 
     // Fill in the entry before listing it so GNOME never sees a half-built one.
     let schema_path = format!("{ENTRY_SCHEMA}:{path}");
-    gsettings(&[
-        "set",
-        &schema_path,
-        "name",
-        &format_gvariant_string("Sevak"),
-    ])?;
+    gsettings(&["set", &schema_path, "name", &format_gvariant_string(name)])?;
     gsettings(&[
         "set",
         &schema_path,
@@ -509,8 +576,12 @@ pub fn install_shortcut(hotkey: &str, command: &str) -> Result<GnomeSetupReport>
 ///
 /// `Ok` carries the text to show: the install report on GNOME, or manual
 /// instructions on other Linux desktops. `Err` carries the failure followed by
-/// the manual instructions. Off Linux there is nothing to set up.
-pub fn setup_for_ui(hotkey: &str) -> std::result::Result<String, String> {
+/// the manual instructions. Off Linux there is nothing to set up. `customs`
+/// are the config's `[[hotkey]]` entries, bound alongside the toggle key.
+pub fn setup_for_ui(
+    hotkey: &str,
+    customs: &[CustomShortcut],
+) -> std::result::Result<String, String> {
     #[cfg(target_os = "linux")]
     {
         let command = toggle_command()
@@ -518,23 +589,69 @@ pub fn setup_for_ui(hotkey: &str) -> std::result::Result<String, String> {
         if !crate::session::is_gnome() {
             return Ok(format!(
                 "This is not a GNOME session, so the shortcut cannot be installed \
-                 automatically.\n\n{}",
-                manual_instructions(hotkey, &command)
+                 automatically.\n\n{}{}",
+                manual_instructions(hotkey, &command),
+                manual_custom_instructions(customs)
             ));
         }
         match install_shortcut(hotkey, &command) {
-            Ok(report) => Ok(report.describe()),
+            Ok(report) => {
+                let mut text = report.describe();
+                let (more, failed) = install_custom_shortcuts(customs);
+                text.push_str(&more);
+                if failed {
+                    return Err(text);
+                }
+                Ok(text)
+            }
             Err(err) => Err(format!(
-                "{err}\n\n{}",
-                manual_instructions(hotkey, &command)
+                "{err}\n\n{}{}",
+                manual_instructions(hotkey, &command),
+                manual_custom_instructions(customs)
             )),
         }
     }
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = hotkey;
+        let _ = (hotkey, customs);
         Err("Desktop shortcuts are only managed on Linux.".to_owned())
     }
+}
+
+/// Installs every custom shortcut; returns the report text and whether any failed.
+#[cfg(target_os = "linux")]
+pub fn install_custom_shortcuts(customs: &[CustomShortcut]) -> (String, bool) {
+    let mut text = String::new();
+    let mut failed = false;
+    for shortcut in customs {
+        match install_custom_shortcut(shortcut) {
+            Ok(report) => text.push_str(&report.describe()),
+            Err(err) => {
+                failed = true;
+                text.push_str(&format!(
+                    "error: could not bind {}: {err}\n",
+                    shortcut.hotkey
+                ));
+            }
+        }
+    }
+    (text, failed)
+}
+
+/// Manual binding hints for the custom shortcuts (any desktop).
+pub fn manual_custom_instructions(customs: &[CustomShortcut]) -> String {
+    let Ok(executable) = executable_quoted() else {
+        return String::new();
+    };
+    let mut text = String::new();
+    for shortcut in customs {
+        text.push_str(&format!(
+            "\nBind {} to: {}\n",
+            shortcut.hotkey,
+            shortcut.command_for(&executable)
+        ));
+    }
+    text
 }
 
 /// Runs `gsettings` with `args` (no shell involved) and returns its stdout.
@@ -578,6 +695,42 @@ mod tests {
         assert!(text.contains(
             "gsettings set org.gnome.desktop.wm.keybindings activate-window-menu \"[]\""
         ));
+    }
+
+    #[test]
+    fn custom_shortcuts_build_quoted_commands() {
+        let query = CustomShortcut {
+            hotkey: "Ctrl+Alt+T".to_owned(),
+            target: CustomTarget::Query("> ".to_owned()),
+        };
+        assert_eq!(
+            query.command_for("/usr/bin/sevak"),
+            "/usr/bin/sevak --query '> '"
+        );
+        assert_eq!(query.name(), "Sevak query: > ");
+
+        let run = CustomShortcut {
+            hotkey: "Ctrl+Alt+F".to_owned(),
+            target: CustomTarget::Run("apps:org.mozilla.firefox.desktop".to_owned()),
+        };
+        assert_eq!(
+            run.command_for("'/opt/My Apps/sevak'"),
+            "'/opt/My Apps/sevak' --run apps:org.mozilla.firefox.desktop"
+        );
+
+        let tricky = CustomShortcut {
+            hotkey: "F1".to_owned(),
+            target: CustomTarget::Query("it's $HOME; rm".to_owned()),
+        };
+        assert_eq!(
+            tricky.command_for("sevak"),
+            "sevak --query 'it'\\''s $HOME; rm'"
+        );
+        let long = CustomShortcut {
+            hotkey: "F1".to_owned(),
+            target: CustomTarget::Run("x".repeat(100)),
+        };
+        assert_eq!(long.name().chars().count(), "Sevak run: ".len() + 40);
     }
 
     #[test]

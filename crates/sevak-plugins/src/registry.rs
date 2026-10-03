@@ -27,7 +27,11 @@ use serde::Serialize;
 use sevak_core::{Config, Plugin};
 use sevak_platform::PlatformProvider;
 
-use crate::{AppsPlugin, CalculatorPlugin, FilesPlugin, UuidPlugin, WebSearchPlugin};
+use crate::clipboard_history::default_history_path;
+use crate::{
+    AppsPlugin, BookmarksPlugin, CalculatorPlugin, ClipboardPlugin, FilesPlugin, ShellPlugin,
+    SnippetsPlugin, SystemPlugin, UuidPlugin, WebSearchPlugin,
+};
 
 /// Builds the instances of one plugin family.
 ///
@@ -103,8 +107,9 @@ impl PluginRegistry {
         Self::default()
     }
 
-    /// Apps, calculator, web search, files and the example UUID plugin, in that
-    /// order. Order matters only for tie-breaking and logging.
+    /// Apps, calculator, web search, files, bookmarks, system commands, shell,
+    /// clipboard history, snippets and the example UUID plugin, in that order.
+    /// Order matters only for tie-breaking and logging.
     pub fn builtin() -> Self {
         let mut registry = Self::new();
         registry.register(PluginDescriptor::new(
@@ -116,8 +121,8 @@ impl PluginRegistry {
         registry.register(PluginDescriptor::new(
             "calculator",
             "Calculator",
-            "Evaluates math expressions as you type; Enter copies the result.",
-            |_, platform| vec![Arc::new(CalculatorPlugin::new(platform.clone()))],
+            "Evaluates math expressions and converts units (and currencies, if enabled) as you type; Enter copies the result.",
+            |config, platform| vec![Arc::new(CalculatorPlugin::from_config(config, platform.clone()))],
         ));
         registry.register(PluginDescriptor::new(
             "web",
@@ -140,6 +145,64 @@ impl PluginRegistry {
             |config, platform| {
                 vec![Arc::new(FilesPlugin::new(
                     config.files.clone(),
+                    platform.clone(),
+                ))]
+            },
+        ));
+        registry.register(PluginDescriptor::new(
+            "bookmarks",
+            "Bookmarks",
+            "Finds bookmarks in your browsers (read from disk; nothing is sent anywhere).",
+            |config, platform| {
+                vec![Arc::new(BookmarksPlugin::new(
+                    config.bookmarks.clone(),
+                    platform.clone(),
+                ))]
+            },
+        ));
+        registry.register(PluginDescriptor::new(
+            "system",
+            "System commands",
+            "Lock, sleep, restart, shut down, log out, empty the trash and open settings pages.",
+            |config, platform| {
+                vec![Arc::new(SystemPlugin::new(
+                    config.system.clone(),
+                    platform.clone(),
+                ))]
+            },
+        ));
+        registry.register(PluginDescriptor::new(
+            "shell",
+            "Terminal commands",
+            "Type `> command` to run it in a terminal; recent commands are offered again.",
+            |config, platform| {
+                vec![Arc::new(ShellPlugin::new(
+                    config.shell.clone(),
+                    platform.clone(),
+                ))]
+            },
+        ));
+        registry.register(PluginDescriptor::new(
+            "clipboard",
+            "Clipboard history",
+            "Type `cb` to paste text you copied earlier. Off until [clipboard] enabled = true.",
+            |config, platform| {
+                vec![Arc::new(ClipboardPlugin::new(
+                    &config.clipboard,
+                    &config.paste,
+                    platform.clone(),
+                    default_history_path(),
+                ))]
+            },
+        ));
+        registry.register(PluginDescriptor::new(
+            "snippets",
+            "Snippets",
+            "Type `s` to paste text from your [[snippet]] entries, with {date}, {clipboard} and more.",
+            |config, platform| {
+                vec![Arc::new(SnippetsPlugin::new(
+                    &config.snippet,
+                    &config.paste,
                     platform.clone(),
                 ))]
             },
@@ -249,7 +312,21 @@ mod tests {
             .iter()
             .map(|d| d.id)
             .collect();
-        assert_eq!(families, ["apps", "calculator", "web", "files", "uuid"]);
+        assert_eq!(
+            families,
+            [
+                "apps",
+                "calculator",
+                "web",
+                "files",
+                "bookmarks",
+                "system",
+                "shell",
+                "clipboard",
+                "snippets",
+                "uuid"
+            ]
+        );
     }
 
     #[test]
@@ -263,6 +340,11 @@ mod tests {
                 "web:yt",
                 "web:gh",
                 "files",
+                "bookmarks",
+                "system",
+                "shell",
+                "clipboard",
+                "snippets",
                 "uuid"
             ]
         );
@@ -273,23 +355,43 @@ mod tests {
         let config = config_disabling(&["web"]);
         assert_eq!(
             ids(&PluginRegistry::builtin(), &config),
-            ["apps", "calculator", "files", "uuid"]
+            [
+                "apps",
+                "calculator",
+                "files",
+                "bookmarks",
+                "system",
+                "shell",
+                "clipboard",
+                "snippets",
+                "uuid"
+            ]
         );
     }
 
     #[test]
     fn disabling_an_instance_keeps_its_siblings() {
-        let config = config_disabling(&["web:yt", "uuid"]);
+        let config = config_disabling(&["web:yt", "uuid", "system"]);
         assert_eq!(
             ids(&PluginRegistry::builtin(), &config),
-            ["apps", "calculator", "web:g", "web:gh", "files"]
+            [
+                "apps",
+                "calculator",
+                "web:g",
+                "web:gh",
+                "files",
+                "bookmarks",
+                "shell",
+                "clipboard",
+                "snippets"
+            ]
         );
     }
 
     #[test]
     fn unknown_disabled_ids_are_ignored() {
         let config = config_disabling(&["nope"]);
-        assert_eq!(ids(&PluginRegistry::builtin(), &config).len(), 7);
+        assert_eq!(ids(&PluginRegistry::builtin(), &config).len(), 12);
     }
 
     #[test]
@@ -306,6 +408,11 @@ mod tests {
                 ("web:yt", false),
                 ("web:gh", true),
                 ("files", false),
+                ("bookmarks", true),
+                ("system", true),
+                ("shell", true),
+                ("clipboard", true),
+                ("snippets", true),
                 ("uuid", true),
             ]
         );

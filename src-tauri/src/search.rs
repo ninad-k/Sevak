@@ -13,16 +13,21 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use sevak_core::{Config, EngineOptions, Plugin, ResultItem, SearchEngine, UsageError, UsageStore};
+use sevak_core::{
+    Config, EngineOptions, Plugin, ResultItem, ResultsNotifier, SearchEngine, UsageError,
+    UsageStore,
+};
 use sevak_platform::{native_provider, AppPaths, PlatformProvider};
-use sevak_plugins::builtin_plugins;
+use sevak_plugins::{builtin_plugins, ScriptPluginHost};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::icons::IconStore;
 use crate::state::{lock, AppState};
-use crate::window;
+use crate::{script_plugins, window};
 
 pub const EVENT_INDEX: &str = "sevak:index";
+/// A script plugin's late answer is ready: the UI runs its current query again.
+pub const EVENT_RESULTS: &str = "sevak:results";
 
 /// Indexes are rebuilt this often so new apps and files show up.
 const REFRESH_INTERVAL: Duration = Duration::from_secs(10 * 60);
@@ -35,27 +40,52 @@ struct IndexEvent {
 }
 
 fn engine_options(config: &Config) -> EngineOptions {
-    let keyword = &config.search.fallback_web_search;
     EngineOptions {
         max_results: config.search.max_results,
-        fallback_plugins: if keyword.is_empty() {
-            Vec::new()
-        } else {
-            vec![format!("web:{keyword}")]
-        },
+        fallback_plugins: config
+            .search
+            .fallback_web_search
+            .keywords()
+            .iter()
+            .map(|keyword| format!("web:{keyword}"))
+            .collect(),
+        query_history: config.search.query_history,
     }
+}
+
+/// The built-in plugins plus the approved script plugins from the config
+/// directory's `plugins` folder.
+fn all_plugins(
+    config: &Config,
+    platform: &Arc<dyn PlatformProvider>,
+    scripts: &ScriptPluginHost,
+) -> Vec<Arc<dyn Plugin>> {
+    let mut plugins = builtin_plugins(config, platform.clone());
+    plugins.extend(scripts.plugins(config, platform));
+    plugins
 }
 
 pub fn build_engine(
     config: &Config,
     platform: Arc<dyn PlatformProvider>,
     usage: UsageStore,
+    scripts: &ScriptPluginHost,
 ) -> SearchEngine {
     SearchEngine::new(
-        builtin_plugins(config, platform),
+        all_plugins(config, &platform, scripts),
         usage,
         engine_options(config),
     )
+}
+
+/// Tells the UI that a slow plugin has results for the query on screen.
+fn results_notifier(app: &AppHandle) -> ResultsNotifier {
+    let app = app.clone();
+    Arc::new(move |plugin_id: &str| {
+        if let Err(err) = app.emit_to(window::MAIN_LABEL, EVENT_RESULTS, plugin_id.to_owned()) {
+            tracing::warn!("could not emit {EVENT_RESULTS}: {err}");
+        }
+    })
 }
 
 /// Loads the usage file. A corrupt file is moved aside (not overwritten by the
@@ -186,6 +216,8 @@ impl UsageSaver {
 
 pub struct Search {
     pub platform: Arc<dyn PlatformProvider>,
+    /// Script plugins found in `<config dir>/plugins`.
+    pub scripts: Arc<ScriptPluginHost>,
     engine: RwLock<Arc<SearchEngine>>,
     latest: Mutex<Latest>,
     next_ticket: AtomicU64,
@@ -201,10 +233,16 @@ impl Search {
     pub fn new(paths: &AppPaths, config: &Config) -> Self {
         let platform: Arc<dyn PlatformProvider> = Arc::from(native_provider());
         let usage = load_usage(&paths.usage_file);
-        let engine = build_engine(config, platform.clone(), usage);
+        let scripts = Arc::new(ScriptPluginHost::new(
+            paths.config_dir.join("plugins"),
+            paths.data_dir.join("plugins"),
+            paths.data_dir.join("script-plugin-approvals.json"),
+        ));
+        let engine = build_engine(config, platform.clone(), usage, &scripts);
         Self {
             icons: IconStore::new(platform.clone()),
             platform,
+            scripts,
             engine: RwLock::new(Arc::new(engine)),
             latest: Mutex::new(Latest::default()),
             next_ticket: AtomicU64::new(1),
@@ -249,14 +287,20 @@ impl Search {
         plugins: Vec<Arc<dyn Plugin>>,
         options: EngineOptions,
     ) -> bool {
-        let mut current = self
-            .engine
-            .write()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if self.reload_generation.load(Ordering::SeqCst) != generation {
-            return false;
-        }
-        *current = Arc::new(current.rebuild(plugins, options));
+        let old = {
+            let mut current = self
+                .engine
+                .write()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if self.reload_generation.load(Ordering::SeqCst) != generation {
+                return false;
+            }
+            let rebuilt = Arc::new(current.rebuild(plugins, options));
+            std::mem::replace(&mut *current, rebuilt)
+        };
+        // The replaced plugins' background work (script plugin processes) stops
+        // now rather than whenever the last in-flight query lets go of them.
+        old.shutdown();
         true
     }
 }
@@ -314,6 +358,13 @@ fn spawn_thread(name: &str, work: impl FnOnce() + Send + 'static) {
 
 /// Starts the indexing and usage-saver threads. Called once, from `setup`.
 pub fn start(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    state
+        .search
+        .engine()
+        .attach_notifier(&results_notifier(app));
+    script_plugins::review_new(app);
+
     let guard = IndexGuard::new(app);
     let indexer = app.clone();
     spawn_thread("sevak-index", move || {
@@ -361,14 +412,25 @@ pub fn save_usage(app: &AppHandle) {
         .save_now(|| state.search.engine().usage_snapshot());
 }
 
+/// Stops the plugins' background work (script plugin processes) when quitting.
+pub fn shutdown(app: &AppHandle) {
+    app.state::<AppState>().search.engine().shutdown();
+}
+
 /// Rebuilds the engine from `config` on a background thread. The new index is
 /// built first and swapped in afterwards, so search never goes blank.
 pub fn reload(app: &AppHandle, config: &Config) {
     let state = app.state::<AppState>();
     let search = &state.search;
     let generation = search.reload_generation.fetch_add(1, Ordering::SeqCst) + 1;
-    let plugins = builtin_plugins(config, search.platform.clone());
+    let plugins = all_plugins(config, &search.platform, &search.scripts);
+    let notifier = results_notifier(app);
+    for plugin in &plugins {
+        plugin.attach_notifier(Arc::clone(&notifier));
+    }
     let options = engine_options(config);
+
+    script_plugins::review_new(app);
 
     let guard = IndexGuard::new(app);
     let app = app.clone();

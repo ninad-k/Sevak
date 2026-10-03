@@ -1,18 +1,27 @@
 # Developing Sevak
 
+[← Help center](README.md) · [Plugin guide](plugins.md)
+
 ## Layout
 
 ```
 Cargo.toml              workspace: crates/* and src-tauri
-crates/sevak-core       config, fuzzy matcher, search engine, usage stats, Plugin trait
-crates/sevak-platform   OS access: launching, icons, app scanning, clipboard, paths,
-                        hotkey strategy, GNOME shortcut setup (Windows, macOS and Linux backends)
-crates/sevak-plugins    built-in plugins: apps, calculator, files, web search, uuid example
-src-tauri               the Tauri shell: window, hotkey, tray, CLI, IPC commands, bundling config
+crates/sevak-core       config, theme (appearance settings to CSS), fuzzy matcher, search engine,
+                        usage stats, Plugin trait
+crates/sevak-platform   OS access: launching, icons, app scanning, clipboard, pasting into the
+                        previous app, paths, terminal launching, hotkey strategy, GNOME
+                        shortcut setup (Windows, macOS and Linux backends)
+crates/sevak-plugins    built-in plugins: apps, calculator (+ units, currency), files, bookmarks,
+                        web search, system commands, shell, clipboard history, snippets,
+                        uuid example; the script plugin host (external plugins)
+src-tauri               the Tauri shell: window, hotkeys (main + [[hotkey]] entries), tray, CLI,
+                        --query / --run handling (direct.rs), script plugin approval, IPC
+                        commands, bundling config
 ui                      Svelte 5 + Vite frontend (builds to ui/dist)
 packaging/linux         desktop-entry template used by the .deb and .rpm
 scripts                 icon generator, WSL Linux test runner
 docs                    plugins, install, development
+examples/plugins        example script plugins (Python, PowerShell, Node)
 .github/workflows       ci.yml, release.yml
 ```
 
@@ -29,16 +38,45 @@ docs                    plugins, install, development
                                       |  execute -> actions
                                       v
                                sevak-platform::PlatformProvider
-                                      Windows / Linux implementations
+                                      Windows / macOS / Linux implementations
 ```
 
 `sevak-core` and `sevak-plugins` are platform independent; only
-`sevak-platform` has `cfg(windows)` / `cfg(target_os = "linux")` code. How a
+`sevak-platform` contains the OS-specific backends. How a
 query flows through plugins and how to add one is in [plugins.md](plugins.md).
 
 ## Running
 
-Prerequisites are in the [README](../README.md#build-from-source).
+Use **Rust 1.90+**, **Node.js 22+**, and the native dependencies for your platform:
+
+| Platform | Native prerequisites |
+|---|---|
+| Windows | Microsoft C++ Build Tools with the Desktop development with C++ workload; WebView2 runtime |
+| macOS | Xcode Command Line Tools (`xcode-select --install`) |
+| Ubuntu / Debian | WebKitGTK 4.1, AppIndicator and the development packages below |
+| Fedora | WebKitGTK 4.1, AppIndicator and the development packages below |
+
+The Linux commands mirror this repository's CI setup. On Ubuntu / Debian:
+
+```sh
+sudo apt-get update
+sudo apt-get install -y --no-install-recommends \
+  build-essential curl file patchelf \
+  libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+  libxdo-dev libssl-dev
+```
+
+On Fedora:
+
+```sh
+sudo dnf install -y \
+  git tar gzip xz curl file gcc gcc-c++ make patchelf pkgconf-pkg-config \
+  webkit2gtk4.1-devel libayatana-appindicator-gtk3-devel \
+  openssl-devel librsvg2-devel libxdo-devel
+```
+
+See [Tauri's prerequisites](https://v2.tauri.app/start/prerequisites/) for
+platform setup details. Then run from the repository root:
 
 ```sh
 npm ci
@@ -53,13 +91,15 @@ embed `ui/dist`; `tauri build` enables it for you.
 
 ## Tests and lint
 
-CI runs exactly these (on Windows and Ubuntu 22.04, plus a Fedora container):
+CI runs these checks on Windows, macOS and Ubuntu 22.04. A Fedora container
+also builds and tests the Rust workspace:
 
 ```sh
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 npm run check
+npm run build
 ```
 
 ### Linux code from a Windows machine
@@ -69,6 +109,14 @@ Type-check the Linux backend without a Linux toolchain:
 ```sh
 rustup target add x86_64-unknown-linux-gnu
 cargo clippy -p sevak-platform --target x86_64-unknown-linux-gnu
+```
+
+The macOS backend can be type-checked the same way (the crates it uses are pure
+Rust, so no Apple SDK is needed to *check*, only to build and run):
+
+```sh
+rustup target add aarch64-apple-darwin
+cargo clippy -p sevak-platform --target aarch64-apple-darwin
 ```
 
 Run the Linux tests inside WSL (no sudo; bootstraps Rust and Zig as a linker

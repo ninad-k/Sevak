@@ -3,8 +3,10 @@
 mod com;
 mod icons;
 mod packaged;
+mod paste;
 mod provider;
 mod shortcuts;
+pub(crate) mod system;
 
 pub(crate) use provider::WindowsProvider;
 

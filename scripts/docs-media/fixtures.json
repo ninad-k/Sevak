@@ -1,0 +1,16 @@
+{
+  "code": [
+    {"id":"demo:code","title":"Visual Studio Code","subtitle":"Application","icon":{"kind":"builtin","name":"app"},"plugin_id":"apps","action":"launch"},
+    {"id":"demo:insiders","title":"Code - Insiders","subtitle":"Application","icon":{"kind":"builtin","name":"app"},"plugin_id":"apps","action":"launch"}
+  ],
+  "12*7": [
+    {"id":"demo:answer","title":"84","subtitle":"12 * 7 · Enter to copy","icon":{"kind":"builtin","name":"calculator"},"plugin_id":"calculator","action":"copy_text"}
+  ],
+  "f project": [
+    {"id":"demo:plan","title":"project-plan.md","subtitle":"~/Documents/project-plan.md","icon":{"kind":"builtin","name":"file"},"plugin_id":"files","action":"open_path"},
+    {"id":"demo:folder","title":"Projects","subtitle":"~/Documents/Projects","icon":{"kind":"builtin","name":"folder"},"plugin_id":"files","action":"open_path"}
+  ],
+  "g rust traits": [
+    {"id":"demo:web","title":"Search Google for “rust traits”","subtitle":"https://www.google.com/search?q=rust%20traits","icon":{"kind":"builtin","name":"web"},"plugin_id":"web:g","action":"open_url"}
+  ]
+}

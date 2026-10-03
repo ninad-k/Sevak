@@ -5,12 +5,22 @@
 //! | config  | `%APPDATA%\sevak\config.toml`   | `~/Library/Application Support/sevak/config.toml` | `~/.config/sevak/config.toml`  |
 //! | data    | `%APPDATA%\sevak\`              | `~/Library/Application Support/sevak/`            | `~/.local/share/sevak/`        |
 //! | logs    | `<data>\logs\`                  | `<data>/logs/`                                   | `<data>/logs/`                 |
+//!
+//! The config directory can be replaced with `--config <path>` or
+//! `SEVAK_CONFIG_DIR`, the data directory with `SEVAK_DATA_DIR`.
 
-use std::path::PathBuf;
+use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
 
 use crate::error::{PlatformError, Result};
 
 const APP_DIR: &str = "sevak";
+const CONFIG_FILE: &str = "config.toml";
+
+/// Environment variable naming the config directory (see [`AppPaths::resolve`]).
+pub const CONFIG_DIR_ENV: &str = "SEVAK_CONFIG_DIR";
+/// Environment variable naming the data directory (usage statistics, logs).
+pub const DATA_DIR_ENV: &str = "SEVAK_DATA_DIR";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppPaths {
@@ -22,25 +32,96 @@ pub struct AppPaths {
 }
 
 impl AppPaths {
-    /// Resolves the directories from the OS conventions. Nothing is created on
-    /// disk; callers create directories when they first write to them.
+    /// Resolves the directories from the OS conventions and the environment:
+    /// `SEVAK_CONFIG_DIR` and `SEVAK_DATA_DIR` replace the config and data
+    /// directories. Nothing is created on disk; callers create directories when
+    /// they first write to them.
     pub fn resolve() -> Result<Self> {
-        let config_root = dirs::config_dir().ok_or(PlatformError::MissingDirectory("config"))?;
-        let data_root = dirs::data_dir().ok_or(PlatformError::MissingDirectory("data"))?;
-        Ok(Self::with_roots(config_root, data_root))
+        Self::resolve_with_config(None)
+    }
+
+    /// Like [`AppPaths::resolve`], with a `--config` path that takes
+    /// precedence over `SEVAK_CONFIG_DIR`.
+    pub fn resolve_with_config(config: Option<&Path>) -> Result<Self> {
+        let env_path = |name: &str| std::env::var_os(name).filter(|v| !v.is_empty());
+        let config = config
+            .map(Path::to_path_buf)
+            .or_else(|| env_path(CONFIG_DIR_ENV).map(PathBuf::from));
+        let data = env_path(DATA_DIR_ENV).map(PathBuf::from);
+        let base = std::env::current_dir().unwrap_or_default();
+        let home = dirs::home_dir();
+
+        let (config_dir, config_file) = match config {
+            Some(path) => Self::config_location(&path, &base, home.as_deref()),
+            None => {
+                let root = dirs::config_dir().ok_or(PlatformError::MissingDirectory("config"))?;
+                let dir = root.join(APP_DIR);
+                let file = dir.join(CONFIG_FILE);
+                (dir, file)
+            }
+        };
+        let data_dir = match data {
+            Some(path) => absolute(&path, &base, home.as_deref()),
+            None => dirs::data_dir()
+                .ok_or(PlatformError::MissingDirectory("data"))?
+                .join(APP_DIR),
+        };
+        Ok(Self::from_parts(config_dir, config_file, data_dir))
     }
 
     /// Builds the layout below explicit roots (used by tests and portable setups).
     pub fn with_roots(config_root: PathBuf, data_root: PathBuf) -> Self {
         let config_dir = config_root.join(APP_DIR);
-        let data_dir = data_root.join(APP_DIR);
+        let config_file = config_dir.join(CONFIG_FILE);
+        Self::from_parts(config_dir, config_file, data_root.join(APP_DIR))
+    }
+
+    fn from_parts(config_dir: PathBuf, config_file: PathBuf, data_dir: PathBuf) -> Self {
         Self {
-            config_file: config_dir.join("config.toml"),
+            config_file,
+            config_dir,
             log_dir: data_dir.join("logs"),
             usage_file: data_dir.join("usage.json"),
-            config_dir,
             data_dir,
         }
+    }
+
+    /// Where a `--config` / `SEVAK_CONFIG_DIR` value puts the config:
+    /// `(config directory, config file)`. A path ending in `.toml` (that is not
+    /// an existing directory) names the config file itself and its parent is
+    /// the config directory; any other path is the config directory and the
+    /// file is `config.toml` inside it. `~` is expanded and a relative path is
+    /// taken relative to `base`.
+    pub fn config_location(path: &Path, base: &Path, home: Option<&Path>) -> (PathBuf, PathBuf) {
+        let path = absolute(path, base, home);
+        let is_file = path
+            .extension()
+            .and_then(OsStr::to_str)
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("toml"))
+            && !path.is_dir();
+        if is_file {
+            let dir = path
+                .parent()
+                .map_or_else(|| base.to_path_buf(), Path::to_path_buf);
+            (dir, path)
+        } else {
+            let file = path.join(CONFIG_FILE);
+            (path, file)
+        }
+    }
+}
+
+/// Expands a leading `~` and anchors relative paths at `base`. The path is not
+/// canonicalized: it may not exist yet.
+fn absolute(path: &Path, base: &Path, home: Option<&Path>) -> PathBuf {
+    let expanded = match (path.strip_prefix("~"), home) {
+        (Ok(rest), Some(home)) => home.join(rest),
+        _ => path.to_path_buf(),
+    };
+    if expanded.is_absolute() {
+        expanded
+    } else {
+        base.join(expanded)
     }
 }
 
@@ -84,6 +165,51 @@ mod tests {
             elsewhere.display().to_string()
         );
         assert_eq!(tilde_path(&home, None), home.display().to_string());
+    }
+
+    #[test]
+    fn config_location_for_directories_and_files() {
+        let tmp = std::env::temp_dir();
+        let base = tmp.join("base");
+        let base = base.as_path();
+        let home = tmp.join("home").join("me");
+        let dir = std::env::temp_dir().join("sevak-paths-test-dir.toml");
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // A directory (even one named *.toml) holds config.toml.
+        let (config_dir, file) = AppPaths::config_location(&dir, base, None);
+        assert_eq!(config_dir, dir);
+        assert_eq!(file, dir.join("config.toml"));
+        std::fs::remove_dir(&dir).unwrap();
+
+        // A plain name is a directory, relative to `base`.
+        let (config_dir, file) = AppPaths::config_location(Path::new("sync/sevak"), base, None);
+        assert_eq!(config_dir, base.join("sync/sevak"));
+        assert_eq!(file, base.join("sync/sevak").join("config.toml"));
+
+        // A *.toml path names the file; its folder is the config directory.
+        let (config_dir, file) = AppPaths::config_location(Path::new("work.TOML"), base, None);
+        assert_eq!(config_dir, base);
+        assert_eq!(file, base.join("work.TOML"));
+
+        // `~` is expanded.
+        let (config_dir, file) =
+            AppPaths::config_location(Path::new("~/Dropbox/sevak"), base, Some(&home));
+        assert_eq!(config_dir, home.join("Dropbox/sevak"));
+        assert_eq!(file, home.join("Dropbox/sevak/config.toml"));
+        let (config_dir, _) = AppPaths::config_location(Path::new("~"), base, Some(&home));
+        assert_eq!(config_dir, home);
+    }
+
+    #[test]
+    fn config_override_keeps_data_in_its_usual_place() {
+        let dir = std::env::temp_dir().join("sevak-paths-test-cfg");
+        let paths = AppPaths::resolve_with_config(Some(&dir)).unwrap();
+        assert_eq!(paths.config_dir, dir);
+        assert_eq!(paths.config_file, dir.join("config.toml"));
+        assert_ne!(paths.data_dir, dir);
+        assert_eq!(paths.usage_file, paths.data_dir.join("usage.json"));
+        assert_eq!(paths.log_dir, paths.data_dir.join("logs"));
     }
 
     #[test]

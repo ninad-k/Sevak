@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use sevak_core::config::WebSearchEngine;
 use sevak_core::model::score;
-use sevak_core::{Action, IconSource, Plugin, PluginResult, ResultItem};
+use sevak_core::{Action, IconSource, Modifier, Plugin, PluginResult, ResultItem};
 use sevak_platform::PlatformProvider;
 
 use crate::actions::execute_action;
@@ -56,6 +56,21 @@ impl WebSearchPlugin {
         self.url_template
             .replace(PLACEHOLDER, &percent_encode(terms))
     }
+
+    /// The row for a keyword with no terms yet; Enter opens the engine's page.
+    fn home_row(&self, subtitle: &str) -> ResultItem {
+        ResultItem::new(
+            &self.id,
+            "home",
+            format!("Search {}", self.name),
+            Action::OpenUrl {
+                url: self.url_for(""),
+            },
+        )
+        .with_subtitle(subtitle)
+        .with_icon(IconSource::builtin("web"))
+        .with_score(score::KEYWORD)
+    }
 }
 
 impl Plugin for WebSearchPlugin {
@@ -79,21 +94,19 @@ impl Plugin for WebSearchPlugin {
         false
     }
 
+    fn keyword_row(&self) -> Option<ResultItem> {
+        // Tab turns the bare keyword (`g`) into `g `, ready for search terms.
+        Some(
+            self.home_row("Press Tab to type your search terms")
+                .with_autocomplete(format!("{} ", self.keyword)),
+        )
+    }
+
     fn query(&self, input: &str) -> Vec<ResultItem> {
         let terms = input.trim();
-        let icon = IconSource::builtin("web");
 
         if terms.is_empty() {
-            let url = self.url_for("");
-            return vec![ResultItem::new(
-                &self.id,
-                "home",
-                format!("Search {}", self.name),
-                Action::OpenUrl { url },
-            )
-            .with_subtitle("Type your search terms")
-            .with_icon(icon)
-            .with_score(score::KEYWORD)];
+            return vec![self.home_row("Type your search terms")];
         }
 
         let url = self.url_for(terms);
@@ -103,8 +116,13 @@ impl Plugin for WebSearchPlugin {
             format!("Search {} for \u{201c}{terms}\u{201d}", self.name),
             Action::OpenUrl { url: url.clone() },
         )
+        .with_secondary(
+            "Copy URL",
+            Some(Modifier::Shift),
+            Action::CopyText { text: url.clone() },
+        )
         .with_subtitle(url)
-        .with_icon(icon)
+        .with_icon(IconSource::builtin("web"))
         .with_score(score::KEYWORD)]
     }
 
@@ -182,6 +200,27 @@ mod tests {
     }
 
     #[test]
+    fn search_result_can_copy_its_url() {
+        let platform = MockPlatform::empty();
+        let plugin = google(platform.clone());
+        let item = plugin.query("rust").remove(0);
+        assert_eq!(item.secondary.len(), 1);
+        assert_eq!(item.secondary[0].label, "Copy URL");
+        assert_eq!(item.secondary[0].modifier, Some(Modifier::Shift));
+        assert_eq!(
+            item.secondary[0].action,
+            Action::CopyText {
+                text: "https://www.google.com/search?q=rust".into()
+            }
+        );
+        // The Ctrl+C text is the URL as well.
+        assert_eq!(
+            item.copy_text().as_deref(),
+            Some("https://www.google.com/search?q=rust")
+        );
+    }
+
+    #[test]
     fn empty_input_gives_a_hint_that_opens_the_homepage() {
         let plugin = google(MockPlatform::empty());
         for input in ["", "   "] {
@@ -196,6 +235,17 @@ mod tests {
                 }
             );
         }
+    }
+
+    #[test]
+    fn bare_keyword_row_completes_to_the_keyword_and_a_space() {
+        let plugin = google(MockPlatform::empty());
+        let row = plugin.keyword_row().unwrap();
+        assert_eq!(row.id, "web:g:home");
+        assert_eq!(row.autocomplete.as_deref(), Some("g "));
+        assert_eq!(row.action, plugin.query("")[0].action);
+        // Rows typed with terms need no completion.
+        assert_eq!(plugin.query("rust")[0].autocomplete, None);
     }
 
     #[test]
