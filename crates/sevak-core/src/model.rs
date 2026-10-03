@@ -147,7 +147,7 @@ pub enum IconSource {
     /// icon is extracted on demand.
     Shell { parsing_name: String },
     /// A glyph bundled with the UI: `app`, `calculator`, `web`, `file`,
-    /// `folder`, `copy`, `plugin`.
+    /// `folder`, `copy`, `terminal`, `plugin`.
     Builtin { name: String },
 }
 

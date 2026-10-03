@@ -12,6 +12,7 @@ const rows: ResultDto[] = [
   { id: "m:web", title: "Search Google for “rust traits”", subtitle: "Web search", icon: { kind: "builtin", name: "web" }, plugin_id: "web:g", action: "open_url" },
   { id: "m:copy", title: "8", subtitle: "2+2*3 · Enter to copy", icon: { kind: "builtin", name: "copy" }, plugin_id: "calculator", action: "copy_text" },
   { id: "m:broken", title: "Broken icon app", subtitle: "Falls back to the app glyph", icon: { kind: "url", url: "http://sevak-icon.localhost/0000000000000000" }, plugin_id: "apps", action: "launch" },
+  { id: "m:shell", title: "Run `git status` in terminal", subtitle: "Runs only when you press Enter", icon: { kind: "builtin", name: "terminal" }, plugin_id: "shell", action: "custom" },
   { id: "m:plugin", title: "Custom plugin result", subtitle: "Plugin", icon: { kind: "builtin", name: "plugin" }, plugin_id: "x", action: "custom" },
   { id: "m:9", title: "Ninth row", subtitle: "Scrolls the list", icon: null, plugin_id: "apps", action: "launch" },
   { id: "m:10", title: "Tenth row", subtitle: "Scrolls the list", icon: null, plugin_id: "apps", action: "launch" },
@@ -37,6 +38,7 @@ export function mockSettings(): SettingsDto {
         keyword: "f",
         global: true,
       },
+      shell: { terminal: "", shell: "", keep_open: true },
       web_search: [
         { keyword: "g", name: "Google", url: "https://www.google.com/search?q={query}" },
         { keyword: "yt", name: "YouTube", url: "https://www.youtube.com/results?search_query={query}" },
@@ -47,6 +49,7 @@ export function mockSettings(): SettingsDto {
       { id: "apps", name: "Applications", description: "Launches installed applications.", keyword: null, enabled: true },
       { id: "calculator", name: "Calculator", description: "Evaluates math expressions as you type; Enter copies the result.", keyword: null, enabled: true },
       { id: "files", name: "Files", description: "Finds files and folders in your configured directories.", keyword: "f", enabled: true },
+      { id: "shell", name: "Terminal commands", description: "Type `> command` to run it in a terminal; recent commands are offered again.", keyword: ">", enabled: true },
       { id: "uuid", name: "UUID generator", description: "Type `uuid ` to generate random UUIDs; Enter copies one.", keyword: "uuid", enabled: false },
     ],
     display: new URLSearchParams(location.search).get("display") === "wayland" ? "wayland" : "windows",

@@ -60,6 +60,13 @@ pub trait Plugin: Send + Sync {
     /// Performs a result previously returned by [`Plugin::query`].
     fn execute(&self, item: &ResultItem) -> PluginResult<()>;
 
+    /// Hands the plugin the keys (the part of a result id after `<plugin id>:`)
+    /// of its results that were run before, most recently used first, taken from
+    /// the usage statistics when the engine is built. Plugins whose results are
+    /// text the user typed (the shell plugin) use it to offer recent entries
+    /// again; everyone else ignores it.
+    fn restore_history(&self, _keys: &[String]) {}
+
     /// Rebuilds any index the plugin keeps. Called on a background thread at
     /// startup, on demand and periodically. May be slow.
     fn refresh(&self) -> PluginResult<()> {

@@ -195,6 +195,27 @@ impl UsageStore {
         self.entries.get(id)
     }
 
+    /// Keys of the entries recorded for `plugin_id` (ids of the form
+    /// `<plugin_id>:<key>`), most recently used first, at most `limit`. Entries
+    /// with an empty key are skipped.
+    pub fn recent_keys(&self, plugin_id: &str, limit: usize) -> Vec<String> {
+        let prefix = format!("{plugin_id}:");
+        let mut found: Vec<(&str, &UsageEntry)> = self
+            .entries
+            .iter()
+            .filter_map(|(id, entry)| {
+                let key = id.strip_prefix(&prefix)?;
+                (!key.is_empty()).then_some((key, entry))
+            })
+            .collect();
+        found.sort_by(|(ka, a), (kb, b)| b.last_used.cmp(&a.last_used).then(ka.cmp(kb)));
+        found
+            .into_iter()
+            .take(limit)
+            .map(|(key, _)| key.to_owned())
+            .collect()
+    }
+
     pub fn len(&self) -> usize {
         self.entries.len()
     }
@@ -341,6 +362,20 @@ mod tests {
         s.record("app:fx", "fi", T0 + 20);
         s.save(&path).unwrap();
         assert_eq!(UsageStore::load(&path).unwrap(), s);
+    }
+
+    #[test]
+    fn recent_keys_are_newest_first_and_scoped_to_the_plugin() {
+        let mut s = UsageStore::default();
+        s.record("shell:ls -la", "> ls", T0);
+        s.record("shell:git status", "> git", T0 + 20);
+        s.record("shell:ls -la", "> ls", T0 + 30);
+        s.record("shell:", "> ", T0 + 40);
+        s.record("shellfish:x", "", T0 + 50);
+        s.record("app:fx", "", T0 + 60);
+        assert_eq!(s.recent_keys("shell", 10), vec!["ls -la", "git status"]);
+        assert_eq!(s.recent_keys("shell", 1), vec!["ls -la"]);
+        assert!(s.recent_keys("nope", 10).is_empty());
     }
 
     #[test]

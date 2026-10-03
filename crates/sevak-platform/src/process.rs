@@ -122,6 +122,40 @@ pub fn spawn_detached_in<S: AsRef<OsStr>>(
         .map_err(|err| spawn_error(program, err))
 }
 
+/// Spawns a console program (a shell) in a new console window of its own.
+///
+/// Unlike [`spawn_detached_in`] the child's standard handles are *not* nulled:
+/// the new console supplies them, and a shell with stdin redirected to `NUL`
+/// would exit at once. Sevak is a GUI process without a console, so there are no
+/// inherited handles to leak. `raw_tail` is appended to the command line as is
+/// (see [`crate::terminal::Invocation::raw_tail`]).
+#[cfg(windows)]
+pub fn spawn_console_in<S: AsRef<OsStr>>(
+    program: &str,
+    args: &[S],
+    raw_tail: Option<&str>,
+    cwd: Option<&Path>,
+) -> Result<()> {
+    use std::os::windows::process::CommandExt;
+
+    const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
+    const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+
+    let mut command = Command::new(program);
+    command.args(args);
+    if let Some(raw_tail) = raw_tail {
+        command.raw_arg(raw_tail);
+    }
+    if let Some(cwd) = cwd {
+        command.current_dir(cwd);
+    }
+    command
+        .creation_flags(CREATE_NEW_CONSOLE | CREATE_NEW_PROCESS_GROUP)
+        .spawn()
+        .map(drop)
+        .map_err(|err| spawn_error(program, err))
+}
+
 /// Lets the already-running Sevak instance bring its window to the foreground
 /// when this (second) process forwards it `--toggle`.
 ///

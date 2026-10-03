@@ -37,6 +37,9 @@
   {:else if name === "copy"}
     <rect x="8.5" y="8.5" width="12" height="12" rx="2.4" />
     <path d="M15.5 8.5v-1A2.5 2.5 0 0 0 13 5H6.5A2.5 2.5 0 0 0 4 7.5V14a2.5 2.5 0 0 0 2.5 2.5h2" />
+  {:else if name === "terminal"}
+    <rect x="3" y="4.5" width="18" height="15" rx="2.4" />
+    <path d="m7.5 10 3 2.5-3 2.5M13 15h3.5" />
   {:else}
     <path d="M9 3v4M15 3v4" />
     <path d="M6 7h12v4.5a6 6 0 0 1-12 0Z" />

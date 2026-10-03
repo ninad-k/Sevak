@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use sevak_core::{AppEntry, IconData, IconSource, LaunchTarget};
+use sevak_core::{AppEntry, IconData, IconSource, LaunchTarget, ShellConfig};
 use sevak_platform::{PlatformError, PlatformProvider, Result};
 
 #[derive(Default)]
@@ -13,6 +13,7 @@ pub struct MockPlatform {
     pub opened_paths: Mutex<Vec<PathBuf>>,
     pub opened_urls: Mutex<Vec<String>>,
     pub clipboard: Mutex<Vec<String>>,
+    pub terminal_runs: Mutex<Vec<(String, ShellConfig)>>,
 }
 
 impl MockPlatform {
@@ -50,6 +51,14 @@ impl PlatformProvider for MockPlatform {
 
     fn load_icon(&self, _source: &IconSource, _size: u32) -> Result<IconData> {
         Err(PlatformError::Unsupported("icons in tests"))
+    }
+
+    fn run_in_terminal(&self, command: &str, config: &ShellConfig) -> Result<()> {
+        self.terminal_runs
+            .lock()
+            .unwrap()
+            .push((command.to_owned(), config.clone()));
+        Ok(())
     }
 
     fn set_clipboard_text(&self, text: &str) -> Result<()> {

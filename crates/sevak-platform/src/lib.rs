@@ -16,6 +16,7 @@ pub mod paths;
 pub mod process;
 pub mod provider;
 pub mod session;
+pub mod terminal;
 
 #[cfg(target_os = "linux")]
 mod linux;
