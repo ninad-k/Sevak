@@ -164,7 +164,7 @@ fn record_loop(data: &RustConnection, context: record::Context, sink: KeySink) {
         if reply.category != 0 {
             continue;
         }
-        for event in reply.data.chunks_exact(EVENT_LEN) {
+        for event in reply.data.as_chunks::<EVENT_LEN>().0 {
             watcher.on_event(event);
         }
     }

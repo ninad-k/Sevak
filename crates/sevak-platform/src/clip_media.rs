@@ -64,13 +64,11 @@ impl ClipboardImage {
             mix(0xcbf2_9ce4_8422_2325, u64::from(self.width)),
             u64::from(self.height),
         );
-        let mut chunks = self.rgba.chunks_exact(8);
-        for chunk in &mut chunks {
-            let word = u64::from_le_bytes(chunk.try_into().expect("8-byte chunk"));
-            hash = mix(hash, word);
+        let (chunks, rest) = self.rgba.as_chunks::<8>();
+        for chunk in chunks {
+            hash = mix(hash, u64::from_le_bytes(*chunk));
         }
         let mut tail = [0u8; 8];
-        let rest = chunks.remainder();
         tail[..rest.len()].copy_from_slice(rest);
         mix(hash, u64::from_le_bytes(tail))
     }
@@ -78,7 +76,11 @@ impl ClipboardImage {
     /// True if no pixel is transparent (a screenshot): such an image is stored
     /// without an alpha channel, which is smaller and faster to compress.
     fn is_opaque(&self) -> bool {
-        self.rgba.chunks_exact(4).all(|pixel| pixel[3] == 255)
+        self.rgba
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .all(|pixel| pixel[3] == 255)
     }
 
     /// Encodes the image as a PNG (fast compression: this runs while the user
@@ -100,7 +102,9 @@ impl ClipboardImage {
         let written = if opaque {
             let rgb: Vec<u8> = self
                 .rgba
-                .chunks_exact(4)
+                .as_chunks::<4>()
+                .0
+                .iter()
                 .flat_map(|pixel| [pixel[0], pixel[1], pixel[2]])
                 .collect();
             writer.write_image_data(&rgb)
@@ -140,12 +144,16 @@ impl ClipboardImage {
         let rgba: Vec<u8> = match info.color_type {
             png::ColorType::Rgba => pixels.to_vec(),
             png::ColorType::Rgb => pixels
-                .chunks_exact(3)
+                .as_chunks::<3>()
+                .0
+                .iter()
                 .flat_map(|p| [p[0], p[1], p[2], 255])
                 .collect(),
             png::ColorType::Grayscale => pixels.iter().flat_map(|&g| [g, g, g, 255]).collect(),
             png::ColorType::GrayscaleAlpha => pixels
-                .chunks_exact(2)
+                .as_chunks::<2>()
+                .0
+                .iter()
                 .flat_map(|p| [p[0], p[0], p[0], p[1]])
                 .collect(),
             png::ColorType::Indexed => {
