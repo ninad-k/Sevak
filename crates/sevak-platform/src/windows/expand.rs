@@ -73,15 +73,29 @@ impl ExpandDriver for WindowsExpand {
     }
 
     fn press_paste(&self) -> Result<()> {
-        // Apart, with a beat between: some apps read the Ctrl state when they
-        // handle the V, not when it was pressed, and would otherwise see Ctrl
-        // already up and type a "v".
-        send_inputs(&[own_key(VK_CONTROL, false)])?;
+        let [press, release] = paste_batches();
+        send_inputs(&press)?;
         sleep(KEY_GAP);
-        send_inputs(&[own_key(VK_V, false), own_key(VK_V, true)])?;
-        sleep(KEY_GAP);
-        send_inputs(&[own_key(VK_CONTROL, true)])
+        // Ctrl must not stay down if the release is refused once.
+        send_inputs(&release).or_else(|_| send_inputs(&release))
     }
+}
+
+/// Ctrl+V for a replacement, as two `SendInput` batches with [`KEY_GAP`]
+/// between them: Ctrl and V go down together, then come up together.
+///
+/// Each batch is atomic, so keys the user is still typing cannot land between
+/// Ctrl and V (with Ctrl alone sent first, a fast typist's next letter became
+/// Ctrl+letter, and the V could arrive with Ctrl already released). The gap
+/// keeps Ctrl held while the app handles the V, for apps that read the Ctrl
+/// state then rather than from the message. Every event carries its scan code
+/// (see [`key_input`](super::paste::key_input)) and Sevak's stamp, so the
+/// keyboard hook skips it.
+fn paste_batches() -> [[INPUT; 2]; 2] {
+    [
+        [own_key(VK_CONTROL, false), own_key(VK_V, false)],
+        [own_key(VK_V, true), own_key(VK_CONTROL, true)],
+    ]
 }
 
 pub(crate) fn typing_target() -> TypingTarget {
@@ -129,6 +143,34 @@ fn focus_is_password_box(foreground: HWND) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use super::super::paste::tests::key_of;
+
+    /// The events are only built, never sent.
+    #[test]
+    fn the_paste_holds_ctrl_around_v_in_atomic_batches() {
+        let [press, release] = paste_batches();
+        let keys = |batch: &[INPUT]| -> Vec<(VIRTUAL_KEY, bool)> {
+            batch
+                .iter()
+                .map(|input| {
+                    let (vk, scan, up, _) = key_of(input);
+                    assert_ne!(scan, 0, "every key carries its scan code");
+                    // SAFETY: `ki` is the active field of a keyboard INPUT.
+                    assert_eq!(unsafe { input.Anonymous.ki.dwExtraInfo }, OWN_EXTRA_INFO);
+                    (vk, up)
+                })
+                .collect()
+        };
+        assert_eq!(keys(&press), [(VK_CONTROL, false), (VK_V, false)]);
+        assert_eq!(keys(&release), [(VK_V, true), (VK_CONTROL, true)]);
+    }
+
+    #[test]
+    fn backspaces_are_stamped_and_scan_coded() {
+        let (vk, scan, up, extended) = key_of(&own_key(VK_BACK, true));
+        assert_eq!((vk, scan, up, extended), (VK_BACK, 0x0E, true, false));
+    }
 
     #[test]
     fn the_typing_target_can_be_described() {
