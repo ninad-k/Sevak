@@ -3,6 +3,7 @@
 mod capture;
 mod com;
 mod icons;
+pub(crate) mod os_search;
 mod packaged;
 mod paste;
 mod provider;

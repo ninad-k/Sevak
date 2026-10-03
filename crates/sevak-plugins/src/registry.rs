@@ -29,7 +29,7 @@ use sevak_platform::PlatformProvider;
 
 use crate::clipboard_history::default_history_path;
 use crate::{
-    AppsPlugin, BookmarksPlugin, CalculatorPlugin, ClipboardPlugin, FilesPlugin, SelectionPlugin,
+    files_family, AppsPlugin, BookmarksPlugin, CalculatorPlugin, ClipboardPlugin, SelectionPlugin,
     ShellPlugin, SnippetsPlugin, SystemPlugin, UuidPlugin, WebSearchPlugin,
 };
 
@@ -142,13 +142,8 @@ impl PluginRegistry {
         registry.register(PluginDescriptor::new(
             "files",
             "Files",
-            "Finds files and folders in your configured directories.",
-            |config, platform| {
-                vec![Arc::new(FilesPlugin::new(
-                    config.files.clone(),
-                    platform.clone(),
-                ))]
-            },
+            "Finds files and folders in your configured directories; `ff` and `in` search the whole disk by name and by contents through the OS index.",
+            files_family,
         ));
         registry.register(PluginDescriptor::new(
             "bookmarks",
@@ -348,6 +343,8 @@ mod tests {
                 "web:yt",
                 "web:gh",
                 "files",
+                "files:names",
+                "files:content",
                 "bookmarks",
                 "system",
                 "shell",
@@ -368,6 +365,8 @@ mod tests {
                 "apps",
                 "calculator",
                 "files",
+                "files:names",
+                "files:content",
                 "bookmarks",
                 "system",
                 "shell",
@@ -390,6 +389,8 @@ mod tests {
                 "web:g",
                 "web:gh",
                 "files",
+                "files:names",
+                "files:content",
                 "bookmarks",
                 "shell",
                 "clipboard",
@@ -402,7 +403,7 @@ mod tests {
     #[test]
     fn unknown_disabled_ids_are_ignored() {
         let config = config_disabling(&["nope"]);
-        assert_eq!(ids(&PluginRegistry::builtin(), &config).len(), 13);
+        assert_eq!(ids(&PluginRegistry::builtin(), &config).len(), 15);
     }
 
     #[test]
@@ -419,6 +420,8 @@ mod tests {
                 ("web:yt", false),
                 ("web:gh", true),
                 ("files", false),
+                ("files:names", false),
+                ("files:content", false),
                 ("bookmarks", true),
                 ("system", true),
                 ("shell", true),

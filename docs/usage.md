@@ -101,8 +101,9 @@ Type `f ` followed by at least two characters of a file or folder name.
 
 ![Sample project file and folder results](media/launcher-files.png)
 
-Sevak searches indexed **names** inside your selected directories, not text
-inside documents. Enter opens a file with its default application or a folder
+`f` searches indexed **names** inside your selected directories; to search the
+whole disk or inside documents, see [Whole-disk and content
+search](#whole-disk-and-content-search). Enter opens a file with its default application or a folder
 in the file manager.
 
 By default:
@@ -116,6 +117,36 @@ By default:
 The file index is capped at 100,000 entries. Keep roots focused. Use
 **Settings → Files** to change roots and depth, then Save. Choose **Reload
 index** after files move or when a recent change is not reflected.
+
+### Whole-disk and content search
+
+`f` only knows the folders you chose. Two more keywords ask your computer's own
+file index, which covers the whole disk and can read inside documents:
+
+- `ff report` finds files and folders by **name** anywhere the index looks.
+- `in invoice 2026` finds files by the **words inside** them (at least three
+  characters).
+
+Several words must all match. Results are ordinary file results: Enter opens,
+`Ctrl+Enter` shows in folder, `Shift+Enter` copies the path, Tab fills in the
+path. Names match from the start of each word (`rep` finds `annual_report.docx`).
+Hidden files, caches and generated folders are left out, as for `f`.
+
+| OS | Names | Inside files | Notes |
+|---|---|---|---|
+| Windows | Windows Search; "Everything" if `es.exe` is on `PATH` and Everything is running | Windows Search | Only indexed places are searched (by default your user folders and the Start menu). Add drives in *Indexing Options*. Reading PDFs and Office files depends on the installed search filters. |
+| macOS | Spotlight (`mdfind`) | Spotlight | Honors Spotlight's Privacy list; app bundles and system folders are left out. |
+| Linux | `plocate` or `locate` | Tracker 3 (`tracker3`), else Baloo (`baloosearch`) | Names need a `locate` database (`updatedb`, usually a daily timer). Contents need Tracker or Baloo to be installed and indexing. |
+
+Asking the index takes a moment, so it never holds up typing: for `ff`, matches
+from the `f` folder index appear immediately, and the index's results join the
+list when they arrive. A search that takes more than two seconds is given up.
+If there is no index to ask (the Windows Search service is stopped, `locate` is
+not installed), a "File index unavailable" row says what to do, and `ff` still
+shows the folder matches. Queries go only to that local index, never over the
+network. Turn it off with `files.use_os_index = false`, or change the keywords
+(`files.index_keyword`, `files.content_keyword`) in
+[configuration](configuration.md#search-the-whole-disk).
 
 ### Browsing a path
 

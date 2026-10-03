@@ -20,7 +20,7 @@ const MAX_CANDIDATES: usize = 50;
 const MIN_QUERY_CHARS: usize = 2;
 
 /// Directories never descended into, matched case-insensitively.
-const PRUNED_DIRS: &[&str] = &[
+pub(crate) const PRUNED_DIRS: &[&str] = &[
     "node_modules",
     ".git",
     "target",
@@ -78,6 +78,11 @@ impl FilesPlugin {
             index: RwLock::new(Arc::new(Vec::new())),
             dirs: DirReader::default(),
         }
+    }
+
+    /// The home directory `~` expands to.
+    pub(crate) fn home(&self) -> Option<&Path> {
+        self.home.as_deref()
     }
 
     fn snapshot(&self) -> Arc<Vec<FileEntry>> {
@@ -147,7 +152,7 @@ impl FilesPlugin {
             .collect()
     }
 
-    fn row(&self, name: &str, path: PathBuf, is_dir: bool, score: f64) -> ResultItem {
+    pub(crate) fn row(&self, name: &str, path: PathBuf, is_dir: bool, score: f64) -> ResultItem {
         let path_string = path.to_string_lossy().into_owned();
         let icon = if cfg!(windows) {
             IconSource::Shell {
@@ -182,7 +187,7 @@ impl FilesPlugin {
         .with_score(score)
     }
 
-    fn search(&self, input: &str) -> Vec<ResultItem> {
+    pub(crate) fn search(&self, input: &str) -> Vec<ResultItem> {
         let input = input.trim();
         if let Some(typed) = path_browse::parse(input, self.home.as_deref(), cfg!(windows)) {
             return self.browse(&typed);
@@ -221,7 +226,7 @@ impl FilesPlugin {
 }
 
 /// Bonus for names that equal or start with the (ASCII-case-insensitive) input.
-fn name_bonus(name: &str, input: &str) -> f64 {
+pub(crate) fn name_bonus(name: &str, input: &str) -> f64 {
     if name.eq_ignore_ascii_case(input) {
         return EXACT_NAME_BONUS;
     }
@@ -421,6 +426,7 @@ mod tests {
             include_hidden: false,
             keyword: "f".into(),
             global: true,
+            ..FilesConfig::default()
         }
     }
 

@@ -6,6 +6,8 @@
 //! | `calculator`     | [`CalculatorPlugin`]                    | none    | yes    |
 //! | `web:<keyword>`  | [`WebSearchPlugin`] (one per engine)    | engine  | no     |
 //! | `files`          | [`FilesPlugin`]                         | config  | config |
+//! | `files:names`    | [`OsFilesPlugin`] (whole disk, OS index) | `ff`   | no     |
+//! | `files:content`  | [`OsFilesPlugin`] (inside files)        | `in`    | no     |
 //! | `bookmarks`      | [`BookmarksPlugin`]                     | config  | config |
 //! | `system`         | [`SystemPlugin`]                        | none    | yes    |
 //! | `shell`          | [`ShellPlugin`]                         | `>`     | no     |
@@ -34,6 +36,7 @@ pub mod clipboard_history;
 pub mod currency;
 pub mod example_uuid;
 pub mod files;
+pub mod os_files;
 pub mod path_browse;
 pub mod registry;
 pub mod script;
@@ -54,6 +57,7 @@ pub use calculator::CalculatorPlugin;
 pub use clipboard_history::ClipboardPlugin;
 pub use example_uuid::UuidPlugin;
 pub use files::FilesPlugin;
+pub use os_files::{files_family, OsFilesPlugin};
 pub use registry::{PluginDescriptor, PluginFactory, PluginInfo, PluginRegistry};
 pub use script::{ScriptPlugin, ScriptPluginHost};
 pub use selection::SelectionPlugin;
@@ -100,6 +104,8 @@ mod tests {
                 "web:yt",
                 "web:gh",
                 "files",
+                "files:names",
+                "files:content",
                 "bookmarks",
                 "system",
                 "shell",

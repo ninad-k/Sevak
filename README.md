@@ -64,6 +64,7 @@ They show the workflow rather than measured search or launch times.
 | Launch an installed app | `code` | Launches the selected application |
 | Calculate | `12*7` or `sqrt(16)` | Copies the answer |
 | Find a file or folder | `f project` | Opens the selected result |
+| Find a file anywhere, or by its contents | `ff budget`, `in invoice 2026` | Opens it (uses your OS file index) |
 | Search Google | `g rust traits` | Opens the search in your browser |
 | Search YouTube | `yt svelte tutorial` | Opens YouTube search |
 | Search GitHub | `gh tauri` | Opens GitHub search |
@@ -77,8 +78,10 @@ They show the workflow rather than measured search or launch times.
 | Paste a snippet | `s sig` | Pastes the snippet with `{date}` etc. filled in |
 | Generate a UUID | `uuid ` or `uuid 5` | Copies a UUID when the plugin is enabled |
 
-App results depend on what is installed. File search covers the folders you
-choose and matches **names**, not document contents. Put a space after a
+App results depend on what is installed. `f` covers the folders you choose and
+matches **names**; `ff` and `in` ask your OS file index for the whole disk and
+for text inside files ([details](docs/usage.md#whole-disk-and-content-search)).
+Put a space after a
 keyword to activate it (`>` is the exception: `>ls` works too).
 
 Sevak also includes:
@@ -170,6 +173,9 @@ stay on your machine. The launcher does not send your local search queries to
 a cloud search service. Usage history includes your recent searches and the
 `>` commands you ran; clipboard history (off by default) is stored unencrypted
 in the data folder. Bookmarks are read from your browsers' files, read-only.
+Whole-disk and content file search (`ff`, `in`) ask only your own computer's
+file index (Windows Search, Spotlight, locate, Tracker or Baloo); the words you
+type go to that local service and nowhere else.
 
 There are explicit network uses:
 

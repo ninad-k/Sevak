@@ -54,7 +54,16 @@
     },
     plugins: { disabled: [] },
     calculator: { currency: false },
-    files: { directories: [], max_depth: 4, include_hidden: false, keyword: "", global: true },
+    files: {
+      directories: [],
+      max_depth: 4,
+      include_hidden: false,
+      keyword: "",
+      global: true,
+      use_os_index: true,
+      index_keyword: "ff",
+      content_keyword: "in",
+    },
     bookmarks: { browsers: [], keyword: "", global: true },
     shell: { terminal: "", shell: "", keep_open: true },
     web_search: [],
@@ -293,6 +302,8 @@
     payload.general.hotkey = payload.general.hotkey.trim();
     payload.general.actions_hotkey = payload.general.actions_hotkey.trim();
     payload.files.keyword = payload.files.keyword.trim();
+    payload.files.index_keyword = payload.files.index_keyword.trim();
+    payload.files.content_keyword = payload.files.content_keyword.trim();
     payload.files.directories = payload.files.directories.map((dir) => dir.trim());
     payload.search.fallback_web_search = Array.isArray(payload.search.fallback_web_search)
       ? payload.search.fallback_web_search.map((k) => k.trim())
@@ -864,6 +875,51 @@
               </div>
               <Toggle bind:checked={draft.files.global} label="Show files in global results" />
             </div>
+
+            <div class="row">
+              <div class="label">
+                <span class="name">Search the whole disk</span>
+                <span class="hint">
+                  Type “{draft.files.index_keyword.trim() || "keyword"} name” to find files anywhere,
+                  or “{draft.files.content_keyword.trim() || "keyword"} words” to search inside them,
+                  through your computer’s own file index (Windows Search, Spotlight, locate or
+                  Tracker). Nothing leaves your computer.
+                </span>
+              </div>
+              <Toggle bind:checked={draft.files.use_os_index} label="Search the whole disk" />
+            </div>
+
+            {#if draft.files.use_os_index}
+              <div class="row">
+                <div class="label">
+                  <label class="name" for="files-index-keyword">Whole-disk keyword</label>
+                  <span class="hint">Empty turns off name search.</span>
+                </div>
+                <input
+                  id="files-index-keyword"
+                  class="input number"
+                  type="text"
+                  bind:value={draft.files.index_keyword}
+                  spellcheck="false"
+                  autocomplete="off"
+                />
+              </div>
+
+              <div class="row">
+                <div class="label">
+                  <label class="name" for="files-content-keyword">Contents keyword</label>
+                  <span class="hint">Empty turns off content search.</span>
+                </div>
+                <input
+                  id="files-content-keyword"
+                  class="input number"
+                  type="text"
+                  bind:value={draft.files.content_keyword}
+                  spellcheck="false"
+                  autocomplete="off"
+                />
+              </div>
+            {/if}
           </section>
         {:else if active === "linux"}
           <h1>Linux</h1>

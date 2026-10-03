@@ -102,6 +102,13 @@ include_hidden = false
 keyword = "f"
 # Also show (lower-ranked) file results for plain queries.
 global = true
+# Whole-disk search through the operating system's own index (Windows Search,
+# Spotlight, locate / Tracker / Baloo). Nothing leaves your computer. Type
+# "<index_keyword> <name>" for file names and "<content_keyword> <words>" for
+# what is inside files. false turns both off.
+use_os_index = true
+index_keyword = "ff"
+content_keyword = "in"
 
 [bookmarks]
 # Browsers whose bookmarks are searchable; [] means every browser found.
@@ -533,6 +540,14 @@ pub struct FilesConfig {
     pub include_hidden: bool,
     pub keyword: String,
     pub global: bool,
+    /// Search the whole disk through the OS index (`index_keyword`,
+    /// `content_keyword`). The folder index above still answers `keyword` and
+    /// plain queries, and stands in when the OS index cannot be reached.
+    pub use_os_index: bool,
+    /// Keyword for whole-disk file-name search; empty turns it off.
+    pub index_keyword: String,
+    /// Keyword for searching inside files; empty turns it off.
+    pub content_keyword: String,
 }
 
 impl Default for FilesConfig {
@@ -547,6 +562,9 @@ impl Default for FilesConfig {
             include_hidden: false,
             keyword: "f".to_owned(),
             global: true,
+            use_os_index: true,
+            index_keyword: "ff".to_owned(),
+            content_keyword: "in".to_owned(),
         }
     }
 }
@@ -1121,6 +1139,27 @@ url = "https://example.com"
         let config = Config::from_toml_str("").unwrap();
         assert!(config.bookmarks.browsers.is_empty());
         assert_eq!(config.bookmarks.keyword, "b");
+    }
+
+    #[test]
+    fn os_index_search_is_on_with_its_own_keywords() {
+        let config = Config::from_toml_str("").unwrap();
+        assert!(config.files.use_os_index);
+        assert_eq!(config.files.index_keyword, "ff");
+        assert_eq!(config.files.content_keyword, "in");
+
+        // A files section from before the OS index existed keeps working.
+        let config = Config::from_toml_str("[files]\nkeyword = \"x\"\n").unwrap();
+        assert!(config.files.use_os_index);
+        assert_eq!(config.files.index_keyword, "ff");
+
+        let config = Config::from_toml_str(
+            "[files]\nuse_os_index = false\nindex_keyword = \"all\"\ncontent_keyword = \"\"\n",
+        )
+        .unwrap();
+        assert!(!config.files.use_os_index);
+        assert_eq!(config.files.index_keyword, "all");
+        assert_eq!(config.files.content_keyword, "");
     }
 
     #[test]
