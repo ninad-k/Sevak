@@ -12,7 +12,7 @@ On **Linux Wayland**, configure the shortcut first: [Setting up the hotkey](inst
 
 ### Hide the launcher
 
-- Press **++esc++** while the launcher is open
+- Press **++esc++** while the launcher is open (it first closes whatever is open on top: Large Type, the Text View, the action panel, the preview pane, a folder picker or a workflow's text output)
 - Click outside the search bar (if "Hide when focus is lost" is on in Settings)
 - Run a result and "Hide when focus is lost" is enabled
 
@@ -121,6 +121,39 @@ In the action panel:
 - Calculation results
 - Large text from the selection (Universal Actions)
 
+## Preview, Text View and Grid View
+
+### Preview pane
+
+Tap ++shift++ (press and release it alone) or press ++ctrl+y++ (++cmd+y++ on macOS) to open a pane under the list that shows what the selected result is. It follows the selection as you move; tap ++shift++ or press ++ctrl+y++ again, or ++escape++, to close it (the first ++escape++ closes the pane, the next hides Sevak). It shows:
+
+| Result | The pane shows |
+|---|---|
+| Text and code files | The first 64 KB in a monospace font, with size and modified date |
+| Images (PNG, JPEG, GIF, WebP, SVG, BMP, ICO; up to 4 MB) | The picture and its pixel size |
+| PDFs and other binary files | Kind, size, path and modified date (pages are not rendered) |
+| Folders | The first 100 entries, folders first, and the item count |
+| Applications | Kind, path or launch command, and the version when it is cheap to read (macOS apps) |
+| Web results and bookmarks | The address, title and site. Nothing is fetched from the network |
+| Snippets | The text as ++enter++ would paste it, with `{date}` and the other placeholders filled in |
+| Clipboard history entries | The copied text, the full image, or the copied file (several files: their paths) |
+| Calculator and conversions | The result and the calculation |
+| Emoji | The emoji large, with its name, keywords and code points |
+
+The pane reads only the file or folder the selected result refers to, only when it is open, and never reads network locations (`\\server\share`). The window grows to make room and shrinks back when you close the pane; near the bottom of a small screen it moves up so the pane stays visible.
+
+### Text View
+
+A result that carries a long text (a long or multi-line clipboard entry, a snippet, a script plugin's output) can be opened in a scrollable, taller view with ++ctrl+t++. ++arrow-up++ ++arrow-down++ ++pageup++ ++pagedown++ ++home++ ++end++ scroll; ++ctrl+c++ copies the text, ++enter++ runs the result as usual, and ++escape++ or ++arrow-left++ goes back to the list. Rows that exist only to show text (marked by the script that produced them) open the Text View on ++enter++.
+
+### Grid View
+
+Plugins that offer pictures show their results as a grid of tiles instead of a list, when every result of a search is a tile. Move with ++arrow-left++ ++arrow-right++ ++arrow-up++ ++arrow-down++ (++pageup++ / ++pagedown++ jump three rows), ++enter++ runs the selected tile, ++ctrl+k++ opens its actions, and the preview pane (++shift++ or ++ctrl+y++) works as for list rows. The grid shows up to 60 tiles. Built in:
+
+- The [emoji picker](features/emoji.md): `:heart` or `emoji heart`.
+- Copied images in [clipboard history](features/clipboard.md): `cb image`.
+- Script plugins can request tiles too: see [Views: text and grid](plugins.md#views-text-and-grid).
+
 ## Tab completion
 
 Press **++tab++** to complete the input to the selected result's name or value. The text in the search box is replaced.
@@ -193,11 +226,15 @@ More: [Calculator](features/calculator.md) plugin.
 
 Type **`f `** (keyword + space) followed by a filename or folder name to search indexed directories.
 
-Sevak searches **names only**, not document contents. Default roots: Desktop, Documents, Downloads.
+`f` searches **names** in the folders you chose. Default roots: Desktop, Documents, Downloads.
+
+**Whole disk and inside files**: `ff report` asks your computer's own file index (Windows Search, Spotlight, `locate`) for names anywhere, and `in invoice 2026` for words inside documents. Queries stay on your computer. See [Whole-disk and content search](features/files.md#whole-disk-and-content-search).
 
 By default, dot-files and cache folders (node_modules, .git, etc.) are excluded.
 
 **Browsing a path**: type a full path (e.g., `~/Documents/`, `/etc/`, `C:\Users\`) to list a folder directly. **Tab** completes entries; **++shift+tab++** goes up; **++enter++** opens.
+
+**File buffer**: press ++alt+arrow-down++ on file results to collect them, then ++alt+arrow-right++ to open, move, copy, zip or trash them all at once. See [File buffer](features/files.md#file-buffer).
 
 Configure in **Settings → Files** or with `[files]` in config.toml.
 
@@ -217,9 +254,9 @@ More: [Bookmarks](features/bookmarks.md) plugin.
 
 **Optional and off by default.** Enable in **Settings → Plugins** or with `[clipboard] enabled = true`.
 
-Type **`cb `** to search recent copied text. Results you paste into your previous app with **++enter++**.
+Type **`cb `** to search what you copied recently: text, images and files. **++enter++** pastes the entry into your previous app. `cb image` shows copied images as a grid of thumbnails.
 
-Sevak never records content password managers mark as secret, copies made in apps listed in `ignore_apps`, very long text, or images.
+Sevak never records content password managers mark as secret, copies made in apps listed in `ignore_apps`, very long text or very large images. Images are kept as PNG files in the data folder, unencrypted; turn them off with `[clipboard] images = false`.
 
 More: [Clipboard history](features/clipboard.md) plugin.
 
@@ -236,6 +273,8 @@ Placeholders:
 
 Configure in `[paste]` and with `[[snippet]]` entries in config.toml.
 
+**Expand as you type** (off by default): with `[snippets] auto_expand = true` (or **Settings → Plugins**), typing a snippet's `keyword` in any app replaces it with the snippet. While on, Sevak watches your keystrokes, keeping only the last 64 characters in memory. See [Expand snippets as you type](features/snippets.md#expand-snippets-as-you-type).
+
 More: [Snippets](features/snippets.md) plugin.
 
 ### System commands
@@ -245,6 +284,18 @@ Type a command's name: `lock`, `sleep`, `restart`, `shutdown`, `logout`, `empty 
 Dangerous actions (restart, shut down, logout, empty trash) ask for confirmation first. You can disable the ask or hide commands in **Settings → Plugins** or with `[system]` in config.toml.
 
 More: [System commands](features/system.md) plugin.
+
+### Automation tasks
+
+Type a task's name, or `t ` to list them all: `dark mode`, `vol 30`, `screenshot`, `quit`, `kill chrome`, `eject`, `awake 45`, `wifi`, `flush dns`… Only the tasks that work on your machine are offered. Force quit, kill and restarting Explorer or Finder ask first.
+
+More: [Automation tasks](features/tasks.md).
+
+### Media controls
+
+Type `play`, `pause`, `next`, `previous` or `stop` to press the media button of whatever is playing. `play ` (with a space) or `music` also shows the current track.
+
+More: [Media controls](features/media.md).
 
 ### Shell commands
 
@@ -280,6 +331,32 @@ Add your own keywords without building Sevak. Put a folder with `plugin.toml` an
 Scripts run with your permissions (not sandboxed), so install only plugins you trust.
 
 Three examples are in `examples/plugins/`. The full guide is [Plugins](plugins.md#external-plugins).
+
+### Workflows
+
+Chain a trigger (a keyword, a script filter, a hotkey, a Universal Actions entry or `sevak --trigger`) to actions and outputs, built as boxes and connectors in **Settings → Workflows**: type `issue 14` to open issue 14, or select text in any app and have a workflow tidy it and paste it back. Start from one of the templates in **New from template…**.
+
+A workflow that runs scripts or commands asks for your permission first, and again if what it runs changes. **Settings → Gallery** installs ready-made workflows and script plugins, but only after you press **Load gallery** and **Install**.
+
+More: [Workflows](workflows.md).
+
+### Emoji picker
+
+Type `:` and a name (`:heart`) or `emoji ` and a name. Matches are shown as a grid; **++enter++** pastes the emoji, **++shift+enter++** copies it.
+
+More: [Emoji picker](features/emoji.md).
+
+### Contacts and 1Password
+
+Both are **off by default**. `c ada` or `@ada` searches your address book (vCard files and the system address book); **++enter++** copies the e-mail address. `1p github` lists your 1Password logins through the official `op` tool; **++enter++** opens the website. Sevak never reads passwords.
+
+More: [Contacts](features/contacts.md) and [1Password](features/1password.md).
+
+### Dictionary and spelling
+
+`define serendipity` shows definitions; `spell recieve` lists corrections and **++enter++** pastes the right spelling. Everything is offline.
+
+More: [Dictionary and spelling](features/dictionary.md).
 
 ## Universal Actions {#universal-actions}
 
@@ -347,7 +424,10 @@ Quick summary:
 | **History** | ++arrow-up++ / ++arrow-down++ (empty bar) | Recall searches |
 | **Copying** | ++ctrl+c++ | Copy result value/path/URL |
 | **Large Type** | ++ctrl+l++ | Show as Large Type |
-| **Close** | ++escape++ | Hide launcher or close panel |
+| **Preview** | ++shift++ (tap) or ++ctrl+y++ | Show or hide the preview pane |
+| **Text View** | ++ctrl+t++ | Read the result's long text in full |
+| **File buffer** | ++alt+arrow-up++ / ++alt+arrow-down++ | Add the file to the buffer and move |
+| **Close** | ++escape++ | Close the innermost panel or view, then hide the launcher |
 
 ## Command line
 
@@ -359,6 +439,7 @@ sevak --toggle              # Toggle the launcher (open or hide)
 sevak --query "> "          # Open the launcher with text pre-filled
 sevak --run system:lock     # Run a result by ID without showing the launcher
 sevak --actions             # Universal Actions for the current selection
+sevak --trigger my-flow/go some text   # Start a workflow's external trigger
 sevak --background          # Start without showing the launcher
 sevak --settings            # Open Settings
 sevak --quit                # Quit Sevak
@@ -376,4 +457,5 @@ Only one instance runs at a time; subsequent invocations forward their action.
 - [Keyboard reference](keyboard.md) — every key Sevak handles
 - [Universal Actions in depth](features/selection.md)
 - [All plugins and features](features/index.md)
+- [Workflows](workflows.md)
 - [Configuration guide](configuration.md)

@@ -1,6 +1,6 @@
 # Files and folders
 
-Find and open files by name from your configured directories, or browse folders by typing a path. ++enter++ opens the file or folder.
+Find and open files by name from your configured directories, search the whole disk or inside documents through your computer's own file index, or browse folders by typing a path. ++enter++ opens the file or folder. The [file buffer](#file-buffer) collects several files so you can act on them together.
 
 ## How to use it
 
@@ -32,6 +32,25 @@ Type a path to browse its contents live. ++tab++ and ++shift+tab++ navigate up a
 
 Folders end with `/` (or `\` on Windows), so ++tab++ drills deeper. Path browsing shows contents live without waiting for the full index.
 
+### Whole-disk and content search
+
+`f` only knows the folders you chose. Two more keywords ask your computer's own file index, which covers the whole disk and can read inside documents:
+
+| Input | What you see | What ++enter++ does |
+|---|---|---|
+| `ff report` | Files and folders anywhere the index looks whose **name** matches | Open the selected file |
+| `in invoice 2026` | Files whose **contents** contain the words (at least three characters) | Open the selected file |
+
+Several words must all match. Results are ordinary file results: ++enter++ opens, ++ctrl+enter++ shows in folder, ++shift+enter++ copies the path, ++tab++ fills in the path. Names match from the start of each word (`rep` finds `annual_report.docx`). Hidden files, caches and generated folders are left out, as for `f`.
+
+| OS | Names | Inside files | Notes |
+|---|---|---|---|
+| Windows | Windows Search; "Everything" if `es.exe` is on `PATH` and Everything is running | Windows Search | Only indexed places are searched (by default your user folders and the Start menu). Add drives in *Indexing Options*. Reading PDFs and Office files depends on the installed search filters. |
+| macOS | Spotlight (`mdfind`) | Spotlight | Honors Spotlight's Privacy list; app bundles and system folders are left out. |
+| Linux | `plocate` or `locate` | Tracker 3 (`tracker3`), else Baloo (`baloosearch`) | Names need a `locate` database (`updatedb`, usually a daily timer). Contents need Tracker or Baloo to be installed and indexing. |
+
+Asking the index takes a moment, so it never holds up typing: for `ff`, matches from the `f` folder index appear immediately, and the index's results join the list when they arrive. A search that takes more than two seconds is given up. If there is no index to ask (the Windows Search service is stopped, `locate` is not installed), a "File index unavailable" row says what to do, and `ff` still shows the folder matches. Queries go only to that local index, never over the network.
+
 ## How indexing vs. path-browsing is chosen
 
 ```mermaid
@@ -55,8 +74,46 @@ flowchart TD
 | ++shift+enter++ | Copy the full path to your clipboard |
 | ++tab++ (path browsing) | Complete or drill into a folder |
 | ++shift+tab++ (path browsing) | Go up one folder level |
+| ++alt+arrow-up++ / ++alt+arrow-down++ | Add the file to the [file buffer](#file-buffer) and move on |
+| ++shift++ (tap) or ++ctrl+y++ | Preview the file or folder ([preview pane](../usage.md#preview-text-view-and-grid-view)) |
 
 Use ++ctrl+k++ to see all available actions.
+
+## File buffer
+
+Collect several files and folders, then act on all of them. With a file or folder result selected (from file search or a browsed path; not bookmarks or apps):
+
+| Key | What it does |
+|---|---|
+| ++alt+arrow-up++ / ++alt+arrow-down++ | Add the selected result to the buffer and move the selection up / down (++option++ on macOS) |
+| ++alt+arrow-left++ | Remove the last item |
+| ++alt+backspace++ / ++alt+delete++ | Empty the buffer |
+| ++alt+arrow-right++ | Open the buffer's actions |
+
+The buffer is a strip of chips above the results (click the `x` on a chip to drop it). It stays while you search for other things, and is emptied when the launcher hides, unless you set [`[file_buffer] keep_between_shows`](../configuration.md#file_buffer). The same actions are in the action panel of a file result (**Add to file buffer**, and **File buffer actions** once something is collected). The ++alt+arrow-left++, ++alt+arrow-right++ and ++alt+backspace++ keys only act while the buffer holds something, so on macOS ++option+arrow-left++ and ++option+backspace++ keep their text-editing meaning when it is empty.
+
+| Buffer action | What it does |
+|---|---|
+| Open all | Opens each item with its default application (asks above 10 items) |
+| Show in folder | Opens a file manager window for each folder the items are in (asks above 3) |
+| Copy paths | Copies the paths, one per line |
+| Copy files to clipboard | Puts the files on the clipboard as a file list, so pasting in Explorer, Finder or a file manager copies them |
+| Move to… / Copy to… | Asks for a folder, then moves or copies the items there |
+| Move to Trash | Sends the items to the Recycle Bin, Trash or freedesktop trash |
+| Compress to .zip | Writes `Archive.zip` (one item: `<name>.zip`) into the folder the items share |
+| Open in terminal | Opens a terminal in each folder, or in the folder of each file (asks above 3) |
+| More file actions… | The [Universal Actions](selection.md) for files, over the collected items |
+
+**Move to…** and **Copy to…** turn the search bar into a folder picker, starting at `~/`. Type a path or browse it as usual: ++tab++ opens the highlighted folder, ++shift+tab++ goes up, ++enter++ uses the highlighted folder, ++ctrl+enter++ uses the path exactly as typed, and ++escape++ cancels. Only folders are listed; the path browsing needs [`[files] global`](../configuration.md#files) or the `f ` prefix.
+
+What to expect:
+
+- Moving and trashing ask first, naming the items. Nothing is overwritten: a name that is taken becomes `report (2).docx` (`photos (2)`, `a (2).tar.gz`).
+- Move, copy, trash and zip run in the background with a progress line under the chips; you can keep typing. When done, a line says what happened. If some items failed it says how many worked and why the first one did not, and the failed ones stay in the buffer. Moved and trashed items leave the buffer; copied and zipped ones stay for the next action.
+- A folder is never moved or copied into itself. Items inside a collected folder are handled with the folder, not twice. Moving to another drive copies first and removes the original only if the copy worked.
+- Zip archives skip symbolic links, and files that cannot be read (the line says how many).
+- There is no undo, and no way to cancel a running operation. Trashed items can be restored from the Recycle Bin or Trash.
+- On Linux, trashing needs `gio` (part of GLib), and "Copy files to clipboard" works with file managers that read `text/uri-list`; some (Nautilus) only accept their own format and may ignore it.
 
 ## Options
 
@@ -67,6 +124,10 @@ Use ++ctrl+k++ to see all available actions.
 | Include hidden | `false` | Whether to index dot-files and dot-folders (`.gitignore`, `.config/`) | [`[files] include_hidden`](../configuration.md#files) |
 | Keyword | `f` | Keyword to search only files | [`[files] keyword`](../configuration.md#files) |
 | Global | `true` | Also show file results in ordinary searches without the keyword | [`[files] global`](../configuration.md#files) |
+| Use the OS index | `true` | Turn whole-disk (`ff`) and content (`in`) search on or off | [`[files] use_os_index`](../configuration.md#files) |
+| Whole-disk keyword | `ff` | Keyword for names anywhere; `""` turns that search off | [`[files] index_keyword`](../configuration.md#files) |
+| Contents keyword | `in` | Keyword for words inside files; `""` turns that search off | [`[files] content_keyword`](../configuration.md#files) |
+| Keep the buffer | `false` | Keep the file buffer when the launcher hides | [`[file_buffer] keep_between_shows`](../configuration.md#file_buffer) |
 
 ### How indexing works
 
@@ -96,6 +157,8 @@ To search inside one of these, use path browsing or configure them as a separate
 ## Tips and troubleshooting
 
 **Slow indexing:** The first index scan takes longer than refreshes. It runs in the background; you can keep using Sevak while it builds.
+
+**`ff` or `in` says "File index unavailable":** Start the Windows Search service (`WSearch`), install `plocate` and run `updatedb`, or install Tracker or Baloo, as the row explains. The OS only finds what it has indexed, so a file created seconds ago may take a moment to appear.
 
 **Index doesn't include files I added:** Refresh the index by choosing **Reload index** from the tray menu, or wait a few minutes for the automatic refresh.
 

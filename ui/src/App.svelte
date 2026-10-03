@@ -1,31 +1,51 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
-  import Glyph from "./lib/Glyph.svelte";
+  import FileBufferStrip from "./lib/FileBufferStrip.svelte";
+  import GridView from "./lib/GridView.svelte";
+  import PreviewPane from "./lib/PreviewPane.svelte";
+  import ResultRow from "./lib/ResultRow.svelte";
+  import TextView from "./lib/TextView.svelte";
   import { applyAppearance } from "./lib/appearance";
   import { parentPath } from "./lib/path";
   import { applyTheme } from "./lib/theme";
   import {
     copyResult,
     execute,
+    fileBufferAdd,
+    fileBufferClear,
+    fileBufferGet,
+    fileBufferRemove,
+    fileBufferRun,
+    fileBufferSelection,
     getStatus,
     hasTauri,
     hideWindow,
+    onBufferProgress,
     onHidden,
     onIndex,
     onResultsUpdated,
     onShow,
     onStatus,
+    preview,
     queryHistory,
     search,
     setContentHeight,
     setLargeType,
     takePendingShow,
+    textView,
+    type BufferDestination,
+    type BufferDto,
+    type BufferNote,
+    type BufferProgress,
     type Modifier,
+    type PreviewContent,
     type ResultDto,
+    type OutputPayload,
     type SelectionActionDto,
     type SelectionPayload,
     type ShowPayload,
     type Status,
+    type TextViewContent,
     type WindowAction,
   } from "./lib/ipc";
 
@@ -52,6 +72,8 @@
    * it is set the panel lists them instead of a row's actions (and is open).
    */
   let selection = $state<SelectionPayload | null>(null);
+  /** A workflow's text view node: a block of text under the search bar. */
+  let outputView = $state<{ heading: string; text: string } | null>(null);
   /** Large Type: the text shown huge, or `null` when it is not showing. */
   let largeText = $state<string | null>(null);
   /** The window was stretched over the screen (else the text shows inside the launcher). */
@@ -61,6 +83,37 @@
   let largeFont = $state(96);
   /** Tags each open/close so a slow window resize cannot resurrect a dismissed Large Type. */
   let largeSeq = 0;
+
+  /** The preview pane (Shift tap / Ctrl+Y) under the list; it follows the selection. */
+  let previewOpen = $state(false);
+  let previewContent = $state<PreviewContent | null>(null);
+  let previewLoading = $state(false);
+  let previewSeq = 0;
+  /** When a lone Shift went down (0: none, or another key came between). */
+  let shiftDownAt = 0;
+  /** The Text View (Ctrl+T): the selected row's long text, full height. */
+  let textViewOpen = $state(false);
+  let textContent = $state<TextViewContent | null>(null);
+  let textSeq = 0;
+  let textViewEl: ReturnType<typeof TextView> | undefined = $state();
+  /** Columns of the Grid View, measured by the grid. */
+  let gridCols = $state(1);
+
+  /**
+   * The file buffer: files and folders collected from the file results
+   * (Alt+Up / Alt+Down) to act on together. The shell owns the list; this is
+   * the copy last reported.
+   */
+  let fileBuffer = $state<BufferDto>({ items: [], actions: [] });
+  /** The panel is listing the buffer's actions rather than the row's. */
+  let bufferPanel = $state(false);
+  /** Move to… / Copy to… is waiting for a folder to be typed or picked. */
+  let destination = $state<{ key: string; label: string } | null>(null);
+  /** A buffer action is running (the shell does one at a time). */
+  let bufferBusy = $state(false);
+  let bufferProgress = $state<BufferProgress | null>(null);
+  /** How the last buffer action ended. */
+  let bufferNote = $state<BufferNote | null>(null);
 
   interface PanelEntry {
     label: string;
@@ -73,10 +126,30 @@
     verb?: string;
     /** The other modifier + Enter shortcuts of the action (Universal Actions). */
     extras?: { modifier: Modifier; label: string }[];
+    /** A file buffer action, by key. */
+    bufferKey?: string;
+    /** Entries that are not a result action: collect the row, open the buffer's actions, ... */
+    special?: "buffer_add" | "buffer_actions" | "buffer_more";
+  }
+
+  /** A row of the file results (not bookmarks or apps): what can be collected. */
+  function isFileRow(item: ResultDto | undefined): item is ResultDto {
+    return !!item && item.plugin_id === "files" && item.action === "open_path";
+  }
+
+  /** A folder row of a browsed path: the rows Move to… / Copy to… can choose. */
+  function isFolderRow(item: ResultDto): boolean {
+    return isFileRow(item) && /[\\/]$/.test(item.autocomplete ?? "");
+  }
+
+  /** While a destination is wanted, only folders are worth listing. */
+  function forDestination(found: ResultDto[]): ResultDto[] {
+    return destination ? found.filter(isFolderRow) : found;
   }
 
   const current = $derived<ResultDto | undefined>(results[selected]);
   const mac = $derived(status?.display === "macos");
+  const altKey = $derived(mac ? "⌥" : "Alt+");
   const panelEntries = $derived<PanelEntry[]>(
     selection
       ? selection.actions.map((action) => ({
@@ -89,18 +162,63 @@
             s.modifier ? [{ modifier: s.modifier, label: s.label }] : [],
           ),
         }))
-      : current
+      : bufferPanel
         ? [
-            { label: verb(current), modifier: null, index: null },
-            ...current.secondary.map((s, index) => ({
-              label: s.label,
-              modifier: s.modifier,
-              index,
+            ...fileBuffer.actions.map((action) => ({
+              label: action.label,
+              detail: action.destination ? "then choose a folder" : undefined,
+              modifier: null,
+              index: null,
+              bufferKey: action.key,
             })),
+            {
+              label: "More file actions…",
+              detail: "open with, reveal, share…",
+              modifier: null,
+              index: null,
+              special: "buffer_more" as const,
+            },
           ]
-        : [],
+        : current
+          ? [
+              { label: verb(current), modifier: null, index: null },
+              ...current.secondary.map((s, index) => ({
+                label: s.label,
+                modifier: s.modifier,
+                index,
+              })),
+              ...(isFileRow(current)
+                ? [
+                    {
+                      label: "Add to file buffer",
+                      detail: `${altKey}↑ or ${altKey}↓`,
+                      modifier: null,
+                      index: null,
+                      special: "buffer_add" as const,
+                    },
+                  ]
+                : []),
+              ...(fileBuffer.items.length > 0
+                ? [
+                    {
+                      label: `File buffer actions (${fileBuffer.items.length})…`,
+                      detail: `${altKey}→`,
+                      modifier: null,
+                      index: null,
+                      special: "buffer_actions" as const,
+                    },
+                  ]
+                : []),
+            ]
+          : [],
   );
   const modifierHints = $derived(current?.secondary.filter((s) => s.modifier !== null) ?? []);
+  /** Every result asks to be a tile: show them as a grid instead of a list. */
+  const gridMode = $derived(results.length > 0 && results.every((result) => result.tile));
+  /** The pane is shown (it gives way to the action panel, Large Type and the Text View). */
+  const paneVisible = $derived(
+    previewOpen && !!current && !panelOpen && largeText === null && !textViewOpen,
+  );
 
   const hotkeyError = $derived(status?.hotkey.error ?? null);
   const accelerator = $derived(status?.hotkey.accelerator ?? "");
@@ -113,6 +231,11 @@
       !error &&
       results.every((result) => result.plugin_id.startsWith("web:")),
   );
+
+  // The buffer's action list only exists while the panel is open.
+  $effect(() => {
+    if (!panelOpen) bufferPanel = false;
+  });
 
   let lastHeight = -1;
   /** Tags every search; a response is applied only if it is still the latest. */
@@ -145,7 +268,13 @@
     searchSeq++; // drop any search still in flight
     panelOpen = false;
     selection = null;
+    destination = null;
+    bufferNote = null;
+    outputView = null;
     closeLargeType();
+    previewOpen = false;
+    previewContent = null;
+    closeTextView(false);
     historyPos = -1;
     query = "";
     results = [];
@@ -157,8 +286,13 @@
   /** The window is being shown; `payload` can prefill the query or carry an error. */
   function applyShow(payload: ShowPayload | null) {
     reset();
+    void refreshBuffer();
     if (payload?.selection) {
       openSelection(payload.selection);
+      return;
+    }
+    if (payload?.output) {
+      showOutput(payload.output);
       return;
     }
     if (payload?.error) error = payload.error;
@@ -166,6 +300,16 @@
       prefill(payload.query);
       return;
     }
+    focusInput(true);
+  }
+
+  /** Shows what a workflow's Large Type or text view node produced. */
+  function showOutput(output: OutputPayload) {
+    if (output.kind === "large_type") {
+      void openLargeType(output.text);
+      return;
+    }
+    outputView = { heading: output.heading, text: output.text };
     focusInput(true);
   }
 
@@ -211,7 +355,7 @@
     }
     const found = await search(text);
     if (mine !== searchSeq || found === null) return;
-    results = found.results;
+    results = forDestination(found.results);
     resultsTicket = found.ticket;
     selected = 0;
     panelOpen = false;
@@ -229,7 +373,7 @@
     const found = await search(text);
     if (mine !== searchSeq || found === null) return;
     const keep = results[selected]?.id;
-    results = found.results;
+    results = forDestination(found.results);
     resultsTicket = found.ticket;
     const at = keep === undefined ? -1 : results.findIndex((result) => result.id === keep);
     if (at >= 0) {
@@ -296,6 +440,10 @@
 
   /** Runs row `index`: its primary action, or secondary action number `action`. */
   async function run(index: number, action?: number) {
+    if (destination) {
+      void chooseDestination(index, false);
+      return;
+    }
     const item = results[index];
     if (!item || executing) return;
     executing = true;
@@ -336,7 +484,23 @@
       void runSelection(selection.actions[k], modifier);
       return;
     }
+    if (entry.special === "buffer_actions") {
+      openBufferPanel();
+      return;
+    }
+    if (entry.special === "buffer_more") {
+      void moreFileActions();
+      return;
+    }
     panelOpen = false;
+    if (entry.special === "buffer_add") {
+      void collect(0);
+      return;
+    }
+    if (entry.bufferKey) {
+      void startBufferAction(entry.bufferKey);
+      return;
+    }
     void run(selected, entry.index ?? undefined);
   }
 
@@ -371,6 +535,160 @@
     }
   }
 
+  async function refreshBuffer() {
+    const found = await fileBufferGet();
+    if (found) fileBuffer = found;
+  }
+
+  /**
+   * Alt+Up / Alt+Down: the selected file or folder goes into the buffer, and the
+   * selection moves on (`delta` 0 stays, for the action panel's entry).
+   */
+  async function collect(delta: number) {
+    const item = current;
+    const ticket = resultsTicket;
+    if (!isFileRow(item) || bufferBusy) return;
+    bufferNote = null;
+    if (delta !== 0) move(delta);
+    const found = await fileBufferAdd(item.id, ticket);
+    if (typeof found === "string") error = found;
+    else fileBuffer = found;
+  }
+
+  async function removeFromBuffer(index?: number) {
+    if (bufferBusy) return;
+    bufferNote = null;
+    const found = await fileBufferRemove(index);
+    if (found) fileBuffer = found;
+  }
+
+  async function clearBuffer() {
+    if (bufferBusy) return;
+    bufferNote = null;
+    const found = await fileBufferClear();
+    if (found) fileBuffer = found;
+  }
+
+  function openBufferPanel() {
+    if (fileBuffer.items.length === 0 || bufferBusy) return;
+    selection = null;
+    bufferPanel = true;
+    panelIndex = 0;
+    panelOpen = true;
+  }
+
+  /**
+   * The Alt+arrow keys of the file buffer. Returns false for a key that is not
+   * the buffer's to handle right now (so the input keeps it).
+   */
+  function onBufferKey(e: KeyboardEvent): boolean {
+    if (destination) return false;
+    const filled = fileBuffer.items.length > 0;
+    switch (e.key) {
+      case "ArrowUp":
+      case "ArrowDown":
+        if (!isFileRow(current)) return false;
+        void collect(e.key === "ArrowUp" ? -1 : 1);
+        return true;
+      case "ArrowLeft":
+        if (!filled) return false;
+        void removeFromBuffer();
+        return true;
+      case "ArrowRight":
+        if (!filled) return false;
+        openBufferPanel();
+        return true;
+      case "Backspace":
+      case "Delete":
+        if (!filled) return false;
+        void clearBuffer();
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  /** A picked buffer action: ask for a folder first when it needs one. */
+  async function startBufferAction(key: string) {
+    const action = fileBuffer.actions.find((a) => a.key === key);
+    if (!action || bufferBusy) return;
+    bufferNote = null;
+    error = null;
+    if (action.destination) {
+      destination = { key, label: action.label };
+      historyPos = -1;
+      setQuery("~/");
+      focusInput();
+      return;
+    }
+    await runBufferAction(key, null);
+  }
+
+  /**
+   * Runs a buffer action in the shell. Resolves to false when it did not run
+   * (an error, or the confirmation was declined).
+   */
+  async function runBufferAction(key: string, to: BufferDestination | null): Promise<boolean> {
+    if (bufferBusy) return false;
+    bufferBusy = true;
+    bufferNote = null;
+    bufferProgress = null;
+    try {
+      const outcome = await fileBufferRun(key, to);
+      if (typeof outcome === "string") {
+        error = outcome;
+        return false;
+      }
+      fileBuffer = outcome.buffer;
+      if (outcome.declined) return false;
+      if (!outcome.hidden && outcome.message) {
+        bufferNote = { text: outcome.message, error: !outcome.ok };
+      }
+      return true;
+    } finally {
+      bufferBusy = false;
+      bufferProgress = null;
+    }
+  }
+
+  /**
+   * Move to… / Copy to… got its folder: the highlighted folder row, or with
+   * `typed` the path as typed (a keyword in front of it is ignored).
+   */
+  async function chooseDestination(index: number, typed: boolean) {
+    const wanted = destination;
+    if (!wanted || bufferBusy) return;
+    const row = results[index];
+    const path = query.trim().replace(/^\S+\s+(?=(~[\\/]|[\\/]|[A-Za-z]:[\\/]))/, "");
+    let to: BufferDestination;
+    if (!typed && row && isFolderRow(row)) {
+      to = { kind: "result", id: row.id, ticket: resultsTicket };
+    } else if (path !== "") {
+      to = { kind: "text", text: path };
+    } else {
+      error = "Pick a folder first.";
+      return;
+    }
+    error = null;
+    if (await runBufferAction(wanted.key, to)) leaveDestination();
+  }
+
+  function leaveDestination() {
+    destination = null;
+    setQuery("");
+  }
+
+  /** The Universal Actions list for the collected files. */
+  async function moreFileActions() {
+    const found = await fileBufferSelection();
+    if (typeof found === "string") {
+      error = found;
+      leaveSelection();
+      return;
+    }
+    openSelection(found);
+  }
+
   function onPanelMove(e: MouseEvent, k: number) {
     if (e.movementX === 0 && e.movementY === 0) return;
     panelIndex = k;
@@ -387,6 +705,96 @@
     } finally {
       executing = false;
     }
+  }
+
+  /** Shift tap / Ctrl+Y: show or hide the preview pane for the selected row. */
+  function togglePreview() {
+    if (selection || largeText !== null || textViewOpen) return;
+    if (previewOpen) {
+      previewOpen = false;
+    } else if (current) {
+      previewOpen = true;
+    }
+  }
+
+  // The pane follows the selection. A short delay keeps a held arrow key from
+  // reading a file for every row it passes over; the old content stays on
+  // screen (dimmed) until the new one arrives.
+  $effect(() => {
+    if (!previewOpen || !current) return;
+    const id = current.id;
+    const ticket = resultsTicket;
+    const mine = ++previewSeq;
+    previewLoading = true;
+    const timer = setTimeout(() => {
+      void preview(id, ticket).then((content) => {
+        if (mine !== previewSeq) return;
+        previewContent = content;
+        previewLoading = false;
+      });
+    }, 60);
+    return () => clearTimeout(timer);
+  });
+
+  /** Ctrl+T (or Enter on a text-only row): the row's long text in the Text View. */
+  async function openTextView() {
+    const item = current;
+    if (!item?.text_view || selection) return;
+    const mine = ++textSeq;
+    textViewOpen = true;
+    textContent = null;
+    panelOpen = false;
+    const text = await textView(item.id, resultsTicket);
+    if (mine !== textSeq) return;
+    textContent = text ?? { title: item.title, text: "There is nothing to show.", truncated: false };
+  }
+
+  /** Back to the list (Esc or Left); `refocus` puts the caret back in the search box. */
+  function closeTextView(refocus = true) {
+    textSeq++;
+    if (!textViewOpen) return;
+    textViewOpen = false;
+    textContent = null;
+    if (refocus) void tick().then(() => focusInput());
+  }
+
+  /** Arrow keys, PageUp/PageDown, Home and End scroll the Text View. */
+  function scrollTextView(key: string): boolean {
+    switch (key) {
+      case "ArrowDown":
+        textViewEl?.scrollBy(48);
+        return true;
+      case "ArrowUp":
+        textViewEl?.scrollBy(-48);
+        return true;
+      case "PageDown":
+        textViewEl?.scrollBy("page");
+        return true;
+      case "PageUp":
+        textViewEl?.scrollBy("-page");
+        return true;
+      case "Home":
+        textViewEl?.scrollToEdge(false);
+        return true;
+      case "End":
+        textViewEl?.scrollToEdge(true);
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  /** Grid View arrows: moves by whole rows (`dy`) or tiles (`dx`), staying inside the grid. */
+  function gridMove(dx: number, dy: number) {
+    const n = results.length;
+    if (n === 0) return;
+    let next = selected + dx + dy * gridCols;
+    if (dy > 0 && next >= n) {
+      // A short last row: Down from the row above lands on its last tile.
+      const lastRow = Math.floor((n - 1) / gridCols) * gridCols;
+      next = selected >= lastRow ? selected : n - 1;
+    }
+    void select(Math.max(0, Math.min(n - 1, next)), true);
   }
 
   async function openLargeType(text: string) {
@@ -448,6 +856,10 @@
     selected = index;
     if (!reveal) return;
     await tick();
+    if (gridMode) {
+      document.getElementById(`result-${selected}`)?.scrollIntoView({ block: "nearest" });
+      return;
+    }
     const row = list?.children[selected] as HTMLElement | undefined;
     if (!list || !row) return;
     if (selected === 0) list.scrollTop = 0;
@@ -468,7 +880,22 @@
     if (n > 0) void select(Math.min(n - 1, Math.max(0, selected + delta)), true);
   }
 
+  /** Shift released soon after it went down alone: a tap, which toggles the preview. */
+  function onKeyup(e: KeyboardEvent) {
+    if (e.key !== "Shift") return;
+    const tapped = shiftDownAt > 0 && performance.now() - shiftDownAt < 450;
+    shiftDownAt = 0;
+    if (tapped && !e.isComposing) togglePreview();
+  }
+
   function onKeydown(e: KeyboardEvent) {
+    // A lone Shift is a candidate tap. Any other key meanwhile (Shift+Enter, a
+    // capital letter, Alt+Shift switching the keyboard layout) or key repeat
+    // (holding Shift) makes it not one.
+    shiftDownAt =
+      e.key === "Shift" && !e.repeat && !e.ctrlKey && !e.altKey && !e.metaKey
+        ? performance.now()
+        : 0;
     if (e.isComposing) return;
     const key = e.key;
     const ctrl = (e.ctrlKey || e.metaKey) && !e.altKey;
@@ -481,6 +908,35 @@
       e.preventDefault();
       closeLargeType();
       return;
+    }
+
+    if (textViewOpen) {
+      if (key === "Escape" || (key === "ArrowLeft" && !e.shiftKey) || (ctrl && lower === "t")) {
+        e.preventDefault();
+        closeTextView();
+        return;
+      } else if (!ctrl && !e.altKey && !e.shiftKey && scrollTextView(key)) {
+        e.preventDefault();
+        return;
+      } else if (key === "Enter") {
+        e.preventDefault();
+        const modifier = modifierOf(e);
+        if (modifier === null) void run(selected);
+        else runModified(modifier);
+        return;
+      } else if (ctrl && !e.shiftKey && lower === "c") {
+        // Text the user selected with the mouse copies as usual; otherwise the
+        // row's text goes to the clipboard.
+        if (!window.getSelection()?.toString()) {
+          e.preventDefault();
+          void copySelected();
+        }
+        return;
+      } else if (["Control", "Shift", "Alt", "Meta"].includes(key)) {
+        return;
+      }
+      // Typing and the like go back to the list and act as usual.
+      closeTextView();
     }
 
     if (panelOpen) {
@@ -517,9 +973,46 @@
       leaveSelection();
     }
 
+    if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && onBufferKey(e)) {
+      e.preventDefault();
+      return;
+    }
+    // Esc closes the innermost thing first: an open preview pane, then the
+    // folder picker of Move to… / Copy to…, then the launcher.
+    if (destination && key === "Escape" && !previewOpen) {
+      e.preventDefault();
+      leaveDestination();
+      return;
+    }
+    if (destination && key === "Enter") {
+      e.preventDefault();
+      void chooseDestination(selected, e.ctrlKey || e.metaKey);
+      return;
+    }
+
     if (key === "Escape") {
       e.preventDefault();
-      void hideWindow();
+      // The preview pane, then a workflow's text output, close first; the
+      // next Esc hides the launcher.
+      if (previewOpen) previewOpen = false;
+      else if (outputView) outputView = null;
+      else void hideWindow();
+    } else if (ctrl && !e.shiftKey && lower === "y") {
+      e.preventDefault();
+      if (!e.repeat) togglePreview();
+    } else if (ctrl && !e.shiftKey && lower === "t") {
+      e.preventDefault();
+      if (!e.repeat) void openTextView();
+    } else if (
+      gridMode &&
+      (key === "ArrowLeft" || key === "ArrowRight") &&
+      !ctrl &&
+      !e.altKey &&
+      !e.shiftKey
+    ) {
+      // In a grid the sideways arrows walk the tiles (Ctrl+K opens the actions).
+      e.preventDefault();
+      gridMove(key === "ArrowRight" ? 1 : -1, 0);
     } else if (key === "ArrowRight" && current && rightArrowIsFree(e)) {
       e.preventDefault();
       openPanel();
@@ -528,7 +1021,7 @@
       openPanel();
     } else if (ctrl && !e.shiftKey && lower === "l") {
       e.preventDefault();
-      if (current && !e.repeat) void openLargeType(current.title);
+      if (current && !e.repeat) void openLargeType(current.large_text ?? current.title);
     } else if (
       ctrl &&
       !e.shiftKey &&
@@ -554,20 +1047,25 @@
       complete(e.shiftKey);
     } else if (key === "ArrowDown" || (ctrl && lower === "n")) {
       e.preventDefault();
-      move(1);
+      if (gridMode) gridMove(0, 1);
+      else move(1);
     } else if (key === "ArrowUp" || (ctrl && lower === "p")) {
       e.preventDefault();
-      move(-1);
+      if (gridMode) gridMove(0, -1);
+      else move(-1);
     } else if (key === "PageDown") {
       e.preventDefault();
-      page(7);
+      if (gridMode) gridMove(0, 3);
+      else page(7);
     } else if (key === "PageUp") {
       e.preventDefault();
-      page(-7);
+      if (gridMode) gridMove(0, -3);
+      else page(-7);
     } else if (key === "Enter") {
       e.preventDefault();
       const modifier = modifierOf(e);
-      if (modifier === null) void run(selected);
+      if (modifier === null && current?.text_on_enter) void openTextView();
+      else if (modifier === null) void run(selected);
       else runModified(modifier);
     } else if (ctrl && /^[1-9]$/.test(key)) {
       e.preventDefault();
@@ -595,6 +1093,9 @@
   }
 
   function verb(item: ResultDto): string {
+    if (destination && isFolderRow(item)) {
+      return destination.label.startsWith("Move") ? "Move here" : "Copy here";
+    }
     if (item.plugin_id.startsWith("web:")) return "Search";
     switch (item.action) {
       case "launch":
@@ -632,6 +1133,7 @@
 
   onMount(() => {
     focusInput(true);
+    void refreshBuffer();
 
     const resizeObserver = new ResizeObserver(reportHeight);
     if (shell) resizeObserver.observe(shell);
@@ -659,11 +1161,24 @@
         indexing = state === "indexing";
       }),
       onResultsUpdated(() => void refreshResults()),
+      onBufferProgress((progress) => {
+        if (bufferBusy) bufferProgress = progress;
+      }),
     ];
 
     // Browser preview only: `/#selection` shows the Universal Actions panel.
     if (import.meta.env.DEV && !hasTauri() && location.hash === "#selection") {
       void import("./lib/mock").then(({ mockSelection }) => openSelection(mockSelection()));
+    }
+
+    // Browser preview only: `/#buffer` starts with some collected files, and
+    // `/#buffer-dest` with Move to… waiting for a folder.
+    if (import.meta.env.DEV && !hasTauri() && location.hash.startsWith("#buffer")) {
+      void import("./lib/mock").then(async ({ mockBuffer }) => {
+        fileBuffer = mockBuffer.seed();
+        setQuery("report");
+        if (location.hash === "#buffer-dest") await startBufferAction("move_to");
+      });
     }
 
     // A query sent while the window was still loading (`sevak --query` at startup).
@@ -680,7 +1195,7 @@
   });
 </script>
 
-<svelte:window onkeydown={onKeydown} onfocus={() => focusInput()} oncontextmenu={onContextMenu} />
+<svelte:window onkeydown={onKeydown} onkeyup={onKeyup} onfocus={() => focusInput()} oncontextmenu={onContextMenu} />
 
 <main class="shell" bind:this={shell}>
   <div class="card" class:covered={largeFull}>
@@ -719,70 +1234,84 @@
       </div>
     {/if}
 
+    <FileBufferStrip
+      items={fileBuffer.items}
+      progress={bufferProgress}
+      note={bufferNote}
+      destination={destination && { label: destination.label, count: fileBuffer.items.length }}
+      {mac}
+      onremove={(index) => void removeFromBuffer(index)}
+    />
+
+    {#if gridMode && !textViewOpen}
+      <GridView
+        items={results}
+        {selected}
+        verb={current ? verb(current) : ""}
+        compact={paneVisible}
+        bind:columns={gridCols}
+        onhover={(i) => (selected = i)}
+        onrun={(i) => void run(i)}
+      />
+    {:else if !gridMode}
     <div
       id="results"
       class="results"
       class:empty={results.length === 0}
+      class:compact={paneVisible}
+      class:hidden={textViewOpen}
       role="listbox"
       aria-label="Results"
       bind:this={list}
     >
       {#each results as item, i (item.id)}
-        <!-- Keyboard handling lives on the window; rows must not take focus from the input. -->
-        <!-- svelte-ignore a11y_click_events_have_key_events -->
-        <div
+        <!-- The row itself lives in lib/ResultRow.svelte, shared with the theme editor's preview. -->
+        {@const iconUrl = item.icon?.kind === "url" ? item.icon.url : null}
+        <ResultRow
           id="result-{i}"
-          class="row"
-          class:selected={i === selected}
-          role="option"
-          aria-selected={i === selected}
-          tabindex="-1"
-          title={item.id}
-          onmousemove={(e) => onRowMove(e, i)}
-          onmousedown={(e) => e.preventDefault()}
-          onclick={() => void run(i)}
-        >
-          <span class="tile">
-            {#if item.icon?.kind === "url" && !brokenIcons[item.icon.url]}
-              {@const url = item.icon.url}
-              <img
-                src={url}
-                width="32"
-                height="32"
-                alt=""
-                draggable="false"
-                onerror={() => (brokenIcons[url] = true)}
-              />
-            {:else}
-              <Glyph name={glyphFor(item)} />
-            {/if}
-          </span>
-          <span class="text">
-            <span class="title">{item.title}</span>
-            {#if item.subtitle}<span class="subtitle">{item.subtitle}</span>{/if}
-          </span>
-          <span class="hint" aria-hidden="true">
-            {#if i === selected}
-              <kbd>↵</kbd><span class="verb">{verb(item)}</span>
-            {:else if i < 9}
-              <kbd>Ctrl+{i + 1}</kbd>
-            {/if}
-          </span>
-        </div>
+          {item}
+          index={i}
+          selected={i === selected}
+          glyph={glyphFor(item)}
+          verb={verb(item)}
+          broken={iconUrl !== null && !!brokenIcons[iconUrl]}
+          onbroken={() => iconUrl !== null && (brokenIcons[iconUrl] = true)}
+          onmove={(e) => onRowMove(e, i)}
+          onrun={() => void run(i)}
+        />
       {/each}
     </div>
+    {/if}
 
-    {#if panelOpen && largeText === null && (selection || current)}
+    {#if textViewOpen}
+      <TextView bind:this={textViewEl} content={textContent} {mac} />
+    {:else if paneVisible}
+      <PreviewPane
+        content={previewContent}
+        loading={previewLoading}
+        glyph={current?.glyph ?? null}
+        hasTextView={!!current?.text_view}
+        {mac}
+      />
+    {/if}
+
+    {#if panelOpen && largeText === null && (selection || bufferPanel || current)}
       <div
         class="panel"
-        class:scroll={!!selection}
+        class:scroll={!!selection || bufferPanel}
         role="menu"
-        aria-label="Actions for {selection ? selection.title : current?.title}"
+        aria-label="Actions for {selection
+          ? selection.title
+          : bufferPanel
+            ? 'the file buffer'
+            : current?.title}"
         bind:this={panelEl}
       >
         <div class="panel-title">
           {#if selection}
             {selection.title}{#if selection.subtitle}: <span class="quote">{selection.subtitle}</span>{/if}
+          {:else if bufferPanel}
+            File buffer: {fileBuffer.items.length === 1 ? "1 item" : `${fileBuffer.items.length} items`}
           {:else}
             Actions for {current?.title}
           {/if}
@@ -811,7 +1340,7 @@
           </div>
         {/each}
       </div>
-    {:else if current && (current.secondary.length > 0 || current.autocomplete)}
+    {:else if current && !textViewOpen && !destination && (current.secondary.length > 0 || current.autocomplete)}
       <div class="hints" aria-hidden="true">
         <span class="chips">
           {#if current.autocomplete}
@@ -822,10 +1351,20 @@
               <span class="chip"><kbd>{combo(hint.modifier)}</kbd>{hint.label}</span>
             {/if}
           {/each}
+          {#if isFileRow(current) && !destination}
+            <span class="chip"><kbd>{altKey}↑↓</kbd>Collect</span>
+          {/if}
         </span>
         {#if current.secondary.length > 0}
           <span class="chip more"><kbd>→</kbd>Actions</span>
         {/if}
+      </div>
+    {/if}
+
+    {#if outputView}
+      <div class="output" role="region" aria-label={outputView.heading || "Workflow output"}>
+        {#if outputView.heading}<div class="output-heading">{outputView.heading}</div>{/if}
+        <pre class="output-text">{outputView.text}</pre>
       </div>
     {/if}
 
@@ -884,7 +1423,7 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    height: max(56px, calc(56px * var(--font-scale, 1)));
+    height: max(56px, calc(var(--search-size, calc(22px * var(--font-scale, 1))) * 2.55));
     padding: 0 18px;
   }
 
@@ -904,7 +1443,7 @@
     color: var(--fg);
     caret-color: var(--accent);
     font: inherit;
-    font-size: calc(22px * var(--font-scale, 1));
+    font-size: var(--search-size, calc(22px * var(--font-scale, 1)));
     padding: 0;
   }
 
@@ -922,7 +1461,7 @@
   }
 
   .results {
-    --row-height: max(48px, calc(48px * var(--font-scale, 1)));
+    --row-height: var(--row-h, max(48px, calc(48px * var(--font-scale, 1))));
     position: relative;
     max-height: calc(var(--row-height) * 8.5 + 12px);
     padding: 6px;
@@ -931,81 +1470,17 @@
     border-top: 1px solid var(--border);
   }
 
-  .results.empty {
+  .results.empty,
+  .results.hidden {
     display: none;
   }
 
-  .row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    height: var(--row-height);
-    padding: 0 10px;
-    border-radius: 10px;
+  /* A preview pane is open below: fewer rows, so the window stays short. */
+  .results.compact {
+    max-height: calc(var(--row-height) * 4.5 + 12px);
   }
 
-  .row.selected {
-    background: var(--selected);
-  }
-
-  .tile {
-    flex: none;
-    display: grid;
-    place-items: center;
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    background: var(--tile);
-    color: var(--muted);
-    overflow: hidden;
-  }
-
-  .tile:has(img) {
-    background: transparent;
-    border-radius: 0;
-  }
-
-  .tile img {
-    display: block;
-    width: 32px;
-    height: 32px;
-    object-fit: contain;
-  }
-
-  .text {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-  }
-
-  .title,
-  .subtitle {
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
-
-  .title {
-    font-size: var(--font-size, 15px);
-    line-height: 1.3;
-  }
-
-  .subtitle {
-    font-size: calc(12px * var(--font-scale, 1));
-    line-height: 1.3;
-    color: var(--muted);
-  }
-
-  .hint {
-    flex: none;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: calc(11px * var(--font-scale, 1));
-    color: var(--muted);
-  }
+  /* Result rows are styled in lib/ResultRow.svelte. */
 
   kbd {
     padding: 1px 6px;
@@ -1016,6 +1491,31 @@
     font-size: calc(11px * var(--font-scale, 1));
     line-height: 1.5;
     color: var(--muted);
+  }
+
+  .output {
+    max-height: 340px;
+    overflow-y: auto;
+    padding: 10px 18px 12px;
+    border-top: 1px solid var(--border);
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
+  .output-heading {
+    margin-bottom: 4px;
+    color: var(--muted);
+    font-size: calc(12px * var(--font-scale, 1));
+    font-weight: 600;
+  }
+
+  .output-text {
+    margin: 0;
+    font: inherit;
+    font-size: calc(14px * var(--font-scale, 1));
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 
   .error {

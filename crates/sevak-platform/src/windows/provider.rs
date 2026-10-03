@@ -4,16 +4,20 @@ use std::collections::HashSet;
 use std::ffi::OsString;
 use std::time::Instant;
 
-use sevak_core::{AppEntry, IconData, IconSource, LaunchTarget};
+use sevak_core::{AppEntry, ClipContent, IconData, IconSource, LaunchTarget};
 
 use crate::capture::{CaptureOptions, SelectionCapture};
+use crate::contacts::{Contact, ContactsAccess};
+use crate::dictionary::Spelling;
 use crate::error::{PlatformError, Result};
-use crate::paste::{ClipboardRead, ForegroundApp, PasteOutcome, PasteSupport};
+use crate::keyboard::{KeyListener, KeyListenerSupport, KeySink, TypingTarget};
+use crate::paste::{ClipboardRead, ForegroundApp, PasteContent, PasteOutcome, PasteSupport};
 use crate::provider::PlatformProvider;
 
 use super::com::ComGuard;
 use super::{
-    allow_foreground_handoff, capture, icons, packaged, paste, shell_execute_in, shortcuts,
+    allow_foreground_handoff, capture, expand, icons, keyhook_expand, packaged, paste, people,
+    shell_execute_in, shortcuts, spell,
 };
 
 pub(crate) struct WindowsProvider;
@@ -116,6 +120,31 @@ impl PlatformProvider for WindowsProvider {
         paste::paste_text(text, restore_clipboard)
     }
 
+    fn paste_clip(&self, content: &ClipContent, restore_clipboard: bool) -> Result<PasteOutcome> {
+        paste::paste_content(PasteContent::Clip(content), restore_clipboard)
+    }
+
+    fn key_listener_support(&self) -> KeyListenerSupport {
+        KeyListenerSupport::Available
+    }
+
+    fn start_key_listener(&self, sink: KeySink) -> Result<KeyListener> {
+        keyhook_expand::start(sink)
+    }
+
+    fn typing_target(&self) -> TypingTarget {
+        expand::typing_target()
+    }
+
+    fn replace_typed_text(
+        &self,
+        delete: usize,
+        text: &str,
+        still_current: &dyn Fn() -> bool,
+    ) -> Result<bool> {
+        expand::replace_typed_text(delete, text, still_current)
+    }
+
     fn capture_selection(&self, options: &CaptureOptions) -> SelectionCapture {
         capture::capture_selection(options)
     }
@@ -126,6 +155,20 @@ impl PlatformProvider for WindowsProvider {
 
     fn read_clipboard(&self) -> Result<ClipboardRead> {
         paste::read_clipboard()
+    }
+
+    fn contacts_access(&self) -> ContactsAccess {
+        // The People store can be opened read-only without asking; if a policy
+        // refuses, `system_contacts` reports it.
+        ContactsAccess::Granted
+    }
+
+    fn system_contacts(&self) -> Result<Vec<Contact>> {
+        people::read_contacts()
+    }
+
+    fn system_spelling(&self, word: &str) -> Option<Spelling> {
+        spell::check(word)
     }
 }
 

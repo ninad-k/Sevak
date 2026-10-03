@@ -4,22 +4,30 @@
 
 ```
 Cargo.toml              workspace: crates/* and src-tauri
-crates/sevak-core       config, theme (appearance settings to CSS), fuzzy matcher, search engine,
+crates/sevak-core       config, theme (appearance settings to CSS), theme files and gallery checks, fuzzy matcher, search engine,
                         usage stats, Plugin trait
 crates/sevak-platform   OS access: launching, icons, app scanning, clipboard, pasting into the
-                        previous app, capturing the selection (Universal Actions), paths, terminal launching, hotkey strategy, GNOME
+                        previous app, capturing the selection (Universal Actions), moving to the trash,
+                        whole-disk search through the OS file index (os_search), watching typed
+                        keywords and replacing them (snippet expansion), paths, terminal
+                        launching, hotkey strategy, GNOME
                         shortcut setup (Windows, macOS and Linux backends)
 crates/sevak-plugins    built-in plugins: apps, calculator (+ units, currency), files, bookmarks,
-                        web search, system commands, shell, clipboard history, snippets,
-                        uuid example; the script plugin host (external plugins)
+                        web search, system commands, automation tasks, media controls, shell,
+                        clipboard history, snippets, emoji picker (data/emoji.tsv), uuid example;
+                        the file buffer (collect files, act on all); the script plugin host
+                        (external plugins); workflows (graph engine, runtime, gallery)
 src-tauri               the Tauri shell: window, hotkeys (main, Universal Actions + [[hotkey]] entries), tray, CLI,
                         --query / --run handling (direct.rs), script plugin approval, IPC
                         commands, bundling config
 ui                      Svelte 5 + Vite frontend (builds to ui/dist)
 packaging/linux         desktop-entry template used by the .deb and .rpm
-scripts                 icon generator, WSL Linux test runner
+scripts                 icon generator, emoji list generator, WSL Linux test runner
 docs                    plugins, install, development
 examples/plugins        example script plugins (Python, PowerShell, Node)
+examples/workflows      example workflows (also packaged for the gallery)
+gallery                 the opt-in online galleries: index.json and packages/*.zip (workflows and
+                        script plugins), themes.json and themes/*.toml (themes)
 .github/workflows       ci.yml, release.yml
 ```
 
@@ -150,7 +158,15 @@ Bundle settings are the `bundle` object in `src-tauri/tauri.conf.json`:
   ad-hoc signed (`bundle.macOS.signingIdentity: "-"`), not notarized.
   `app.macOSPrivateApi` (and Tauri's `macos-private-api` feature) give the
   launcher its transparent window.
+- macOS: `src-tauri/Info.plist` is merged into the app's `Info.plist` by Tauri. It
+  holds `NSContactsUsageDescription`; macOS ends an app that reads Contacts
+  without it, so keep it while the contacts plugin uses the Contacts framework.
 - Installers are not code-signed yet.
+- `crates/sevak-plugins/data/wordnet-en.z` is the bundled dictionary (about 2.7
+  MB), generated from Princeton WordNet 3.0 by `scripts/build-dictionary.py`
+  (`python scripts/build-dictionary.py <path to WordNet-3.0>`, Python 3, no
+  dependencies). Regenerate it only to change what is kept; its licence notice is
+  inside the file and in `THIRD_PARTY_NOTICES.md`.
 
 ## CI
 

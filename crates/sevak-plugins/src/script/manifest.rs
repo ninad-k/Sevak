@@ -48,6 +48,11 @@ pub enum Format {
     Sevak,
     /// Alfred Script Filter JSON.
     Alfred,
+    /// Alfred Script Filter JSON for a workflow's script filter node
+    /// (`workflow/`): the items keep their raw `arg` and `variables` for the
+    /// nodes that follow instead of becoming an action. Not a manifest value.
+    #[serde(skip_deserializing)]
+    AlfredWorkflow,
 }
 
 #[derive(Debug, Deserialize)]
@@ -236,41 +241,52 @@ impl Manifest {
     ///
     /// Programs without a path separator are looked up on `PATH` by the OS.
     pub fn resolve_argv(&self, dir: &Path) -> Result<Vec<String>, String> {
-        match &self.launch {
-            Launch::Command(argv) => {
-                let mut argv = argv.clone();
-                let program = &argv[0];
-                let has_path = program.contains(['/', '\\']) || program.starts_with('.');
-                if has_path && !Path::new(program).is_absolute() {
-                    let resolved = relative_inside(dir, program)
-                        .ok_or_else(|| format!("`{program}` points outside the plugin folder"))?;
-                    argv[0] = resolved.to_string_lossy().into_owned();
-                }
-                Ok(argv)
+        resolve_launch(&self.launch, dir)
+    }
+}
+
+/// The program and arguments for `launch`, with relative paths resolved
+/// against `dir` (a plugin or workflow folder). Shared by script plugins and
+/// the script nodes of workflows.
+///
+/// Programs without a path separator are looked up on `PATH` by the OS.
+pub fn resolve_launch(launch: &Launch, dir: &Path) -> Result<Vec<String>, String> {
+    match launch {
+        Launch::Command(argv) => {
+            let mut argv = argv.clone();
+            let program = argv
+                .first()
+                .ok_or_else(|| "`command` must start with a program".to_owned())?;
+            let has_path = program.contains(['/', '\\']) || program.starts_with('.');
+            if has_path && !Path::new(program).is_absolute() {
+                let resolved = relative_inside(dir, program)
+                    .ok_or_else(|| format!("`{program}` points outside the plugin folder"))?;
+                argv[0] = resolved.to_string_lossy().into_owned();
             }
-            Launch::Script(script) => {
-                let path = relative_inside(dir, script)
-                    .ok_or_else(|| format!("`{script}` points outside the plugin folder"))?;
-                if !path.is_file() {
-                    return Err(format!("the script {script} does not exist"));
-                }
-                let extension = path
-                    .extension()
-                    .map(|ext| ext.to_string_lossy().into_owned())
-                    .unwrap_or_default();
-                let mut argv = match script_runner(&extension) {
-                    ScriptRunner::Interpreter(prefix) => prefix,
-                    ScriptRunner::Direct => Vec::new(),
-                    ScriptRunner::Missing(names) => {
-                        return Err(format!(
-                            "cannot run .{extension} scripts: none of {} is on PATH",
-                            names.join(", ")
-                        ))
-                    }
-                };
-                argv.push(path.to_string_lossy().into_owned());
-                Ok(argv)
+            Ok(argv)
+        }
+        Launch::Script(script) => {
+            let path = relative_inside(dir, script)
+                .ok_or_else(|| format!("`{script}` points outside the plugin folder"))?;
+            if !path.is_file() {
+                return Err(format!("the script {script} does not exist"));
             }
+            let extension = path
+                .extension()
+                .map(|ext| ext.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let mut argv = match script_runner(&extension) {
+                ScriptRunner::Interpreter(prefix) => prefix,
+                ScriptRunner::Direct => Vec::new(),
+                ScriptRunner::Missing(names) => {
+                    return Err(format!(
+                        "cannot run .{extension} scripts: none of {} is on PATH",
+                        names.join(", ")
+                    ))
+                }
+            };
+            argv.push(path.to_string_lossy().into_owned());
+            Ok(argv)
         }
     }
 }

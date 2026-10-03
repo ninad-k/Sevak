@@ -2,12 +2,20 @@
 
 mod capture;
 mod com;
+mod expand;
 mod icons;
+mod keyhook_expand;
+pub(crate) mod media;
+pub(crate) mod os_search;
 mod packaged;
 mod paste;
+mod people;
 mod provider;
 mod shortcuts;
+mod spell;
 pub(crate) mod system;
+pub(crate) mod tasks;
+pub(crate) mod trash;
 
 pub(crate) use provider::WindowsProvider;
 

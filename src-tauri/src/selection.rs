@@ -180,7 +180,10 @@ fn resolve(
 
 /// Asks the plugins for the actions, stores them under a fresh ticket and
 /// describes them for the launcher.
-fn payload_for(app: &AppHandle, selection: &Selection) -> Result<SelectionPayload, String> {
+pub(crate) fn payload_for(
+    app: &AppHandle,
+    selection: &Selection,
+) -> Result<SelectionPayload, String> {
     let state = app.state::<AppState>();
     let search = &state.search;
     let items = search.engine().selection_actions(selection);
@@ -327,6 +330,11 @@ mod tests {
                     action: "copy_text",
                     secondary: Vec::new(),
                     copy_text: Some("my password".into()),
+                    tile: false,
+                    glyph: None,
+                    text_view: false,
+                    text_on_enter: false,
+                    large_text: None,
                 },
                 window: None,
             }],

@@ -18,7 +18,7 @@
 
 mod alfred;
 mod approvals;
-mod delivery;
+pub(crate) mod delivery;
 mod host;
 mod items;
 mod manifest;
@@ -27,7 +27,12 @@ mod plugin;
 mod protocol;
 mod runner;
 
+pub use alfred::RawPick;
+pub use approvals::ApprovalStore;
 pub use host::{Candidate, Scanned, ScriptPluginHost, FAMILY};
-pub use manifest::{Format, Launch, Manifest, Mode, ID_PREFIX, MANIFEST_FILE, PROTOCOL};
+pub use manifest::{
+    relative_inside, resolve_launch, Format, Launch, Manifest, Mode, ID_PREFIX, MANIFEST_FILE,
+    PROTOCOL,
+};
 pub use plugin::ScriptPlugin;
 pub use runner::Spec;

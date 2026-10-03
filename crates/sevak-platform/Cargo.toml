@@ -12,23 +12,39 @@ sevak-core.workspace = true
 
 arboard.workspace = true
 dirs.workspace = true
+# Clipboard images are stored as PNG files (and the Windows icon extractor encodes PNG).
+png = "0.18"
+# Process list (name, CPU, memory) for the `kill` task; nothing else of it is used.
+sysinfo = { version = "0.38", default-features = false, features = ["system"] }
 thiserror.workspace = true
 tracing.workspace = true
 
 [target.'cfg(windows)'.dependencies]
-png = "0.18"
 windows = { workspace = true, features = [
+    "ApplicationModel_Contacts",
+    "Devices_Radios",
+    "Foundation",
+    "Foundation_Collections",
+    "Media_Control",
     "Win32_Foundation",
+    "Win32_Globalization",
+    "Win32_Graphics_Dwm",
     "Win32_Graphics_Gdi",
+    "Win32_Media_Audio",
+    "Win32_Media_Audio_Endpoints",
     "Win32_Storage_FileSystem",
     "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
     "Win32_System_Console",
     "Win32_System_DataExchange",
+    "Win32_System_LibraryLoader",
     "Win32_System_Memory",
+    "Win32_System_Ole",
     "Win32_System_Power",
     "Win32_System_Registry",
     "Win32_System_Shutdown",
     "Win32_System_Threading",
+    "Win32_System_Variant",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",
     "Win32_UI_Shell_Common",
@@ -37,8 +53,8 @@ windows = { workspace = true, features = [
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # Pure-Rust X11 client (already pulled in by arboard): active window and the
-# XTest extension for the paste keystroke.
-x11rb = { version = "0.13", features = ["xtest"] }
+# XTest extension for the paste keystroke, RECORD to watch typed keywords.
+x11rb = { version = "0.13", features = ["record", "xtest"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 plist = "1"
@@ -48,10 +64,17 @@ objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = [
     "std",
     "libc",
+    "NSEvent",
+    "NSGraphicsContext",
     "NSPasteboard",
     "NSRunningApplication",
     "NSWorkspace",
+    "objc2-core-graphics",
 ] }
+# NSFileManager.trashItemAtURL (the file buffer's Move to Trash), NSPoint (the
+# media key events) and the strings, arrays and errors of the Contacts framework.
+# The default features: the contacts code uses many of its classes.
+objc2-foundation = "0.3"
 objc2-core-graphics = { version = "0.3", default-features = false, features = [
     "std",
     "CGEvent",
@@ -59,6 +82,16 @@ objc2-core-graphics = { version = "0.3", default-features = false, features = [
     "CGEventTypes",
     "CGRemoteOperation",
 ] }
+# The run loop an event tap (snippet expansion) is served from.
+objc2-core-foundation = { version = "0.3", default-features = false, features = [
+    "std",
+    "CFMachPort",
+    "CFRunLoop",
+] }
+
+# Contacts framework (CNContactStore) for the contacts plugin.
+block2 = "0.6"
+objc2-contacts = "0.3"
 
 [target.'cfg(windows)'.dev-dependencies]
 tempfile = "3"

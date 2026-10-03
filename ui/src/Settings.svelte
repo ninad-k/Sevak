@@ -3,7 +3,10 @@
   import AppearanceExtras from "./lib/AppearanceExtras.svelte";
   import HotkeyField from "./lib/HotkeyField.svelte";
   import HotkeyList from "./lib/HotkeyList.svelte";
+  import ThemeEditor from "./lib/ThemeEditor.svelte";
   import Toggle from "./lib/Toggle.svelte";
+  import GalleryPage from "./lib/workflows/GalleryPage.svelte";
+  import WorkflowsPage from "./lib/workflows/WorkflowsPage.svelte";
   import { getStatus, onStatus, type Status } from "./lib/ipc";
   import {
     closeSettings,
@@ -50,11 +53,29 @@
       font_family: "",
       opacity: 100,
       radius: 14,
+      theme_file: "",
       custom_css: "",
     },
     plugins: { disabled: [] },
     calculator: { currency: false },
-    files: { directories: [], max_depth: 4, include_hidden: false, keyword: "", global: true },
+    files: {
+      directories: [],
+      max_depth: 4,
+      include_hidden: false,
+      keyword: "",
+      global: true,
+      use_os_index: true,
+      index_keyword: "ff",
+      content_keyword: "in",
+    },
+    snippets: {
+      auto_expand: false,
+      prefix: "",
+      expand_on: "immediate",
+      case_sensitive: true,
+      ignore_apps: [],
+      expand_in_terminals: false,
+    },
     bookmarks: { browsers: [], keyword: "", global: true },
     shell: { terminal: "", shell: "", keep_open: true },
     web_search: [],
@@ -74,7 +95,9 @@
   /** Hotkey entries whose key Rust cannot parse (reported by the list). */
   let hotkeyParseProblems = $state(0);
 
-  let active = $state<SectionId>("general");
+  /** The workflow pages keep their own files and are not part of the config form. */
+  type PageId = SectionId | "workflows" | "gallery";
+  let active = $state<PageId>("general");
   let hotkeyError = $state<string | null>(null);
   let actionsHotkeyError = $state<string | null>(null);
   let saving = $state(false);
@@ -108,14 +131,16 @@
         { id: "appearance", label: "Appearance" },
         { id: "search", label: "Search" },
         { id: "plugins", label: "Plugins" },
+        { id: "workflows", label: "Workflows" },
+        { id: "gallery", label: "Gallery" },
         { id: "web", label: "Web search" },
         { id: "files", label: "Files" },
         ...(showLinux ? [{ id: "linux", label: "Linux" }] : []),
-      ] as { id: SectionId; label: string }[]
+      ] as { id: PageId; label: string }[]
     ).map((section) => ({
       ...section,
       problems:
-        problems.count[section.id] +
+        (section.id in problems.count ? problems.count[section.id as SectionId] : 0) +
         (section.id === "general" && hotkeyError ? 1 : 0) +
         (section.id === "general" && actionsHotkeyError ? 1 : 0) +
         (section.id === "hotkeys" ? hotkeyParseProblems : 0),
@@ -293,12 +318,15 @@
     payload.general.hotkey = payload.general.hotkey.trim();
     payload.general.actions_hotkey = payload.general.actions_hotkey.trim();
     payload.files.keyword = payload.files.keyword.trim();
+    payload.files.index_keyword = payload.files.index_keyword.trim();
+    payload.files.content_keyword = payload.files.content_keyword.trim();
     payload.files.directories = payload.files.directories.map((dir) => dir.trim());
     payload.search.fallback_web_search = Array.isArray(payload.search.fallback_web_search)
       ? payload.search.fallback_web_search.map((k) => k.trim())
       : payload.search.fallback_web_search.trim();
     payload.appearance.accent = payload.appearance.accent.trim();
     payload.appearance.font_family = payload.appearance.font_family.trim();
+    payload.appearance.theme_file = payload.appearance.theme_file.trim();
     payload.appearance.custom_css = payload.appearance.custom_css.trim();
     payload.hotkey = payload.hotkey.map((binding) =>
       binding.run != null
@@ -606,6 +634,8 @@
             errors={problems.appearance}
             warnings={status?.appearance.warnings ?? []}
           />
+
+          <ThemeEditor bind:appearance={draft.appearance} />
         {:else if active === "search"}
           <h1>Search</h1>
 
@@ -701,10 +731,74 @@
               </div>
               <Toggle bind:checked={draft.calculator.currency} label="Convert currencies" />
             </div>
+
+            <div class="row">
+              <div class="label">
+                <span class="name">Expand snippets as you type</span>
+                <span class="hint">
+                  Typing a snippet’s keyword in any app replaces it with the snippet’s text.
+                  While this is on, Sevak watches your keystrokes for the keyword: the last few
+                  characters are kept in memory only, never saved, logged or sent anywhere, and
+                  ignored in Sevak’s own windows, terminals and password boxes it can detect.
+                  Needs a keyword on at least one <code>[[snippet]]</code>; not available on
+                  Wayland.
+                </span>
+                {#if status?.snippet_expansion.problem}
+                  <span class="msg warn" role="status">{status.snippet_expansion.problem}</span>
+                {/if}
+              </div>
+              <Toggle
+                bind:checked={draft.snippets.auto_expand}
+                label="Expand snippets as you type"
+              />
+            </div>
+
+            {#if draft.snippets.auto_expand}
+              <div class="row">
+                <div class="label">
+                  <label class="name" for="snippets-prefix">Keyword prefix</label>
+                  <span class="hint">
+                    Typed before every keyword, such as <code>;</code> so that
+                    <code>;sig</code> expands and a plain <code>sig</code> does not. Empty
+                    expands bare keywords at the start of a word.
+                  </span>
+                </div>
+                <input
+                  id="snippets-prefix"
+                  class="input number"
+                  type="text"
+                  bind:value={draft.snippets.prefix}
+                  spellcheck="false"
+                  autocomplete="off"
+                />
+              </div>
+
+              <div class="row">
+                <div class="label">
+                  <label class="name" for="snippets-expand-on">Expand</label>
+                  <span class="hint">
+                    Right away, or once a space or punctuation mark follows the keyword (which is
+                    kept).
+                  </span>
+                </div>
+                <select
+                  id="snippets-expand-on"
+                  class="input select"
+                  bind:value={draft.snippets.expand_on}
+                >
+                  <option value="immediate">As soon as it is typed</option>
+                  <option value="delimiter">After a space or punctuation</option>
+                </select>
+              </div>
+            {/if}
           </section>
           <p class="note">
             Web search engines are edited under “Web search”. Changes apply when you save.
           </p>
+        {:else if active === "workflows"}
+          <WorkflowsPage />
+        {:else if active === "gallery"}
+          <GalleryPage />
         {:else if active === "web"}
           <h1>Web search</h1>
           <p class="note">
@@ -864,6 +958,51 @@
               </div>
               <Toggle bind:checked={draft.files.global} label="Show files in global results" />
             </div>
+
+            <div class="row">
+              <div class="label">
+                <span class="name">Search the whole disk</span>
+                <span class="hint">
+                  Type “{draft.files.index_keyword.trim() || "keyword"} name” to find files anywhere,
+                  or “{draft.files.content_keyword.trim() || "keyword"} words” to search inside them,
+                  through your computer’s own file index (Windows Search, Spotlight, locate or
+                  Tracker). Nothing leaves your computer.
+                </span>
+              </div>
+              <Toggle bind:checked={draft.files.use_os_index} label="Search the whole disk" />
+            </div>
+
+            {#if draft.files.use_os_index}
+              <div class="row">
+                <div class="label">
+                  <label class="name" for="files-index-keyword">Whole-disk keyword</label>
+                  <span class="hint">Empty turns off name search.</span>
+                </div>
+                <input
+                  id="files-index-keyword"
+                  class="input number"
+                  type="text"
+                  bind:value={draft.files.index_keyword}
+                  spellcheck="false"
+                  autocomplete="off"
+                />
+              </div>
+
+              <div class="row">
+                <div class="label">
+                  <label class="name" for="files-content-keyword">Contents keyword</label>
+                  <span class="hint">Empty turns off content search.</span>
+                </div>
+                <input
+                  id="files-content-keyword"
+                  class="input number"
+                  type="text"
+                  bind:value={draft.files.content_keyword}
+                  spellcheck="false"
+                  autocomplete="off"
+                />
+              </div>
+            {/if}
           </section>
         {:else if active === "linux"}
           <h1>Linux</h1>

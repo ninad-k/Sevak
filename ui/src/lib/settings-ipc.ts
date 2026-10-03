@@ -24,6 +24,8 @@ export interface Appearance {
   font_family: string;
   opacity: number;
   radius: number;
+  /** A theme file in the config folder, such as `themes/Nord.toml`; empty uses none. */
+  theme_file: string;
   custom_css: string;
 }
 
@@ -55,8 +57,20 @@ export interface Config {
     include_hidden: boolean;
     keyword: string;
     global: boolean;
+    use_os_index: boolean;
+    index_keyword: string;
+    content_keyword: string;
   };
   bookmarks: { browsers: string[]; keyword: string; global: boolean };
+  /** Expanding `[[snippet]]` keywords as you type in other apps (off by default). */
+  snippets: {
+    auto_expand: boolean;
+    prefix: string;
+    expand_on: "immediate" | "delimiter";
+    case_sensitive: boolean;
+    ignore_apps: string[];
+    expand_in_terminals: boolean;
+  };
   /** Edited in the config file; kept here so saving the form round-trips it. */
   shell: { terminal: string; shell: string; keep_open: boolean };
   web_search: WebSearchEngine[];

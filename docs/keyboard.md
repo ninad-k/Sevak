@@ -11,6 +11,8 @@ These work anywhere on your system:
 | ++alt+space++ | Show or hide the launcher | `[general] hotkey` |
 | ++ctrl+alt+space++ | Universal Actions for your current selection | `[general] actions_hotkey` (or empty to disable) |
 | Custom `[[hotkey]]` entries | Type a query or run a result without showing the launcher | `[[hotkey]]` in config.toml or Settings → Hotkeys |
+| A workflow's hotkey trigger | Start that [workflow](workflows.md#triggers) | The trigger node in Settings → Workflows |
+| A snippet's keyword, typed in any app | Replace it with the snippet (only with expansion turned on) | [`[snippets] auto_expand`](features/snippets.md#expand-snippets-as-you-type) |
 
 On **macOS**, ++alt++ is ++option++, and ++ctrl++ is ++cmd++.
 
@@ -56,8 +58,50 @@ When using Universal Actions, each action's row shows its modifiers (++ctrl++, +
 
 | Key | Action |
 |---|---|
-| ++ctrl+l++ | Show the selected result as Large Type across the screen (dismiss with any key) |
+| ++ctrl+l++ | Show the selected result as Large Type across the screen (dismiss with any key); for a contact, its phone number |
 | ++ctrl+c++ | Copy the selected result's path, URL, or value (when nothing is selected in the text input) |
+| ++shift++ (tap) or ++ctrl+y++ | Show or hide the [preview pane](usage.md#preview-text-view-and-grid-view) for the selected result |
+| ++ctrl+t++ | Open the selected result's long text in the [Text View](usage.md#preview-text-view-and-grid-view) |
+
+### Text View
+
+| Key | Action |
+|---|---|
+| ++arrow-up++ ++arrow-down++ ++pageup++ ++pagedown++ ++home++ ++end++ | Scroll |
+| ++ctrl+c++ | Copy the text |
+| ++enter++ | Run the result as usual |
+| ++escape++ or ++arrow-left++ | Back to the list |
+
+### Grid View
+
+When every result is a tile (the [emoji picker](features/emoji.md), `cb image`, some script plugins):
+
+| Key | Action |
+|---|---|
+| ++arrow-left++ ++arrow-right++ ++arrow-up++ ++arrow-down++ | Move between tiles |
+| ++pageup++ / ++pagedown++ | Jump three rows |
+| ++enter++ | Run the selected tile |
+| ++ctrl+k++ | The tile's actions |
+
+### File buffer
+
+On a file or folder result (see [File buffer](features/files.md#file-buffer)); ++alt++ is ++option++ on macOS:
+
+| Key | Action |
+|---|---|
+| ++alt+arrow-up++ / ++alt+arrow-down++ | Add the selected result to the buffer and move up / down |
+| ++alt+arrow-left++ | Remove the last item (only while the buffer holds something) |
+| ++alt+arrow-right++ | Open the buffer's actions (only while the buffer holds something) |
+| ++alt+backspace++ / ++alt+delete++ | Empty the buffer (only while the buffer holds something) |
+
+In the folder picker of **Move to…** / **Copy to…**:
+
+| Key | Action |
+|---|---|
+| ++tab++ / ++shift+tab++ | Open the highlighted folder / go up |
+| ++enter++ | Use the highlighted folder |
+| ++ctrl+enter++ | Use the path exactly as typed |
+| ++escape++ | Cancel |
 
 ### Search history
 
@@ -74,7 +118,7 @@ Typing leaves history. Toggle history on or off with `[search] query_history`.
 
 | Key | Action |
 |---|---|
-| ++escape++ | Hide the launcher (or close the actions panel) |
+| ++escape++ | Close the innermost thing first (Large Type, the Text View, the action panel, the preview pane, the folder picker of Move to… / Copy to…, a workflow's text output), then hide the launcher |
 
 ## Settings window
 
@@ -82,9 +126,19 @@ Typing leaves history. Toggle history on or off with `[search] query_history`.
 
 | Key | Action |
 |---|---|
-| ++ctrl+s++ | Save the current settings |
+| ++ctrl+s++ | Save the current settings (in the workflow builder: save the workflow) |
 | ++arrow-down++ or ++arrow-up++ | Move between tabs (when a tab button has focus) |
 | ++home++ or ++end++ | Jump to the first or last tab |
+
+### Workflow builder
+
+| Key | Action |
+|---|---|
+| Arrow keys on a focused node | Move it (++shift++ moves further) |
+| ++delete++ | Delete the selected node or connection |
+| ++ctrl+s++ | Save the workflow |
+
+See [The builder](workflows.md#the-builder).
 
 ### Form controls
 

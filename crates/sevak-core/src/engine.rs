@@ -32,7 +32,7 @@
 //!    either).
 //! 5. Results are deduplicated by `id` (best score wins), sorted by score
 //!    descending (ties: title case-insensitively, then id) and truncated to
-//!    `max_results`.
+//!    `max_results` (or [`GRID_MAX_RESULTS`] when every result is a grid tile).
 //! 6. If step 3 found nothing and the input is non-empty, each configured
 //!    fallback plugin is queried with the full trimmed input and its results
 //!    are returned in the configured order (truncated, not boosted).
@@ -64,6 +64,10 @@ type KeywordRoute<'p, 'a> = (Vec<&'p Arc<dyn Plugin>>, &'a str, &'a str);
 
 /// Score multiplier for results of keyword plugins that answer global queries.
 pub const GLOBAL_SECONDARY_WEIGHT: f64 = 0.5;
+
+/// Most results kept when every one of them is a grid tile (see
+/// [`ResultItem::as_tile`]), whatever `max_results` is.
+pub const GRID_MAX_RESULTS: usize = 60;
 
 /// How many previously run results per plugin [`Plugin::restore_history`] gets.
 const HISTORY_LIMIT: usize = 50;
@@ -364,7 +368,13 @@ impl SearchEngine {
                 }
             }
             drop(usage);
-            finalize(collected, self.options.max_results)
+            // A grid of tiles shows far more than eight at a glance.
+            let cap = if collected.iter().all(ResultItem::is_tile) {
+                self.options.max_results.max(GRID_MAX_RESULTS)
+            } else {
+                self.options.max_results
+            };
+            finalize(collected, cap)
         };
 
         if results.is_empty() && !keyword_mode {
@@ -475,6 +485,16 @@ impl SearchEngine {
             })
             .filter(|item| seen.insert(item.id.clone()))
             .collect()
+    }
+
+    /// What `item`'s plugin says the preview pane should show for it (see
+    /// [`Plugin::preview`]); `None` when it has nothing to add. A panicking
+    /// plugin is logged and counts as having nothing to add.
+    pub fn preview_hint(&self, item: &ResultItem) -> Option<crate::PreviewHint> {
+        let plugin = self.plugin(&item.plugin_id)?;
+        guarded(plugin.as_ref(), "preview", || plugin.preview(item))
+            .ok()
+            .flatten()
     }
 
     /// Copies `item`'s [`ResultItem::copy_text`] (Ctrl+C) through its plugin:
@@ -716,6 +736,14 @@ mod tests {
         }
         fn resolve(&self, id: &str) -> Option<ResultItem> {
             (self.query_fn)("").into_iter().find(|item| item.id == id)
+        }
+        fn preview(&self, item: &ResultItem) -> Option<crate::PreviewHint> {
+            assert!(!item.id.ends_with(":panic"), "preview panic");
+            item.id
+                .ends_with(":hint")
+                .then(|| crate::PreviewHint::Text {
+                    text: format!("about {}", item.title),
+                })
         }
         fn refresh(&self) -> PluginResult<()> {
             match &self.refresh_error {
@@ -1561,6 +1589,58 @@ mod tests {
         assert!(e.resolve("apps:missing").is_none());
         assert!(e.resolve("apps").is_none());
         assert!(e.resolve("nope:a.desktop").is_none());
+    }
+
+    #[test]
+    fn a_search_made_only_of_tiles_keeps_more_than_max_results() {
+        let tiles = |id: &'static str, tile: bool| {
+            Mock::new(id, move |_| {
+                (0..30)
+                    .map(|n| {
+                        let row = item(id, &format!("k{n:02}"), &format!("t{n:02}"), 50.0);
+                        if tile {
+                            row.as_tile(Some("x"))
+                        } else {
+                            row
+                        }
+                    })
+                    .collect()
+            })
+            .keyword(id)
+            .arc()
+        };
+        let e = engine(vec![tiles("grid", true), tiles("list", false)], 8, &[]);
+        assert_eq!(e.query_at("grid x", T0).len(), 30);
+        assert_eq!(e.query_at("list x", T0).len(), 8);
+
+        let many = Mock::new("many", |_| {
+            (0..100)
+                .map(|n| item("many", &format!("k{n:03}"), &format!("t{n:03}"), 50.0).as_tile(None))
+                .collect()
+        })
+        .keyword("many")
+        .arc();
+        let e = engine(vec![many], 8, &[]);
+        assert_eq!(e.query_at("many x", T0).len(), GRID_MAX_RESULTS);
+    }
+
+    #[test]
+    fn preview_hints_come_from_the_owning_plugin_and_survive_panics() {
+        let e = engine(
+            vec![Mock::fixed("app", &[("hint", "A", 1.0)]).arc()],
+            8,
+            &[],
+        );
+        let row = item("app", "hint", "A", 1.0);
+        assert_eq!(
+            e.preview_hint(&row),
+            Some(crate::PreviewHint::Text {
+                text: "about A".into()
+            })
+        );
+        assert_eq!(e.preview_hint(&item("app", "plain", "B", 1.0)), None);
+        assert_eq!(e.preview_hint(&item("app", "panic", "B", 1.0)), None);
+        assert_eq!(e.preview_hint(&item("other", "hint", "B", 1.0)), None);
     }
 
     #[test]

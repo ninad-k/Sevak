@@ -10,7 +10,8 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent};
 use crate::cli::{self, Launch};
 use crate::state::AppState;
 use crate::{
-    autostart, commands, direct, hotkey, icons, search, selection, settings, tray, updater, window,
+    autostart, commands, direct, expansion, file_buffer, hotkey, icons, search, selection,
+    settings, themes, tray, updater, window, workflows,
 };
 
 pub fn run(
@@ -34,6 +35,7 @@ pub fn run(
                 Launch::Query(query) => direct::open_with_query(app, query),
                 Launch::Run(id) => direct::run_result(app, id),
                 Launch::Actions => selection::trigger(app),
+                Launch::Trigger { target, arg } => workflows::run_trigger(app, target, arg),
                 Launch::Settings => settings::open(app),
                 Launch::Background => {}
                 Launch::Quit => quit(app),
@@ -41,6 +43,7 @@ pub fn run(
         }))
         .plugin(autostart::plugin())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(updater::plugin());
     if let Some(plugin) = hotkey::plugin(strategy) {
         builder = builder.plugin(plugin);
@@ -62,8 +65,16 @@ pub fn run(
             commands::search,
             commands::execute,
             commands::copy_result,
+            commands::preview,
+            commands::text_view,
             commands::set_large_type,
             commands::query_history,
+            file_buffer::file_buffer_get,
+            file_buffer::file_buffer_add,
+            file_buffer::file_buffer_remove,
+            file_buffer::file_buffer_clear,
+            file_buffer::file_buffer_run,
+            file_buffer::file_buffer_selection,
             direct::take_pending_show,
             settings::get_settings,
             settings::save_settings,
@@ -74,7 +85,27 @@ pub fn run(
             settings::setup_wayland_hotkey,
             settings::open_config_file,
             settings::open_log_dir,
-            settings::close_settings
+            settings::close_settings,
+            themes::list_themes,
+            themes::save_theme,
+            themes::use_builtin_theme,
+            themes::import_theme,
+            themes::export_theme,
+            themes::open_themes_dir,
+            themes::fetch_theme_gallery,
+            themes::install_gallery_theme,
+            workflows::list_workflows,
+            workflows::load_workflow,
+            workflows::check_workflow,
+            workflows::save_workflow,
+            workflows::create_workflow,
+            workflows::delete_workflow,
+            workflows::set_workflow_enabled,
+            workflows::review_workflow,
+            workflows::workflow_templates,
+            workflows::open_workflows_folder,
+            workflows::gallery_load,
+            workflows::gallery_install
         ])
         .on_window_event(window::on_window_event)
         .setup(move |app| {
@@ -89,6 +120,7 @@ pub fn run(
             apply_theme(handle);
             autostart::sync(handle);
             search::start(handle);
+            expansion::apply(handle);
             updater::start(handle);
             tracing::info!(display = ?server, ?launch, "sevak is ready");
 
@@ -97,6 +129,7 @@ pub fn run(
                 Launch::Query(query) => direct::open_with_query(handle, query),
                 Launch::Run(id) => direct::run_result(handle, id),
                 Launch::Actions => selection::trigger(handle),
+                Launch::Trigger { target, arg } => workflows::run_trigger(handle, target, arg),
                 Launch::Settings => settings::open(handle),
                 Launch::Background => {}
                 Launch::Quit => quit(handle),
@@ -139,6 +172,7 @@ pub fn reload(app: &AppHandle) {
     autostart::sync(app);
     // The index is rebuilt in the background and swapped in when ready.
     search::reload(app, &state.config());
+    expansion::apply(app);
 
     // Both the launcher and the settings window follow the status.
     if let Err(err) = app.emit(window::EVENT_STATUS, state.status()) {
@@ -171,6 +205,7 @@ pub fn apply_theme(app: &AppHandle) {
 /// Saves the usage statistics, then exits. The one way Sevak quits.
 pub fn quit(app: &AppHandle) {
     tracing::info!("quitting");
+    expansion::stop();
     search::save_usage(app);
     search::shutdown(app);
     app.exit(0);

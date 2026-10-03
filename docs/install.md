@@ -66,6 +66,8 @@ installs keep Sevak's own updater, which those package managers recognise.
 - **Pasting:** Clipboard history and snippets require Accessibility permission to paste with Cmd+V. Without it, they copy to the clipboard instead.
   - Go to System Settings → Privacy & Security → Accessibility and add Sevak.
   - If pasting stops after updating, remove Sevak and re-add it (ad-hoc signed builds are treated as new apps).
+- **Contacts:** The optional contacts plugin (`[contacts] enabled = true`) asks for access to your contacts the first time you press Enter on its "Allow" row; nothing is asked at startup. Change the answer under System Settings → Privacy & Security → Contacts.
+- **Snippet expansion:** Expanding snippets as you type (opt-in, `[snippets] auto_expand`) also needs **Input Monitoring** to see the keys; macOS asks the first time, and Sevak must be restarted after you allow it.
 
 **Uninstall:** Delete `/Applications/Sevak.app`. Config and data remain at `~/Library/Application Support/sevak/`; see [Files and data](files-and-data.md) to delete them.
 

@@ -1,0 +1,347 @@
+[
+  {
+    "file": "themes/Sevak Light.toml",
+    "spec": {
+      "author": "Sevak",
+      "dark": null,
+      "description": "Sevak's light theme.",
+      "font": {
+        "family": "",
+        "size": 15
+      },
+      "layout": {
+        "icon_size": 32,
+        "opacity": 100,
+        "radius": 14,
+        "row_height": 48,
+        "search_size": 22,
+        "window_width": 720
+      },
+      "light": {
+        "accent": "#f59e0b",
+        "accent_strong": "#d97706",
+        "background": "#fcfcfd",
+        "border": "rgba(28, 27, 46, 0.12)",
+        "error": "#b42318",
+        "input_background": "#ffffff",
+        "input_border": "rgba(28, 27, 46, 0.22)",
+        "kbd_background": "rgba(28, 27, 46, 0.06)",
+        "kbd_border": "rgba(28, 27, 46, 0.14)",
+        "ok": "#15803d",
+        "on_accent": "#1c1b2e",
+        "selection": "rgba(245, 158, 11, 0.17)",
+        "shadow": "0 8px 28px rgba(28, 27, 46, 0.22), 0 1px 3px rgba(28, 27, 46, 0.12)",
+        "subtext": "#6b6a80",
+        "surface": "rgba(28, 27, 46, 0.035)",
+        "switch_off": "rgba(28, 27, 46, 0.26)",
+        "text": "#1c1b2e",
+        "tile": "rgba(28, 27, 46, 0.06)",
+        "warn": "#b45309"
+      },
+      "name": "Sevak Light"
+    },
+    "warnings": []
+  },
+  {
+    "file": "themes/Sevak Dark.toml",
+    "spec": {
+      "author": "Sevak",
+      "dark": {
+        "accent": "#fbbf24",
+        "accent_strong": "#f59e0b",
+        "background": "#17152b",
+        "border": "rgba(236, 233, 251, 0.12)",
+        "error": "#ff8a80",
+        "input_background": "rgba(236, 233, 251, 0.06)",
+        "input_border": "rgba(236, 233, 251, 0.24)",
+        "kbd_background": "rgba(236, 233, 251, 0.08)",
+        "kbd_border": "rgba(236, 233, 251, 0.16)",
+        "ok": "#4ade80",
+        "on_accent": "#1c1b2e",
+        "selection": "rgba(251, 191, 36, 0.16)",
+        "shadow": "0 8px 28px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.4)",
+        "subtext": "#9a97b8",
+        "surface": "rgba(236, 233, 251, 0.05)",
+        "switch_off": "rgba(236, 233, 251, 0.28)",
+        "text": "#ece9fb",
+        "tile": "rgba(236, 233, 251, 0.08)",
+        "warn": "#fbbf24"
+      },
+      "description": "Sevak's dark theme.",
+      "font": {
+        "family": "",
+        "size": 15
+      },
+      "layout": {
+        "icon_size": 32,
+        "opacity": 100,
+        "radius": 14,
+        "row_height": 48,
+        "search_size": 22,
+        "window_width": 720
+      },
+      "light": null,
+      "name": "Sevak Dark"
+    },
+    "warnings": []
+  },
+  {
+    "file": "themes/Nord.toml",
+    "spec": {
+      "author": "Sevak",
+      "dark": {
+        "accent": "#88c0d0",
+        "accent_strong": "#709dab",
+        "background": "#2e3440",
+        "border": "rgba(236, 239, 244, 0.12)",
+        "error": "#e5848d",
+        "input_background": "rgba(236, 239, 244, 0.06)",
+        "input_border": "rgba(236, 239, 244, 0.24)",
+        "kbd_background": "rgba(236, 239, 244, 0.08)",
+        "kbd_border": "rgba(236, 239, 244, 0.16)",
+        "ok": "#a3be8c",
+        "on_accent": "#2e3440",
+        "selection": "rgba(136, 192, 208, 0.2)",
+        "shadow": "0 8px 28px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.4)",
+        "subtext": "#bcc7d8",
+        "surface": "rgba(236, 239, 244, 0.05)",
+        "switch_off": "rgba(236, 239, 244, 0.28)",
+        "text": "#eceff4",
+        "tile": "rgba(236, 239, 244, 0.08)",
+        "warn": "#ebcb8b"
+      },
+      "description": "Arctic, north-bluish dark colors after the Nord palette.",
+      "font": {
+        "family": "",
+        "size": 15
+      },
+      "layout": {
+        "icon_size": 32,
+        "opacity": 100,
+        "radius": 14,
+        "row_height": 48,
+        "search_size": 22,
+        "window_width": 720
+      },
+      "light": null,
+      "name": "Nord"
+    },
+    "warnings": []
+  },
+  {
+    "file": "themes/Dracula.toml",
+    "spec": {
+      "author": "Sevak",
+      "dark": {
+        "accent": "#bd93f9",
+        "accent_strong": "#9b79cc",
+        "background": "#282a36",
+        "border": "rgba(248, 248, 242, 0.12)",
+        "error": "#ff8080",
+        "input_background": "rgba(248, 248, 242, 0.06)",
+        "input_border": "rgba(248, 248, 242, 0.24)",
+        "kbd_background": "rgba(248, 248, 242, 0.08)",
+        "kbd_border": "rgba(248, 248, 242, 0.16)",
+        "ok": "#50fa7b",
+        "on_accent": "#282a36",
+        "selection": "rgba(189, 147, 249, 0.22)",
+        "shadow": "0 8px 28px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.4)",
+        "subtext": "#a9b4dc",
+        "surface": "rgba(248, 248, 242, 0.05)",
+        "switch_off": "rgba(248, 248, 242, 0.28)",
+        "text": "#f8f8f2",
+        "tile": "rgba(248, 248, 242, 0.08)",
+        "warn": "#f1fa8c"
+      },
+      "description": "A dark theme with vivid purple accents after the Dracula palette.",
+      "font": {
+        "family": "",
+        "size": 15
+      },
+      "layout": {
+        "icon_size": 32,
+        "opacity": 100,
+        "radius": 14,
+        "row_height": 48,
+        "search_size": 22,
+        "window_width": 720
+      },
+      "light": null,
+      "name": "Dracula"
+    },
+    "warnings": []
+  },
+  {
+    "file": "themes/Solarized Light.toml",
+    "spec": {
+      "author": "Sevak",
+      "dark": null,
+      "description": "Low-glare light colors after the Solarized palette.",
+      "font": {
+        "family": "",
+        "size": 15
+      },
+      "layout": {
+        "icon_size": 32,
+        "opacity": 100,
+        "radius": 14,
+        "row_height": 48,
+        "search_size": 22,
+        "window_width": 720
+      },
+      "light": {
+        "accent": "#1a6fb0",
+        "accent_strong": "#155b90",
+        "background": "#fdf6e3",
+        "border": "rgba(82, 104, 111, 0.12)",
+        "error": "#c0302d",
+        "input_background": "#ffffff",
+        "input_border": "rgba(82, 104, 111, 0.22)",
+        "kbd_background": "rgba(82, 104, 111, 0.06)",
+        "kbd_border": "rgba(82, 104, 111, 0.14)",
+        "ok": "#5f7300",
+        "on_accent": "#fdf6e3",
+        "selection": "rgba(26, 111, 176, 0.08)",
+        "shadow": "0 8px 28px rgba(82, 104, 111, 0.22), 0 1px 3px rgba(82, 104, 111, 0.12)",
+        "subtext": "#566c74",
+        "surface": "rgba(82, 104, 111, 0.035)",
+        "switch_off": "rgba(82, 104, 111, 0.26)",
+        "text": "#52686f",
+        "tile": "rgba(82, 104, 111, 0.06)",
+        "warn": "#8a6500"
+      },
+      "name": "Solarized Light"
+    },
+    "warnings": []
+  },
+  {
+    "file": "themes/Solarized Dark.toml",
+    "spec": {
+      "author": "Sevak",
+      "dark": {
+        "accent": "#3b9be0",
+        "accent_strong": "#307fb8",
+        "background": "#002b36",
+        "border": "rgba(159, 171, 171, 0.12)",
+        "error": "#ff7b72",
+        "input_background": "rgba(159, 171, 171, 0.06)",
+        "input_border": "rgba(159, 171, 171, 0.24)",
+        "kbd_background": "rgba(159, 171, 171, 0.08)",
+        "kbd_border": "rgba(159, 171, 171, 0.16)",
+        "ok": "#9bbf2b",
+        "on_accent": "#002b36",
+        "selection": "rgba(59, 155, 224, 0.1)",
+        "shadow": "0 8px 28px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.4)",
+        "subtext": "#8fa0a8",
+        "surface": "rgba(159, 171, 171, 0.05)",
+        "switch_off": "rgba(159, 171, 171, 0.28)",
+        "text": "#9fabab",
+        "tile": "rgba(159, 171, 171, 0.08)",
+        "warn": "#d6a41c"
+      },
+      "description": "Low-glare dark colors after the Solarized palette.",
+      "font": {
+        "family": "",
+        "size": 15
+      },
+      "layout": {
+        "icon_size": 32,
+        "opacity": 100,
+        "radius": 14,
+        "row_height": 48,
+        "search_size": 22,
+        "window_width": 720
+      },
+      "light": null,
+      "name": "Solarized Dark"
+    },
+    "warnings": []
+  },
+  {
+    "file": "themes/Gruvbox.toml",
+    "spec": {
+      "author": "Sevak",
+      "dark": {
+        "accent": "#fabd2f",
+        "accent_strong": "#cd9b27",
+        "background": "#282828",
+        "border": "rgba(235, 219, 178, 0.12)",
+        "error": "#fb6a5b",
+        "input_background": "rgba(235, 219, 178, 0.06)",
+        "input_border": "rgba(235, 219, 178, 0.24)",
+        "kbd_background": "rgba(235, 219, 178, 0.08)",
+        "kbd_border": "rgba(235, 219, 178, 0.16)",
+        "ok": "#b8bb26",
+        "on_accent": "#282828",
+        "selection": "rgba(250, 189, 47, 0.2)",
+        "shadow": "0 8px 28px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.4)",
+        "subtext": "#c2b498",
+        "surface": "rgba(235, 219, 178, 0.05)",
+        "switch_off": "rgba(235, 219, 178, 0.28)",
+        "text": "#ebdbb2",
+        "tile": "rgba(235, 219, 178, 0.08)",
+        "warn": "#fabd2f"
+      },
+      "description": "Warm, retro dark colors after the Gruvbox palette.",
+      "font": {
+        "family": "",
+        "size": 15
+      },
+      "layout": {
+        "icon_size": 32,
+        "opacity": 100,
+        "radius": 14,
+        "row_height": 48,
+        "search_size": 22,
+        "window_width": 720
+      },
+      "light": null,
+      "name": "Gruvbox"
+    },
+    "warnings": []
+  },
+  {
+    "file": "themes/High Contrast.toml",
+    "spec": {
+      "author": "Sevak",
+      "dark": {
+        "accent": "#ffd400",
+        "accent_strong": "#d1ae00",
+        "background": "#000000",
+        "border": "rgba(255, 255, 255, 0.55)",
+        "error": "#ff6b6b",
+        "input_background": "rgba(255, 255, 255, 0.06)",
+        "input_border": "rgba(255, 255, 255, 0.24)",
+        "kbd_background": "rgba(255, 255, 255, 0.08)",
+        "kbd_border": "rgba(255, 255, 255, 0.16)",
+        "ok": "#5cf27c",
+        "on_accent": "#000000",
+        "selection": "rgba(255, 212, 0, 0.3)",
+        "selection_text": "#ffffff",
+        "shadow": "0 8px 28px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.4)",
+        "subtext": "#d4d4d4",
+        "surface": "rgba(255, 255, 255, 0.05)",
+        "switch_off": "rgba(255, 255, 255, 0.28)",
+        "text": "#ffffff",
+        "tile": "rgba(255, 255, 255, 0.08)",
+        "warn": "#ffd400"
+      },
+      "description": "Black and white with a yellow accent; the text pairs reach AAA.",
+      "font": {
+        "family": "",
+        "size": 15
+      },
+      "layout": {
+        "icon_size": 32,
+        "opacity": 100,
+        "radius": 14,
+        "row_height": 48,
+        "search_size": 22,
+        "window_width": 720
+      },
+      "light": null,
+      "name": "High Contrast"
+    },
+    "warnings": []
+  }
+]

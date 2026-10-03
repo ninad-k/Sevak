@@ -163,6 +163,7 @@ impl ScriptPluginHost {
                 data_dir: self.data_dir.join(&candidate.folder),
                 dir: candidate.dir,
                 manifest: candidate.manifest,
+                env: Vec::new(),
             };
             plugins.push(Arc::new(ScriptPlugin::new(spec, Arc::clone(platform))));
         }

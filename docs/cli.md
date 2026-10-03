@@ -11,6 +11,7 @@ Sevak can be controlled from the command line or automated with scripts. When Se
 | `--query TEXT` | Show the search bar with TEXT already typed |
 | `--run ID` | Run a result by its id without showing the search bar |
 | `--actions` | Universal Actions: capture the selection in the foreground app |
+| `--trigger WORKFLOW/ID [TEXT]` | Start a workflow's external trigger, with TEXT as its argument |
 | `--background` | Start Sevak without showing the window |
 | `--settings` | Open the Settings window |
 | `--quit` | Quit the running instance |
@@ -81,7 +82,7 @@ sevak --run "system:lock"
 
 Run a result by its id directly without showing the search bar. The launcher stays hidden. Useful for hotkey bindings, e.g. bind `Ctrl+Alt+L` to `sevak --run "system:lock"`.
 
-See [custom hotkeys](configuration.md#hotkey) for result id formats.
+See [custom hotkeys](configuration.md#hotkey) for result id formats. Automation tasks have ids too: `tasks:dark_mode`, `tasks:volume:30`, `tasks:keep_awake:45`, `tasks:kill:chrome.exe` (see [Automation tasks](features/tasks.md#bind-a-task-to-a-hotkey)).
 
 #### `--actions`
 
@@ -90,6 +91,18 @@ sevak --actions
 ```
 
 Universal Actions: capture what you have selected in the currently focused app (text, a URL, files) and offer actions on it. On Wayland, bind this to a key in your desktop settings or use `sevak --setup-hotkey` on GNOME.
+
+#### `--trigger WORKFLOW/ID [TEXT]`
+
+```bash
+sevak --trigger my-flow/go                 # no text
+sevak --trigger my-flow/go some text       # several words are one text
+sevak --trigger my-flow/go -- --starts-with-dashes
+```
+
+Start the external trigger `ID` of the [workflow](workflows.md) in the folder `WORKFLOW` (under `workflows/` next to `config.toml`), with the rest of the command line as its argument. The words after it are its text, up to the next option; `--` makes everything after it text. Use it from a desktop shortcut on Wayland, a script, a file manager action or a scheduled task.
+
+The workflow must be enabled, valid and allowed to run; otherwise the launcher opens and says why. A workflow's hotkey trigger can also be run with `sevak --run workflow:<folder>:run:<node id>`.
 
 ### Interaction
 

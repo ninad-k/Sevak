@@ -119,6 +119,9 @@ pub fn unhide_app(_app: &AppHandle) {}
 pub fn announce_hidden(app: &AppHandle) {
     if let Some(state) = app.try_state::<AppState>() {
         state.search.forget_selection();
+        state
+            .file_buffer
+            .on_hidden(state.config().file_buffer.keep_between_shows);
     }
     if let Err(err) = app.emit_to(MAIN_LABEL, EVENT_HIDDEN, ()) {
         tracing::warn!("hide: could not emit {EVENT_HIDDEN}: {err}");
@@ -188,6 +191,10 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
             if !state.config().general.hide_on_blur || !window.is_visible().unwrap_or(false) {
                 return;
             }
+            if state.file_buffer.confirming() {
+                tracing::debug!("ignoring blur: a file buffer confirmation is open");
+                return;
+            }
             if lock(&state.last_shown).is_some_and(|at| at.elapsed() < SHOW_BLUR_GRACE) {
                 tracing::debug!("ignoring blur right after show");
                 return;
@@ -233,15 +240,48 @@ fn position(app: &AppHandle, window: &WebviewWindow) {
     let y =
         f64::from(work_area.position.y) + f64::from(work_area.size.height) * TOP_OFFSET_FRACTION;
 
+    *lock(&HOME_TOP) = Some(y.round() as i32);
     if let Err(err) = window.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32))
     {
         tracing::debug!("position: set_position failed: {err}");
     }
 }
 
+/// Top edge (physical pixels) the launcher was last placed at by [`position`],
+/// before [`keep_on_screen`] lifted it for a tall window.
+static HOME_TOP: Mutex<Option<i32>> = Mutex::new(None);
+
+/// Moves the window up when `logical_height` (a preview pane, the Text View or
+/// a grid made it tall) would run past the bottom of its monitor's work area,
+/// and back to its usual place when it is short again. A no-op where the window
+/// manager does not let us move windows (native Wayland) or before the first
+/// placement.
+pub fn keep_on_screen(window: &WebviewWindow, logical_height: f64) {
+    let Some(home) = *lock(&HOME_TOP) else {
+        return;
+    };
+    let Ok(Some(monitor)) = window.current_monitor() else {
+        return;
+    };
+    let Ok(current) = window.outer_position() else {
+        return;
+    };
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let area = monitor.work_area();
+    let area_top = area.position.y;
+    let area_bottom = area_top + i32::try_from(area.size.height).unwrap_or(i32::MAX / 2);
+    let height = (logical_height * scale).round() as i32;
+    let top = home.min(area_bottom - height).max(area_top);
+    if top != current.y {
+        if let Err(err) = window.set_position(PhysicalPosition::new(current.x, top)) {
+            tracing::debug!("keep_on_screen: set_position failed: {err}");
+        }
+    }
+}
+
 fn configured_width(app: &AppHandle) -> u32 {
     app.try_state::<AppState>()
-        .map(|state| state.config().window.width)
+        .map(|state| state.window_width())
         .unwrap_or(sevak_core::config::MIN_WINDOW_WIDTH)
 }
 

@@ -10,12 +10,22 @@ Sevak includes built-in result sources (plugins) for applications, calculations,
 | Calculator | Type a math expression | (global) | Copy the result | [Calculator →](calculator.md) |
 | Web search | `<keyword> <search>` | g, yt, gh | Open search results | [Web search →](web-search.md) |
 | Files | `f <name>` or path-browse | f | Open the file or folder | [Files →](files.md) |
+| Whole-disk and content search | `ff <name>`, `in <words>` | ff, in | Open the file | [Files →](files.md#whole-disk-and-content-search) |
+| File buffer | ++alt+arrow-down++ on a file | (key) | Act on all collected files | [Files →](files.md#file-buffer) |
 | Bookmarks | `b <bookmark name>` | b | Open the URL | [Bookmarks →](bookmarks.md) |
-| System commands | Type a command name | (global) | Run the command | — |
-| Terminal commands | `> <command>` | > | Run in a terminal | — |
-| Clipboard history | `cb <text>` | cb | Paste the previous text | — |
-| Snippets | `s <snippet>` | s | Paste the saved text | — |
-| Universal Actions | Press hotkey on selection | (hotkey) | Open action menu | — |
+| System commands | Type a command name | (global) | Run the command | [System →](system.md) |
+| Automation tasks | Type a task name, or `t ` | t (also global) | Run the task | [Tasks →](tasks.md) |
+| Media controls | `pause`, `next`, `play ` | play (also global) | Press the media button | [Media →](media.md) |
+| Terminal commands | `> <command>` | > | Run in a terminal | [Shell →](shell.md) |
+| Clipboard history | `cb <text>` | cb | Paste the text, image or files | [Clipboard →](clipboard.md) |
+| Snippets | `s <snippet>`, or the keyword in any app | s | Paste the saved text | [Snippets →](snippets.md) |
+| Emoji picker | `:<name>` or `emoji <name>` | :, emoji | Paste the emoji | [Emoji →](emoji.md) |
+| Contacts (opt-in) | `c <name>` or `@<name>` | c, @ | Copy the e-mail address | [Contacts →](contacts.md) |
+| 1Password (opt-in) | `1p <login>` | 1p | Open the login's website | [1Password →](1password.md) |
+| Dictionary and spelling | `define <word>`, `spell <word>` | define, spell | Copy the definition / paste the spelling | [Dictionary →](dictionary.md) |
+| Universal Actions | Press hotkey on selection | (hotkey) | Open action menu | [Selection →](selection.md) |
+| Script plugins | Your plugin's keyword | (yours) | What the script says | [Script plugins →](script-plugins.md) |
+| Workflows | Your workflow's keyword, hotkey or trigger | (yours) | Run the workflow | [Workflows →](../workflows.md) |
 | UUID generator | `uuid ` | uuid | Copy a generated UUID | — |
 
 ## How query routing works
@@ -55,6 +65,7 @@ Without a keyword, global plugins answer every query:
 - **Applications** (global, no keyword)
 - **Calculator** (global, no keyword)
 - **System commands** (global, no keyword)
+- **Automation tasks** and **Media controls** (global if enabled; `global = true` in `[tasks]` and `[media]`)
 - **Files** (global if enabled; `global = true` in config)
 - **Bookmarks** (global if enabled; `global = true` in config)
 
@@ -100,6 +111,8 @@ disabled = ["clipboard", "web:yt"]   # turn off clipboard history and YouTube
 Family ids turn off all instances: `disabled = ["web"]` turns off every web engine.
 Instance ids turn off one instance: `disabled = ["web:g"]` turns off Google only.
 
+The built-in ids are `apps`, `calculator`, `web` (instances `web:<keyword>`), `files` (its instances `files:names` and `files:content` are the `ff` and `in` searches), `bookmarks`, `system`, `tasks`, `media`, `shell`, `clipboard`, `snippets`, `emoji` (`emoji:word` and `emoji:colon` are its two keywords), `selection` (Universal Actions), `contacts`, `1password`, `dict` and `uuid`. Script plugins use `script:<name>` (or `script` for all), and workflows `workflow:<folder>` (or `workflow` for all). The full list is in the [configuration reference](../configuration.md#plugins).
+
 To find a plugin's id, hover over a result for a moment—the id appears at the bottom.
 
 ## Customizing keywords and defaults
@@ -109,5 +122,7 @@ Read individual feature pages for options:
 - [Files keyword and folders](files.md)
 - [Bookmarks keyword and browsers](bookmarks.md)
 - [Calculator functions and units](calculator.md)
+- [Automation tasks](tasks.md) and [media controls](media.md)
+- [Contacts](contacts.md), [1Password](1password.md) and [the dictionary](dictionary.md)
 
 All options are in `[section]` of `config.toml`. After editing, choose **Reload index** from the tray menu or restart Sevak.

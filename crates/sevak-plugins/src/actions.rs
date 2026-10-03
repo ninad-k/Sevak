@@ -31,6 +31,21 @@ pub fn execute_action(platform: &dyn PlatformProvider, action: &Action) -> Plugi
             }
             Ok(())
         }
+        Action::PasteClip {
+            content,
+            restore_clipboard,
+        } => {
+            if let PasteOutcome::CopiedOnly(reason) = platform
+                .paste_clip(content, *restore_clipboard)
+                .map_err(PluginError::other)?
+            {
+                tracing::warn!(reason, "copied to the clipboard instead of pasting");
+            }
+            Ok(())
+        }
+        Action::CopyClip { content } => platform
+            .set_clipboard_clip(content)
+            .map_err(PluginError::other),
         Action::Custom { payload } => Err(PluginError::Unsupported(payload.clone())),
     }
 }

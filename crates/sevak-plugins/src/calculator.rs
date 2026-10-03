@@ -22,7 +22,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use sevak_core::model::score;
-use sevak_core::{Action, Config, IconSource, Plugin, PluginResult, ResultItem};
+use sevak_core::{Action, Config, IconSource, Plugin, PluginResult, PreviewHint, ResultItem};
 use sevak_platform::{AppPaths, PlatformProvider};
 
 use crate::actions::execute_action;
@@ -768,6 +768,12 @@ impl CalculatorPlugin {
         .with_subtitle(format!("{detail} · Enter to copy"))
         .with_icon(IconSource::builtin("calculator"))
         .with_score(score::EXACT_ANSWER)
+        .with_preview(PreviewHint::Details {
+            rows: vec![
+                ("Result".to_owned(), text.to_owned()),
+                ("Calculation".to_owned(), detail.to_owned()),
+            ],
+        })
     }
 }
 
@@ -1319,6 +1325,26 @@ mod tests {
         assert!(CalculatorPlugin::new(MockPlatform::empty())
             .refresh()
             .is_ok());
+    }
+
+    #[test]
+    fn answers_carry_the_calculation_for_the_preview_pane() {
+        let plugin = CalculatorPlugin::new(MockPlatform::empty());
+        let item = plugin.query("2+2*3").remove(0);
+        assert_eq!(
+            item.preview,
+            Some(PreviewHint::Details {
+                rows: vec![
+                    ("Result".to_owned(), "8".to_owned()),
+                    ("Calculation".to_owned(), "2 + 2 * 3".to_owned()),
+                ]
+            })
+        );
+        let conversion = plugin.query("10 km in mi").remove(0);
+        assert!(matches!(
+            conversion.preview,
+            Some(PreviewHint::Details { .. })
+        ));
     }
 
     #[test]

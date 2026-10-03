@@ -69,12 +69,20 @@ flowchart TD
 | `12*7`, `5 km in mi` | Shows the answer; ++enter++ copies it | [Calculator and conversions](features/calculator.md) |
 | `g rust traits` | Searches Google in your browser | [Web search](features/web-search.md) |
 | `f report` | Finds files in your chosen folders | [Files and folders](features/files.md) |
+| `ff budget`, `in invoice 2026` | Finds files anywhere, or by the words inside them, through your OS index | [Files and folders](features/files.md#whole-disk-and-content-search) |
 | `~/Downloads/`, `C:\Users\` | Browses folders as you type | [Files and folders](features/files.md) |
 | `b recipes` | Opens a browser bookmark | [Browser bookmarks](features/bookmarks.md) |
-| `cb` | Shows recent clipboard entries (once clipboard history is turned on) | [Clipboard history](features/clipboard.md) |
+| `cb` | Shows recent clipboard entries: text, images and files (once clipboard history is turned on) | [Clipboard history](features/clipboard.md) |
 | `s sig` | Pastes a saved snippet | [Snippets](features/snippets.md) |
+| `:heart` | Picks an emoji from a grid and pastes it | [Emoji picker](features/emoji.md) |
 | `lock`, `sleep` | Runs a system command | [System commands](features/system.md) |
+| `dark mode`, `vol 30`, `kill chrome` | Runs an automation task | [Automation tasks](features/tasks.md) |
+| `pause`, `next`, `play ` | Presses a media button; shows what is playing | [Media controls](features/media.md) |
 | `> git status` | Runs a shell command in a terminal | [Shell commands](features/shell.md) |
+| `define word`, `spell word` | Looks up a word or fixes its spelling, offline | [Dictionary and spelling](features/dictionary.md) |
+| `c ada`, `1p github` | Finds a contact or a 1Password login (both opt-in) | [Contacts](features/contacts.md), [1Password](features/1password.md) |
+| ++shift++ (tap) | Previews the selected result | [Preview, Text View and Grid View](usage.md#preview-text-view-and-grid-view) |
+| Your own keyword | Runs a workflow built in Settings → Workflows | [Workflows](workflows.md) |
 
 The exact keywords above are the defaults; most can be changed. The
 [features overview](features/index.md) lists every keyword and how to change it.

@@ -17,7 +17,7 @@ too:
 - [Searching and launching](usage.md): opening Sevak, ranking, running results, the actions panel
 - [Keyboard shortcuts](keyboard.md): every key in the launcher and Settings
 - [Settings window](settings.md): each tab and what it changes
-- [Themes](themes.md): appearance options and custom CSS
+- [Themes](themes.md): appearance options, the theme editor and gallery, custom CSS
 
 ## Features
 
@@ -29,10 +29,17 @@ too:
 [Browser bookmarks](features/bookmarks.md) ·
 [Clipboard history](features/clipboard.md) ·
 [Snippets](features/snippets.md) ·
+[Emoji picker](features/emoji.md) ·
 [System commands](features/system.md) ·
+[Automation tasks](features/tasks.md) ·
+[Media controls](features/media.md) ·
 [Shell commands](features/shell.md) ·
 [Selection actions](features/selection.md) ·
-[Script plugins](features/script-plugins.md)
+[Contacts](features/contacts.md) ·
+[1Password](features/1password.md) ·
+[Dictionary and spelling](features/dictionary.md) ·
+[Script plugins](features/script-plugins.md) ·
+[Workflows](workflows.md)
 
 ## Reference
 

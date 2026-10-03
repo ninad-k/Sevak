@@ -2,7 +2,12 @@
 //! standard application folders, launched and opened through `/usr/bin/open`.
 
 mod capture;
+mod contacts;
+mod dictionary;
+mod expand;
+pub(crate) mod media;
 mod paste;
+pub(crate) mod trash;
 
 use std::collections::HashSet;
 use std::fs;
@@ -10,12 +15,14 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Instant;
 
-use sevak_core::{AppEntry, IconData, IconSource, LaunchTarget};
+use sevak_core::{AppEntry, ClipContent, IconData, IconSource, LaunchTarget};
 
 use crate::capture::{CaptureOptions, SelectionCapture};
+use crate::contacts::{Contact, ContactsAccess};
 use crate::error::{PlatformError, Result};
 use crate::icon_file;
-use crate::paste::{ClipboardRead, ForegroundApp, PasteOutcome, PasteSupport};
+use crate::keyboard::{KeyListener, KeyListenerSupport, KeySink, TypingTarget};
+use crate::paste::{ClipboardRead, ForegroundApp, PasteContent, PasteOutcome, PasteSupport};
 use crate::process::spawn_detached_in;
 use crate::provider::PlatformProvider;
 
@@ -92,6 +99,35 @@ impl PlatformProvider for MacProvider {
         paste::paste_text(text, restore_clipboard)
     }
 
+    fn paste_clip(&self, content: &ClipContent, restore_clipboard: bool) -> Result<PasteOutcome> {
+        paste::paste_content(PasteContent::Clip(content), restore_clipboard)
+    }
+
+    fn key_listener_support(&self) -> KeyListenerSupport {
+        expand::key_listener_support()
+    }
+
+    fn request_key_listener_permission(&self) {
+        expand::request_key_listener_permission();
+    }
+
+    fn start_key_listener(&self, sink: KeySink) -> Result<KeyListener> {
+        expand::start(sink)
+    }
+
+    fn typing_target(&self) -> TypingTarget {
+        expand::typing_target()
+    }
+
+    fn replace_typed_text(
+        &self,
+        delete: usize,
+        text: &str,
+        still_current: &dyn Fn() -> bool,
+    ) -> Result<bool> {
+        expand::replace_typed_text(delete, text, still_current)
+    }
+
     fn capture_selection(&self, options: &CaptureOptions) -> SelectionCapture {
         capture::capture_selection(options)
     }
@@ -102,6 +138,22 @@ impl PlatformProvider for MacProvider {
 
     fn read_clipboard(&self) -> Result<ClipboardRead> {
         paste::read_clipboard()
+    }
+
+    fn contacts_access(&self) -> ContactsAccess {
+        contacts::status()
+    }
+
+    fn request_contacts_access(&self) -> Result<ContactsAccess> {
+        contacts::request()
+    }
+
+    fn system_contacts(&self) -> Result<Vec<Contact>> {
+        contacts::read_contacts()
+    }
+
+    fn system_definition(&self, word: &str) -> Option<String> {
+        dictionary::definition(word)
     }
 }
 

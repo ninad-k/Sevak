@@ -9,6 +9,8 @@ use sevak_core::theme::{self, ResolvedAppearance};
 use sevak_core::Config;
 use sevak_platform::{AppPaths, DisplayServer};
 
+use crate::expansion;
+use crate::file_buffer::BufferState;
 use crate::search::Search;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -52,6 +54,8 @@ pub struct Status {
     pub appearance: ResolvedAppearance,
     /// The search index is being (re)built.
     pub indexing: bool,
+    /// Snippet expansion as you type: whether it is running, or why not.
+    pub snippet_expansion: expansion::ExpansionStatus,
 }
 
 pub struct AppState {
@@ -59,6 +63,8 @@ pub struct AppState {
     pub display: DisplayServer,
     pub config: RwLock<Config>,
     pub search: Search,
+    /// Files collected for acting on together (the file buffer).
+    pub file_buffer: BufferState,
     pub hotkey: RwLock<HotkeyStatus>,
     pub custom_hotkeys: RwLock<Vec<CustomHotkeyStatus>>,
     pub actions_hotkey: RwLock<Option<CustomHotkeyStatus>>,
@@ -82,6 +88,7 @@ impl AppState {
             paths,
             display,
             search,
+            file_buffer: BufferState::default(),
             config: RwLock::new(config),
             hotkey: RwLock::new(hotkey),
             custom_hotkeys: RwLock::new(Vec::new()),
@@ -108,6 +115,15 @@ impl AppState {
             .appearance
             .write()
             .unwrap_or_else(|poisoned| poisoned.into_inner()) = resolved;
+    }
+
+    /// The launcher's logical width: the config's, or the theme file's while the
+    /// config still has the default.
+    pub fn window_width(&self) -> u32 {
+        self.appearance
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .window_width_or(self.config().window.width)
     }
 
     pub fn status(&self) -> Status {
@@ -137,6 +153,7 @@ impl AppState {
                 .unwrap_or_else(|poisoned| poisoned.into_inner())
                 .clone(),
             indexing: self.search.is_indexing(),
+            snippet_expansion: expansion::status(),
         }
     }
 }

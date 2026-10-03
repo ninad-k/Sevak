@@ -48,7 +48,7 @@ pub fn open(app: &AppHandle) {
         WebviewUrl::App(WINDOW_URL.into()),
     )
     .title(WINDOW_TITLE)
-    .inner_size(760.0, 620.0)
+    .inner_size(920.0, 680.0)
     .min_inner_size(560.0, 460.0)
     .resizable(true)
     .center()
@@ -158,24 +158,7 @@ pub fn validate(config: &Config, strategy: HotkeyStrategy) -> Result<(), String>
         }
     }
 
-    let files_keyword = config.files.keyword.trim();
-    if files_keyword.chars().any(char::is_whitespace) {
-        return Err("The files keyword cannot contain spaces.".to_owned());
-    }
-    if !files_keyword.is_empty() && keywords.contains(&files_keyword.to_lowercase()) {
-        return Err(format!(
-            "The files keyword \"{files_keyword}\" is already a web search keyword."
-        ));
-    }
-    let bookmarks_keyword = config.bookmarks.keyword.trim();
-    if bookmarks_keyword.chars().any(char::is_whitespace) {
-        return Err("The bookmarks keyword cannot contain spaces.".to_owned());
-    }
-    if !bookmarks_keyword.is_empty() && keywords.contains(&bookmarks_keyword.to_lowercase()) {
-        return Err(format!(
-            "The bookmarks keyword \"{bookmarks_keyword}\" is already a web search keyword."
-        ));
-    }
+    validate_builtin_keywords(config, &keywords)?;
     if config
         .files
         .directories
@@ -183,6 +166,95 @@ pub fn validate(config: &Config, strategy: HotkeyStrategy) -> Result<(), String>
         .any(|dir| dir.trim().is_empty())
     {
         return Err("A files directory is empty.".to_owned());
+    }
+    let prefix = config.snippets.prefix.trim();
+    if prefix.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return Err("The snippet prefix cannot contain spaces.".to_owned());
+    }
+    Ok(())
+}
+
+/// Keywords of built-in plugins that cannot be changed, and what they open.
+const FIXED_KEYWORDS: &[(&str, &str)] = &[
+    (">", "terminal commands"),
+    ("cb", "clipboard history"),
+    ("s", "snippets"),
+    ("emoji", "the emoji picker"),
+    (":", "the emoji picker"),
+    ("@", "contacts"),
+    ("uuid", "the UUID generator"),
+];
+
+/// The configurable keywords of the built-in plugins (`[files]`, `[bookmarks]`,
+/// `[tasks]`, `[media]`, `[contacts]`, `[onepassword]`, `[dictionary]`) are one
+/// word each, and no two searches share a keyword: not two built-in ones, not a
+/// built-in one and a fixed keyword (`>`, `cb`, `s`, `emoji`, `:`, `@`, `uuid`),
+/// and not either of those and a web search engine (`web`, lowercased). An
+/// empty keyword turns that keyword off and never clashes.
+fn validate_builtin_keywords(config: &Config, web: &HashSet<String>) -> Result<(), String> {
+    for (keyword, owner) in FIXED_KEYWORDS {
+        if web.contains(*keyword) {
+            return Err(format!(
+                "The web search keyword \"{keyword}\" is already used by {owner}."
+            ));
+        }
+    }
+    let configurable = [
+        ("files", &config.files.keyword, "the files search"),
+        (
+            "whole-disk file search",
+            &config.files.index_keyword,
+            "the whole-disk file search",
+        ),
+        (
+            "file contents search",
+            &config.files.content_keyword,
+            "the file contents search",
+        ),
+        ("bookmarks", &config.bookmarks.keyword, "bookmarks"),
+        (
+            "automation tasks",
+            &config.tasks.keyword,
+            "automation tasks",
+        ),
+        ("media controls", &config.media.keyword, "media controls"),
+        ("contacts", &config.contacts.keyword, "contacts"),
+        ("1Password", &config.onepassword.keyword, "1Password"),
+        (
+            "dictionary",
+            &config.dictionary.define_keyword,
+            "the dictionary",
+        ),
+        (
+            "spelling",
+            &config.dictionary.spell_keyword,
+            "the spelling checker",
+        ),
+    ];
+    let mut taken: Vec<(String, &str)> = FIXED_KEYWORDS
+        .iter()
+        .map(|(keyword, owner)| ((*keyword).to_owned(), *owner))
+        .collect();
+    for (label, keyword, owner) in configurable {
+        let keyword = keyword.trim();
+        if keyword.is_empty() {
+            continue;
+        }
+        if keyword.chars().any(char::is_whitespace) {
+            return Err(format!("The {label} keyword cannot contain spaces."));
+        }
+        let lower = keyword.to_lowercase();
+        if web.contains(&lower) {
+            return Err(format!(
+                "The {label} keyword \"{keyword}\" is already a web search keyword."
+            ));
+        }
+        if let Some((_, other)) = taken.iter().find(|(used, _)| *used == lower) {
+            return Err(format!(
+                "The {label} keyword \"{keyword}\" is already used by {other}."
+            ));
+        }
+        taken.push((lower, owner));
     }
     Ok(())
 }
@@ -383,6 +455,19 @@ mod tests {
     }
 
     #[test]
+    fn the_snippet_prefix_is_one_word() {
+        let mut config = Config::default();
+        for good in ["", ";", ";;", "//", " ; "] {
+            config.snippets.prefix = good.to_owned();
+            assert_eq!(check(&config), Ok(()), "{good:?}");
+        }
+        for bad in ["; ;", "a b", ";\tx"] {
+            config.snippets.prefix = bad.to_owned();
+            assert!(check(&config).is_err(), "{bad:?} should be rejected");
+        }
+    }
+
+    #[test]
     fn hotkeys_are_parsed_like_the_plugin_does() {
         let mut config = Config::default();
         for good in ["Alt+Space", "Ctrl+Shift+K", "Super+F12", "CmdOrCtrl+Comma"] {
@@ -450,6 +535,72 @@ mod tests {
         assert!(check(&config).is_err());
         config.files.keyword = "find me".to_owned();
         assert!(check(&config).is_err());
+    }
+
+    #[test]
+    fn built_in_keywords_cannot_collide() {
+        assert!(check(&Config::default()).is_ok());
+        type Set = fn(&mut Config, &str);
+        let setters: [(&str, Set); 7] = [
+            ("tasks", |c, k| c.tasks.keyword = k.into()),
+            ("media", |c, k| c.media.keyword = k.into()),
+            ("contacts", |c, k| c.contacts.keyword = k.into()),
+            ("1password", |c, k| c.onepassword.keyword = k.into()),
+            ("define", |c, k| c.dictionary.define_keyword = k.into()),
+            ("spell", |c, k| c.dictionary.spell_keyword = k.into()),
+            ("bookmarks", |c, k| c.bookmarks.keyword = k.into()),
+        ];
+        for (name, set) in setters {
+            // A fixed keyword, another built-in one, a web engine's (any
+            // case), or two words.
+            for taken in [
+                ">", "cb", "S", ":", "@", "emoji", "uuid", "ff", "in", "g", "YT", "a b",
+            ] {
+                let mut config = Config::default();
+                set(&mut config, taken);
+                assert!(check(&config).is_err(), "{name} = {taken:?}");
+            }
+            // A free word is fine, and empty turns the keyword off.
+            for free in ["zz", ""] {
+                let mut config = Config::default();
+                set(&mut config, free);
+                assert_eq!(check(&config), Ok(()), "{name} = {free:?}");
+            }
+        }
+        // Two configurable ones clash with each other too.
+        let mut config = Config::default();
+        config.tasks.keyword = "x".into();
+        config.media.keyword = "X".into();
+        let err = check(&config).unwrap_err();
+        assert!(err.contains("automation tasks"), "{err}");
+        // A web engine cannot take a fixed keyword.
+        let mut config = Config::default();
+        config.web_search[0].keyword = "cb".into();
+        assert!(check(&config).is_err());
+    }
+
+    #[test]
+    fn os_index_keywords_must_be_single_words_and_unique() {
+        let mut config = Config::default();
+        assert!(check(&config).is_ok());
+        for (index, content) in [
+            ("g", "in"),
+            ("ff", "yt"),
+            ("f", "in"),
+            ("ff", "b"),
+            ("x", "X"),
+        ] {
+            config.files.index_keyword = index.to_owned();
+            config.files.content_keyword = content.to_owned();
+            assert!(check(&config).is_err(), "{index} / {content}");
+        }
+        config.files.index_keyword = "find all".to_owned();
+        config.files.content_keyword = "in".to_owned();
+        assert!(check(&config).is_err());
+        // Empty turns a search off; two empty keywords do not clash.
+        config.files.index_keyword = String::new();
+        config.files.content_keyword = String::new();
+        assert!(check(&config).is_ok());
     }
 
     fn entry(key: &str, query: Option<&str>, run: Option<&str>) -> HotkeyBinding {

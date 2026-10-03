@@ -1,6 +1,6 @@
 # Files and data locations
 
-Sevak stores configuration, logs, usage history and clipboard history in well-known locations on each platform. You can override these with environment variables or command-line flags.
+Sevak stores configuration, themes, script plugins, workflows, logs, usage history and clipboard history in well-known locations on each platform. You can override these with environment variables or command-line flags.
 
 ## Default locations
 
@@ -12,6 +12,12 @@ Sevak stores configuration, logs, usage history and clipboard history in well-kn
 | **Logs** | `%APPDATA%\sevak\logs\` | `~/Library/Application Support/sevak/logs/` | `~/.local/share/sevak/logs/` |
 | **Usage history** | `%APPDATA%\sevak\usage.json` | `~/Library/Application Support/sevak/usage.json` | `~/.local/share/sevak/usage.json` |
 | **Clipboard history** | `%APPDATA%\sevak\clipboard-history.json` | `~/Library/Application Support/sevak/clipboard-history.json` | `~/.local/share/sevak/clipboard-history.json` |
+| **Clipboard images** | `%APPDATA%\sevak\clipboard\` | `~/Library/Application Support/sevak/clipboard/` | `~/.local/share/sevak/clipboard/` |
+| **Theme files** | `%APPDATA%\sevak\themes\` | `~/Library/Application Support/sevak/themes/` | `~/.config/sevak/themes/` |
+| **Script plugins** | `%APPDATA%\sevak\plugins\` | `~/Library/Application Support/sevak/plugins/` | `~/.config/sevak/plugins/` |
+| **Workflows** | `%APPDATA%\sevak\workflows\` | `~/Library/Application Support/sevak/workflows/` | `~/.config/sevak/workflows/` |
+
+Theme files, script plugins and workflows sit next to `config.toml` in the config folder; clipboard images, approvals and the data folders of plugins and workflows are in the data folder. On Windows and macOS the two folders are the same.
 
 Expand `~` to your home directory and `%APPDATA%` to your roaming app data folder.
 
@@ -48,7 +54,7 @@ Expand `~` to your home directory and `%APPDATA%` to your roaming app data folde
 
 The `--config` flag takes precedence over the environment variable.
 
-### Data folder (logs, usage, clipboard history)
+### Data folder (logs, usage, clipboard history, approvals)
 
 === "Environment variable"
 
@@ -95,13 +101,33 @@ Records searches and actions you perform: what you typed, which results you ran,
 
 **Privacy:** Text you searched is recorded. Select what to delete (see "Clear history" below).
 
-### clipboard-history.json
+### clipboard-history.json and clipboard/
 
-Optional clipboard history (only if `[clipboard] enabled = true`). Records text you copy from most apps, with timestamps.
+Optional clipboard history (only if `[clipboard] enabled = true`). `clipboard-history.json` records the text you copy and the paths of files you copy, with timestamps. The `clipboard/` folder next to it holds each copied image as a PNG file plus a small thumbnail (only if `[clipboard] images = true`, the default once the history is on). Both are unencrypted.
 
-**Edited by:** Sevak (when you copy text) and the Settings window (when you delete items).
+**Edited by:** Sevak (when you copy, and when you type `cb clear` and run **Clear clipboard history**, which deletes the entries and the image files).
 
-**Privacy:** Disabled by default because it records what you copy. Apps that mark their content as secret (password managers, etc.) are never recorded. Configure `[clipboard] ignore_apps` to never record copies from specific apps.
+**Privacy:** Disabled by default because it records what you copy. Apps that mark their content as secret (password managers, etc.) are never recorded. Configure `[clipboard] ignore_apps` to never record copies from specific apps, and `[clipboard] images = false` / `files = false` to record text only.
+
+### currency-rates.json
+
+Cached European Central Bank exchange rates, only if currency conversion (`[calculator] currency`) is on.
+
+### script-plugin-approvals.json
+
+The script plugins and workflows you allowed to run. Delete it to be asked again for each of them.
+
+### plugins/ and workflows/ (data folder)
+
+`plugins/<name>/` and `workflows/<name>/` in the data folder are where script plugins and workflow scripts may keep their own files (`SEVAK_PLUGIN_DATA`, `SEVAK_WORKFLOW_DATA`). Sevak itself writes nothing there.
+
+### themes/, plugins/ and workflows/ (config folder)
+
+Your [theme files](themes.md#theme-files-and-the-editor), [script plugins](features/script-plugins.md) and [workflows](workflows.md) (each a folder with a `workflow.toml` and its scripts). They travel with the config folder, so a synced config folder brings them along.
+
+### What is never written to disk
+
+Contacts and the list of 1Password logins are kept in memory only. The keystrokes watched for [snippet expansion](features/snippets.md#expand-snippets-as-you-type) (the last 64 characters) are kept in memory only, never logged. The Universal Actions selection is never stored.
 
 ## Back up your data
 
@@ -130,7 +156,7 @@ To also clear history:
 
 1. Delete `config.toml`.
 2. Delete `usage.json` (or just the queries and actions you want to forget).
-3. If clipboard history is enabled, delete `clipboard-history.json`.
+3. If clipboard history is enabled, delete `clipboard-history.json` and the `clipboard` folder.
 4. Start Sevak.
 
 ## Clear search history
@@ -153,20 +179,18 @@ To selectively delete searches, edit `usage.json` in a text editor (it is JSON f
 
 ## Clear clipboard history
 
-To delete all saved clipboard items:
+To delete all saved clipboard items, type `cb clear` in Sevak and press ++enter++ on **Clear clipboard history**. It deletes the entries and the image files.
 
-1. Open Sevak Settings.
-2. Go to Clipboard.
-3. Use the "Delete all" button, or manually delete the file:
+Or, with Sevak closed, delete the file and the image folder yourself:
 
 ```bash
-rm ~/.local/share/sevak/clipboard-history.json
+rm -r ~/.local/share/sevak/clipboard-history.json ~/.local/share/sevak/clipboard
 ```
 
 On Windows:
 
 ```powershell
-Remove-Item "$env:APPDATA\sevak\clipboard-history.json"
+Remove-Item "$env:APPDATA\sevak\clipboard-history.json", "$env:APPDATA\sevak\clipboard" -Recurse
 ```
 
 Sevak will create a fresh file on next use.

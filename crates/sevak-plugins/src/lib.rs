@@ -6,12 +6,21 @@
 //! | `calculator`     | [`CalculatorPlugin`]                    | none    | yes    |
 //! | `web:<keyword>`  | [`WebSearchPlugin`] (one per engine)    | engine  | no     |
 //! | `files`          | [`FilesPlugin`]                         | config  | config |
+//! | `files:names`    | [`OsFilesPlugin`] (whole disk, OS index) | `ff`   | no     |
+//! | `files:content`  | [`OsFilesPlugin`] (inside files)        | `in`    | no     |
 //! | `bookmarks`      | [`BookmarksPlugin`]                     | config  | config |
 //! | `system`         | [`SystemPlugin`]                        | none    | yes    |
+//! | `tasks`          | [`TasksPlugin`] (automation tasks)      | `t`     | config |
+//! | `media`          | [`MediaPlugin`] (play/pause, now playing) | `play` | config |
 //! | `shell`          | [`ShellPlugin`]                         | `>`     | no     |
 //! | `clipboard`      | [`ClipboardPlugin`] (opt-in history)    | `cb`    | no     |
 //! | `snippets`       | [`SnippetsPlugin`]                      | `s`     | no     |
+//! | `emoji:word`    | [`EmojiPlugin`] (grid of tiles)         | `emoji` | no     |
+//! | `emoji:colon`    | [`EmojiPlugin`] (same, shorter keyword) | `:`     | no     |
 //! | `selection`      | [`SelectionPlugin`] (Universal Actions) | none    | no     |
+//! | `contacts`       | [`ContactsPlugin`] (opt-in; also `contacts:at`) | `c`, `@` | no |
+//! | `1password`      | [`OnePasswordPlugin`] (opt-in)          | `1p`    | no     |
+//! | `dict`           | [`DictionaryPlugin`] (also `dict:spell`) | `define`, `spell` | no |
 //! | `uuid`           | [`UuidPlugin`] (a tutorial example)     | `uuid`  | no     |
 //!
 //! Script plugins (`script:<name>`, from `<config dir>/plugins/`) are loaded by
@@ -31,18 +40,31 @@ pub mod apps;
 pub mod bookmarks;
 pub mod calculator;
 pub mod clipboard_history;
+mod clipboard_store;
+pub mod contacts;
 pub mod currency;
+pub mod dictionary;
+pub mod emoji;
 pub mod example_uuid;
+pub mod file_buffer;
 pub mod files;
+mod live;
+pub mod media;
+pub mod net;
+pub mod onepassword;
+pub mod os_files;
 pub mod path_browse;
 pub mod registry;
 pub mod script;
 pub mod selection;
 pub mod shell;
+pub mod snippet_expansion;
 pub mod snippets;
 pub mod system;
+pub mod tasks;
 pub mod units;
 pub mod web_search;
+pub mod workflow;
 
 #[cfg(test)]
 mod test_util;
@@ -52,19 +74,28 @@ pub use apps::AppsPlugin;
 pub use bookmarks::BookmarksPlugin;
 pub use calculator::CalculatorPlugin;
 pub use clipboard_history::ClipboardPlugin;
+pub use contacts::ContactsPlugin;
+pub use dictionary::DictionaryPlugin;
+pub use emoji::EmojiPlugin;
 pub use example_uuid::UuidPlugin;
 pub use files::FilesPlugin;
+pub use media::MediaPlugin;
+pub use onepassword::OnePasswordPlugin;
+pub use os_files::{files_family, OsFilesPlugin};
 pub use registry::{PluginDescriptor, PluginFactory, PluginInfo, PluginRegistry};
 pub use script::{ScriptPlugin, ScriptPluginHost};
 pub use selection::SelectionPlugin;
 pub use shell::ShellPlugin;
 pub use snippets::SnippetsPlugin;
 pub use system::SystemPlugin;
+pub use tasks::TasksPlugin;
 pub use web_search::WebSearchPlugin;
+pub use workflow::WorkflowHost;
 
 /// Instantiates every enabled built-in plugin (`apps`, `calculator`, one
 /// `web:<keyword>` per `[[web_search]]` engine, `files`, `bookmarks`, `system`,
-/// `shell`, `clipboard`, `snippets`, `selection`, `uuid`).
+/// `tasks`, `media`, `shell`, `clipboard`, `snippets`, `emoji`, `selection`,
+/// `contacts`, `1password`, `dict`, `uuid`).
 ///
 /// Shorthand for `PluginRegistry::builtin().instantiate(config, platform)`.
 ///
@@ -100,12 +131,23 @@ mod tests {
                 "web:yt",
                 "web:gh",
                 "files",
+                "files:names",
+                "files:content",
                 "bookmarks",
                 "system",
+                "tasks",
+                "media",
                 "shell",
                 "clipboard",
                 "snippets",
+                "emoji:word",
+                "emoji:colon",
                 "selection",
+                "contacts",
+                "contacts:at",
+                "1password",
+                "dict",
+                "dict:spell",
                 "uuid"
             ]
         );
@@ -123,10 +165,19 @@ mod tests {
                 "web:gh",
                 "bookmarks",
                 "system",
+                "tasks",
+                "media",
                 "shell",
                 "clipboard",
                 "snippets",
+                "emoji:word",
+                "emoji:colon",
                 "selection",
+                "contacts",
+                "contacts:at",
+                "1password",
+                "dict",
+                "dict:spell",
                 "uuid"
             ]
         );
