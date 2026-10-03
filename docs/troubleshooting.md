@@ -55,8 +55,13 @@ Check these in order:
 | Permissions | Ensure your user account can read that directory |
 | Index size | Reduce broad roots if you hit the 100,000-entry cap |
 
-File search matches names, not document contents. A word appearing only
-inside a PDF or document is not a filename match.
+`f` matches names in your indexed folders, not document contents. A file
+outside them, or a word that is only inside a document, needs `ff` or `in`
+([whole-disk search](usage.md#whole-disk-and-content-search)). If those say
+"File index unavailable", start the Windows Search service (`WSearch`), install
+`plocate` and run `updatedb`, or install Tracker or Baloo, as the row explains;
+the OS only finds what it has indexed, so a file created seconds ago may take a
+moment to appear.
 [Full file-search behavior](usage.md#files-and-folders).
 
 ## I get a web suggestion instead of a local result

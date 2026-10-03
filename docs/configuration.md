@@ -18,7 +18,7 @@ the running app then reloads the saved configuration.
 | Search | Result limit, fallback web engines, search history |
 | Plugins | Available result sources (including script plugins) and currency conversion |
 | Web search | Keywords, provider names and URL templates |
-| Files | Indexed folders, depth, dot-files and global file results |
+| Files | Indexed folders, depth, dot-files, global file results and whole-disk (`ff`, `in`) search |
 | Linux | Wayland-related options when applicable |
 
 ## Editing TOML
@@ -61,9 +61,28 @@ still want. `~` expands to your home directory on each platform. Forward
 slashes work in the portable examples; avoid unescaped backslashes inside
 TOML double-quoted Windows paths.
 
-Search matches filenames and folder names, not document contents. Some cache
-and generated directories are always pruned; see [file search](usage.md#files-and-folders).
+`f` matches filenames and folder names in these folders, not document contents.
+Some cache and generated directories are always pruned; see [file search](usage.md#files-and-folders).
 Set `global = false` to show file results only through `f <name>`.
+
+### Search the whole disk
+
+```toml
+[files]
+use_os_index = true
+index_keyword = "ff"
+content_keyword = "in"
+```
+
+`ff <name>` searches file names anywhere on the disk and `in <words>` searches
+inside files, both through the operating system's own index (Windows Search,
+Spotlight, `locate`, Tracker or Baloo; see [what each OS needs](usage.md#whole-disk-and-content-search)).
+Queries go only to that local index; nothing is sent over the network.
+`use_os_index = false` turns both off. An empty keyword turns off just that
+search. The keywords must be one word each and different from every other
+keyword (settings rejects clashes; in the file, a clashing one is ignored and
+logged). The plugin ids are `files:names` and `files:content`; disabling
+`files` turns off all three.
 
 ### Choose dark mode and fewer results
 
@@ -315,6 +334,8 @@ available in the tray menu. Update installation requires your agreement.
 | `files.include_hidden` | `false` | Include dot-files and dot-folders |
 | `files.keyword` | `"f"` | Dedicated file-search prefix |
 | `files.global` | `true` | Include files in ordinary searches |
+| `files.use_os_index` | `true` | Whole-disk (`ff`) and content (`in`) search through the OS index |
+| `files.index_keyword` / `content_keyword` | `"ff"` / `"in"` | Empty turns that search off |
 | `linux.wayland_use_xwayland` | `true` | Restart after changing this option |
 
 The commented default template lives in

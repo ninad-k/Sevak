@@ -176,6 +176,36 @@ pub fn validate(config: &Config, strategy: HotkeyStrategy) -> Result<(), String>
             "The bookmarks keyword \"{bookmarks_keyword}\" is already a web search keyword."
         ));
     }
+    for (label, keyword) in [
+        ("whole-disk file search", &config.files.index_keyword),
+        ("file contents search", &config.files.content_keyword),
+    ] {
+        let keyword = keyword.trim();
+        if keyword.chars().any(char::is_whitespace) {
+            return Err(format!("The {label} keyword cannot contain spaces."));
+        }
+        let lower = keyword.to_lowercase();
+        let taken = keywords.contains(&lower)
+            || [&config.files.keyword, &config.bookmarks.keyword]
+                .iter()
+                .any(|other| other.trim().to_lowercase() == lower);
+        if !keyword.is_empty() && taken {
+            return Err(format!(
+                "The {label} keyword \"{keyword}\" is already used by another search."
+            ));
+        }
+    }
+    if !config.files.index_keyword.trim().is_empty()
+        && config
+            .files
+            .index_keyword
+            .trim()
+            .eq_ignore_ascii_case(config.files.content_keyword.trim())
+    {
+        return Err(
+            "The whole-disk and contents file searches need different keywords.".to_owned(),
+        );
+    }
     if config
         .files
         .directories
@@ -450,6 +480,30 @@ mod tests {
         assert!(check(&config).is_err());
         config.files.keyword = "find me".to_owned();
         assert!(check(&config).is_err());
+    }
+
+    #[test]
+    fn os_index_keywords_must_be_single_words_and_unique() {
+        let mut config = Config::default();
+        assert!(check(&config).is_ok());
+        for (index, content) in [
+            ("g", "in"),
+            ("ff", "yt"),
+            ("f", "in"),
+            ("ff", "b"),
+            ("x", "X"),
+        ] {
+            config.files.index_keyword = index.to_owned();
+            config.files.content_keyword = content.to_owned();
+            assert!(check(&config).is_err(), "{index} / {content}");
+        }
+        config.files.index_keyword = "find all".to_owned();
+        config.files.content_keyword = "in".to_owned();
+        assert!(check(&config).is_err());
+        // Empty turns a search off; two empty keywords do not clash.
+        config.files.index_keyword = String::new();
+        config.files.content_keyword = String::new();
+        assert!(check(&config).is_ok());
     }
 
     fn entry(key: &str, query: Option<&str>, run: Option<&str>) -> HotkeyBinding {

@@ -55,6 +55,9 @@ export interface Config {
     include_hidden: boolean;
     keyword: string;
     global: boolean;
+    use_os_index: boolean;
+    index_keyword: string;
+    content_keyword: string;
   };
   bookmarks: { browsers: string[]; keyword: string; global: boolean };
   /** Edited in the config file; kept here so saving the form round-trips it. */

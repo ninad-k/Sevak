@@ -10,7 +10,8 @@ crates/sevak-core       config, theme (appearance settings to CSS), fuzzy matche
                         usage stats, Plugin trait
 crates/sevak-platform   OS access: launching, icons, app scanning, clipboard, pasting into the
                         previous app, capturing the selection (Universal Actions), moving to the trash,
-                        paths, terminal launching, hotkey strategy, GNOME
+                        whole-disk search through the OS file index (os_search), paths, terminal
+                        launching, hotkey strategy, GNOME
                         shortcut setup (Windows, macOS and Linux backends)
 crates/sevak-plugins    built-in plugins: apps, calculator (+ units, currency), files, bookmarks,
                         web search, system commands, shell, clipboard history, snippets,

@@ -63,7 +63,9 @@ secondary action.)
   happen as an `Action`. They do not touch the OS directly. Script plugins (see
   [External plugins](#external-plugins)) are the exception to "in-memory": they ask
   a child process, so they answer within a small time budget and deliver late
-  answers through `Plugin::attach_notifier`.
+  answers through `Plugin::attach_notifier`. So do the `files:names` and
+  `files:content` plugins, which ask the OS file index
+  ([below](#whole-disk-and-content-search-in-the-files-plugins)).
 - **Actions** (`Action`) are a closed vocabulary: `Launch`, `OpenPath`,
   `OpenUrl`, `CopyText`, `PasteText` (copy, return to the app that was focused
   before Sevak opened, press Ctrl+V / Cmd+V), `RevealPath` (show in the file
@@ -203,7 +205,7 @@ process, so plugins must never panic.
 | `apps` | `apps` | |
 | `calculator` | `calculator` | also converts units (`units.rs`) and, with `[calculator] currency`, currencies (`currency.rs`) |
 | `web` | `web:<keyword>` per `[[web_search]]` engine | |
-| `files` | `files` | also browses typed paths ([below](#path-browsing-in-the-files-plugin)) |
+| `files` | `files`, `files:names`, `files:content` | `files` also browses typed paths ([below](#path-browsing-in-the-files-plugin)); the other two search the whole disk (`ff`) and file contents (`in`) through the OS index ([below](#whole-disk-and-content-search-in-the-files-plugins)) |
 | `bookmarks` | `bookmarks` | see [Bookmarks](#bookmarks) |
 | `system` | `system` | lock, sleep, restart, settings pages; global |
 | `shell` | `shell` | `> command` runs in a terminal; see below |
@@ -231,6 +233,42 @@ then choose "Reload index" in the tray (or restart):
 # a family id disables all its instances; an instance id disables one
 disabled = ["web:yt", "uuid"]
 ```
+
+### Whole-disk and content search in the files plugins
+
+`files_family` (`crates/sevak-plugins/src/os_files.rs`) builds the `files`
+family: the folder-index `files` plugin and, unless `[files] use_os_index` is
+off, `files:names` (keyword `index_keyword`, default `ff`) and `files:content`
+(`content_keyword`, default `in`). Both are keyword-only. Their rows are the
+folder plugin's own (`plugin_id` is `files`, ids are `files:<full path>`), so
+activation, usage statistics and `[[hotkey]] run` treat them alike.
+
+The OS index is reached through `PlatformProvider::os_search(&OsSearchRequest)`
+(`crates/sevak-platform/src/os_search.rs`), a blocking call with its own
+timeout, so a platform override can use any mechanism:
+
+| OS | Names | Contents |
+|---|---|---|
+| Windows | `es.exe` (Everything) if installed and running; else Windows Search: ADO `Search.CollatorDSO` over IDispatch (`windows/os_search.rs`), `CONTAINS(System.FileName, '"word*" AND ...')` | same connection, `CONTAINS(System.Search.Contents, ...)` ordered by rank |
+| macOS | `mdfind 'kMDItemDisplayName == "*word*"cd && ...'` | `mdfind 'kMDItemTextContent == "word*"cd && ...'` |
+| Linux | `plocate`/`locate -i -b -A` | `tracker3 search --files`, else `baloosearch` |
+
+User text never reaches a shell: external programs get an argument list, and the
+SQL escapes its string literal and keeps the words inside quoted phrases. The
+builders and the output parsers are pure functions with unit tests on every OS.
+`os_search` reports `Unavailable` (service stopped, tool missing) separately
+from `TimedOut` and `Failed`; the plugin turns `Unavailable` and `Failed` into
+one explanatory row.
+
+The query never waits for the index. `query` takes a request number from the
+same `Delivery` the script plugins use, hands the text to one worker thread that
+keeps only the newest pending request, and waits 80 ms. An answer that is late
+notifies the shell, which runs the query again and finds it cached; an answer
+for a request that is no longer the newest is dropped, and a superseded request
+that the worker has not started is never run. `ff` adds the in-memory folder
+matches (without duplicates) to whatever the index has answered, and browses a
+typed path like `f` does. Hidden paths and the folder index's pruned directories
+(plus app bundles and system folders on macOS) are removed from the index's hits.
 
 ### Path browsing in the files plugin
 
@@ -974,8 +1012,8 @@ a **budget, not a deadline**:
    has already typed past it.
 
 The engine side of this is `Plugin::attach_notifier`: a plugin that can answer
-late is handed a callback (`ResultsNotifier`) and calls it with its id. Built-in
-plugins never use it.
+late is handed a callback (`ResultsNotifier`) and calls it with its id. Among the
+built-in plugins only the OS-index file searches use it.
 
 ### Lifecycle, crashes and restarts
 

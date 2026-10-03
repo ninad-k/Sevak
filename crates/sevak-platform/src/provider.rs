@@ -8,6 +8,7 @@ use crate::browsers::BrowserRoot;
 use crate::capture::{CaptureOptions, SelectionCapture};
 use crate::clipboard::{ClipboardMedia, MediaRequest};
 use crate::error::Result;
+use crate::os_search::{OsHit, OsSearchError, OsSearchRequest};
 use crate::paste::{ClipboardRead, ForegroundApp, PasteOutcome, PasteSupport, UNSUPPORTED_REASON};
 use crate::system::{SettingsPage, SystemCommand};
 
@@ -174,6 +175,17 @@ pub trait PlatformProvider: Send + Sync {
         SelectionCapture::Unavailable(
             "Reading the selection is not supported on this system".to_owned(),
         )
+    }
+
+    /// Searches the whole disk through the OS's own file index (Windows Search,
+    /// Spotlight, locate / Tracker / Baloo): file names or the text inside
+    /// files. Queries go only to that local index. Slow and blocking; call it
+    /// from a background thread. See [`crate::os_search`].
+    fn os_search(
+        &self,
+        request: &OsSearchRequest,
+    ) -> std::result::Result<Vec<OsHit>, OsSearchError> {
+        crate::os_search::search(request)
     }
 
     /// A counter that changes whenever the clipboard does, where the OS has one
