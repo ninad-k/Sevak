@@ -9,6 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use serde::Serialize;
+use sevak_plugins::keywords::{workflow_key, KeywordOwners};
 use sevak_plugins::workflow::gallery::{self, Dirs, Entry, Kind};
 use sevak_plugins::workflow::templates;
 use sevak_plugins::workflow::{
@@ -250,6 +251,8 @@ pub async fn list_workflows(app: AppHandle) -> WorkflowList {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         let config = state.config();
+        let owners =
+            KeywordOwners::collect(&config, &state.search.scripts, &state.search.workflows);
         let hotkeys = state
             .custom_hotkeys
             .read()
@@ -258,7 +261,7 @@ pub async fn list_workflows(app: AppHandle) -> WorkflowList {
         let workflows = state
             .search
             .workflows
-            .summaries(&config)
+            .summaries(&config, &owners)
             .into_iter()
             .map(|summary| {
                 let prefix = format!("Run workflow:{}:run:", summary.folder);
@@ -295,13 +298,50 @@ pub async fn list_workflows(app: AppHandle) -> WorkflowList {
 
 #[tauri::command]
 pub async fn load_workflow(app: AppHandle, folder: String) -> Result<Loaded, String> {
-    blocking(move || app.state::<AppState>().search.workflows.load(&folder)).await
+    blocking(move || {
+        let state = app.state::<AppState>();
+        let mut loaded = state.search.workflows.load(&folder)?;
+        let owners = current_owners(&state);
+        loaded.problems.extend(
+            loaded
+                .workflow
+                .keyword_problems(&owners, Some(&workflow_key(&folder))),
+        );
+        Ok(loaded)
+    })
+    .await
 }
 
-/// Live validation for the builder; nothing is saved.
+/// Everything that answers a keyword right now.
+fn current_owners(state: &AppState) -> KeywordOwners {
+    KeywordOwners::collect(
+        &state.config(),
+        &state.search.scripts,
+        &state.search.workflows,
+    )
+}
+
+/// Live validation for the builder; nothing is saved. `folder` is where the
+/// workflow is saved, if it is (its own keywords do not clash with themselves).
 #[tauri::command]
-pub fn check_workflow(workflow: Workflow) -> Vec<Problem> {
-    workflow.validate()
+pub async fn check_workflow(
+    app: AppHandle,
+    workflow: Workflow,
+    folder: Option<String>,
+) -> Vec<Problem> {
+    blocking(move || {
+        let owners = current_owners(&app.state::<AppState>());
+        Ok(check(&workflow, &owners, folder.as_deref()))
+    })
+    .await
+    .unwrap_or_default()
+}
+
+/// The errors, then the warnings, of `workflow`, keyword clashes included.
+fn check(workflow: &Workflow, owners: &KeywordOwners, folder: Option<&str>) -> Vec<Problem> {
+    let mut problems = workflow.validate();
+    problems.extend(workflow.keyword_problems(owners, folder.map(workflow_key).as_deref()));
+    problems
 }
 
 /// Saves a workflow (a new folder when `folder` is `None`) and reloads Sevak,
@@ -313,11 +353,11 @@ pub async fn save_workflow(
     workflow: Workflow,
 ) -> Result<Saved, String> {
     blocking(move || {
-        let saved = app
-            .state::<AppState>()
-            .search
-            .workflows
-            .save(folder.as_deref(), &workflow)?;
+        let state = app.state::<AppState>();
+        let mut saved = state.search.workflows.save(folder.as_deref(), &workflow)?;
+        saved.problems.extend(
+            workflow.keyword_problems(&current_owners(&state), Some(&workflow_key(&saved.folder))),
+        );
         tracing::info!(workflow = saved.folder, "workflow saved");
         app::reload(&app);
         Ok(saved)
@@ -575,7 +615,7 @@ mod tests {
             name: "x".into(),
             ..Workflow::default()
         };
-        let problems = check_workflow(workflow);
+        let problems = check(&workflow, &KeywordOwners::default(), None);
         assert!(problems.iter().any(|p| p.message.contains("no trigger")));
     }
 }

@@ -18,7 +18,7 @@ use sevak_core::{
     UsageStore,
 };
 use sevak_platform::{native_provider, AppPaths, PlatformProvider};
-use sevak_plugins::{builtin_plugins, ScriptPluginHost, WorkflowHost};
+use sevak_plugins::{builtin_plugins, KeywordOwners, ScriptPluginHost, WorkflowHost};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::icons::IconStore;
@@ -65,6 +65,8 @@ fn all_plugins(
     let mut plugins = builtin_plugins(config, platform.clone());
     plugins.extend(scripts.plugins(config, platform));
     plugins.extend(workflows.plugins(config, platform));
+    // A keyword two plugins answer is not an error, but say so once.
+    KeywordOwners::collect(config, scripts, workflows).log_shared();
     plugins
 }
 

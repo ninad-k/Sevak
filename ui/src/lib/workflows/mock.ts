@@ -87,6 +87,20 @@ const BROKEN = {
 
 // ---- validation (a small copy of the Rust rules, for the preview) ---------
 
+/** A few keywords other things answer, to show the clash warning in the preview. */
+const TAKEN: Record<string, string> = {
+  g: "web search Google",
+  f: "the files search",
+  b: "bookmarks",
+};
+
+/** The warning for a keyword something else answers too, or `null`. */
+function clash(keyword: unknown): string | null {
+  const word = String(keyword ?? "").trim();
+  const owner = TAKEN[word.toLowerCase()];
+  return owner ? `Keyword "${word}" is also used by ${owner}; both will show results.` : null;
+}
+
 export function check(workflow: Workflow): Problem[] {
   const problems: Problem[] = [];
   const error = (node: string | null, message: string) =>
@@ -104,6 +118,9 @@ export function check(workflow: Workflow): Problem[] {
     ids.add(node.id);
     if ((node.type === "keyword" || node.type === "script_filter") && !String(node.keyword ?? "").trim()) {
       error(node.id, "choose a keyword");
+    } else if (node.type === "keyword" || node.type === "script_filter") {
+      const message = clash(node.keyword);
+      if (message) warn(node.id, message);
     }
     if (node.type === "open_url" && !String(node.url ?? "").trim()) error(node.id, "enter a link");
     if (node.type === "hotkey" && !String(node.key ?? "").trim()) error(node.id, "choose a shortcut");
@@ -183,6 +200,9 @@ function summary(folder: string, workflow: Workflow): WorkflowSummary {
       .map((n) => String(n.keyword)),
     nodes: workflow.node.length,
     warnings: check(workflow).filter((p) => p.severity === "warning").length,
+    keyword_warnings: check(workflow)
+      .filter((p) => p.severity === "warning" && p.message.startsWith("Keyword "))
+      .map((p) => p.message),
     error: null,
     hotkey_errors: [],
   };
@@ -202,6 +222,7 @@ export function list(): WorkflowList {
     keywords: [],
     nodes: 0,
     warnings: 0,
+    keyword_warnings: [],
     error: BROKEN.error,
     hotkey_errors: [],
   });

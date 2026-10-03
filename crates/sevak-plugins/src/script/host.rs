@@ -21,6 +21,7 @@ use super::approvals::ApprovalStore;
 use super::manifest::{Manifest, ID_PREFIX, MANIFEST_FILE};
 use super::plugin::ScriptPlugin;
 use super::runner::Spec;
+use crate::keywords::{KeywordOwners, KeywordUse, OwnerKind};
 use crate::PluginInfo;
 
 /// The family id: `[plugins] disabled = ["script"]` turns every script plugin off.
@@ -203,9 +204,29 @@ impl ScriptPluginHost {
             .insert(candidate.manifest.approval_key_with_id());
     }
 
+    /// The keywords of the enabled script plugins (approved or not: they
+    /// answer once allowed), for finding clashes.
+    pub fn keyword_uses(&self, config: &Config) -> Vec<KeywordUse> {
+        self.scan()
+            .into_iter()
+            .filter_map(|scanned| match scanned {
+                Scanned::Plugin(c) if Self::enabled(config, &c.manifest.id) => {
+                    Some(KeywordUse::new(
+                        &c.manifest.keyword,
+                        OwnerKind::ScriptPlugin,
+                        c.manifest.id.clone(),
+                        format!("script plugin {}", c.manifest.name),
+                    ))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
     /// Settings rows for every script plugin, including ones that are waiting
-    /// for approval or cannot load (their description says why).
-    pub fn catalog(&self, config: &Config) -> Vec<PluginInfo> {
+    /// for approval or cannot load (their description says why), and a warning
+    /// when another plugin answers the same keyword (`owners`).
+    pub fn catalog(&self, config: &Config, owners: &KeywordOwners) -> Vec<PluginInfo> {
         self.scan()
             .into_iter()
             .map(|scanned| match scanned {
@@ -217,6 +238,11 @@ impl ScriptPluginHost {
                             "Waiting for your approval (restart Sevak or choose Reload index \
                              to be asked). {description}"
                         );
+                    }
+                    for (_, warning) in
+                        owners.warnings_for(Some(&id), [c.manifest.keyword.as_str()])
+                    {
+                        description = format!("{description} {warning}");
                     }
                     PluginInfo {
                         enabled: c.approved && Self::enabled(config, &id),
@@ -299,7 +325,10 @@ mod tests {
         let f = fixture();
         assert!(f.host.scan().is_empty());
         assert!(f.host.plugins(&Config::default(), &platform()).is_empty());
-        assert!(f.host.catalog(&Config::default()).is_empty());
+        assert!(f
+            .host
+            .catalog(&Config::default(), &KeywordOwners::default())
+            .is_empty());
     }
 
     #[test]
@@ -382,7 +411,7 @@ mod tests {
 
         config.plugins.disabled = vec!["script:one".into()];
         assert_eq!(ids(&f.host.plugins(&config, &platform())), ["script:two"]);
-        let rows = f.host.catalog(&config);
+        let rows = f.host.catalog(&config, &KeywordOwners::default());
         assert_eq!(
             rows.iter().map(|r| r.enabled).collect::<Vec<_>>(),
             [false, true]
@@ -413,7 +442,9 @@ mod tests {
             matches!(&scanned[2], Scanned::Broken { error, .. } if error.contains("already used"))
         );
 
-        let rows = f.host.catalog(&Config::default());
+        let rows = f
+            .host
+            .catalog(&Config::default(), &KeywordOwners::default());
         assert_eq!(rows.len(), 3);
         assert!(rows[0].description.starts_with("Waiting for your approval"));
         assert!(!rows[1].enabled && rows[1].description.starts_with("Not loaded"));

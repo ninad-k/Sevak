@@ -79,6 +79,8 @@ Every workflow starts at one or more triggers. A workflow may have several.
 until you do) or *none*. The label of the node is the result's title and may use
 `{query}`. Pressing `Tab` on the bare keyword completes it to `keyword `.
 
+**Keyword clashes.** A keyword that is already used by a built-in search, a web search engine, a script plugin or another workflow (compared without regard to case) is only a warning, so the workflow still runs and both sets of results are shown. The warning names the other owner (for example `Keyword "g" is also used by web search Google; both will show results.`) and appears next to the node in the builder, on the Workflows page and in the log. Give the keyword another name to silence it.
+
 **Hotkey.** The key uses the same syntax as the shortcut settings
 (`Ctrl+Alt+K`). Sevak registers it like a `[[hotkey]]` entry in `config.toml`
 (without writing it to that file), so it needs a system that lets Sevak grab
@@ -391,7 +393,7 @@ understood. Differences worth knowing:
 |---|---|
 | The workflow's row says **Waiting for your permission** | It runs code. Press **Review…** (or choose **Reload index** in the tray) |
 | The row says **Not loaded** | The file has an error; the message says which. **Fix…** opens it in the builder |
-| The keyword shows nothing | The workflow is switched off or waiting for permission; another plugin may also answer the keyword (both answer) |
+| The keyword shows nothing | The workflow is switched off or waiting for permission; another plugin may also answer the keyword (both answer; the Workflows page and the builder warn about this) |
 | A hotkey does nothing | The row shows "The shortcut ... is not active" if another app owns it; on Wayland use an external trigger |
 | A script node fails at once | The interpreter is not installed (the notification says "none of ... is on PATH"), or the path is wrong. Tick *Log its error output* and look at **Reveal logs folder** |
 | *Paste* only copied | The system cannot paste (Wayland, or macOS without Accessibility permission); the text is on the clipboard |

@@ -184,6 +184,9 @@
                 {/if}
               </div>
               {#if row.error}<p class="wf-msg error">{row.error}</p>{/if}
+              {#each row.keyword_warnings as warning (warning)}
+                <p class="wf-msg warn">{warning}</p>
+              {/each}
               {#each row.hotkey_errors as problem (problem.key)}
                 <p class="wf-msg warn">The shortcut {problem.key} is not active: {problem.error}</p>
               {/each}

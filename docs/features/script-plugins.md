@@ -91,7 +91,7 @@ Sevak's built-in plugins work the same way:
 - `>` is shell commands' keyword
 - `f` is file search's keyword
 
-Script plugins work exactly like these: type the keyword, get results, press Enter.
+Script plugins work exactly like these: type the keyword, get results, press Enter. If a script plugin's keyword is also used by a built-in search, a web search engine, a workflow or another script plugin, Sevak logs a warning and shows it in the plugin's description in Settings; the plugin still loads and both sets of results appear.
 
 ## Built-in examples
 

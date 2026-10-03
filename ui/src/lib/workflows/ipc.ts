@@ -24,7 +24,10 @@ export interface WorkflowSummary {
   approved: boolean;
   keywords: string[];
   nodes: number;
+  /** All warnings, keyword clashes included. */
   warnings: number;
+  /** The keyword clashes among them, as sentences. */
+  keyword_warnings: string[];
   /** Why it cannot load. */
   error: string | null;
   hotkey_errors: HotkeyError[];
@@ -114,10 +117,16 @@ export async function loadWorkflow(folder: string): Promise<Result<LoadedWorkflo
   return call("load_workflow", { folder });
 }
 
-/** Live validation for the builder; nothing is saved. */
-export async function checkWorkflow(workflow: Workflow): Promise<Result<Problem[]>> {
+/**
+ * Live validation for the builder; nothing is saved. `folder` is where the
+ * workflow is saved (or `null`), so its own keywords are not reported as clashes.
+ */
+export async function checkWorkflow(
+  workflow: Workflow,
+  folder: string | null,
+): Promise<Result<Problem[]>> {
   if (preview()) return { ok: true, value: (await mock()).check(workflow) };
-  return call("check_workflow", { workflow });
+  return call("check_workflow", { workflow, folder });
 }
 
 /** Saves into `folder`, or into a new folder when it is `null`. */

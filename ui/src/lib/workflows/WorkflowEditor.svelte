@@ -135,9 +135,10 @@
   let checkSeq = 0;
   $effect(() => {
     const body = snapshot(workflow);
+    const where = currentFolder;
     const mine = ++checkSeq;
     const timer = setTimeout(async () => {
-      const result = await checkWorkflow(JSON.parse(body) as Workflow);
+      const result = await checkWorkflow(JSON.parse(body) as Workflow, where);
       if (mine === checkSeq && result.ok) problems = result.value;
     }, 120);
     return () => clearTimeout(timer);

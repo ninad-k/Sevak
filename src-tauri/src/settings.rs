@@ -6,6 +6,9 @@ use serde::Serialize;
 use sevak_core::config::{Config, Theme};
 use sevak_core::theme;
 use sevak_platform::{gnome, open, paths, session, HotkeyStrategy};
+use sevak_plugins::keywords::{
+    configurable_keywords, ConfigurableKeyword, KeywordOwners, FIXED_KEYWORDS,
+};
 use sevak_plugins::{PluginInfo, PluginRegistry};
 use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
@@ -81,7 +84,8 @@ pub async fn get_settings(app: AppHandle) -> SettingsDto {
     let state = app.state::<AppState>();
     let config = state.config();
     let mut catalog = PluginRegistry::builtin().catalog(&config, state.search.platform.clone());
-    catalog.extend(state.search.scripts.catalog(&config));
+    let owners = KeywordOwners::collect(&config, &state.search.scripts, &state.search.workflows);
+    catalog.extend(state.search.scripts.catalog(&config, &owners));
     SettingsDto {
         config,
         catalog,
@@ -174,20 +178,11 @@ pub fn validate(config: &Config, strategy: HotkeyStrategy) -> Result<(), String>
     Ok(())
 }
 
-/// Keywords of built-in plugins that cannot be changed, and what they open.
-const FIXED_KEYWORDS: &[(&str, &str)] = &[
-    (">", "terminal commands"),
-    ("cb", "clipboard history"),
-    ("s", "snippets"),
-    ("emoji", "the emoji picker"),
-    (":", "the emoji picker"),
-    ("@", "contacts"),
-    ("uuid", "the UUID generator"),
-];
-
 /// The configurable keywords of the built-in plugins (`[files]`, `[bookmarks]`,
 /// `[tasks]`, `[media]`, `[contacts]`, `[onepassword]`, `[dictionary]`) are one
-/// word each, and no two searches share a keyword: not two built-in ones, not a
+/// word each, and no two searches share a keyword (the lists live in
+/// `sevak_plugins::keywords`, which also finds workflow and script plugin
+/// clashes, only a warning there): not two built-in ones, not a
 /// built-in one and a fixed keyword (`>`, `cb`, `s`, `emoji`, `:`, `@`, `uuid`),
 /// and not either of those and a web search engine (`web`, lowercased). An
 /// empty keyword turns that keyword off and never clashes.
@@ -199,43 +194,16 @@ fn validate_builtin_keywords(config: &Config, web: &HashSet<String>) -> Result<(
             ));
         }
     }
-    let configurable = [
-        ("files", &config.files.keyword, "the files search"),
-        (
-            "whole-disk file search",
-            &config.files.index_keyword,
-            "the whole-disk file search",
-        ),
-        (
-            "file contents search",
-            &config.files.content_keyword,
-            "the file contents search",
-        ),
-        ("bookmarks", &config.bookmarks.keyword, "bookmarks"),
-        (
-            "automation tasks",
-            &config.tasks.keyword,
-            "automation tasks",
-        ),
-        ("media controls", &config.media.keyword, "media controls"),
-        ("contacts", &config.contacts.keyword, "contacts"),
-        ("1Password", &config.onepassword.keyword, "1Password"),
-        (
-            "dictionary",
-            &config.dictionary.define_keyword,
-            "the dictionary",
-        ),
-        (
-            "spelling",
-            &config.dictionary.spell_keyword,
-            "the spelling checker",
-        ),
-    ];
     let mut taken: Vec<(String, &str)> = FIXED_KEYWORDS
         .iter()
         .map(|(keyword, owner)| ((*keyword).to_owned(), *owner))
         .collect();
-    for (label, keyword, owner) in configurable {
+    for ConfigurableKeyword {
+        label,
+        keyword,
+        owner,
+    } in configurable_keywords(config)
+    {
         let keyword = keyword.trim();
         if keyword.is_empty() {
             continue;

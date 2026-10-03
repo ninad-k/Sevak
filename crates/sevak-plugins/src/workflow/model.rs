@@ -485,6 +485,22 @@ impl Workflow {
         self.nodes.iter().find(|node| node.id == id)
     }
 
+    /// The nodes that answer a typed keyword (keyword triggers and script
+    /// filters) with that keyword, trimmed.
+    pub fn keyword_nodes(&self) -> impl Iterator<Item = (&Node, &str)> {
+        self.nodes.iter().filter_map(|node| match &node.kind {
+            NodeKind::Keyword { keyword, .. } | NodeKind::ScriptFilter { keyword, .. } => {
+                Some((node, keyword.trim()))
+            }
+            _ => None,
+        })
+    }
+
+    /// The keywords of [`Workflow::keyword_nodes`].
+    pub fn keywords(&self) -> impl Iterator<Item = &str> {
+        self.keyword_nodes().map(|(_, keyword)| keyword)
+    }
+
     /// The connections leaving port `port` of node `from`, in file order (the
     /// order the nodes after it run in).
     pub fn outgoing<'a>(

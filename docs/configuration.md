@@ -35,6 +35,8 @@ A minimal config works: missing fields use their defaults, so a nearly empty fil
 
 Every keyword is one word, and no two searches may share one: the configurable keywords (`[files]` `keyword` / `index_keyword` / `content_keyword`, `[bookmarks]`, `[tasks]`, `[media]`, `[contacts]`, `[onepassword]`, `[dictionary]` `define_keyword` / `spell_keyword`), the fixed ones (`>`, `cb`, `s`, `emoji`, `:`, `@`, `uuid`) and your web search keywords. Settings refuses to save a clash; in a hand-edited file a clashing keyword is ignored and logged. An empty keyword turns that keyword off.
 
+Keywords of [workflows](workflows.md) and [script plugins](features/script-plugins.md) are checked the same way but only produce a warning (in Settings and in the log), because both plugins then answer the keyword and show their results.
+
 ## How configuration is loaded
 
 ```mermaid

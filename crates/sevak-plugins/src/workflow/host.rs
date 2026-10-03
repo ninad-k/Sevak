@@ -25,6 +25,7 @@ use super::model::{slug, valid_folder_name, Accepts, Node, NodeKind, Workflow, F
 use super::plugins::{run_id, FilterPlugin, KeywordPlugin, TriggersPlugin};
 use super::templates;
 use super::validate::{error_summary, Problem};
+use crate::keywords::{workflow_key, KeywordOwners, KeywordUse, OwnerKind};
 use crate::script::{relative_inside, ApprovalStore};
 
 /// A workflow folder that loaded and is valid.
@@ -79,7 +80,10 @@ pub struct Summary {
     pub approved: bool,
     pub keywords: Vec<String>,
     pub nodes: usize,
+    /// Everything suspicious about it, keyword clashes included.
     pub warnings: usize,
+    /// The keyword clashes among those warnings, as sentences.
+    pub keyword_warnings: Vec<String>,
     /// Why it cannot load.
     pub error: Option<String>,
 }
@@ -231,7 +235,6 @@ impl WorkflowHost {
     ) -> Vec<Arc<dyn Plugin>> {
         let mut plugins: Vec<Arc<dyn Plugin>> = Vec::new();
         let mut runtimes = HashMap::new();
-        let mut keywords: HashMap<String, String> = HashMap::new();
         for scanned in self.scan() {
             let Scanned::Workflow(candidate) = scanned else {
                 continue;
@@ -256,22 +259,6 @@ impl WorkflowHost {
                 config,
             );
             for node in &candidate.workflow.nodes {
-                let keyword = match &node.kind {
-                    NodeKind::Keyword { keyword, .. } | NodeKind::ScriptFilter { keyword, .. } => {
-                        Some(keyword.trim().to_lowercase())
-                    }
-                    _ => None,
-                };
-                if let Some(keyword) = keyword {
-                    if let Some(first) = keywords.insert(keyword.clone(), candidate.folder.clone())
-                    {
-                        tracing::warn!(
-                            workflow = candidate.folder,
-                            "the keyword \"{keyword}\" is also used by the workflow {first}; \
-                             both answer it"
-                        );
-                    }
-                }
                 let plugin: Option<Arc<dyn Plugin>> = match &node.kind {
                     NodeKind::Keyword { .. } => KeywordPlugin::new(runtime.clone(), node)
                         .map(|plugin| Arc::new(plugin) as Arc<dyn Plugin>),
@@ -296,6 +283,33 @@ impl WorkflowHost {
         tracing::info!(loaded = ?ids, "workflow plugins loaded");
         *self.runtimes.lock().unwrap_or_else(|p| p.into_inner()) = runtimes;
         plugins
+    }
+
+    /// The keywords of the enabled workflows (approved or not: they answer
+    /// once allowed), for finding clashes.
+    pub fn keyword_uses(&self, config: &Config) -> Vec<KeywordUse> {
+        let mut uses = Vec::new();
+        for scanned in self.scan() {
+            let Scanned::Workflow(candidate) = scanned else {
+                continue;
+            };
+            if !Self::enabled(config, &candidate) {
+                continue;
+            }
+            let owner = format!(
+                "workflow {}",
+                display_name(&candidate.workflow, &candidate.folder)
+            );
+            for keyword in candidate.workflow.keywords() {
+                uses.push(KeywordUse::new(
+                    keyword,
+                    OwnerKind::Workflow,
+                    workflow_key(&candidate.folder),
+                    owner.clone(),
+                ));
+            }
+        }
+        uses
     }
 
     /// The `[[hotkey]]`-style bindings for the hotkey triggers of workflows
@@ -394,22 +408,19 @@ impl WorkflowHost {
     // ---- the settings page -------------------------------------------------
 
     /// Every workflow folder as a settings row, broken ones included.
-    pub fn summaries(&self, config: &Config) -> Vec<Summary> {
+    pub fn summaries(&self, config: &Config, owners: &KeywordOwners) -> Vec<Summary> {
         self.scan()
             .into_iter()
             .map(|scanned| match scanned {
                 Scanned::Workflow(c) => {
-                    let keywords = c
-                        .workflow
-                        .nodes
-                        .iter()
-                        .filter_map(|node| match &node.kind {
-                            NodeKind::Keyword { keyword, .. }
-                            | NodeKind::ScriptFilter { keyword, .. } => {
-                                Some(keyword.trim().to_owned())
-                            }
-                            _ => None,
-                        })
+                    let keywords: Vec<String> = c.workflow.keywords().map(str::to_owned).collect();
+                    let keyword_warnings: Vec<String> = owners
+                        .warnings_for(
+                            Some(&workflow_key(&c.folder)),
+                            keywords.iter().map(String::as_str),
+                        )
+                        .into_iter()
+                        .map(|(_, message)| message)
                         .collect();
                     Summary {
                         enabled: Self::enabled(config, &c),
@@ -417,7 +428,8 @@ impl WorkflowHost {
                         approved: c.approved,
                         keywords,
                         nodes: c.workflow.nodes.len(),
-                        warnings: c.warnings.len(),
+                        warnings: c.warnings.len() + keyword_warnings.len(),
+                        keyword_warnings,
                         name: display_name(&c.workflow, &c.folder),
                         description: c.workflow.description.clone(),
                         author: c.workflow.author.clone(),
@@ -437,6 +449,7 @@ impl WorkflowHost {
                     keywords: Vec::new(),
                     nodes: 0,
                     warnings: 0,
+                    keyword_warnings: Vec::new(),
                     error: Some(error),
                     folder,
                 },
@@ -801,7 +814,10 @@ mod tests {
         let f = fixture();
         assert!(f.host.scan().is_empty());
         assert!(f.host.plugins(&Config::default(), &platform()).is_empty());
-        assert!(f.host.summaries(&Config::default()).is_empty());
+        assert!(f
+            .host
+            .summaries(&Config::default(), &KeywordOwners::default())
+            .is_empty());
         assert!(f.host.hotkey_bindings(&Config::default()).is_empty());
     }
 
@@ -946,7 +962,9 @@ mod tests {
         );
         write(&f, "harmless", &off);
         assert!(f.host.plugins(&Config::default(), &platform()).is_empty());
-        let rows = f.host.summaries(&Config::default());
+        let rows = f
+            .host
+            .summaries(&Config::default(), &KeywordOwners::default());
         assert!(
             !rows
                 .iter()
@@ -986,7 +1004,9 @@ mod tests {
             ids(&f.host.plugins(&Config::default(), &platform())),
             ["workflow:a-good:k"]
         );
-        let rows = f.host.summaries(&Config::default());
+        let rows = f
+            .host
+            .summaries(&Config::default(), &KeywordOwners::default());
         assert_eq!(rows.len(), 4);
         assert!(rows[1].error.is_some() && !rows[1].enabled);
         assert_eq!(rows[0].keywords, ["harm"]);
@@ -1170,7 +1190,9 @@ mod tests {
         assert_eq!(saved.folder, "script-filter");
         let dir = f.root.path().join("config/workflows/script-filter");
         assert!(dir.join("filter.py").is_file());
-        let rows = f.host.summaries(&Config::default());
+        let rows = f
+            .host
+            .summaries(&Config::default(), &KeywordOwners::default());
         assert!(rows[0].needs_approval && !rows[0].approved);
         assert!(f.host.create_from_template("nope").is_err());
 

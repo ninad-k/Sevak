@@ -10,6 +10,8 @@ use regex::RegexBuilder;
 use serde::Serialize;
 use sevak_platform::SystemCommand;
 
+use crate::keywords::KeywordOwners;
+
 #[cfg(test)]
 use super::model::OUT;
 use super::model::{
@@ -132,6 +134,24 @@ impl Workflow {
         self.check_graph(&mut problems);
         // Stable and readable: errors before warnings, otherwise in file order.
         problems.sort_by_key(|problem| problem.severity != Severity::Error);
+        problems
+    }
+
+    /// A warning for each keyword trigger whose keyword something else in
+    /// `owners` answers too. `own_key` is this workflow's own entry in
+    /// `owners` (see [`crate::keywords::workflow_key`]), which is not "something
+    /// else". Kept apart from [`Workflow::validate`], which needs no config.
+    pub fn keyword_problems(&self, owners: &KeywordOwners, own_key: Option<&str>) -> Vec<Problem> {
+        let mut problems = Vec::new();
+        let mut seen: HashSet<String> = HashSet::new();
+        for (node, keyword) in self.keyword_nodes() {
+            if !seen.insert(keyword.to_lowercase()) {
+                continue;
+            }
+            for (_, message) in owners.warnings_for(own_key, [keyword]) {
+                problems.push(Problem::warning(Some(&node.id), message));
+            }
+        }
         problems
     }
 
