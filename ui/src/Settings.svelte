@@ -4,6 +4,8 @@
   import HotkeyField from "./lib/HotkeyField.svelte";
   import HotkeyList from "./lib/HotkeyList.svelte";
   import Toggle from "./lib/Toggle.svelte";
+  import GalleryPage from "./lib/workflows/GalleryPage.svelte";
+  import WorkflowsPage from "./lib/workflows/WorkflowsPage.svelte";
   import { getStatus, onStatus, type Status } from "./lib/ipc";
   import {
     closeSettings,
@@ -74,7 +76,9 @@
   /** Hotkey entries whose key Rust cannot parse (reported by the list). */
   let hotkeyParseProblems = $state(0);
 
-  let active = $state<SectionId>("general");
+  /** The workflow pages keep their own files and are not part of the config form. */
+  type PageId = SectionId | "workflows" | "gallery";
+  let active = $state<PageId>("general");
   let hotkeyError = $state<string | null>(null);
   let actionsHotkeyError = $state<string | null>(null);
   let saving = $state(false);
@@ -108,14 +112,16 @@
         { id: "appearance", label: "Appearance" },
         { id: "search", label: "Search" },
         { id: "plugins", label: "Plugins" },
+        { id: "workflows", label: "Workflows" },
+        { id: "gallery", label: "Gallery" },
         { id: "web", label: "Web search" },
         { id: "files", label: "Files" },
         ...(showLinux ? [{ id: "linux", label: "Linux" }] : []),
-      ] as { id: SectionId; label: string }[]
+      ] as { id: PageId; label: string }[]
     ).map((section) => ({
       ...section,
       problems:
-        problems.count[section.id] +
+        (section.id in problems.count ? problems.count[section.id as SectionId] : 0) +
         (section.id === "general" && hotkeyError ? 1 : 0) +
         (section.id === "general" && actionsHotkeyError ? 1 : 0) +
         (section.id === "hotkeys" ? hotkeyParseProblems : 0),
@@ -705,6 +711,10 @@
           <p class="note">
             Web search engines are edited under “Web search”. Changes apply when you save.
           </p>
+        {:else if active === "workflows"}
+          <WorkflowsPage />
+        {:else if active === "gallery"}
+          <GalleryPage />
         {:else if active === "web"}
           <h1>Web search</h1>
           <p class="note">

@@ -13,7 +13,8 @@ crates/sevak-platform   OS access: launching, icons, app scanning, clipboard, pa
                         shortcut setup (Windows, macOS and Linux backends)
 crates/sevak-plugins    built-in plugins: apps, calculator (+ units, currency), files, bookmarks,
                         web search, system commands, shell, clipboard history, snippets,
-                        uuid example; the script plugin host (external plugins)
+                        uuid example; the script plugin host (external plugins); workflows
+                        (graph engine, runtime, gallery)
 src-tauri               the Tauri shell: window, hotkeys (main, Universal Actions + [[hotkey]] entries), tray, CLI,
                         --query / --run handling (direct.rs), script plugin approval, IPC
                         commands, bundling config
@@ -22,6 +23,8 @@ packaging/linux         desktop-entry template used by the .deb and .rpm
 scripts                 icon generator, WSL Linux test runner
 docs                    plugins, install, development
 examples/plugins        example script plugins (Python, PowerShell, Node)
+examples/workflows      example workflows (also packaged for the gallery)
+gallery                 index.json and packages/*.zip: the opt-in gallery's catalogue
 .github/workflows       ci.yml, release.yml
 ```
 

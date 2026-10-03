@@ -41,4 +41,9 @@ walkdir = "2"
 # blocking client runs on a plain background thread, never on the typing path.
 reqwest = { version = "0.13", default-features = false, features = ["blocking", "rustls-no-provider"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
+# Workflows: regex conditions and replacements (linear-time matching), and the
+# SHA-256 and zip handling behind the opt-in gallery's downloads.
+regex = "1"
+sha2 = "0.10"
+zip = { version = "4", default-features = false, features = ["deflate"] }
 

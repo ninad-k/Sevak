@@ -401,6 +401,25 @@ fn alfred_script_filter_output_is_mapped_to_actions() {
     );
     assert!(matches!(items[0].icon, Some(IconSource::File { .. })));
 
+    // `autocomplete` is what Tab inserts; the engine puts the keyword back.
+    assert_eq!(items[0].autocomplete.as_deref(), Some("al alfred rust "));
+    assert_eq!(items[1].autocomplete, None);
+    // `mods` become secondary actions: `alt` on Alt+Enter, the combination in
+    // the action panel only.
+    let secondary: Vec<_> = items[0]
+        .secondary
+        .iter()
+        .map(|s| (s.label.as_str(), s.modifier))
+        .collect();
+    assert_eq!(
+        secondary,
+        [
+            ("Copy the text", Some(sevak_core::Modifier::Alt)),
+            ("Open both", None)
+        ]
+    );
+    assert!(items[1].secondary.is_empty());
+
     engine.execute(&items[0], "al rust").unwrap();
     assert_eq!(
         *world.platform.urls.lock().unwrap(),
@@ -408,6 +427,18 @@ fn alfred_script_filter_output_is_mapped_to_actions() {
     );
     engine.execute(&items[1], "al rust").unwrap();
     assert_eq!(*world.platform.clipboard.lock().unwrap(), ["just text"]);
+
+    // Alt+Enter runs the mod's own action through the same plugin.
+    engine.execute_secondary(&items[0], 0, "al rust").unwrap();
+    assert_eq!(
+        *world.platform.clipboard.lock().unwrap(),
+        ["just text", "copy rust"]
+    );
+    engine.execute_secondary(&items[0], 1, "al rust").unwrap();
+    assert_eq!(
+        *world.platform.urls.lock().unwrap(),
+        ["https://example.com/?q=rust", "https://example.com/both"]
+    );
 }
 
 #[test]

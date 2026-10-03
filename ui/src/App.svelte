@@ -22,6 +22,7 @@
     takePendingShow,
     type Modifier,
     type ResultDto,
+    type OutputPayload,
     type SelectionActionDto,
     type SelectionPayload,
     type ShowPayload,
@@ -52,6 +53,8 @@
    * it is set the panel lists them instead of a row's actions (and is open).
    */
   let selection = $state<SelectionPayload | null>(null);
+  /** A workflow's text view node: a block of text under the search bar. */
+  let textView = $state<{ heading: string; text: string } | null>(null);
   /** Large Type: the text shown huge, or `null` when it is not showing. */
   let largeText = $state<string | null>(null);
   /** The window was stretched over the screen (else the text shows inside the launcher). */
@@ -145,6 +148,7 @@
     searchSeq++; // drop any search still in flight
     panelOpen = false;
     selection = null;
+    textView = null;
     closeLargeType();
     historyPos = -1;
     query = "";
@@ -161,11 +165,25 @@
       openSelection(payload.selection);
       return;
     }
+    if (payload?.output) {
+      showOutput(payload.output);
+      return;
+    }
     if (payload?.error) error = payload.error;
     if (payload?.query) {
       prefill(payload.query);
       return;
     }
+    focusInput(true);
+  }
+
+  /** Shows what a workflow's Large Type or text view node produced. */
+  function showOutput(output: OutputPayload) {
+    if (output.kind === "large_type") {
+      void openLargeType(output.text);
+      return;
+    }
+    textView = { heading: output.heading, text: output.text };
     focusInput(true);
   }
 
@@ -829,6 +847,13 @@
       </div>
     {/if}
 
+    {#if textView}
+      <div class="textview" role="region" aria-label={textView.heading || "Workflow output"}>
+        {#if textView.heading}<div class="textview-heading">{textView.heading}</div>{/if}
+        <pre class="textview-text">{textView.text}</pre>
+      </div>
+    {/if}
+
     {#if error}
       <div class="error" role="alert">{error}</div>
     {/if}
@@ -1016,6 +1041,31 @@
     font-size: calc(11px * var(--font-scale, 1));
     line-height: 1.5;
     color: var(--muted);
+  }
+
+  .textview {
+    max-height: 340px;
+    overflow-y: auto;
+    padding: 10px 18px 12px;
+    border-top: 1px solid var(--border);
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
+  .textview-heading {
+    margin-bottom: 4px;
+    color: var(--muted);
+    font-size: calc(12px * var(--font-scale, 1));
+    font-weight: 600;
+  }
+
+  .textview-text {
+    margin: 0;
+    font: inherit;
+    font-size: calc(14px * var(--font-scale, 1));
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 
   .error {

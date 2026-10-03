@@ -130,7 +130,7 @@ sure the package came from the project's release page.
 
 App search, indexed file search, calculations and local ranking work without
 network access. Web searches, checking for a release, and downloading updates
-need an internet connection. Indexes depend on locally accessible applications
+need an internet connection, as does the optional workflow gallery. Indexes depend on locally accessible applications
 and folders.
 
 ## Where is my data? Does Sevak collect analytics?

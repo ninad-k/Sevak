@@ -25,11 +25,44 @@ pub struct ShowPayload {
     pub error: Option<String>,
     /// The actions for what was selected in another app (Universal Actions).
     pub selection: Option<SelectionPayload>,
+    /// Text a workflow's output node shows in the launcher.
+    pub output: Option<OutputPayload>,
 }
 
 impl ShowPayload {
     fn is_empty(&self) -> bool {
-        self.query.is_none() && self.error.is_none() && self.selection.is_none()
+        self.query.is_none()
+            && self.error.is_none()
+            && self.selection.is_none()
+            && self.output.is_none()
+    }
+}
+
+/// How the launcher shows a workflow's output.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OutputKind {
+    /// Huge text over the screen.
+    LargeType,
+    /// A block of text under the search bar.
+    TextView,
+}
+
+/// What a workflow's Large Type or text view node shows.
+#[derive(Clone, PartialEq, Eq, Serialize)]
+pub struct OutputPayload {
+    pub kind: OutputKind,
+    pub heading: String,
+    pub text: String,
+}
+
+// By hand: the text may be anything the user selected or typed.
+impl std::fmt::Debug for OutputPayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OutputPayload")
+            .field("kind", &self.kind)
+            .field("text_bytes", &self.text.len())
+            .finish()
     }
 }
 

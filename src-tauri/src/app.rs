@@ -11,6 +11,7 @@ use crate::cli::{self, Launch};
 use crate::state::AppState;
 use crate::{
     autostart, commands, direct, hotkey, icons, search, selection, settings, tray, updater, window,
+    workflows,
 };
 
 pub fn run(
@@ -34,6 +35,7 @@ pub fn run(
                 Launch::Query(query) => direct::open_with_query(app, query),
                 Launch::Run(id) => direct::run_result(app, id),
                 Launch::Actions => selection::trigger(app),
+                Launch::Trigger { target, arg } => workflows::run_trigger(app, target, arg),
                 Launch::Settings => settings::open(app),
                 Launch::Background => {}
                 Launch::Quit => quit(app),
@@ -41,6 +43,7 @@ pub fn run(
         }))
         .plugin(autostart::plugin())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(updater::plugin());
     if let Some(plugin) = hotkey::plugin(strategy) {
         builder = builder.plugin(plugin);
@@ -74,7 +77,19 @@ pub fn run(
             settings::setup_wayland_hotkey,
             settings::open_config_file,
             settings::open_log_dir,
-            settings::close_settings
+            settings::close_settings,
+            workflows::list_workflows,
+            workflows::load_workflow,
+            workflows::check_workflow,
+            workflows::save_workflow,
+            workflows::create_workflow,
+            workflows::delete_workflow,
+            workflows::set_workflow_enabled,
+            workflows::review_workflow,
+            workflows::workflow_templates,
+            workflows::open_workflows_folder,
+            workflows::gallery_load,
+            workflows::gallery_install
         ])
         .on_window_event(window::on_window_event)
         .setup(move |app| {
@@ -97,6 +112,7 @@ pub fn run(
                 Launch::Query(query) => direct::open_with_query(handle, query),
                 Launch::Run(id) => direct::run_result(handle, id),
                 Launch::Actions => selection::trigger(handle),
+                Launch::Trigger { target, arg } => workflows::run_trigger(handle, target, arg),
                 Launch::Settings => settings::open(handle),
                 Launch::Background => {}
                 Launch::Quit => quit(handle),

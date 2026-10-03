@@ -1,0 +1,60 @@
+# Type "ddg" and some words to search DuckDuckGo; "ddg" alone opens its home page.
+#
+# Built with Settings > Workflows. It shows a keyword trigger with an optional
+# argument, a conditional that branches on whether you typed anything, and
+# URL nodes (the query is percent-encoded automatically). It runs no code, so
+# Sevak does not ask for approval.
+format = 1
+name = "DuckDuckGo search"
+description = "Type ddg and some words to search DuckDuckGo."
+author = "Sevak"
+version = "1.0"
+
+[[node]]
+id = "keyword"
+type = "keyword"
+title = "Search DuckDuckGo for {query}"
+x = 40.0
+y = 120.0
+keyword = "ddg"
+argument = "optional"
+subtitle = "Opens the results in your browser"
+
+[[node]]
+id = "typed-something"
+type = "conditional"
+title = "Typed something?"
+x = 320.0
+y = 120.0
+left = "{query}"
+test = "not_empty"
+
+[[node]]
+id = "search"
+type = "open_url"
+title = "Search"
+x = 600.0
+y = 60.0
+url = "https://duckduckgo.com/?q={query}"
+
+[[node]]
+id = "home"
+type = "open_url"
+title = "Home page"
+x = 600.0
+y = 200.0
+url = "https://duckduckgo.com/"
+
+[[connection]]
+from = "keyword"
+to = "typed-something"
+
+[[connection]]
+from = "typed-something"
+port = "then"
+to = "search"
+
+[[connection]]
+from = "typed-something"
+port = "else"
+to = "home"

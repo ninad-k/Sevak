@@ -255,7 +255,8 @@ An instance ID such as `web:yt` disables that engine. A family ID such as
 `web` disables every engine in that family. Available built-in families are
 `apps`, `calculator`, `web`, `files`, `bookmarks`, `system`, `shell`,
 `clipboard`, `snippets`, `selection` (Universal Actions) and `uuid`. Script plugins use `script:<name>`, or
-`script` for all of them.
+`script` for all of them. [Workflows](workflows.md) use `workflow:<folder>`, or `workflow` for all of
+them (each workflow also has its own switch in Settings > Workflows).
 [Plugin details](plugins.md#registry-and-enablingdisabling).
 
 ### Control startup and updates
@@ -314,7 +315,10 @@ when introducing or documenting a new setting.
 
 Linux locations follow the OS/XDG directory configuration when overridden;
 `SEVAK_CONFIG_DIR` / `--config` and `SEVAK_DATA_DIR` override them on every OS.
-Script plugins live in `plugins/` next to `config.toml`.
+Script plugins live in `plugins/` next to `config.toml`, and [workflows](workflows.md)
+in `workflows/` (each in a folder with a `workflow.toml`; the builder in
+Settings writes them). A workflow's scripts may keep files in `workflows/<name>/`
+of the data folder.
 
 The data folder holds:
 
@@ -323,7 +327,8 @@ The data folder holds:
 | `usage.json` | Launch counts for ranking, your last 50 searches (if `query_history` is on) and the `>` commands you ran |
 | `clipboard-history.json` | Clipboard history, unencrypted, only if enabled |
 | `currency-rates.json` | Cached ECB exchange rates, only if currency conversion is on |
-| `script-plugin-approvals.json` | Script plugins you allowed |
+| `script-plugin-approvals.json` | Script plugins and workflows you allowed |
+| `plugins/<name>/`, `workflows/<name>/` | Data folders for script plugins and workflows (`SEVAK_PLUGIN_DATA`, `SEVAK_WORKFLOW_DATA`) |
 | `logs/` | Log files |
 
 Usage history affects ranking; logs help diagnose failures. These files stay
