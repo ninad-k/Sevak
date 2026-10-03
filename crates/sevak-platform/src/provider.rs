@@ -5,6 +5,7 @@ use std::path::Path;
 use sevak_core::{AppEntry, IconData, IconSource, LaunchTarget};
 
 use crate::error::Result;
+use crate::system::{SettingsPage, SystemCommand};
 
 /// Everything Sevak needs from the operating system to find and start things.
 ///
@@ -38,5 +39,29 @@ pub trait PlatformProvider: Send + Sync {
     /// Replaces the clipboard's contents with `text`.
     fn set_clipboard_text(&self, text: &str) -> Result<()> {
         crate::clipboard::set_text(text)
+    }
+
+    /// The power and session commands that can work on this system right now
+    /// (for example no hibernate without swap, no logout the desktop cannot
+    /// do). Probes the system; call it from a background thread.
+    fn supported_system_commands(&self) -> Vec<SystemCommand> {
+        crate::system::supported_commands()
+    }
+
+    /// Runs one of the [`PlatformProvider::supported_system_commands`].
+    fn run_system_command(&self, command: SystemCommand) -> Result<()> {
+        crate::system::run_command(command)
+    }
+
+    /// The pages of the system settings app that exist on this system.
+    fn supported_settings_pages(&self) -> Vec<SettingsPage> {
+        crate::system::supported_settings_pages()
+    }
+
+    /// Opens one page of the system settings app. A closed set of pages rather
+    /// than a URI, so [`PlatformProvider::open_url`] can stay limited to web
+    /// and mail links.
+    fn open_settings_page(&self, page: SettingsPage) -> Result<()> {
+        crate::system::open_settings_page(page)
     }
 }

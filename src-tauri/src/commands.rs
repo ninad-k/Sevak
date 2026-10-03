@@ -5,6 +5,7 @@ use std::time::Instant;
 use serde::Serialize;
 use sevak_core::{Action, ResultItem};
 use tauri::{AppHandle, LogicalSize, Manager, State, WebviewWindow};
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
 use crate::icons::IconDto;
 use crate::state::{AppState, Status};
@@ -128,6 +129,22 @@ fn hands_over(action: &Action) -> bool {
     )
 }
 
+/// Puts a plugin's confirmation question to the user in a native dialog whose
+/// OK button carries the action's name. Blocks, so only call it off the main
+/// thread. Anything but an explicit OK (Cancel, closing the dialog, no dialog
+/// available) declines: a destructive action never runs by accident.
+fn confirmed(app: &AppHandle, action: &str, question: String) -> bool {
+    app.dialog()
+        .message(question)
+        .title("Sevak")
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            action.to_owned(),
+            "Cancel".to_owned(),
+        ))
+        .blocking_show()
+}
+
 fn run_execute(app: &AppHandle, id: &str, ticket: u64) -> Result<(), String> {
     let state = app.state::<AppState>();
     let search = &state.search;
@@ -135,6 +152,13 @@ fn run_execute(app: &AppHandle, id: &str, ticket: u64) -> Result<(), String> {
         tracing::warn!(id, "execute: result expired");
         return Err("result expired".to_owned());
     };
+
+    if let Some(question) = search.engine().confirmation(&item) {
+        if !confirmed(app, &item.title, question) {
+            tracing::info!(id, "execute: declined at the confirmation");
+            return Ok(());
+        }
+    }
 
     let optimistic = hands_over(&item.action);
     if optimistic {

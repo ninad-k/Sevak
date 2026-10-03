@@ -5,6 +5,7 @@ use std::env;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::time::Duration;
 
 use crate::error::{PlatformError, Result};
 
@@ -122,6 +123,73 @@ pub fn spawn_detached_in<S: AsRef<OsStr>>(
         .map_err(|err| spawn_error(program, err))
 }
 
+/// Runs `program` and reports an immediate failure.
+///
+/// Waits up to `grace` for the program to exit. A non-zero exit inside that
+/// time becomes a [`PlatformError::CommandFailed`] carrying the program's
+/// stderr; a program still running afterwards (a slow job, or a window that
+/// stays open) is left to finish in the background and counts as started.
+pub fn run_checked<S: AsRef<OsStr>>(program: &str, args: &[S], grace: Duration) -> Result<()> {
+    use std::io::Read;
+    use std::sync::mpsc;
+
+    let mut command = Command::new(program);
+    command
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped());
+    apply_child_env(&mut command, crate::session::xwayland_forced());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // Console tools such as shutdown.exe would flash a console window.
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    let mut child = command.spawn().map_err(|err| spawn_error(program, err))?;
+
+    // A thread owns the child so a slow program never blocks the caller and is
+    // still reaped; it reports the exit through the channel if anyone listens.
+    let (tx, rx) = mpsc::channel();
+    let name = program.to_owned();
+    let waiter = std::thread::Builder::new()
+        .name("sevak-run".into())
+        .spawn(move || {
+            let mut stderr = String::new();
+            if let Some(mut pipe) = child.stderr.take() {
+                let _ = pipe.read_to_string(&mut stderr);
+            }
+            let status = child.wait();
+            if let Err(err) = &status {
+                tracing::debug!(program = %name, %err, "waiting on child failed");
+            }
+            let _ = tx.send((status, stderr));
+        });
+    if let Err(err) = waiter {
+        tracing::debug!(program, %err, "could not start waiter thread");
+        return Ok(());
+    }
+
+    match rx.recv_timeout(grace) {
+        Ok((Ok(status), _)) if status.success() => Ok(()),
+        Ok((Ok(status), stderr)) => {
+            let stderr = stderr.trim();
+            Err(PlatformError::CommandFailed {
+                command: program.to_owned(),
+                message: if stderr.is_empty() {
+                    status.to_string()
+                } else {
+                    format!("{status}: {stderr}")
+                },
+            })
+        }
+        Ok((Err(err), _)) => Err(spawn_error(program, err)),
+        // Still running, or the waiter vanished: nothing failed yet.
+        Err(_) => Ok(()),
+    }
+}
+
 /// Lets the already-running Sevak instance bring its window to the foreground
 /// when this (second) process forwards it `--toggle`.
 ///
@@ -171,6 +239,58 @@ mod tests {
         };
         assert!(removed(true));
         assert!(!removed(false));
+    }
+
+    fn shell(script: &str) -> (&'static str, Vec<String>) {
+        if cfg!(windows) {
+            ("cmd", vec!["/c".into(), script.into()])
+        } else {
+            ("sh", vec!["-c".into(), script.into()])
+        }
+    }
+
+    #[test]
+    fn run_checked_succeeds_for_a_clean_exit() {
+        let (program, args) = shell("exit 0");
+        assert!(run_checked(program, &args, Duration::from_secs(10)).is_ok());
+    }
+
+    #[test]
+    fn run_checked_reports_a_failure_with_its_stderr() {
+        let (program, args) = shell(if cfg!(windows) {
+            "echo boom 1>&2 & exit 3"
+        } else {
+            "echo boom >&2; exit 3"
+        });
+        let err = run_checked(program, &args, Duration::from_secs(10)).unwrap_err();
+        let text = err.to_string();
+        assert!(text.contains("boom"), "{text}");
+        assert!(matches!(err, PlatformError::CommandFailed { .. }));
+    }
+
+    #[test]
+    fn run_checked_does_not_wait_for_a_slow_program() {
+        let (program, args) = if cfg!(windows) {
+            (
+                "cmd",
+                vec!["/c".to_owned(), "ping -n 6 127.0.0.1 >nul".to_owned()],
+            )
+        } else {
+            ("sh", vec!["-c".to_owned(), "sleep 5".to_owned()])
+        };
+        let started = std::time::Instant::now();
+        assert!(run_checked(program, &args, Duration::from_millis(100)).is_ok());
+        assert!(started.elapsed() < Duration::from_secs(4));
+    }
+
+    #[test]
+    fn run_checked_of_missing_program_is_an_error() {
+        let result = run_checked(
+            "sevak-definitely-not-a-real-program",
+            &[] as &[&str],
+            Duration::from_secs(1),
+        );
+        assert!(matches!(result, Err(PlatformError::CommandFailed { .. })));
     }
 
     #[test]

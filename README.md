@@ -23,6 +23,10 @@ Built with Rust, [Tauri](https://tauri.app) v2 and Svelte 5. Licensed under
 - **File search**: `f <name>` searches files and folders under the folders you
   choose (Desktop, Documents and Downloads by default). Optionally also shown
   for plain queries.
+- **System commands**: type `lock`, `sleep`, `restart`, `shut down`, `log out`
+  or `empty trash` (and `bluetooth`, `display`, `wifi` ... for OS settings
+  pages). Restart, shut down, log out and emptying the trash ask first. See
+  [System commands](#system-commands).
 - **Frequency and recency ranking**: results you pick often and recently rise
   to the top, per query.
 - **Plugin system**: every result source is a plugin; there is a worked example
@@ -100,6 +104,28 @@ web search (`g` by default) is offered.
 The tray menu has Show, Settings (opens the settings window), Reload index
 (re-reads the config and rescans apps and files) and Quit.
 
+### System commands
+
+System commands are matched by name in ordinary queries, like apps (two or more
+letters). Only the commands that can work on your machine are listed.
+
+| Command (aliases) | Windows | macOS | Linux |
+|---|---|---|---|
+| Lock screen (`lock`) | `LockWorkStation` | `pmset displaysleepnow` | `loginctl lock-session` |
+| Sleep (`suspend`) | `SetSuspendState` | `pmset sleepnow` | `systemctl suspend` |
+| Hibernate | `shutdown /h`, if hibernation is on | not offered | `systemctl hibernate`, if swap is set up |
+| Restart (`reboot`) | `shutdown /r /t 0` | System Events | `systemctl reboot` |
+| Shut down (`shutdown`, `power off`) | `shutdown /s /t 0` | System Events | `systemctl poweroff` |
+| Log out (`logout`, `sign out`) | `shutdown /l` | System Events | `gnome-session-quit`, KDE `qdbus`, or `loginctl terminate-session` |
+| Empty Recycle Bin / Trash | `SHEmptyRecycleBin` | Finder | `gio trash --empty` |
+| Settings pages (`bluetooth`, `display`, `wifi`, `sound`, `network`, `apps`, `power`, ...) | `ms-settings:` | System Settings panes | `gnome-control-center <panel>`, if installed |
+
+Restart, shut down, log out and empty trash show a confirmation dialog first.
+On macOS the first use asks permission to control System Events or Finder, and
+Lock needs "Require password after screen saver begins or display is turned off"
+(the default) to actually lock. Turn confirmation off or hide commands in the
+`[system]` section of the config (below).
+
 ## Configuration
 
 Sevak creates a commented config file on first run:
@@ -132,7 +158,7 @@ fallback_web_search = "g"
 theme = "system"       # "system", "light" or "dark"
 
 [plugins]
-disabled = []          # "apps", "calculator", "files", "web:<keyword>"
+disabled = []          # "apps", "calculator", "files", "system", "web:<keyword>"
 
 [files]
 directories = ["~/Desktop", "~/Documents", "~/Downloads"]
@@ -140,6 +166,11 @@ max_depth = 4
 include_hidden = false
 keyword = "f"
 global = true
+
+[system]
+confirm = true         # ask before restart, shut down, log out, empty trash
+disabled = []          # "lock", "sleep", "hibernate", "restart", "shutdown",
+                       # "logout", "empty_trash", "settings", "settings:<page>"
 
 [linux]
 wayland_use_xwayland = true

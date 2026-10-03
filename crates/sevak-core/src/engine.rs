@@ -289,6 +289,16 @@ impl SearchEngine {
         results
     }
 
+    /// The question to ask the user before [`SearchEngine::execute`] runs
+    /// `item`, if its plugin wants one (see [`Plugin::confirmation`]).
+    pub fn confirmation(&self, item: &ResultItem) -> Option<String> {
+        let plugin = self.plugin(&item.plugin_id)?;
+        guarded(plugin.as_ref(), "confirmation", || {
+            plugin.confirmation(item)
+        })
+        .unwrap_or(None)
+    }
+
     /// Executes `item` through its plugin and, on success, records the launch.
     /// `query` is the text the user had typed (the whole input, keyword
     /// included, so it matches what [`SearchEngine::query`] later receives).
@@ -430,6 +440,9 @@ mod tests {
             let _ = item;
             self.executed.fetch_add(1, AtomicOrdering::SeqCst);
             Ok(())
+        }
+        fn confirmation(&self, item: &ResultItem) -> Option<String> {
+            (item.id.ends_with(":danger")).then(|| format!("Run {}?", item.title))
         }
         fn refresh(&self) -> PluginResult<()> {
             match &self.refresh_error {
@@ -773,6 +786,15 @@ mod tests {
         let bad_item = item("bad", "b", "B", 1.0);
         assert!(e.execute_at(&bad_item, "x", T0).is_err());
         assert!(e.usage_snapshot().get("bad:b").is_none());
+    }
+
+    #[test]
+    fn confirmation_comes_from_the_owning_plugin() {
+        let e = engine(vec![Mock::fixed("p", &[]).arc()], 8, &[]);
+        let danger = item("p", "danger", "Format", 1.0);
+        assert_eq!(e.confirmation(&danger).as_deref(), Some("Run Format?"));
+        assert_eq!(e.confirmation(&item("p", "safe", "Open", 1.0)), None);
+        assert_eq!(e.confirmation(&item("ghost", "danger", "X", 1.0)), None);
     }
 
     #[test]

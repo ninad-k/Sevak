@@ -5,6 +5,7 @@ mod icons;
 mod packaged;
 mod provider;
 mod shortcuts;
+pub(crate) mod system;
 
 pub(crate) use provider::WindowsProvider;
 

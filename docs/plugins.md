@@ -59,6 +59,11 @@ Code map:
 - **Platform provider** (`PlatformProvider`) is the only OS-specific layer
   (Windows Start Menu / packaged apps, Linux `.desktop` entries). It also
   gatekeeps URLs: `open_url` accepts only `http://`, `https://` and `mailto:`.
+  Other OS entry points are narrow, closed vocabularies instead of strings:
+  `run_system_command(SystemCommand)` and `open_settings_page(SettingsPage)`
+  (with `supported_*` methods that report what works on this machine). They
+  back the `system` plugin, so settings URIs such as `ms-settings:` never pass
+  through `open_url`.
 
 ### Routing
 
@@ -122,6 +127,7 @@ process, so plugins must never panic.
 | `calculator` | `calculator` | |
 | `web` | `web:<keyword>` per `[[web_search]]` engine | |
 | `files` | `files` | |
+| `system` | `system` | lock, sleep, restart, settings pages; global |
 | `uuid` | `uuid` | example plugin, keyword-only |
 
 - `PluginRegistry::builtin()` is the stock set; `register(descriptor)` adds (or
@@ -189,8 +195,13 @@ Rules of thumb (all spelled out in the example):
 - Delegate standard actions to `execute_action`. Use `Action::Custom` only when
   none fits, and handle it in your own `execute`.
 - Icons are `IconSource::builtin(name)` (a UI glyph: `app`, `calculator`,
-  `web`, `file`, `folder`, `copy`, `plugin`), or `File` / `Shell` for real
+  `web`, `file`, `folder`, `copy`, `plugin`, `lock`, `sleep`, `restart`,
+  `power`, `logout`, `trash`, `settings`), or `File` / `Shell` for real
   images.
+- For an action that cannot be undone, override `Plugin::confirmation(item)` to
+  return the question to ask. The shell shows it in a native dialog before
+  `execute` runs and skips the action if the user declines. The `system`
+  plugin does this for restart, shut down, log out and emptying the trash.
 - Pick scores deliberately: fuzzy score for fuzzy matches, `score::KEYWORD` for
   rows the user asked for by keyword, `score::EXACT_ANSWER` for answers.
 
