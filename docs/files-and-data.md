@@ -119,7 +119,7 @@ The script plugins and workflows you allowed to run. Delete it to be asked again
 
 ### plugins/ and workflows/ (data folder)
 
-`plugins/<name>/` and `workflows/<name>/` in the data folder are where script plugins and workflow scripts may keep their own files (`SEVAK_PLUGIN_DATA`, `SEVAK_WORKFLOW_DATA`). Sevak itself writes nothing there.
+`plugins/<name>/` and `workflows/<name>/` in the data folder are where script plugins and workflow scripts may keep their own files (`SEVAK_PLUGIN_DATA`, `SEVAK_WORKFLOW_DATA`). Sevak creates the folder when the script first runs; what goes in it is up to the script.
 
 ### themes/, plugins/ and workflows/ (config folder)
 
