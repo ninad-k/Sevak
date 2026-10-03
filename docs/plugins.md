@@ -44,18 +44,39 @@ Code map:
  Plugin::execute(item)  ->  execute_action(platform, &item.action)
     |
     v
- PlatformProvider::{launch, open_path, open_url, set_clipboard_text}   (sevak-platform)
+ PlatformProvider::{launch, open_path, open_url, set_clipboard_text,
+                    reveal_path, launch_as_admin}                      (sevak-platform)
 ```
+
+(`SearchEngine::execute_secondary(item, index, query)` is the same path for a
+secondary action.)
 
 - **Engine** (`SearchEngine`) owns the plugins (`Vec<Arc<dyn Plugin>>`) and the
   usage store. It never interprets results; it only routes and ranks them.
 - **Plugins** answer queries from in-memory data and describe what should
   happen as an `Action`. They do not touch the OS directly.
 - **Actions** (`Action`) are a closed vocabulary: `Launch`, `OpenPath`,
-  `OpenUrl`, `CopyText`, and `Custom` (plugin-defined payload that only the
-  owning plugin understands). `execute_action` in `sevak-plugins` maps the
-  standard ones onto the platform provider; `Custom` yields
-  `PluginError::Unsupported` there, so a plugin using it must handle it itself.
+  `OpenUrl`, `CopyText`, `RevealPath` (show in the file manager),
+  `RunAsAdmin` (elevated launch; Windows) and `Custom` (plugin-defined payload
+  that only the owning plugin understands). `execute_action` in
+  `sevak-plugins` maps the standard ones onto the platform provider; `Custom`
+  yields `PluginError::Unsupported` there, so a plugin using it must handle it
+  itself.
+- **Secondary actions.** Besides the `action` Enter runs, a result can carry
+  more, added with `ResultItem::with_secondary(label, modifier, action)`. The
+  `modifier` (`Modifier::Ctrl`/`Shift`/`Alt`, or `None`) is the key held with
+  Enter to run it straight from the list; the action panel (Right arrow or
+  `Ctrl+K`) lists all of them. Use at most one action per modifier. Plugins need
+  no extra code to support them: the engine's `execute_secondary` hands the
+  plugin its item with the chosen action swapped in as `item.action`, so
+  `execute_action(.., &item.action)` just works (a `Custom` secondary action
+  arrives as `Custom` in `execute`). Usage is recorded for the item either way.
+  Offer only what can work here: for example the apps plugin adds
+  `RunAsAdmin` only when `PlatformProvider::can_run_as_admin()` is true.
+- **Copy text.** `ResultItem::copy_text()` is what `Ctrl+C` copies: the value
+  of a `CopyText` action, the URL of an `OpenUrl`, the path of `OpenPath`,
+  `RevealPath` or a launch target. Nothing is copied for `Custom` actions or
+  packaged apps.
 - **Platform provider** (`PlatformProvider`) is the only OS-specific layer
   (Windows Start Menu / packaged apps, Linux `.desktop` entries). It also
   gatekeeps URLs: `open_url` accepts only `http://`, `https://` and `mailto:`.
@@ -188,6 +209,8 @@ Rules of thumb (all spelled out in the example):
   remembering the last `query`.
 - Delegate standard actions to `execute_action`. Use `Action::Custom` only when
   none fits, and handle it in your own `execute`.
+- Add `with_secondary(..)` actions where they are natural (a path to reveal or
+  copy, a URL to copy). Secondary actions share the primary's `execute`.
 - Icons are `IconSource::builtin(name)` (a UI glyph: `app`, `calculator`,
   `web`, `file`, `folder`, `copy`, `plugin`), or `File` / `Shell` for real
   images.

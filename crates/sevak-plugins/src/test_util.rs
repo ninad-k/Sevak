@@ -13,6 +13,10 @@ pub struct MockPlatform {
     pub opened_paths: Mutex<Vec<PathBuf>>,
     pub opened_urls: Mutex<Vec<String>>,
     pub clipboard: Mutex<Vec<String>>,
+    pub revealed: Mutex<Vec<PathBuf>>,
+    pub elevated: Mutex<Vec<LaunchTarget>>,
+    /// What `can_run_as_admin` reports; off by default, like most platforms.
+    pub admin_supported: bool,
 }
 
 impl MockPlatform {
@@ -25,6 +29,14 @@ impl MockPlatform {
 
     pub fn empty() -> Arc<Self> {
         Arc::new(Self::default())
+    }
+
+    /// A platform that can run applications as administrator (like Windows).
+    pub fn with_admin() -> Arc<Self> {
+        Arc::new(Self {
+            admin_supported: true,
+            ..Self::default()
+        })
     }
 }
 
@@ -40,6 +52,20 @@ impl PlatformProvider for MockPlatform {
 
     fn open_path(&self, path: &Path) -> Result<()> {
         self.opened_paths.lock().unwrap().push(path.to_path_buf());
+        Ok(())
+    }
+
+    fn reveal_path(&self, path: &Path) -> Result<()> {
+        self.revealed.lock().unwrap().push(path.to_path_buf());
+        Ok(())
+    }
+
+    fn can_run_as_admin(&self) -> bool {
+        self.admin_supported
+    }
+
+    fn launch_as_admin(&self, target: &LaunchTarget) -> Result<()> {
+        self.elevated.lock().unwrap().push(target.clone());
         Ok(())
     }
 

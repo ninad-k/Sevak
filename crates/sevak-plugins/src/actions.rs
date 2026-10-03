@@ -13,6 +13,39 @@ pub fn execute_action(platform: &dyn PlatformProvider, action: &Action) -> Plugi
         Action::CopyText { text } => platform
             .set_clipboard_text(text)
             .map_err(PluginError::other),
+        Action::RevealPath { path } => platform.reveal_path(path).map_err(PluginError::other),
+        Action::RunAsAdmin { target } => {
+            platform.launch_as_admin(target).map_err(PluginError::other)
+        }
         Action::Custom { payload } => Err(PluginError::Unsupported(payload.clone())),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use sevak_core::LaunchTarget;
+
+    use super::*;
+    use crate::test_util::MockPlatform;
+
+    #[test]
+    fn reveal_and_elevated_launch_reach_the_platform() {
+        let platform = MockPlatform::with_admin();
+        let path = PathBuf::from("/tmp/a.txt");
+        execute_action(&*platform, &Action::RevealPath { path: path.clone() }).unwrap();
+        assert_eq!(*platform.revealed.lock().unwrap(), vec![path.clone()]);
+
+        let target = LaunchTarget::Shortcut { path };
+        execute_action(
+            &*platform,
+            &Action::RunAsAdmin {
+                target: target.clone(),
+            },
+        )
+        .unwrap();
+        assert_eq!(*platform.elevated.lock().unwrap(), vec![target]);
+        assert!(platform.launched.lock().unwrap().is_empty());
     }
 }

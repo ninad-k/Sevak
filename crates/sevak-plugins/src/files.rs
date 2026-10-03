@@ -5,7 +5,7 @@ use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
 use sevak_core::config::FilesConfig;
-use sevak_core::{Action, FuzzyQuery, IconSource, Plugin, PluginResult, ResultItem};
+use sevak_core::{Action, FuzzyQuery, IconSource, Modifier, Plugin, PluginResult, ResultItem};
 use sevak_platform::PlatformProvider;
 use walkdir::{DirEntry, WalkDir};
 
@@ -129,6 +129,20 @@ impl FilesPlugin {
                     &entry.name,
                     Action::OpenPath {
                         path: entry.path.clone(),
+                    },
+                )
+                .with_secondary(
+                    "Show in folder",
+                    Some(Modifier::Ctrl),
+                    Action::RevealPath {
+                        path: entry.path.clone(),
+                    },
+                )
+                .with_secondary(
+                    "Copy path",
+                    Some(Modifier::Shift),
+                    Action::CopyText {
+                        text: path_string.clone(),
                     },
                 )
                 .with_subtitle(subtitle(&entry.path, self.home.as_deref()))
@@ -348,6 +362,48 @@ mod tests {
 
     fn titles(plugin: &FilesPlugin, query: &str) -> Vec<String> {
         plugin.query(query).into_iter().map(|r| r.title).collect()
+    }
+
+    #[test]
+    fn files_offer_reveal_and_copy_path() {
+        let dir = tempfile::tempdir().unwrap();
+        touch(&dir.path().join("report.txt"));
+        let plugin = indexed(config_for(&[dir.path()]), None);
+        let item = plugin.query("report").remove(0);
+        let path = dir.path().join("report.txt");
+
+        assert_eq!(item.secondary.len(), 2);
+        assert_eq!(item.secondary[0].label, "Show in folder");
+        assert_eq!(item.secondary[0].modifier, Some(Modifier::Ctrl));
+        assert_eq!(
+            item.secondary[0].action,
+            Action::RevealPath { path: path.clone() }
+        );
+        assert_eq!(item.secondary[1].label, "Copy path");
+        assert_eq!(item.secondary[1].modifier, Some(Modifier::Shift));
+        assert_eq!(
+            item.secondary[1].action,
+            Action::CopyText {
+                text: path.to_string_lossy().into_owned()
+            }
+        );
+        assert_eq!(item.copy_text(), Some(path.to_string_lossy().into_owned()));
+    }
+
+    #[test]
+    fn revealing_goes_through_the_platform() {
+        let dir = tempfile::tempdir().unwrap();
+        touch(&dir.path().join("report.txt"));
+        let platform = MockPlatform::empty();
+        let plugin = FilesPlugin::with_home(config_for(&[dir.path()]), platform.clone(), None);
+        plugin.refresh().unwrap();
+        let mut item = plugin.query("report").remove(0);
+        item.action = item.secondary[0].action.clone();
+        plugin.execute(&item).unwrap();
+        assert_eq!(
+            *platform.revealed.lock().unwrap(),
+            vec![dir.path().join("report.txt")]
+        );
     }
 
     #[test]

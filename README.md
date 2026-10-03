@@ -23,6 +23,11 @@ Built with Rust, [Tauri](https://tauri.app) v2 and Svelte 5. Licensed under
 - **File search**: `f <name>` searches files and folders under the folders you
   choose (Desktop, Documents and Downloads by default). Optionally also shown
   for plain queries.
+- **Result actions**: act on a result in more than one way: show a file or app
+  in its folder, copy its path or URL, run an app as administrator (Windows).
+  Press `Ctrl+Enter` / `Shift+Enter` / `Alt+Enter`, or open the action panel
+  with `Right` or `Ctrl+K`. `Ctrl+C` copies the result's path, URL or value, and
+  `Ctrl+L` shows it as Large Type.
 - **Frequency and recency ranking**: results you pick often and recently rise
   to the top, per query.
 - **Plugin system**: every result source is a plugin; there is a worked example
@@ -81,7 +86,21 @@ Details, Wayland hotkey setup and troubleshooting are in
 | `PageUp` / `PageDown` | Move by a page |
 | `Enter` | Run the selected result |
 | `Ctrl+1` ... `Ctrl+9` | Run the Nth visible result |
+| `Ctrl+Enter`, `Shift+Enter`, `Alt+Enter` | Run the selected result's alternative action (shown under the list) |
+| `Right` (caret at the end) or `Ctrl+K` | Open the action panel: every action for the selected result; `Up`/`Down` and `Enter` to pick, `Esc` or `Left` to close |
+| `Ctrl+C` (nothing selected in the box) | Copy the selected result's path, URL or value |
+| `Ctrl+L` | Show the selected result as Large Type; any key or click dismisses it |
 | `Esc` | Hide Sevak |
+
+On macOS, `Cmd` takes the place of `Ctrl`.
+
+What the alternative actions are:
+
+| Result | `Ctrl+Enter` | `Shift+Enter` | `Alt+Enter` |
+|---|---|---|---|
+| Application | Show in folder | Copy path | Run as administrator (Windows, not for Store apps) |
+| File or folder | Show in folder | Copy path | |
+| Web search | | Copy URL | |
 
 Keywords (type the keyword, then a space):
 

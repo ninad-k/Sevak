@@ -25,9 +25,25 @@ export interface Status {
   indexing: boolean;
 }
 
-export type ActionKind = "launch" | "open_path" | "open_url" | "copy_text" | "custom";
+export type ActionKind =
+  | "launch"
+  | "open_path"
+  | "open_url"
+  | "copy_text"
+  | "reveal_path"
+  | "run_as_admin"
+  | "custom";
 
 export type IconDto = { kind: "url"; url: string } | { kind: "builtin"; name: string };
+
+/** A key held with Enter to run a secondary action. `ctrl` is Cmd on macOS. */
+export type Modifier = "ctrl" | "shift" | "alt";
+
+export interface SecondaryDto {
+  label: string;
+  modifier: Modifier | null;
+  kind: ActionKind;
+}
 
 export interface ResultDto {
   id: string;
@@ -36,6 +52,10 @@ export interface ResultDto {
   icon: IconDto | null;
   plugin_id: string;
   action: ActionKind;
+  /** Other actions; `execute`'s `action` index refers to this list. */
+  secondary: SecondaryDto[];
+  /** What Ctrl+C copies for this row, if anything. */
+  copy_text: string | null;
 }
 
 export type IndexState = "indexing" | "ready";
@@ -103,20 +123,57 @@ export async function search(query: string): Promise<SearchResponse | null> {
 }
 
 /**
- * Run result `id` of search `ticket` (the results on screen). Resolves to an
- * error message, or `null` on success.
+ * Run result `id` of search `ticket` (the results on screen). `action` is the
+ * index of one of its secondary actions; omit it for the primary action.
+ * Resolves to an error message, or `null` on success.
  */
-export async function execute(id: string, ticket: number): Promise<string | null> {
+export async function execute(
+  id: string,
+  ticket: number,
+  action?: number,
+): Promise<string | null> {
   if (import.meta.env.DEV && !hasTauri()) {
     return id === "m:broken" ? "Could not start “Broken icon app” (preview error)" : null;
   }
   try {
-    await invoke("execute", { id, ticket });
+    await invoke("execute", { id, ticket, action: action ?? null });
     return null;
   } catch (err) {
     console.warn("[ipc] execute failed:", err);
-    return typeof err === "string" ? err : err instanceof Error ? err.message : String(err);
+    return errorText(err);
   }
+}
+
+/** Copy result `id`'s most useful text (see `ResultDto.copy_text`) and hide. */
+export async function copyResult(id: string, ticket: number): Promise<string | null> {
+  if (import.meta.env.DEV && !hasTauri()) return null;
+  try {
+    await invoke("copy_result", { id, ticket });
+    return null;
+  } catch (err) {
+    console.warn("[ipc] copy_result failed:", err);
+    return errorText(err);
+  }
+}
+
+/**
+ * Stretch the window over the screen (`true`) for Large Type, or restore it.
+ * Resolves to whether the window now covers the screen; `false` means the
+ * caller should show the text inside the launcher instead.
+ */
+export async function setLargeType(on: boolean): Promise<boolean> {
+  if (!hasTauri()) return on;
+  try {
+    await invoke("set_large_type", { on });
+    return on;
+  } catch (err) {
+    console.warn("[ipc] set_large_type failed:", err);
+    return false;
+  }
+}
+
+function errorText(err: unknown): string {
+  return typeof err === "string" ? err : err instanceof Error ? err.message : String(err);
 }
 
 async function safeListen<T>(event: string, cb: (payload: T) => void): Promise<UnlistenFn> {

@@ -21,7 +21,13 @@ pub struct ResultItem {
     /// constants non-fuzzy plugins use. The engine adds usage boosts on top.
     pub score: f64,
     pub plugin_id: String,
+    /// What Enter does.
     pub action: Action,
+    /// Other things the user can do with this result, shown in the action
+    /// panel and run with a modifier + Enter. Empty for most plugins; add with
+    /// [`ResultItem::with_secondary`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub secondary: Vec<SecondaryAction>,
 }
 
 impl ResultItem {
@@ -40,6 +46,7 @@ impl ResultItem {
             score: 0.0,
             plugin_id,
             action,
+            secondary: Vec::new(),
         }
     }
 
@@ -60,6 +67,51 @@ impl ResultItem {
         self.score = score;
         self
     }
+
+    /// Adds a secondary action. `modifier` is the key held with Enter to run it
+    /// directly; the action panel lists every secondary action, with or
+    /// without one. Give each modifier to at most one action.
+    #[must_use]
+    pub fn with_secondary(
+        mut self,
+        label: impl Into<String>,
+        modifier: Option<Modifier>,
+        action: Action,
+    ) -> Self {
+        self.secondary.push(SecondaryAction {
+            label: label.into(),
+            modifier,
+            action,
+        });
+        self
+    }
+
+    /// The text most worth copying from this result: the calculator's value, a
+    /// file or application path, a URL. `None` when there is nothing sensible
+    /// (a packaged Windows app, a plugin-defined action).
+    pub fn copy_text(&self) -> Option<String> {
+        self.action.copy_text()
+    }
+}
+
+/// A modifier key held together with Enter to pick a secondary action. The UI
+/// maps `Ctrl` to Cmd on macOS.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Modifier {
+    Ctrl,
+    Shift,
+    Alt,
+}
+
+/// An alternative way to act on a result.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SecondaryAction {
+    /// Shown in the action panel: "Show in folder", "Copy path".
+    pub label: String,
+    /// Runs this action from the result list with `<modifier>+Enter`.
+    pub modifier: Option<Modifier>,
+    pub action: Action,
 }
 
 /// Score constants for results that do not come from fuzzy matching.
@@ -92,6 +144,32 @@ pub enum Action {
     Custom {
         payload: String,
     },
+    /// Shows a file or folder selected in the system file manager.
+    RevealPath {
+        path: PathBuf,
+    },
+    /// Starts an application with administrator rights (Windows only; plugins
+    /// offer it only when the platform reports support for it).
+    RunAsAdmin {
+        target: LaunchTarget,
+    },
+}
+
+impl Action {
+    /// The text most worth copying for this action; see [`ResultItem::copy_text`].
+    pub fn copy_text(&self) -> Option<String> {
+        match self {
+            Self::CopyText { text } => Some(text.clone()),
+            Self::OpenUrl { url } => Some(url.clone()),
+            Self::OpenPath { path } | Self::RevealPath { path } => {
+                Some(path.to_string_lossy().into_owned())
+            }
+            Self::Launch { target } | Self::RunAsAdmin { target } => target
+                .path()
+                .map(|path| path.to_string_lossy().into_owned()),
+            Self::Custom { .. } => None,
+        }
+    }
 }
 
 /// An installed application, as discovered by the platform layer.
@@ -134,6 +212,24 @@ pub enum LaunchTarget {
         args: Vec<String>,
         working_dir: Option<PathBuf>,
     },
+}
+
+impl LaunchTarget {
+    /// The file or bundle a user would look for in a file manager: the
+    /// shortcut, `.desktop` entry, executable or macOS `.app`; none for
+    /// packaged apps. macOS apps launch as `open -a <bundle>`, so for those the
+    /// bundle (the command's argument) is returned rather than `open`.
+    pub fn path(&self) -> Option<&std::path::Path> {
+        match self {
+            Self::Executable { args, .. } if args.len() == 2 && args[0] == "-a" => {
+                Some(std::path::Path::new(&args[1]))
+            }
+            Self::Shortcut { path }
+            | Self::DesktopEntry { path, .. }
+            | Self::Executable { path, .. } => Some(path),
+            Self::PackagedApp { .. } => None,
+        }
+    }
 }
 
 /// Where a result's icon comes from. The shell turns this into image bytes
@@ -183,6 +279,80 @@ mod tests {
         );
         assert_eq!(item.id, "app:firefox.desktop");
         assert_eq!(item.plugin_id, "app");
+    }
+
+    #[test]
+    fn new_items_have_no_secondary_actions() {
+        let item = ResultItem::new("p", "k", "T", Action::CopyText { text: "x".into() });
+        assert!(item.secondary.is_empty());
+        // Payloads without the field still deserialize.
+        let json = serde_json::to_string(&item).unwrap();
+        assert!(!json.contains("secondary"));
+        let back: ResultItem = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, item);
+    }
+
+    #[test]
+    fn secondary_actions_keep_their_order_and_modifier() {
+        let item = ResultItem::new("p", "k", "T", Action::CopyText { text: "x".into() })
+            .with_secondary(
+                "Reveal",
+                Some(Modifier::Ctrl),
+                Action::RevealPath { path: "/a".into() },
+            )
+            .with_secondary("Copy", None, Action::CopyText { text: "y".into() });
+        assert_eq!(item.secondary.len(), 2);
+        assert_eq!(item.secondary[0].modifier, Some(Modifier::Ctrl));
+        assert_eq!(item.secondary[1].label, "Copy");
+        let json = serde_json::to_string(&item.secondary[0]).unwrap();
+        assert!(json.contains(r#""modifier":"ctrl""#), "{json}");
+        assert!(json.contains(r#""type":"reveal_path""#), "{json}");
+    }
+
+    #[test]
+    fn copy_text_picks_the_most_useful_text() {
+        let text = |action: Action| ResultItem::new("p", "k", "T", action).copy_text();
+        assert_eq!(
+            text(Action::CopyText { text: "8".into() }).as_deref(),
+            Some("8")
+        );
+        assert_eq!(
+            text(Action::OpenUrl {
+                url: "https://a.b/?q=1".into()
+            })
+            .as_deref(),
+            Some("https://a.b/?q=1")
+        );
+        assert_eq!(
+            text(Action::OpenPath {
+                path: "/tmp/x".into()
+            })
+            .as_deref(),
+            Some("/tmp/x")
+        );
+        assert_eq!(
+            text(Action::Launch {
+                target: LaunchTarget::Shortcut {
+                    path: "/s/App.lnk".into()
+                }
+            })
+            .as_deref(),
+            Some("/s/App.lnk")
+        );
+        assert_eq!(
+            text(Action::Launch {
+                target: LaunchTarget::PackagedApp {
+                    app_user_model_id: "x!y".into()
+                }
+            }),
+            None
+        );
+        assert_eq!(
+            text(Action::Custom {
+                payload: "p".into()
+            }),
+            None
+        );
     }
 
     #[test]

@@ -10,6 +10,19 @@ pub fn open_path(path: &Path) -> Result<()> {
     open_target(path.as_os_str())
 }
 
+/// Shows a file or folder selected in the system file manager: Explorer's
+/// `/select`, Finder's `open -R`, or the freedesktop `FileManager1` service
+/// (falling back to opening the parent folder on Linux).
+pub fn reveal_path(path: &Path) -> Result<()> {
+    if !path.exists() {
+        return Err(PlatformError::Os {
+            operation: "reveal",
+            message: format!("{} no longer exists", path.display()),
+        });
+    }
+    reveal_in_file_manager(path)
+}
+
 /// Opens a web or mail link in the default browser/mail client.
 ///
 /// Only `http://`, `https://` and `mailto:` are accepted: URLs reach us from
@@ -112,9 +125,149 @@ fn open_target(target: &OsStr) -> Result<()> {
     Ok(())
 }
 
+#[cfg(windows)]
+fn reveal_in_file_manager(path: &Path) -> Result<()> {
+    use std::os::windows::process::CommandExt;
+    use std::process::{Command, Stdio};
+
+    // Explorer parses its own command line: `/select,"<path>"` must reach it
+    // verbatim, which `Command::arg` would re-quote.
+    Command::new("explorer.exe")
+        .raw_arg(explorer_select_arg(path))
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map(drop)
+        .map_err(|err| PlatformError::CommandFailed {
+            command: "explorer.exe".to_owned(),
+            message: err.to_string(),
+        })?;
+    tracing::debug!(path = %path.display(), "revealed via explorer /select");
+    Ok(())
+}
+
+/// `/select,"C:\dir\file"`. Explorer wants backslashes and no `\\?\` prefix.
+#[cfg(windows)]
+fn explorer_select_arg(path: &Path) -> String {
+    let text = path.to_string_lossy().replace('/', "\\");
+    let text = text.strip_prefix(r"\\?\").unwrap_or(&text);
+    format!("/select,\"{text}\"")
+}
+
+#[cfg(target_os = "macos")]
+fn reveal_in_file_manager(path: &Path) -> Result<()> {
+    let args: [&OsStr; 2] = [OsStr::new("-R"), path.as_os_str()];
+    crate::process::spawn_detached(crate::macos::OPEN, &args)?;
+    tracing::debug!(path = %path.display(), "revealed via open -R");
+    Ok(())
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
+fn reveal_in_file_manager(path: &Path) -> Result<()> {
+    if show_items_over_dbus(path) {
+        tracing::debug!(path = %path.display(), "revealed via FileManager1.ShowItems");
+        return Ok(());
+    }
+    // No file manager speaks the interface (or no D-Bus session): open the
+    // folder instead. Nothing is highlighted, but the user lands next to it.
+    let folder = path.parent().filter(|p| !p.as_os_str().is_empty());
+    tracing::debug!(path = %path.display(), "ShowItems unavailable, opening the parent folder");
+    open_path(folder.unwrap_or(path))
+}
+
+/// Asks the desktop's file manager to select `path` through
+/// `org.freedesktop.FileManager1.ShowItems`. Returns whether it answered.
+#[cfg(not(any(windows, target_os = "macos")))]
+fn show_items_over_dbus(path: &Path) -> bool {
+    use std::process::{Command, Stdio};
+
+    use crate::process::find_in_path;
+
+    if find_in_path("gdbus").is_none() {
+        return false;
+    }
+    let uris = format!("['{}']", file_uri(path));
+    // `--timeout` bounds the wait for a file manager that has to start first.
+    Command::new("gdbus")
+        .args([
+            "call",
+            "--session",
+            "--timeout",
+            "3",
+            "--dest",
+            "org.freedesktop.FileManager1",
+            "--object-path",
+            "/org/freedesktop/FileManager1",
+            "--method",
+            "org.freedesktop.FileManager1.ShowItems",
+        ])
+        .arg(uris)
+        // The startup id, as an (empty) GVariant string.
+        .arg("''")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+/// A `file://` URI for an absolute path, percent-encoding everything except
+/// unreserved characters and `/`.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn file_uri(path: &Path) -> String {
+    #[cfg(unix)]
+    let bytes = {
+        use std::os::unix::ffi::OsStrExt;
+        path.as_os_str().as_bytes().to_vec()
+    };
+    #[cfg(not(unix))]
+    let bytes = path.to_string_lossy().replace('\\', "/").into_bytes();
+
+    let mut uri = String::from("file://");
+    for byte in bytes {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' | b'/' => {
+                uri.push(char::from(byte));
+            }
+            other => uri.push_str(&format!("%{other:02X}")),
+        }
+    }
+    uri
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn file_uris_are_percent_encoded() {
+        assert_eq!(
+            file_uri(Path::new("/home/a b/it's#1.txt")),
+            "file:///home/a%20b/it%27s%231.txt"
+        );
+        assert_eq!(file_uri(Path::new("/tmp/é")), "file:///tmp/%C3%A9");
+    }
+
+    #[test]
+    fn revealing_a_missing_path_is_an_error() {
+        let missing = std::env::temp_dir().join("sevak-definitely-not-here-0f3a");
+        let err = reveal_path(&missing).unwrap_err();
+        assert!(err.to_string().contains("no longer exists"), "{err}");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn explorer_argument_selects_the_item() {
+        assert_eq!(
+            explorer_select_arg(Path::new("C:/Users/a b/c.txt")),
+            r#"/select,"C:\Users\a b\c.txt""#
+        );
+        assert_eq!(
+            explorer_select_arg(Path::new(r"\\?\C:\x\y")),
+            r#"/select,"C:\x\y""#
+        );
+    }
 
     #[test]
     fn rejects_empty_and_unsupported_urls() {
