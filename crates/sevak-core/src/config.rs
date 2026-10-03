@@ -156,14 +156,20 @@ use_clipboard_fallback = false
 
 [clipboard]
 # Clipboard history ("cb <text>"). Off by default: turning it on makes Sevak
-# watch the clipboard and keep copied text in clipboard-history.json in its data
-# folder. Text only. Content that apps mark as secret (password managers) is
-# never recorded.
+# watch the clipboard and keep what you copy in clipboard-history.json in its
+# data folder: text, images (as PNG files in a "clipboard" folder next to it)
+# and the paths of copied files. All of it is stored unencrypted. Content that
+# apps mark as secret (password managers) is never recorded.
 enabled = false
-# Items kept (the oldest are dropped).
+# Items kept, of all kinds together (the oldest are dropped).
 max_items = 200
 # Longer text is not recorded.
 max_item_bytes = 65536
+# Record copied images, and copied files and folders (paths only).
+images = true
+files = true
+# An image whose PNG is larger than this is not recorded.
+max_image_bytes = 10485760
 # Never record text copied from these apps, e.g. ["KeePassXC", "1Password"].
 # Matched case-insensitively against the program or app name.
 ignore_apps = []
@@ -210,6 +216,7 @@ url = "https://github.com/search?q={query}"
 
 pub const MAX_CLIPBOARD_ITEMS_LIMIT: usize = 5_000;
 pub const MAX_CLIPBOARD_ITEM_BYTES_LIMIT: usize = 4 * 1024 * 1024;
+pub const MAX_CLIPBOARD_IMAGE_BYTES_LIMIT: usize = 64 * 1024 * 1024;
 pub const MIN_WINDOW_WIDTH: u32 = 400;
 pub const MAX_WINDOW_WIDTH: u32 = 1600;
 pub const MAX_RESULTS_LIMIT: usize = 20;
@@ -615,6 +622,12 @@ pub struct ClipboardConfig {
     pub max_item_bytes: usize,
     /// Apps whose copies are never recorded (program or app names).
     pub ignore_apps: Vec<String>,
+    /// Record copied images (as PNG files next to the history).
+    pub images: bool,
+    /// Record copied files and folders (their paths; the files stay where they are).
+    pub files: bool,
+    /// An image whose PNG is larger than this many bytes is not recorded.
+    pub max_image_bytes: usize,
 }
 
 impl Default for ClipboardConfig {
@@ -624,6 +637,9 @@ impl Default for ClipboardConfig {
             max_items: 200,
             max_item_bytes: 64 * 1024,
             ignore_apps: Vec::new(),
+            images: true,
+            files: true,
+            max_image_bytes: 10 * 1024 * 1024,
         }
     }
 }
@@ -851,6 +867,10 @@ impl Config {
             .clipboard
             .max_item_bytes
             .clamp(1, MAX_CLIPBOARD_ITEM_BYTES_LIMIT);
+        self.clipboard.max_image_bytes = self
+            .clipboard
+            .max_image_bytes
+            .clamp(1, MAX_CLIPBOARD_IMAGE_BYTES_LIMIT);
         self.clipboard
             .ignore_apps
             .retain(|app| !app.trim().is_empty());
@@ -1195,6 +1215,29 @@ url = "https://example.com"
             MAX_CLIPBOARD_ITEM_BYTES_LIMIT
         );
         assert_eq!(config.clipboard.ignore_apps, ["KeePassXC"]);
+    }
+
+    #[test]
+    fn clipboard_records_images_and_files_unless_turned_off() {
+        let config = Config::default();
+        assert!(config.clipboard.images && config.clipboard.files);
+        assert_eq!(config.clipboard.max_image_bytes, 10 * 1024 * 1024);
+
+        // A config written before these keys existed keeps working.
+        let old = Config::from_toml_str("[clipboard]\nenabled = true\n").unwrap();
+        assert!(old.clipboard.images && old.clipboard.files);
+
+        let config = Config::from_toml_str(
+            "[clipboard]\nimages = false\nfiles = false\nmax_image_bytes = 0\n",
+        )
+        .unwrap();
+        assert!(!config.clipboard.images && !config.clipboard.files);
+        assert_eq!(config.clipboard.max_image_bytes, 1);
+        let config = Config::from_toml_str("[clipboard]\nmax_image_bytes = 99999999999\n").unwrap();
+        assert_eq!(
+            config.clipboard.max_image_bytes,
+            MAX_CLIPBOARD_IMAGE_BYTES_LIMIT
+        );
     }
 
     #[test]

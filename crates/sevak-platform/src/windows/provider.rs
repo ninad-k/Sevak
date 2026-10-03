@@ -4,11 +4,11 @@ use std::collections::HashSet;
 use std::ffi::OsString;
 use std::time::Instant;
 
-use sevak_core::{AppEntry, IconData, IconSource, LaunchTarget};
+use sevak_core::{AppEntry, ClipContent, IconData, IconSource, LaunchTarget};
 
 use crate::capture::{CaptureOptions, SelectionCapture};
 use crate::error::{PlatformError, Result};
-use crate::paste::{ClipboardRead, ForegroundApp, PasteOutcome, PasteSupport};
+use crate::paste::{ClipboardRead, ForegroundApp, PasteContent, PasteOutcome, PasteSupport};
 use crate::provider::PlatformProvider;
 
 use super::com::ComGuard;
@@ -114,6 +114,10 @@ impl PlatformProvider for WindowsProvider {
 
     fn paste_text(&self, text: &str, restore_clipboard: bool) -> Result<PasteOutcome> {
         paste::paste_text(text, restore_clipboard)
+    }
+
+    fn paste_clip(&self, content: &ClipContent, restore_clipboard: bool) -> Result<PasteOutcome> {
+        paste::paste_content(PasteContent::Clip(content), restore_clipboard)
     }
 
     fn capture_selection(&self, options: &CaptureOptions) -> SelectionCapture {

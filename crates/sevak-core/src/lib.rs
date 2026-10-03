@@ -21,7 +21,8 @@ pub use config::{
 pub use engine::{EngineOptions, SearchEngine};
 pub use fuzzy::FuzzyQuery;
 pub use model::{
-    Action, AppEntry, IconData, IconSource, LaunchTarget, Modifier, ResultItem, SecondaryAction,
+    Action, AppEntry, ClipContent, IconData, IconSource, LaunchTarget, Modifier, ResultItem,
+    SecondaryAction,
 };
 pub use plugin::{Plugin, PluginError, PluginResult, ResultsNotifier};
 pub use selection::{Selection, SelectionKind};

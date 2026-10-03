@@ -84,7 +84,8 @@ fn action_kind(action: &Action) -> &'static str {
         Action::OpenPath { .. } => "open_path",
         Action::OpenUrl { .. } => "open_url",
         Action::CopyText { .. } => "copy_text",
-        Action::PasteText { .. } => "paste_text",
+        Action::PasteText { .. } | Action::PasteClip { .. } => "paste_text",
+        Action::CopyClip { .. } => "copy_text",
         Action::Custom { .. } => "custom",
         Action::RevealPath { .. } => "reveal_path",
         Action::RunAsAdmin { .. } => "run_as_admin",
@@ -212,6 +213,7 @@ fn hands_over(action: &Action) -> bool {
             | Action::RevealPath { .. }
             | Action::RunAsAdmin { .. }
             | Action::PasteText { .. }
+            | Action::PasteClip { .. }
     )
 }
 

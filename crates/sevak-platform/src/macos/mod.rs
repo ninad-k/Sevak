@@ -10,12 +10,12 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Instant;
 
-use sevak_core::{AppEntry, IconData, IconSource, LaunchTarget};
+use sevak_core::{AppEntry, ClipContent, IconData, IconSource, LaunchTarget};
 
 use crate::capture::{CaptureOptions, SelectionCapture};
 use crate::error::{PlatformError, Result};
 use crate::icon_file;
-use crate::paste::{ClipboardRead, ForegroundApp, PasteOutcome, PasteSupport};
+use crate::paste::{ClipboardRead, ForegroundApp, PasteContent, PasteOutcome, PasteSupport};
 use crate::process::spawn_detached_in;
 use crate::provider::PlatformProvider;
 
@@ -90,6 +90,10 @@ impl PlatformProvider for MacProvider {
 
     fn paste_text(&self, text: &str, restore_clipboard: bool) -> Result<PasteOutcome> {
         paste::paste_text(text, restore_clipboard)
+    }
+
+    fn paste_clip(&self, content: &ClipContent, restore_clipboard: bool) -> Result<PasteOutcome> {
+        paste::paste_content(PasteContent::Clip(content), restore_clipboard)
     }
 
     fn capture_selection(&self, options: &CaptureOptions) -> SelectionCapture {

@@ -3,10 +3,10 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use sevak_core::{AppEntry, IconData, IconSource, LaunchTarget, ShellConfig};
+use sevak_core::{AppEntry, ClipContent, IconData, IconSource, LaunchTarget, ShellConfig};
 use sevak_platform::{
-    ClipboardRead, ForegroundApp, PasteOutcome, PasteSupport, PlatformError, PlatformProvider,
-    Result, SettingsPage, SystemCommand,
+    ClipboardMedia, ClipboardRead, ForegroundApp, MediaRequest, PasteOutcome, PasteSupport,
+    PlatformError, PlatformProvider, Result, SettingsPage, SystemCommand,
 };
 
 #[derive(Default)]
@@ -38,6 +38,14 @@ pub struct MockPlatform {
     pub clipboard_sequence: Mutex<Option<u64>>,
     /// What `read_clipboard` returns; `None` makes it fail like a busy clipboard.
     pub clipboard_read: Mutex<Option<ClipboardRead>>,
+    /// What `read_clipboard_media` returns.
+    pub clipboard_media: Mutex<ClipboardMedia>,
+    /// The requests `read_clipboard_media` got.
+    pub media_requests: Mutex<Vec<(bool, bool)>>,
+    /// `(content, restore_clipboard)` of every image or files paste.
+    pub pasted_clips: Mutex<Vec<(ClipContent, bool)>>,
+    /// Every image or files copy.
+    pub copied_clips: Mutex<Vec<ClipContent>>,
 }
 
 impl MockPlatform {
@@ -156,6 +164,27 @@ impl PlatformProvider for MockPlatform {
             .unwrap()
             .push((text.to_owned(), restore_clipboard));
         Ok(PasteOutcome::Pasted)
+    }
+
+    fn paste_clip(&self, content: &ClipContent, restore_clipboard: bool) -> Result<PasteOutcome> {
+        self.pasted_clips
+            .lock()
+            .unwrap()
+            .push((content.clone(), restore_clipboard));
+        Ok(PasteOutcome::Pasted)
+    }
+
+    fn set_clipboard_clip(&self, content: &ClipContent) -> Result<()> {
+        self.copied_clips.lock().unwrap().push(content.clone());
+        Ok(())
+    }
+
+    fn read_clipboard_media(&self, request: MediaRequest) -> ClipboardMedia {
+        self.media_requests
+            .lock()
+            .unwrap()
+            .push((request.files, request.image));
+        self.clipboard_media.lock().unwrap().clone()
     }
 
     fn clipboard_sequence(&self) -> Option<u64> {

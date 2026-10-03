@@ -73,7 +73,7 @@ They show the workflow rather than measured search or launch times.
 | Act on selected text or files in any app | select, then `Ctrl+Alt+Space` | Searches, transforms, opens or copies it — you pick |
 | Lock, sleep, restart… | `lock`, `restart`, `bluetooth` | Runs the system command (restart, shut down, log out and empty trash ask first) |
 | Run a terminal command | `> git status` | Opens your terminal and runs it |
-| Paste earlier clipboard text | `cb invoice` | Pastes into the app you were using (opt-in) |
+| Paste earlier clipboard text, images or files | `cb invoice` | Pastes into the app you were using (opt-in) |
 | Paste a snippet | `s sig` | Pastes the snippet with `{date}` etc. filled in |
 | Generate a UUID | `uuid ` or `uuid 5` | Copies a UUID when the plugin is enabled |
 
@@ -169,7 +169,9 @@ Sevak has no telemetry or analytics. Configuration, local usage history and logs
 stay on your machine. The launcher does not send your local search queries to
 a cloud search service. Usage history includes your recent searches and the
 `>` commands you ran; clipboard history (off by default) is stored unencrypted
-in the data folder. Bookmarks are read from your browsers' files, read-only.
+in the data folder, including copied text, the paths of copied files and copied
+images (as PNG files; `[clipboard] images` and `files` turn those off).
+Bookmarks are read from your browsers' files, read-only.
 
 There are explicit network uses:
 

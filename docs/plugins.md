@@ -438,6 +438,15 @@ a background thread. User documentation is in the README.
 3. synthesizes Ctrl+V / Cmd+V;
 4. optionally puts the previous clipboard text back.
 
+An image or a list of files is pasted the same way by `Action::PasteClip`
+{ content: `ClipContent`, restore_clipboard } (`PlatformProvider::paste_clip`; `paste.rs`
+runs the one order of operations for both). `ClipContent::Image { path }` names
+a PNG file whose pixels become the clipboard's image; `ClipContent::Files { paths }`
+puts the files on it as a file manager's copy does. `Action::CopyClip` only
+copies (`set_clipboard_clip`). The shell treats both like `PasteText` (hides the
+window first for a paste), and the UI shows them as "Paste" / "Copy". Only text
+is put back afterwards, if `restore_clipboard` is on.
+
 The shell hides Sevak's window *before* executing a `PasteText` (as it does for
 `Launch`/`OpenPath`/`OpenUrl`). Implementations: `windows/paste.rs`
 (`GetForegroundWindow`, `SetForegroundWindow`, `SendInput`), `macos/paste.rs`
@@ -462,7 +471,30 @@ table hands to the new plugin while the old one is alive; the thread holds a
 `clipboard_sequence()` (change counter), `read_clipboard()` (text plus the
 "secret" flag) and `foreground_app()` (source app, matched against
 `ignore_apps`). Text Sevak wrote itself is recognised through
-`sevak_platform::clipboard::take_own_write` and skipped.
+`sevak_platform::clipboard::take_own_write` and skipped; images and file lists
+the same way through `take_own_image` / `take_own_files`, which hash the pixels
+(`ClipboardImage::content_hash`) or the paths.
+
+Besides text, the monitor asks the platform for files and the image
+(`read_clipboard_media(MediaRequest)`, after `read_clipboard()` has said the
+content is not secret). Files win over text, and text over an image. The image
+is read as RGBA by `arboard` (which converts `CF_DIB`/`CF_DIBV5`/`PNG`, `public.png`/
+`public.tiff` and `image/png`), hashed, and only if it is new encoded as a PNG
+(RGB when it has no transparency) plus a 96 px thumbnail. `clipboard_store.rs`
+(`MediaStore`) owns the `clipboard/` folder: files are named after the pixel hash,
+nothing else in the folder is ever deleted, and `load` removes the files no entry
+refers to. Systems without a change counter (Linux) look for an image or files
+only every fourth poll while the clipboard holds no text.
+
+A history row for an image uses its thumbnail as `IconSource::File` (the shell
+serves it through the `sevak-icon` scheme, so the webview never gets a file
+path) and the `PasteClip` action; a grid view would use the same two. The history
+file is version 2: entries gain optional `image` (hash, size) and `files`; `text`
+is always written so version 1 readers still load the file.
+
+Universal Actions' clipboard restore (`ClipboardSnapshot`) covers an image too:
+the image is read into the snapshot only when the clipboard holds no text and no
+files, and putting it back is noted as Sevak's own write.
 
 ### `snippets`: expanding at execution time
 
