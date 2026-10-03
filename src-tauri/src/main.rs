@@ -12,6 +12,7 @@ mod search;
 mod settings;
 mod state;
 mod tray;
+mod updater;
 mod window;
 
 use std::process::ExitCode;

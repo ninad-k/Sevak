@@ -4,7 +4,7 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::AppHandle;
 
-use crate::{app, settings, window};
+use crate::{app, settings, updater, window};
 
 const TRAY_ID: &str = "main";
 const TOOLTIP: &str = "Sevak \u{2014} at your service";
@@ -29,6 +29,7 @@ fn build(app: &AppHandle) -> tauri::Result<()> {
             &MenuItem::with_id(app, "show", "Show", true, None::<&str>)?,
             &MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?,
             &MenuItem::with_id(app, "reload", "Reload index", true, None::<&str>)?,
+            &MenuItem::with_id(app, "update", "Check for updates", true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?,
         ],
@@ -42,6 +43,7 @@ fn build(app: &AppHandle) -> tauri::Result<()> {
             "show" => window::show(app),
             "settings" => settings::open(app),
             "reload" => app::reload(app),
+            "update" => updater::check_now(app),
             "quit" => app::quit(app),
             other => tracing::debug!("unhandled tray menu item {other}"),
         })

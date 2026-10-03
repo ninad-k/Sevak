@@ -27,6 +27,8 @@ Built with Rust, [Tauri](https://tauri.app) v2 and Svelte 5. Licensed under
   to the top, per query.
 - **Plugin system**: every result source is a plugin; there is a worked example
   (`uuid`) and a guide to writing your own in [docs/plugins.md](docs/plugins.md).
+- **Automatic updates**: Sevak checks for a new release daily and installs it
+  after you agree (signed updates; can be turned off).
 - **Settings window** (tray menu or `sevak --settings`), tray icon, hide-on-blur,
   launch at login, light/dark theme, and a plain-text config file whose comments
   survive saves from the settings window.
@@ -117,6 +119,7 @@ Key options (all optional; defaults shown):
 hotkey = "Alt+Space"
 hide_on_blur = true
 launch_at_login = false
+check_for_updates = true
 
 [window]
 width = 720            # 400-1600
@@ -168,10 +171,17 @@ to the running instance.
 
 ## Privacy
 
-Sevak has no telemetry, analytics or update pings. Config, usage statistics and
-logs stay on your machine. The only network traffic is your browser opening a
-web search URL when you explicitly pick a web search result. (On Windows, the
-installer may download the Microsoft WebView2 runtime if it is missing.)
+Sevak has no telemetry or analytics. Config, usage statistics and logs stay on
+your machine. Sevak makes one kind of request on its own: at startup and once a
+day it downloads `latest.json` from this repository's GitHub Releases to see if
+there is a new version (GitHub sees your IP address, nothing else is sent).
+Turn it off with `general.check_for_updates = false` or in Settings; "Check
+for updates" in the tray menu still works on demand. Updates are signed and
+only installed after you agree.
+
+Otherwise, the only network traffic is your browser opening a web search URL
+when you pick a web search result. (On Windows, the installer may download the
+Microsoft WebView2 runtime if it is missing.)
 
 ## Build from source
 

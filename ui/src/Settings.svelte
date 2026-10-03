@@ -28,7 +28,7 @@
   } from "./lib/validate";
 
   const emptyConfig = (): Config => ({
-    general: { hotkey: "", hide_on_blur: true, launch_at_login: false },
+    general: { hotkey: "", hide_on_blur: true, launch_at_login: false, check_for_updates: true },
     window: { width: 720 },
     linux: { wayland_use_xwayland: true },
     search: { max_results: 8, fallback_web_search: "" },
@@ -412,6 +412,14 @@
                 <span class="hint">Starts Sevak in the background when you sign in.</span>
               </div>
               <Toggle bind:checked={draft.general.launch_at_login} label="Launch at login" />
+            </div>
+
+            <div class="row">
+              <div class="label">
+                <span class="name">Check for updates</span>
+                <span class="hint">Looks for a new version at startup and daily, and asks before installing.</span>
+              </div>
+              <Toggle bind:checked={draft.general.check_for_updates} label="Check for updates" />
             </div>
           </section>
         {:else if active === "appearance"}

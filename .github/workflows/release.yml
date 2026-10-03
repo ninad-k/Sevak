@@ -4,8 +4,10 @@ name: Release
 # and CI already passed on the PR) ships a new version:
 #   1. plan     work out the next version from the commits since the last tag
 #               (scripts/release-version.mjs) and open a draft GitHub release
-#   2. build    build the installers on Windows, macOS and Linux and attach them
-#   3. publish  add SHA256SUMS.txt and publish the release, which creates the tag
+#   2. build    build the installers on Windows, macOS and Linux, signed for the
+#               updater, and attach them
+#   3. publish  add latest.json (the update manifest installed copies poll) and
+#               SHA256SUMS.txt, then publish the release, which creates the tag
 # A failed build leaves only a draft (no tag), which the next run replaces.
 # Docs-only pushes don't release; nor does a head commit containing [skip release].
 
@@ -49,6 +51,15 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+
+      - name: Check the updater signing key is configured
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::The TAURI_SIGNING_PRIVATE_KEY secret is not set; see docs/development.md (Releasing)."
+            exit 1
+          fi
 
       - name: Compute the next version
         id: version
@@ -105,14 +116,14 @@ jobs:
         include:
           - name: Windows x64
             os: windows-latest
-            args: --bundles nsis,msi
+            args: --bundles nsis,msi --config src-tauri/tauri.release.conf.json
           - name: macOS universal
             os: macos-latest
             rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
-            args: --target universal-apple-darwin --bundles app,dmg
+            args: --target universal-apple-darwin --bundles app,dmg --config src-tauri/tauri.release.conf.json
           - name: Linux x64
             os: ubuntu-22.04 # oldest supported glibc, so the AppImage runs widely
-            args: --bundles deb,rpm,appimage
+            args: --bundles deb,rpm,appimage --config src-tauri/tauri.release.conf.json
     steps:
       - uses: actions/checkout@v7
 
@@ -144,9 +155,14 @@ jobs:
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           releaseId: ${{ needs.plan.outputs.release_id }}
           args: ${{ matrix.args }}
+          # The publish job writes latest.json once, from every platform's
+          # signatures; parallel jobs updating it here could overwrite each other.
+          includeUpdaterJson: false
 
   publish:
     name: Publish release
@@ -157,20 +173,39 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_ID: ${{ needs.plan.outputs.release_id }}
+      VERSION: ${{ needs.plan.outputs.version }}
     steps:
-      - name: Add SHA256SUMS.txt
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Download the release assets
         run: |
-          mkdir assets && cd assets
+          mkdir assets
           gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets" --paginate \
             --jq '.[] | [.id, .name] | @tsv' |
           while IFS=$'\t' read -r id name; do
             gh api -H "Accept: application/octet-stream" \
-              "repos/$GITHUB_REPOSITORY/releases/assets/$id" > "$name"
+              "repos/$GITHUB_REPOSITORY/releases/assets/$id" > "assets/$name"
           done
-          sha256sum -- * | tee ../SHA256SUMS.txt
-          gh api -X POST -H "Content-Type: text/plain" --input ../SHA256SUMS.txt \
-            "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=SHA256SUMS.txt" \
-            --jq .browser_download_url
+          ls -l assets
+
+      - name: Add latest.json and SHA256SUMS.txt
+        run: |
+          upload() {
+            gh api -X POST -H "Content-Type: $2" --input "$1" \
+              "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=$(basename "$1")" \
+              --jq .browser_download_url
+          }
+          gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" --jq .body > notes.md
+          node scripts/updater-manifest.mjs assets "$VERSION" \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/v$VERSION" notes.md
+          upload assets/latest.json application/json
+          (cd assets && sha256sum -- * > ../SHA256SUMS.txt)
+          cat SHA256SUMS.txt
+          upload SHA256SUMS.txt text/plain
 
       - name: Publish
         run: |

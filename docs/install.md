@@ -126,6 +126,11 @@ use Fedora/Ubuntu. "EL10 with EPEL" is the realistic enterprise-Linux target.
 
 - **Nothing happens when I press the hotkey on Linux**: you are probably on
   Wayland. Run `sevak --setup-hotkey`.
+- **Updates**: Sevak checks for a new version at startup and daily and asks
+  before installing it (tray menu: "Check for updates"). Turn this off with
+  `general.check_for_updates = false` or in Settings. On Windows the update runs
+  the installer in passive mode; for `.deb` and `.rpm` installs you are asked
+  for your password.
 - **Logs**: `%APPDATA%\sevak\logs\` (Windows),
   `~/Library/Application Support/sevak/logs/` (macOS), `~/.local/share/sevak/logs/` (Linux).
 - **Start in the background at login**: set `general.launch_at_login = true`, or

@@ -7,7 +7,7 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent};
 
 use crate::cli::{self, Launch};
 use crate::state::AppState;
-use crate::{autostart, commands, hotkey, icons, search, settings, tray, window};
+use crate::{autostart, commands, hotkey, icons, search, settings, tray, updater, window};
 
 pub fn run(
     paths: AppPaths,
@@ -32,7 +32,8 @@ pub fn run(
             }
         }))
         .plugin(autostart::plugin())
-        .plugin(tauri_plugin_dialog::init());
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(updater::plugin());
     if let Some(plugin) = hotkey::plugin(strategy) {
         builder = builder.plugin(plugin);
     }
@@ -76,6 +77,7 @@ pub fn run(
             apply_theme(handle);
             autostart::sync(handle);
             search::start(handle);
+            updater::start(handle);
             tracing::info!(display = ?server, ?launch, "sevak is ready");
 
             match launch {

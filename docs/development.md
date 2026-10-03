@@ -139,8 +139,32 @@ Releases are automatic: every push to `main` that changes more than docs
    `package.json` and `package-lock.json` (`release-version.mjs set`, in the
    runner only; nothing is committed), then builds and uploads the installers:
    Windows (nsis, msi), macOS universal (app, dmg) and Linux (deb, rpm, AppImage).
-3. **publish** adds `SHA256SUMS.txt` and publishes the release, which creates
-   the `vX.Y.Z` tag on the released commit.
+   `src-tauri/tauri.release.conf.json` turns on `createUpdaterArtifacts`, so each
+   installer is signed for the updater (`.sig` next to it).
+3. **publish** writes `latest.json` from those signatures
+   (`scripts/updater-manifest.mjs`), adds `SHA256SUMS.txt` and publishes the
+   release, which creates the `vX.Y.Z` tag on the released commit.
+
+### Auto-update and the signing key
+
+Installed copies poll
+`https://github.com/ninad-k/Sevak/releases/latest/download/latest.json`
+(`plugins.updater` in `tauri.conf.json`; code in `src-tauri/src/updater.rs`) at
+startup and daily, and from the tray's "Check for updates". They install an
+update only after the user agrees, and only if its signature matches the
+`pubkey` in `tauri.conf.json`.
+
+The matching private key is the repository secret `TAURI_SIGNING_PRIVATE_KEY`
+(plus `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` if the key has a password). The
+release workflow stops early if it is missing. **Keep an offline backup of the
+private key:** if it is lost, existing installs can no longer verify updates
+and users must reinstall by hand after you rotate keys. To rotate, generate a
+pair with `npx tauri signer generate -w ~/.tauri/sevak-updater.key`, put the
+new public key in `tauri.conf.json` and the private key in the secret; the
+release that ships the new public key must still be signed with the old key.
+
+Local and CI builds don't sign (no `--config src-tauri/tauri.release.conf.json`),
+so they don't need the key. Debug builds never check for updates automatically.
 
 If a build fails, nothing is tagged; the draft is replaced on the next run.
 The version in the repository files is only the floor for the first release
