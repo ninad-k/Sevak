@@ -187,9 +187,11 @@ After installing, follow [Your first five minutes with Sevak](docs/quickstart.md
 | `Shift` (tap) or `Ctrl+Y` | Show or hide the preview pane for the selected result |
 | `Ctrl+T` | Open the selected result's long text in the Text View (`Esc` or `←` returns) |
 | `←` `→` `↑` `↓` | Move between tiles when results are shown as a grid |
+| `Alt+↑` / `Alt+↓` on a file | Add it to the [file buffer](docs/usage.md#file-buffer) and move on |
+| `Alt+←` / `Alt+→` / `Alt+Backspace` | Remove the last buffered file / its actions / empty the buffer |
 | `Ctrl+Alt+Space` (in any app) | Universal Actions for what you have selected; configurable |
 | `Ctrl+1` … `Ctrl+9` | Run the corresponding result when available |
-| `Esc` | Hide the launcher |
+| `Esc` | Close the innermost thing (Text View, action panel, preview pane, folder picker), then hide the launcher |
 
 On macOS, `Command` takes the place of `Ctrl`.
 [Full workflow and CLI reference →](docs/usage.md)
@@ -203,12 +205,25 @@ a cloud search service. Usage history includes your recent searches and the
 in the data folder, including copied text, the paths of copied files and copied
 images (as PNG files; `[clipboard] images` and `files` turn those off).
 Bookmarks are read from your browsers' files, read-only.
-Whole-disk and content file search (`ff`, `in`) ask only your own computer's
-file index (Windows Search, Spotlight, locate, Tracker or Baloo); the words you
-type go to that local service and nowhere else.
 
-The optional integrations below make no network requests of their own:
+These features stay on your computer and make no network request:
 
+- Whole-disk and content file search (`ff`, `in`) ask only your own computer's
+  file index (Windows Search, Spotlight, locate, Tracker or Baloo); the words
+  you type go to that local service and nowhere else.
+- The preview pane reads the selected file or folder from your disk, only while
+  it is open; links are shown as addresses and never fetched.
+- Universal Actions reads your selection only when you press its shortcut, by
+  briefly borrowing the clipboard and restoring it. The selection is never
+  written to disk, logged or sent anywhere.
+- Expanding snippets as you type (`[snippets] auto_expand`, off by default)
+  watches your keystrokes while it is on, to notice a snippet keyword. Only the
+  last 64 characters are kept, in memory, and are wiped constantly; they are
+  never stored, logged or sent anywhere, and Sevak's own windows, terminals,
+  apps you list in `ignore_apps` and detectable password boxes are skipped.
+  [Details →](docs/usage.md#expand-snippets-as-you-type)
+- Automation tasks and media controls talk only to your own system (and read
+  the playing track from your media player on request).
 - Contacts (off by default, `[contacts] enabled`) reads vCard files you name
   and, on request, your system address book (macOS asks for permission; Windows
   People; Evolution on Linux). They are held in memory only: not written to
@@ -222,51 +237,39 @@ The optional integrations below make no network requests of their own:
 - The dictionary and spelling checker are offline: a bundled WordNet dictionary,
   or the operating system's own (macOS Dictionary, Windows spell checker). The
   words you look up are not saved.
+- The emoji picker, themes (built-in, edited, imported or exported) and the
+  notifications and Large Type of workflows are local.
 
-There are explicit network uses:
+Every network request Sevak itself makes is in this list:
 
-- Selecting a web result opens its URL in your browser, where the chosen
-  provider receives your search terms.
-- Automatic update checks fetch release information from GitHub after startup
+- **Links you open.** Selecting a web search, a bookmark or any other link
+  (including a Universal Actions web search) opens it in your browser, where
+  the site receives your search terms.
+- **Update checks.** Release information is fetched from GitHub after startup
   and once a day. Disable them in **Settings → General** or set
   `general.check_for_updates = false`.
-- Installing an update downloads its package after you agree. Windows
+- **Installing an update.** Its package is downloaded after you agree. Windows
   installation may also download WebView2 if it is missing.
-- Currency conversion, if you turn it on (`[calculator] currency`, off by
-  default), downloads the European Central Bank's daily reference rates at
-  most once a day. Unit conversion is always offline.
-- The preview pane reads the selected file or folder from your disk, only while
-  it is open; links are shown as addresses and never fetched.
-- Universal Actions reads your selection only when you press its shortcut, by
-  briefly borrowing the clipboard and restoring it. The selection is never
-  written to disk, logged or sent anywhere (web search actions open your browser
-  with the text, like any web search).
-- The theme gallery (Settings → Appearance → Theme editor) contacts the
-  network only when you click **Browse online themes**: one request for
-  `https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes.json`,
-  with no cookies or identifying data. Clicking **Install** on a theme then
-  downloads that one theme file, and Sevak saves it only if its SHA-256 matches
-  the one in the list. The built-in themes and importing or exporting a theme
-  file work offline.
-- Expanding snippets as you type (`[snippets] auto_expand`, off by default)
-  watches your keystrokes while it is on, to notice a snippet keyword. Only the
-  last 64 characters are kept, in memory, and are wiped constantly; they are never
-  stored, logged or sent anywhere, and Sevak's own windows, terminals, apps you
-  list in `ignore_apps` and detectable password boxes are skipped.
-  [Details →](docs/usage.md#expand-snippets-as-you-type)
+- **Currency rates.** If you turn currency conversion on (`[calculator]
+  currency`, off by default), the European Central Bank's daily reference rates
+  are downloaded at most once a day. Unit conversion is always offline.
+- **Theme gallery.** Only when you click **Browse online themes** (Settings →
+  Appearance → Theme editor): one request for
+  `https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes.json`.
+  Clicking **Install** on a theme downloads that one theme file, saved only if
+  its SHA-256 matches the one in the list.
+- **Workflow gallery.** Only when you press **Load gallery** (Settings →
+  Gallery): one request for `gallery/index.json` from
+  `raw.githubusercontent.com`. **Install** on an entry downloads that one
+  package, checked against the checksum in the index before anything is
+  written, and an installed folder still has to be allowed before it runs.
 
-- Script plugins and workflows you install and allow run with your permissions;
-  what they do on the network is up to them. Workflows send nothing themselves
-  and keep what you type or select out of the logs. Sevak never downloads
-  plugins or workflows on its own.
-- The optional gallery (Settings → Gallery) contacts GitHub only when you press
-  **Load gallery** (one request for `gallery/index.json` from
-  `raw.githubusercontent.com`) and again when you press **Install** on an entry
-  (one request for that package, checked against the checksum in the index
-  before anything is written). Requests carry no identifier beyond the
-  `Sevak/<version> (gallery)` user agent, and an installed folder still has to
-  be allowed before it runs. Notifications and Large Type from workflows are
-  local.
+Both galleries send nothing but the request itself (no cookies or identifiers
+beyond a `Sevak/<version> (gallery)` user agent). Script plugins and workflows
+you install and allow run with your permissions; what they do on the network
+is up to them. Workflows send nothing themselves and keep what you type or
+select out of the logs, and Sevak never downloads plugins or workflows on its
+own.
 
 Update signatures are separate from Windows installer signing and macOS
 notarization. See [installation notes](docs/install.md) for packaging details

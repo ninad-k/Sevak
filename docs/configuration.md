@@ -423,11 +423,13 @@ available in the tray menu. Update installation requires your agreement.
 | `media.keyword` / `global` / `now_playing` | `"play"` / `true` / `true` | Media controls and the playing-track row |
 | `shell.terminal` / `shell` / `keep_open` | `""` / `""` / `true` | Empty auto-detects |
 | `clipboard.enabled` | `false` | Clipboard history is opt-in |
+| `clipboard.max_items` / `max_item_bytes` / `ignore_apps` | `200` / `65536` / `[]` | Entries kept, longest text recorded, apps never recorded |
 | `clipboard.images` / `files` / `max_image_bytes` | `true` / `true` / `10485760` | What the history records besides text (when it is on) |
 | `file_buffer.keep_between_shows` | `false` | Keep collected files when the launcher hides |
 | `paste.restore_clipboard` | `false` | Restore the clipboard after pasting |
 | `contacts.enabled` / `keyword` / `use_system` | `false` / `"c"` / `true` | Contacts are opt-in; `vcard_files` defaults to `[]` |
 | `onepassword.enabled` / `keyword` | `false` / `"1p"` | 1Password logins through `op`, opt-in; `cache_minutes` defaults to `10` |
+| `onepassword.op_path` / `account` | `""` / `""` | Empty finds `op` on `PATH` / uses `op`'s default account |
 | `dictionary.define_keyword` / `spell_keyword` / `use_system` | `"define"` / `"spell"` / `true` | Offline dictionary and spelling |
 | `snippets.auto_expand` | `false` | Expand snippet keywords as you type; watches keystrokes |
 | `snippets.prefix` / `expand_on` / `case_sensitive` | `""` / `"immediate"` / `true` | Typed before keywords; when to expand; exact case |
@@ -458,7 +460,8 @@ Linux locations follow the OS/XDG directory configuration when overridden;
 Script plugins live in `plugins/` next to `config.toml`, and [workflows](workflows.md)
 in `workflows/` (each in a folder with a `workflow.toml`; the builder in
 Settings writes them). A workflow's scripts may keep files in `workflows/<name>/`
-of the data folder.
+of the data folder. Theme files made, imported or installed in Settings →
+Appearance are in `themes/` next to `config.toml` ([themes guide](themes.md)).
 
 The data folder holds:
 

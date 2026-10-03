@@ -770,14 +770,17 @@ lets many existing Alfred scripts work. Three examples are in
 | `Shift+Tab` | Go up one folder while browsing a path |
 | `↑` / `↓` on an empty bar | Recall earlier searches |
 | `Ctrl+C` (no text selected) | Copy the selected result's path, URL or value |
-| `Ctrl+L` | Show the selected result as Large Type |
+| `Ctrl+L` | Show the selected result as Large Type (a contact's phone number, for contacts) |
 | `Shift` (tap) or `Ctrl+Y` | Show or hide the [preview pane](#preview-text-view-and-grid-view) |
 | `Ctrl+T` | Open the selected result's long text in the Text View |
+| `↑` `↓` `PageUp` `PageDown` `Home` `End` in the Text View | Scroll; `Ctrl+C` copies the text, `Esc` or `←` goes back |
 | `←` `→` `↑` `↓` in a grid | Move between tiles ([Grid View](#preview-text-view-and-grid-view)) |
 | `Ctrl+1` … `Ctrl+9` | Execute the corresponding result |
 | `Alt+Up` / `Alt+Down` on a file | Add it to the [file buffer](#file-buffer), then move |
-| `Alt+Left` / `Alt+Right` / `Alt+Backspace` | Remove the last buffered file / its actions / empty it |
-| `Esc` | Close the innermost thing first (Text View, action panel, preview pane, the folder picker of Move to… / Copy to…), then hide the launcher |
+| `Alt+Left` / `Alt+Right` / `Alt+Backspace` | Remove the last buffered file / its actions / empty it (only while the buffer holds something) |
+| `Enter` / `Ctrl+Enter` in the folder picker | Move or copy the buffer to the highlighted folder / to the path as typed |
+| `Ctrl+Alt+Space` (in any app) | [Universal Actions](#universal-actions) for what you selected; configurable |
+| `Esc` | Close the innermost thing first (Large Type, Text View, action panel, preview pane, the folder picker of Move to… / Copy to…, a workflow's text output), then hide the launcher |
 
 On macOS, `Command` takes the place of `Ctrl`.
 The global launcher shortcut is configured separately; you can also add
