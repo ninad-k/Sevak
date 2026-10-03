@@ -5,6 +5,7 @@
 //! implementations are selected with `#[cfg(target_os = ...)]` so callers never
 //! need cfg gates.
 
+pub mod browsers;
 pub mod clipboard;
 pub mod desktop_entry;
 pub mod error;
@@ -29,6 +30,7 @@ mod windows;
 #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
 compile_error!("Sevak supports Windows, macOS and Linux only");
 
+pub use browsers::{BrowserFamily, BrowserRoot};
 pub use error::{PlatformError, Result};
 pub use paths::AppPaths;
 pub use provider::PlatformProvider;

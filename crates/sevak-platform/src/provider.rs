@@ -4,6 +4,7 @@ use std::path::Path;
 
 use sevak_core::{AppEntry, IconData, IconSource, LaunchTarget, ShellConfig};
 
+use crate::browsers::BrowserRoot;
 use crate::error::Result;
 use crate::system::{SettingsPage, SystemCommand};
 
@@ -90,5 +91,12 @@ pub trait PlatformProvider: Send + Sync {
     /// and mail links.
     fn open_settings_page(&self, page: SettingsPage) -> Result<()> {
         crate::system::open_settings_page(page)
+    }
+
+    /// The user-data folders of the web browsers installed for this user (only
+    /// those that exist on disk), for the bookmarks plugin. Cheap: no file is
+    /// read.
+    fn browser_roots(&self) -> Vec<BrowserRoot> {
+        crate::browsers::detect_roots()
     }
 }

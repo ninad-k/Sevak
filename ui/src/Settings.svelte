@@ -36,6 +36,7 @@
     appearance: { theme: "system" },
     plugins: { disabled: [] },
     files: { directories: [], max_depth: 4, include_hidden: false, keyword: "", global: true },
+    bookmarks: { browsers: [], keyword: "", global: true },
     shell: { terminal: "", shell: "", keep_open: true },
     web_search: [],
   });

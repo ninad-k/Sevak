@@ -23,6 +23,10 @@ Built with Rust, [Tauri](https://tauri.app) v2 and Svelte 5. Licensed under
 - **File search**: `f <name>` searches files and folders under the folders you
   choose (Desktop, Documents and Downloads by default). Optionally also shown
   for plain queries.
+- **Bookmark search**: `b <text>` searches the bookmarks of Chrome, Edge,
+  Brave, Vivaldi, Chromium, Opera, Firefox, LibreWolf and Zen, across all
+  profiles, matching titles and URLs. Read locally and read-only. Optionally
+  also shown for plain queries.
 - **Result actions**: act on a result in more than one way: show a file or app
   in its folder, copy its path or URL, run an app as administrator (Windows).
   Press `Ctrl+Enter` / `Shift+Enter` / `Alt+Enter`, or open the action panel
@@ -135,18 +139,20 @@ Keywords (type the keyword, then a space):
 | `yt <terms>` | YouTube search |
 | `gh <terms>` | GitHub search |
 | `f <name>` | Search files and folders only |
+| `b <text>` | Search browser bookmarks only |
 | `> <command>` or `><command>` | Run a command in a terminal (no space needed after `>`); `> ` alone lists recent commands |
 | `uuid`, `uuid 5`, `uuid upper` | Generate random UUIDs and copy one (example plugin) |
 
-Anything else searches apps (and files, if `files.global` is on); an
-expression like `12*7` shows the calculator. A path starting with `~/`, `/`, a
+Anything else searches apps and system commands (and files and bookmarks, if
+`files.global` / `bookmarks.global` are on); an expression like `12*7` shows
+the calculator. A path starting with `~/`, `/`, a
 drive (`C:\`) or `\\server\share\` browses that folder (for plain queries this
 needs `files.global`; after `f ` it always works). Typing just a keyword (`g`)
 offers a row you can complete with `Tab`. When nothing matches, the fallback
 web search (`g` by default; several can be listed) is offered.
 
 The tray menu has Show, Settings (opens the settings window), Reload index
-(re-reads the config and rescans apps and files) and Quit.
+(re-reads the config and rescans apps, files and bookmarks) and Quit.
 
 ### System commands
 
@@ -204,13 +210,19 @@ query_history = true       # Up/Down on an empty search bar recalls past searche
 theme = "system"       # "system", "light" or "dark"
 
 [plugins]
-disabled = []          # "apps", "calculator", "files", "system", "shell", "web:<keyword>"
+disabled = []          # "apps", "calculator", "files", "bookmarks", "system", "shell",
+                       # "web:<keyword>"
 
 [files]
 directories = ["~/Desktop", "~/Documents", "~/Downloads"]
 max_depth = 4
 include_hidden = false
 keyword = "f"
+global = true
+
+[bookmarks]
+browsers = []          # [] = every browser found, or e.g. ["chrome", "firefox"]
+keyword = "b"
 global = true
 
 [system]
@@ -278,6 +290,10 @@ there is a new version (GitHub sees your IP address, nothing else is sent).
 Turn it off with `general.check_for_updates = false` or in Settings; "Check
 for updates" in the tray menu still works on demand. Updates are signed and
 only installed after you agree.
+
+The bookmarks plugin reads your browsers' bookmark files from disk (Firefox's
+database is read from a temporary copy that is deleted again) and never writes
+to them or sends them anywhere.
 
 Otherwise, the only network traffic is your browser opening a web search URL
 when you pick a web search result. (On Windows, the installer may download the

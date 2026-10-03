@@ -6,6 +6,7 @@
 //! | `calculator`     | [`CalculatorPlugin`]                    | none    | yes    |
 //! | `web:<keyword>`  | [`WebSearchPlugin`] (one per engine)    | engine  | no     |
 //! | `files`          | [`FilesPlugin`]                         | config  | config |
+//! | `bookmarks`      | [`BookmarksPlugin`]                     | config  | config |
 //! | `system`         | [`SystemPlugin`]                        | none    | yes    |
 //! | `shell`          | [`ShellPlugin`]                         | `>`     | no     |
 //! | `uuid`           | [`UuidPlugin`] (a tutorial example)     | `uuid`  | no     |
@@ -21,6 +22,7 @@ use sevak_platform::PlatformProvider;
 
 pub mod actions;
 pub mod apps;
+pub mod bookmarks;
 pub mod calculator;
 pub mod example_uuid;
 pub mod files;
@@ -35,6 +37,7 @@ mod test_util;
 
 pub use actions::execute_action;
 pub use apps::AppsPlugin;
+pub use bookmarks::BookmarksPlugin;
 pub use calculator::CalculatorPlugin;
 pub use example_uuid::UuidPlugin;
 pub use files::FilesPlugin;
@@ -44,12 +47,13 @@ pub use system::SystemPlugin;
 pub use web_search::WebSearchPlugin;
 
 /// Instantiates every enabled built-in plugin (`apps`, `calculator`, one
-/// `web:<keyword>` per `[[web_search]]` engine, `files`, `shell`, `uuid`).
+/// `web:<keyword>` per `[[web_search]]` engine, `files`, `bookmarks`, `system`,
+/// `shell`, `uuid`).
 ///
 /// Shorthand for `PluginRegistry::builtin().instantiate(config, platform)`.
 ///
 /// Indexes start empty; call [`Plugin::refresh`] on each plugin (on a
-/// background thread) to populate `apps` and `files`.
+/// background thread) to populate `apps`, `files` and `bookmarks`.
 pub fn builtin_plugins(
     config: &Config,
     platform: Arc<dyn PlatformProvider>,
@@ -80,6 +84,7 @@ mod tests {
                 "web:yt",
                 "web:gh",
                 "files",
+                "bookmarks",
                 "system",
                 "shell",
                 "uuid"
@@ -93,7 +98,15 @@ mod tests {
         config.plugins.disabled = vec!["files".into(), "web:yt".into(), "calculator".into()];
         assert_eq!(
             ids(&config),
-            ["apps", "web:g", "web:gh", "system", "shell", "uuid"]
+            [
+                "apps",
+                "web:g",
+                "web:gh",
+                "bookmarks",
+                "system",
+                "shell",
+                "uuid"
+            ]
         );
     }
 }

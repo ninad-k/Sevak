@@ -35,6 +35,7 @@ export interface Config {
     keyword: string;
     global: boolean;
   };
+  bookmarks: { browsers: string[]; keyword: string; global: boolean };
   /** Edited in the config file; kept here so saving the form round-trips it. */
   shell: { terminal: string; shell: string; keep_open: boolean };
   web_search: WebSearchEngine[];

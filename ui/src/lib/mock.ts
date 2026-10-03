@@ -50,6 +50,7 @@ export function mockSettings(): SettingsDto {
         keyword: "f",
         global: true,
       },
+      bookmarks: { browsers: [], keyword: "b", global: true },
       shell: { terminal: "", shell: "", keep_open: true },
       web_search: [
         { keyword: "g", name: "Google", url: "https://www.google.com/search?q={query}" },
@@ -61,6 +62,7 @@ export function mockSettings(): SettingsDto {
       { id: "apps", name: "Applications", description: "Launches installed applications.", keyword: null, enabled: true },
       { id: "calculator", name: "Calculator", description: "Evaluates math expressions as you type; Enter copies the result.", keyword: null, enabled: true },
       { id: "files", name: "Files", description: "Finds files and folders in your configured directories.", keyword: "f", enabled: true },
+      { id: "bookmarks", name: "Bookmarks", description: "Finds bookmarks in your browsers (read from disk; nothing is sent anywhere).", keyword: "b", enabled: true },
       { id: "shell", name: "Terminal commands", description: "Type `> command` to run it in a terminal; recent commands are offered again.", keyword: ">", enabled: true },
       { id: "uuid", name: "UUID generator", description: "Type `uuid ` to generate random UUIDs; Enter copies one.", keyword: "uuid", enabled: false },
     ],

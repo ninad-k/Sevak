@@ -103,8 +103,8 @@ secondary action.)
    with the symbol.
 3. **Global route.** Otherwise every plugin with `global() == true` is queried
    with the trimmed input. The default is `global() == keyword().is_none()`, so
-   plugins with a keyword are keyword-only unless they opt in (the files plugin
-   does when `[files] global = true`).
+   plugins with a keyword are keyword-only unless they opt in (the files and
+   bookmarks plugins do when `[files] global` / `[bookmarks] global` is true).
 
 ### Ranking
 
@@ -178,6 +178,7 @@ process, so plugins must never panic.
 | `calculator` | `calculator` | |
 | `web` | `web:<keyword>` per `[[web_search]]` engine | |
 | `files` | `files` | also browses typed paths ([below](#path-browsing-in-the-files-plugin)) |
+| `bookmarks` | `bookmarks` | see [Bookmarks](#bookmarks) |
 | `system` | `system` | lock, sleep, restart, settings pages; global |
 | `shell` | `shell` | `> command` runs in a terminal; see below |
 | `uuid` | `uuid` | example plugin, keyword-only |
@@ -241,6 +242,43 @@ arguments (and are unit-tested on every OS without launching anything), and
 the command as `-EncodedCommand`, Windows Terminal gets `;` escaped as `\;`,
 `cmd` gets `/S /K "..."`, POSIX shells get `-c`, and macOS gets an escaped
 AppleScript string, so the command text is never re-parsed by Sevak.
+
+### Bookmarks
+
+The `bookmarks` plugin (`crates/sevak-plugins/src/bookmarks/`) searches the
+bookmarks of the web browsers on the machine, read-only and offline. Typing
+`b <text>` searches only bookmarks; with `[bookmarks] global = true` they also
+appear (down-weighted like files) for plain queries.
+
+- **Where the browsers are** is the platform layer's job:
+  `PlatformProvider::browser_roots()` (`sevak-platform/src/browsers.rs`) lists
+  the user-data folders that exist, per OS (Windows `%LOCALAPPDATA%` /
+  `%APPDATA%`, macOS `~/Library/Application Support`, Linux `~/.config`,
+  `~/.mozilla` plus Flatpak and Snap copies).
+- **Chromium family** (Chrome, Edge, Brave, Vivaldi, Chromium, Opera, Opera GX):
+  the `Bookmarks` JSON file of every profile folder.
+- **Firefox family** (Firefox, LibreWolf, Zen): `places.sqlite` of every profile
+  in `profiles.ini`. Firefox keeps the database locked, so Sevak copies it and
+  its `-wal` file into a private temporary folder, reads the copy with a
+  bundled SQLite and deletes it again. The browser's own files are never
+  written. Tag entries are skipped.
+- `[bookmarks] browsers = []` means every browser found; list ids (`"chrome"`,
+  `"edge"`, `"brave"`, `"vivaldi"`, `"chromium"`, `"opera"`, `"opera-gx"`,
+  `"firefox"`, `"librewolf"`, `"zen"`) to restrict it.
+- **Indexing.** `refresh` runs at startup, on "Reload index" and every ten
+  minutes, on a background thread. A source file is re-read only when its
+  modification time or size changed (Firefox: the database or its `-wal`), so
+  an idle refresh is a handful of `stat` calls. A file that cannot be read
+  keeps its previous contents. Queries use an in-memory snapshot.
+- **Results.** Fuzzy match on the title, falling back to title + URL (so the
+  domain and path match too), with bonuses for a title or domain that starts
+  with or contains the input. Enter opens the URL (`Action::OpenUrl`). Only
+  `http(s)` bookmarks are indexed; `javascript:`, `chrome:`, `file:` and the like
+  are skipped. The subtitle is `folder path · domain · browsers`.
+- **Ids.** The result key is a hash (FNV-1a, 64 bit, hex) of the URL, so usage
+  statistics follow the page across browsers, profiles and restarts. Identical
+  URLs from different browsers or profiles are merged into one result that lists
+  the browsers.
 
 ## Writing a built-in plugin
 

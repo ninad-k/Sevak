@@ -162,6 +162,15 @@ pub fn validate(config: &Config, strategy: HotkeyStrategy) -> Result<(), String>
             "The files keyword \"{files_keyword}\" is already a web search keyword."
         ));
     }
+    let bookmarks_keyword = config.bookmarks.keyword.trim();
+    if bookmarks_keyword.chars().any(char::is_whitespace) {
+        return Err("The bookmarks keyword cannot contain spaces.".to_owned());
+    }
+    if !bookmarks_keyword.is_empty() && keywords.contains(&bookmarks_keyword.to_lowercase()) {
+        return Err(format!(
+            "The bookmarks keyword \"{bookmarks_keyword}\" is already a web search keyword."
+        ));
+    }
     if config
         .files
         .directories
@@ -382,6 +391,17 @@ mod tests {
         assert!(check(&config).is_err());
         config.files.keyword = "find me".to_owned();
         assert!(check(&config).is_err());
+    }
+
+    #[test]
+    fn bookmarks_keyword_must_not_clash_with_a_web_keyword() {
+        let mut config = Config::default();
+        config.bookmarks.keyword = "gh".to_owned();
+        assert!(check(&config).is_err());
+        config.bookmarks.keyword = "my marks".to_owned();
+        assert!(check(&config).is_err());
+        config.bookmarks.keyword = String::new();
+        assert_eq!(check(&config), Ok(()));
     }
 
     #[test]
