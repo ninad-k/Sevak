@@ -101,7 +101,9 @@ Sevak also includes:
 - **Custom hotkeys** — extra global keys that open Sevak with text typed in
   (`> `, `g `) or run a result directly.
 - **Themes** — light, dark or system, plus accent color, font, radius, opacity
-  and your own stylesheet ([themes guide](docs/themes.md)).
+  and your own stylesheet. A visual theme editor with a live preview, eight
+  built-in themes and an optional online theme gallery are in Settings →
+  Appearance ([themes guide](docs/themes.md)).
 - **Settings and TOML** — use the settings window or a commented config file,
   which can live in a synced folder.
 - **Tray access and launch at login** — keep Sevak available in the background.
@@ -187,6 +189,13 @@ There are explicit network uses:
   briefly borrowing the clipboard and restoring it. The selection is never
   written to disk, logged or sent anywhere (web search actions open your browser
   with the text, like any web search).
+- The theme gallery (Settings → Appearance → Theme editor) contacts the
+  network only when you click **Browse online themes**: one request for
+  `https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes.json`,
+  with no cookies or identifying data. Clicking **Install** on a theme then
+  downloads that one theme file, and Sevak saves it only if its SHA-256 matches
+  the one in the list. The built-in themes and importing or exporting a theme
+  file work offline.
 - Script plugins you install and allow run with your permissions; what they do
   on the network is up to them. Sevak never downloads plugins itself.
 

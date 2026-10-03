@@ -24,6 +24,8 @@ export interface Appearance {
   font_family: string;
   opacity: number;
   radius: number;
+  /** A theme file in the config folder, such as `themes/Nord.toml`; empty uses none. */
+  theme_file: string;
   custom_css: string;
 }
 

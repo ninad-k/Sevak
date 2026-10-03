@@ -31,7 +31,7 @@ pub fn set_content_height(window: WebviewWindow, state: State<'_, AppState>, hei
         tracing::debug!("set_content_height ignored: {height}");
         return;
     }
-    let width = f64::from(state.config().window.width);
+    let width = f64::from(state.window_width());
     let size = LogicalSize::new(width, height.clamp(MIN_HEIGHT, MAX_HEIGHT));
     if let Err(err) = window.set_size(size) {
         tracing::warn!("set_content_height: set_size failed: {err}");

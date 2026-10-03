@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
-  import Glyph from "./lib/Glyph.svelte";
+  import ResultRow from "./lib/ResultRow.svelte";
   import { applyAppearance } from "./lib/appearance";
   import { parentPath } from "./lib/path";
   import { applyTheme } from "./lib/theme";
@@ -728,47 +728,20 @@
       bind:this={list}
     >
       {#each results as item, i (item.id)}
-        <!-- Keyboard handling lives on the window; rows must not take focus from the input. -->
-        <!-- svelte-ignore a11y_click_events_have_key_events -->
-        <div
+        <!-- The row itself lives in lib/ResultRow.svelte, shared with the theme editor's preview. -->
+        {@const iconUrl = item.icon?.kind === "url" ? item.icon.url : null}
+        <ResultRow
           id="result-{i}"
-          class="row"
-          class:selected={i === selected}
-          role="option"
-          aria-selected={i === selected}
-          tabindex="-1"
-          title={item.id}
-          onmousemove={(e) => onRowMove(e, i)}
-          onmousedown={(e) => e.preventDefault()}
-          onclick={() => void run(i)}
-        >
-          <span class="tile">
-            {#if item.icon?.kind === "url" && !brokenIcons[item.icon.url]}
-              {@const url = item.icon.url}
-              <img
-                src={url}
-                width="32"
-                height="32"
-                alt=""
-                draggable="false"
-                onerror={() => (brokenIcons[url] = true)}
-              />
-            {:else}
-              <Glyph name={glyphFor(item)} />
-            {/if}
-          </span>
-          <span class="text">
-            <span class="title">{item.title}</span>
-            {#if item.subtitle}<span class="subtitle">{item.subtitle}</span>{/if}
-          </span>
-          <span class="hint" aria-hidden="true">
-            {#if i === selected}
-              <kbd>↵</kbd><span class="verb">{verb(item)}</span>
-            {:else if i < 9}
-              <kbd>Ctrl+{i + 1}</kbd>
-            {/if}
-          </span>
-        </div>
+          {item}
+          index={i}
+          selected={i === selected}
+          glyph={glyphFor(item)}
+          verb={verb(item)}
+          broken={iconUrl !== null && !!brokenIcons[iconUrl]}
+          onbroken={() => iconUrl !== null && (brokenIcons[iconUrl] = true)}
+          onmove={(e) => onRowMove(e, i)}
+          onrun={() => void run(i)}
+        />
       {/each}
     </div>
 
@@ -884,7 +857,7 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    height: max(56px, calc(56px * var(--font-scale, 1)));
+    height: max(56px, calc(var(--search-size, calc(22px * var(--font-scale, 1))) * 2.55));
     padding: 0 18px;
   }
 
@@ -904,7 +877,7 @@
     color: var(--fg);
     caret-color: var(--accent);
     font: inherit;
-    font-size: calc(22px * var(--font-scale, 1));
+    font-size: var(--search-size, calc(22px * var(--font-scale, 1)));
     padding: 0;
   }
 
@@ -922,7 +895,7 @@
   }
 
   .results {
-    --row-height: max(48px, calc(48px * var(--font-scale, 1)));
+    --row-height: var(--row-h, max(48px, calc(48px * var(--font-scale, 1))));
     position: relative;
     max-height: calc(var(--row-height) * 8.5 + 12px);
     padding: 6px;
@@ -935,77 +908,7 @@
     display: none;
   }
 
-  .row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    height: var(--row-height);
-    padding: 0 10px;
-    border-radius: 10px;
-  }
-
-  .row.selected {
-    background: var(--selected);
-  }
-
-  .tile {
-    flex: none;
-    display: grid;
-    place-items: center;
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    background: var(--tile);
-    color: var(--muted);
-    overflow: hidden;
-  }
-
-  .tile:has(img) {
-    background: transparent;
-    border-radius: 0;
-  }
-
-  .tile img {
-    display: block;
-    width: 32px;
-    height: 32px;
-    object-fit: contain;
-  }
-
-  .text {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-  }
-
-  .title,
-  .subtitle {
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
-
-  .title {
-    font-size: var(--font-size, 15px);
-    line-height: 1.3;
-  }
-
-  .subtitle {
-    font-size: calc(12px * var(--font-scale, 1));
-    line-height: 1.3;
-    color: var(--muted);
-  }
-
-  .hint {
-    flex: none;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: calc(11px * var(--font-scale, 1));
-    color: var(--muted);
-  }
+  /* Result rows are styled in lib/ResultRow.svelte. */
 
   kbd {
     padding: 1px 6px;

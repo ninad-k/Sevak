@@ -241,7 +241,7 @@ fn position(app: &AppHandle, window: &WebviewWindow) {
 
 fn configured_width(app: &AppHandle) -> u32 {
     app.try_state::<AppState>()
-        .map(|state| state.config().window.width)
+        .map(|state| state.window_width())
         .unwrap_or(sevak_core::config::MIN_WINDOW_WIDTH)
 }
 

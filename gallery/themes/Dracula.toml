@@ -1,0 +1,35 @@
+name = "Dracula"
+author = "Sevak"
+description = "A dark theme with vivid purple accents after the Dracula palette."
+
+[font]
+size = 15
+
+[layout]
+radius = 14
+opacity = 100
+row_height = 48
+search_size = 22
+icon_size = 32
+window_width = 720
+
+[dark]
+background = "#282a36"
+text = "#f8f8f2"
+subtext = "#a9b4dc"
+border = "rgba(248, 248, 242, 0.12)"
+accent = "#bd93f9"
+accent_strong = "#9b79cc"
+on_accent = "#282a36"
+selection = "rgba(189, 147, 249, 0.22)"
+tile = "rgba(248, 248, 242, 0.08)"
+kbd_background = "rgba(248, 248, 242, 0.08)"
+kbd_border = "rgba(248, 248, 242, 0.16)"
+shadow = "0 8px 28px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.4)"
+surface = "rgba(248, 248, 242, 0.05)"
+input_background = "rgba(248, 248, 242, 0.06)"
+input_border = "rgba(248, 248, 242, 0.24)"
+switch_off = "rgba(248, 248, 242, 0.28)"
+warn = "#f1fa8c"
+error = "#ff8080"
+ok = "#50fa7b"

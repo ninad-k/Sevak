@@ -6,7 +6,7 @@
 
 ```
 Cargo.toml              workspace: crates/* and src-tauri
-crates/sevak-core       config, theme (appearance settings to CSS), fuzzy matcher, search engine,
+crates/sevak-core       config, theme (appearance settings to CSS), theme files and gallery checks, fuzzy matcher, search engine,
                         usage stats, Plugin trait
 crates/sevak-platform   OS access: launching, icons, app scanning, clipboard, pasting into the
                         previous app, capturing the selection (Universal Actions), paths, terminal launching, hotkey strategy, GNOME
@@ -22,6 +22,7 @@ packaging/linux         desktop-entry template used by the .deb and .rpm
 scripts                 icon generator, WSL Linux test runner
 docs                    plugins, install, development
 examples/plugins        example script plugins (Python, PowerShell, Node)
+gallery                 the online theme gallery: themes.json (the index) and themes/*.toml
 .github/workflows       ci.yml, release.yml
 ```
 

@@ -1,0 +1,36 @@
+name = "High Contrast"
+author = "Sevak"
+description = "Black and white with a yellow accent; the text pairs reach AAA."
+
+[font]
+size = 15
+
+[layout]
+radius = 14
+opacity = 100
+row_height = 48
+search_size = 22
+icon_size = 32
+window_width = 720
+
+[dark]
+background = "#000000"
+text = "#ffffff"
+subtext = "#d4d4d4"
+border = "rgba(255, 255, 255, 0.55)"
+accent = "#ffd400"
+accent_strong = "#d1ae00"
+on_accent = "#000000"
+selection = "rgba(255, 212, 0, 0.3)"
+selection_text = "#ffffff"
+tile = "rgba(255, 255, 255, 0.08)"
+kbd_background = "rgba(255, 255, 255, 0.08)"
+kbd_border = "rgba(255, 255, 255, 0.16)"
+shadow = "0 8px 28px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.4)"
+surface = "rgba(255, 255, 255, 0.05)"
+input_background = "rgba(255, 255, 255, 0.06)"
+input_border = "rgba(255, 255, 255, 0.24)"
+switch_off = "rgba(255, 255, 255, 0.28)"
+warn = "#ffd400"
+error = "#ff6b6b"
+ok = "#5cf27c"

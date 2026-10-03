@@ -74,6 +74,9 @@ font_family = ""
 opacity = 100
 # Corner radius of the search bar in pixels (0-32).
 radius = 14
+# A theme file inside this config folder, for example "themes/Nord.toml". Settings,
+# Appearance, Theme editor creates and applies them. "" uses no theme file.
+theme_file = ""
 # A stylesheet inside this config folder that overrides the theme's CSS variables
 # (see docs/themes.md), for example "theme.css". "" loads none.
 custom_css = ""
@@ -439,6 +442,8 @@ pub struct AppearanceConfig {
     pub opacity: u32,
     /// Corner radius of the search bar, in pixels.
     pub radius: u32,
+    /// Theme file inside the config directory (`themes/Nord.toml`); empty uses none.
+    pub theme_file: String,
     /// Stylesheet inside the config directory; empty loads none.
     pub custom_css: String,
 }
@@ -452,6 +457,7 @@ impl Default for AppearanceConfig {
             font_family: String::new(),
             opacity: crate::theme::MAX_OPACITY,
             radius: crate::theme::DEFAULT_RADIUS,
+            theme_file: String::new(),
             custom_css: String::new(),
         }
     }
@@ -1681,6 +1687,7 @@ query = "no key, dropped"
         config.appearance.font_family = "Fira Sans, sans-serif".to_owned();
         config.appearance.opacity = 85;
         config.appearance.radius = 4;
+        config.appearance.theme_file = "themes/Nord.toml".to_owned();
         config.appearance.custom_css = "theme.css".to_owned();
         let text = saved(Some(DEFAULT_CONFIG_TOML), &config);
         assert!(text.contains("# Corner radius of the search bar in pixels (0-32)."));

@@ -97,6 +97,7 @@ export function mockSettings(): SettingsDto {
         font_family: "",
         opacity: 100,
         radius: 14,
+        theme_file: "",
         custom_css: "",
       },
       plugins: { disabled: ["uuid"] },

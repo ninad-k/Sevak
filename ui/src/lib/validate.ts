@@ -34,6 +34,7 @@ export interface HotkeyErrors {
 export interface AppearanceErrors {
   accent?: string;
   fontFamily?: string;
+  themeFile?: string;
   customCss?: string;
 }
 
@@ -95,6 +96,10 @@ export function appearanceErrors(appearance: Appearance): AppearanceErrors {
   const css = appearance.custom_css.trim();
   if (css !== "" && (/^[\\/]|^[A-Za-z]:|(^|[\\/])\.\.([\\/]|$)/.test(css))) {
     errors.customCss = "Must be a path inside the config folder";
+  }
+  const themeFile = appearance.theme_file.trim();
+  if (themeFile !== "" && (/^[\\/]|^[A-Za-z]:|(^|[\\/])\.\.([\\/]|$)/.test(themeFile))) {
+    errors.themeFile = "Must be a path inside the config folder";
   }
   return errors;
 }
