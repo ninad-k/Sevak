@@ -25,7 +25,13 @@ export interface Status {
   indexing: boolean;
 }
 
-export type ActionKind = "launch" | "open_path" | "open_url" | "copy_text" | "custom";
+export type ActionKind =
+  | "launch"
+  | "open_path"
+  | "open_url"
+  | "copy_text"
+  | "paste_text"
+  | "custom";
 
 export type IconDto = { kind: "url"; url: string } | { kind: "builtin"; name: string };
 

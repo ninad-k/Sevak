@@ -254,7 +254,7 @@ impl Request {
 
 /// A random UUID (version 4, RFC 9562) in the canonical lowercase hyphenated
 /// form, or `None` if the OS random number generator is unavailable.
-fn random_uuid_v4() -> Option<String> {
+pub(crate) fn random_uuid_v4() -> Option<String> {
     let mut bytes = [0u8; 16];
     getrandom::fill(&mut bytes).ok()?;
     Some(format_v4(bytes))

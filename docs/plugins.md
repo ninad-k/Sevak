@@ -44,7 +44,7 @@ Code map:
  Plugin::execute(item)  ->  execute_action(platform, &item.action)
     |
     v
- PlatformProvider::{launch, open_path, open_url, set_clipboard_text}   (sevak-platform)
+ PlatformProvider::{launch, open_path, open_url, set_clipboard_text, paste_text}   (sevak-platform)
 ```
 
 - **Engine** (`SearchEngine`) owns the plugins (`Vec<Arc<dyn Plugin>>`) and the
@@ -52,8 +52,9 @@ Code map:
 - **Plugins** answer queries from in-memory data and describe what should
   happen as an `Action`. They do not touch the OS directly.
 - **Actions** (`Action`) are a closed vocabulary: `Launch`, `OpenPath`,
-  `OpenUrl`, `CopyText`, and `Custom` (plugin-defined payload that only the
-  owning plugin understands). `execute_action` in `sevak-plugins` maps the
+  `OpenUrl`, `CopyText`, `PasteText` (copy, return to the app that was focused
+  before Sevak opened, press Ctrl+V / Cmd+V), and `Custom` (plugin-defined
+  payload that only the owning plugin understands). `execute_action` in `sevak-plugins` maps the
   standard ones onto the platform provider; `Custom` yields
   `PluginError::Unsupported` there, so a plugin using it must handle it itself.
 - **Platform provider** (`PlatformProvider`) is the only OS-specific layer
@@ -123,6 +124,8 @@ process, so plugins must never panic.
 | `web` | `web:<keyword>` per `[[web_search]]` engine | |
 | `files` | `files` | |
 | `uuid` | `uuid` | example plugin, keyword-only |
+| `clipboard` | `clipboard` | `cb`, clipboard history; opt-in through `[clipboard] enabled` (see below) |
+| `snippets` | `snippets` | `s`, `[[snippet]]` entries pasted with placeholders expanded |
 
 - `PluginRegistry::builtin()` is the stock set; `register(descriptor)` adds (or
   replaces, by id) a family. This is how a compiled-in third-party plugin joins.
@@ -248,6 +251,58 @@ it (see `registry.rs` tests). Verify with:
 cargo test -p sevak-core -p sevak-plugins
 cargo clippy -p sevak-core -p sevak-plugins --all-targets -- -D warnings
 ```
+
+## Pasting, clipboard history and snippets
+
+Two built-in plugins go beyond "describe an action": `clipboard` (`cb`) and
+`snippets` (`s`). They show how to use `Action::PasteText` and, for the first,
+a background thread. User documentation is in the README.
+
+### Pasting into the previous app
+
+`Action::PasteText { text, restore_clipboard }` is executed by
+`PlatformProvider::paste_text`, which:
+
+1. copies `text` (asking the OS to keep it out of its own clipboard history);
+2. brings back the window remembered by `remember_foreground_app`, which the
+   shell calls just before it shows Sevak's window, while the user's app still
+   has focus;
+3. synthesizes Ctrl+V / Cmd+V;
+4. optionally puts the previous clipboard text back.
+
+The shell hides Sevak's window *before* executing a `PasteText` (as it does for
+`Launch`/`OpenPath`/`OpenUrl`). Implementations: `windows/paste.rs`
+(`GetForegroundWindow`, `SetForegroundWindow`, `SendInput`), `macos/paste.rs`
+(`NSWorkspace`, `CGEvent`; needs the Accessibility permission) and
+`linux/paste.rs` (`_NET_ACTIVE_WINDOW` and XTest through `x11rb`; X11 only).
+`paste.rs` holds the shared order of operations.
+
+Not every system can paste, so a plugin should ask `paste_support()` while
+building rows: for `PasteSupport::CopyOnly(reason)` return `Action::CopyText`
+and say "Copies to clipboard" plus the reason in the subtitle, so the row never
+promises more than Enter does. `paste_text` itself also degrades to copying
+(`PasteOutcome::CopiedOnly`) if the situation changed since the query.
+
+### `clipboard`: a plugin with a thread
+
+The constructor and `query` stay cheap; the recording thread is started by
+`refresh`, never by the constructor, because the settings window also builds
+plugins just to list them (`catalog`). Plugins are rebuilt on every config
+reload, so the history and its thread live in a `Shared` that a process-wide
+table hands to the new plugin while the old one is alive; the thread holds a
+`Weak` and ends when the last plugin is dropped. The platform supplies
+`clipboard_sequence()` (change counter), `read_clipboard()` (text plus the
+"secret" flag) and `foreground_app()` (source app, matched against
+`ignore_apps`). Text Sevak wrote itself is recognised through
+`sevak_platform::clipboard::take_own_write` and skipped.
+
+### `snippets`: expanding at execution time
+
+A snippet's row carries the *template* in its `PasteText` action; `execute`
+expands the placeholders (`{time}`, `{clipboard}`, ...) at the moment of
+pasting, looking the snippet up by its result id so a config reload between
+query and Enter uses the new text. Expansion is the pure function
+`snippets::expand`, tested without a platform.
 
 ## Toward script-based external plugins
 

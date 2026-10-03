@@ -27,7 +27,11 @@ use serde::Serialize;
 use sevak_core::{Config, Plugin};
 use sevak_platform::PlatformProvider;
 
-use crate::{AppsPlugin, CalculatorPlugin, FilesPlugin, UuidPlugin, WebSearchPlugin};
+use crate::clipboard_history::default_history_path;
+use crate::{
+    AppsPlugin, CalculatorPlugin, ClipboardPlugin, FilesPlugin, SnippetsPlugin, UuidPlugin,
+    WebSearchPlugin,
+};
 
 /// Builds the instances of one plugin family.
 ///
@@ -103,8 +107,8 @@ impl PluginRegistry {
         Self::default()
     }
 
-    /// Apps, calculator, web search, files and the example UUID plugin, in that
-    /// order. Order matters only for tie-breaking and logging.
+    /// Apps, calculator, web search, files, the example UUID plugin, clipboard
+    /// history and snippets, in that order. Order matters only for tie-breaking and logging.
     pub fn builtin() -> Self {
         let mut registry = Self::new();
         registry.register(PluginDescriptor::new(
@@ -149,6 +153,31 @@ impl PluginRegistry {
             "UUID generator",
             "Type `uuid ` to generate random UUIDs; Enter copies one.",
             |_, platform| vec![Arc::new(UuidPlugin::new(platform.clone()))],
+        ));
+        registry.register(PluginDescriptor::new(
+            "clipboard",
+            "Clipboard history",
+            "Type `cb` to paste text you copied earlier. Off until [clipboard] enabled = true.",
+            |config, platform| {
+                vec![Arc::new(ClipboardPlugin::new(
+                    &config.clipboard,
+                    &config.paste,
+                    platform.clone(),
+                    default_history_path(),
+                ))]
+            },
+        ));
+        registry.register(PluginDescriptor::new(
+            "snippets",
+            "Snippets",
+            "Type `s` to paste text from your [[snippet]] entries, with {date}, {clipboard} and more.",
+            |config, platform| {
+                vec![Arc::new(SnippetsPlugin::new(
+                    &config.snippet,
+                    &config.paste,
+                    platform.clone(),
+                ))]
+            },
         ));
         registry
     }
@@ -249,7 +278,18 @@ mod tests {
             .iter()
             .map(|d| d.id)
             .collect();
-        assert_eq!(families, ["apps", "calculator", "web", "files", "uuid"]);
+        assert_eq!(
+            families,
+            [
+                "apps",
+                "calculator",
+                "web",
+                "files",
+                "uuid",
+                "clipboard",
+                "snippets"
+            ]
+        );
     }
 
     #[test]
@@ -263,7 +303,9 @@ mod tests {
                 "web:yt",
                 "web:gh",
                 "files",
-                "uuid"
+                "uuid",
+                "clipboard",
+                "snippets"
             ]
         );
     }
@@ -273,7 +315,14 @@ mod tests {
         let config = config_disabling(&["web"]);
         assert_eq!(
             ids(&PluginRegistry::builtin(), &config),
-            ["apps", "calculator", "files", "uuid"]
+            [
+                "apps",
+                "calculator",
+                "files",
+                "uuid",
+                "clipboard",
+                "snippets"
+            ]
         );
     }
 
@@ -282,14 +331,22 @@ mod tests {
         let config = config_disabling(&["web:yt", "uuid"]);
         assert_eq!(
             ids(&PluginRegistry::builtin(), &config),
-            ["apps", "calculator", "web:g", "web:gh", "files"]
+            [
+                "apps",
+                "calculator",
+                "web:g",
+                "web:gh",
+                "files",
+                "clipboard",
+                "snippets"
+            ]
         );
     }
 
     #[test]
     fn unknown_disabled_ids_are_ignored() {
         let config = config_disabling(&["nope"]);
-        assert_eq!(ids(&PluginRegistry::builtin(), &config).len(), 7);
+        assert_eq!(ids(&PluginRegistry::builtin(), &config).len(), 9);
     }
 
     #[test]
@@ -307,6 +364,8 @@ mod tests {
                 ("web:gh", true),
                 ("files", false),
                 ("uuid", true),
+                ("clipboard", true),
+                ("snippets", true),
             ]
         );
     }

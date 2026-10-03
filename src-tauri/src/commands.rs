@@ -45,7 +45,7 @@ pub struct ResultDto {
     pub subtitle: String,
     pub icon: Option<IconDto>,
     pub plugin_id: String,
-    /// `launch`, `open_path`, `open_url`, `copy_text` or `custom`.
+    /// `launch`, `open_path`, `open_url`, `copy_text`, `paste_text` or `custom`.
     pub action: &'static str,
 }
 
@@ -55,6 +55,7 @@ fn action_kind(action: &Action) -> &'static str {
         Action::OpenPath { .. } => "open_path",
         Action::OpenUrl { .. } => "open_url",
         Action::CopyText { .. } => "copy_text",
+        Action::PasteText { .. } => "paste_text",
         Action::Custom { .. } => "custom",
     }
 }
@@ -120,11 +121,15 @@ pub async fn execute(app: AppHandle, id: String, ticket: u64) -> Result<(), Stri
         .map_err(|err| format!("the action did not finish: {err}"))?
 }
 
-/// Whether the action leaves Sevak for another program.
+/// Whether the action leaves Sevak for another program. Pasting does too: the
+/// window must be gone before the previous app is refocused and gets Ctrl+V.
 fn hands_over(action: &Action) -> bool {
     matches!(
         action,
-        Action::Launch { .. } | Action::OpenPath { .. } | Action::OpenUrl { .. }
+        Action::Launch { .. }
+            | Action::OpenPath { .. }
+            | Action::OpenUrl { .. }
+            | Action::PasteText { .. }
     )
 }
 

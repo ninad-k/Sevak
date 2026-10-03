@@ -2386,6 +2386,7 @@ checksum = "d49e936b501e5c5bf01fda3a9452ff86dc3ea98ad5f283e1455153142d97518c"
 dependencies = [
  "bitflags 2.13.2",
  "block2",
+ "libc",
  "objc2",
  "objc2-core-foundation",
  "objc2-core-graphics",
@@ -3562,6 +3563,9 @@ version = "0.1.0"
 dependencies = [
  "arboard",
  "dirs 7.0.0",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-core-graphics",
  "plist",
  "png 0.18.1",
  "sevak-core",
@@ -3569,12 +3573,14 @@ dependencies = [
  "thiserror 2.0.21",
  "tracing",
  "windows",
+ "x11rb",
 ]
 
 [[package]]
 name = "sevak-plugins"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "getrandom 0.4.3",
  "serde",
  "serde_json",

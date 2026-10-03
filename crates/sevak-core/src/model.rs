@@ -88,6 +88,14 @@ pub enum Action {
     CopyText {
         text: String,
     },
+    /// Types `text` into the app that had focus before Sevak opened (copy,
+    /// hide Sevak, refocus that app, Ctrl+V / Cmd+V). Where pasting is not
+    /// possible the text is only copied; see `PlatformProvider::paste_support`.
+    PasteText {
+        text: String,
+        /// Put the clipboard's previous text back afterwards (`[paste]`).
+        restore_clipboard: bool,
+    },
     /// Plugin-defined; only the owning plugin's `execute` understands it.
     Custom {
         payload: String,
@@ -189,5 +197,17 @@ mod tests {
     fn action_serializes_with_type_tag() {
         let json = serde_json::to_string(&Action::CopyText { text: "4".into() }).unwrap();
         assert_eq!(json, r#"{"type":"copy_text","text":"4"}"#);
+    }
+
+    #[test]
+    fn paste_action_serializes_with_type_tag() {
+        let action = Action::PasteText {
+            text: "hi".into(),
+            restore_clipboard: true,
+        };
+        assert_eq!(
+            serde_json::to_string(&action).unwrap(),
+            r#"{"type":"paste_text","text":"hi","restore_clipboard":true}"#
+        );
     }
 }

@@ -34,6 +34,10 @@ pub fn show(app: &AppHandle) {
     };
 
     tracing::info!("showing window");
+    // While the user's app still has focus: pasting returns to it later.
+    if let Some(state) = app.try_state::<AppState>() {
+        state.search.platform.remember_foreground_app();
+    }
     // Before showing, so the UI clears its query and is ready to focus.
     if let Err(err) = app.emit_to(MAIN_LABEL, EVENT_SHOW, ()) {
         tracing::warn!("show: could not emit {EVENT_SHOW}: {err}");

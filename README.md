@@ -23,6 +23,12 @@ Built with Rust, [Tauri](https://tauri.app) v2 and Svelte 5. Licensed under
 - **File search**: `f <name>` searches files and folders under the folders you
   choose (Desktop, Documents and Downloads by default). Optionally also shown
   for plain queries.
+- **Clipboard history** (opt-in): `cb <text>` finds text you copied earlier and
+  Enter pastes it into the app you were using. Text only; passwords from
+  password managers are never recorded. Turn it on with `[clipboard] enabled`.
+- **Snippets**: `s <name>` pastes text from your `[[snippet]]` entries into the
+  app you were using, with `{date}`, `{time}`, `{clipboard}`, `{uuid}`
+  placeholders filled in.
 - **Frequency and recency ranking**: results you pick often and recently rise
   to the top, per query.
 - **Plugin system**: every result source is a plugin; there is a worked example
@@ -92,6 +98,15 @@ Keywords (type the keyword, then a space):
 | `gh <terms>` | GitHub search |
 | `f <name>` | Search files and folders only |
 | `uuid`, `uuid 5`, `uuid upper` | Generate random UUIDs and copy one (example plugin) |
+| `cb <text>` | Clipboard history, newest first; Enter pastes (needs `[clipboard] enabled = true`) |
+| `cb clear` | Shows a "Clear clipboard history" row at the bottom |
+| `s <name>` | Snippets by name or keyword; Enter pastes the expanded text |
+
+Enter on a clipboard or snippet result hides Sevak, returns to the app you were
+using and presses Ctrl+V (Cmd+V on macOS). Where that is not possible (Wayland,
+or macOS without Accessibility permission) the text is copied instead, and the
+result says "Copies to clipboard". See [Paste, clipboard history and
+snippets](#paste-clipboard-history-and-snippets).
 
 Anything else searches apps (and files, if `files.global` is on); an
 expression like `12*7` shows the calculator. When nothing matches, the fallback
@@ -109,7 +124,8 @@ Sevak creates a commented config file on first run:
 | Windows | `%APPDATA%\sevak\config.toml` |
 | Linux | `~/.config/sevak/config.toml` |
 
-Usage statistics are in `usage.json` and logs in `logs/`, both under
+Usage statistics are in `usage.json`, the clipboard history (if enabled) in
+`clipboard-history.json`, and logs in `logs/`, all under
 `%APPDATA%\sevak\` (Windows) or `~/.local/share/sevak/` (Linux).
 
 Key options (all optional; defaults shown):
@@ -132,7 +148,7 @@ fallback_web_search = "g"
 theme = "system"       # "system", "light" or "dark"
 
 [plugins]
-disabled = []          # "apps", "calculator", "files", "web:<keyword>"
+disabled = []          # "apps", "calculator", "files", "web:<keyword>", "clipboard", "snippets"
 
 [files]
 directories = ["~/Desktop", "~/Documents", "~/Downloads"]
@@ -141,6 +157,15 @@ include_hidden = false
 keyword = "f"
 global = true
 
+[paste]
+restore_clipboard = false   # put the clipboard's previous text back after pasting
+
+[clipboard]
+enabled = false        # clipboard history is opt-in
+max_items = 200
+max_item_bytes = 65536 # longer text is not recorded
+ignore_apps = []       # e.g. ["KeePassXC", "1Password"]
+
 [linux]
 wayland_use_xwayland = true
 
@@ -148,10 +173,70 @@ wayland_use_xwayland = true
 keyword = "g"
 name = "Google"
 url = "https://www.google.com/search?q={query}"
+
+[[snippet]]
+name = "Email signature"
+keyword = "sig"        # optional
+text = "Best regards,\nNinad\n{date}"
 ```
 
 Defining any `[[web_search]]` entry replaces the default list. After editing,
 choose "Reload index" from the tray menu or restart Sevak.
+
+### Paste, clipboard history and snippets
+
+**Pasting.** Results from `cb` and `s` paste into the app that had focus when
+you opened Sevak. Sevak hides, brings that window back, and sends Ctrl+V
+(Cmd+V on macOS). With `[paste] restore_clipboard = true` the clipboard's
+previous text is put back about 300 ms later (text only: if the clipboard held an
+image or files, it is left as Sevak set it).
+
+- **Windows**: works everywhere except in windows running as administrator
+  (Windows blocks key events sent to them from a normal program).
+- **macOS**: synthetic key presses need the permission *System Settings >
+  Privacy & Security > Accessibility > Sevak*. Without it Sevak copies instead
+  and the result says so. The shortcut sends the `V` key, so keyboard layouts
+  that move `V` (such as Dvorak) do not paste.
+- **Linux X11**: works (XTest). **Wayland**: applications cannot read the focused
+  window or send keys, so Sevak only copies.
+
+**Clipboard history** is off by default. Set `[clipboard] enabled = true` and
+reload; Sevak then checks the clipboard a few times a second and keeps the most
+recent `max_items` pieces of text in `clipboard-history.json` in its data folder
+(`%APPDATA%\sevak\` on Windows, `~/.local/share/sevak/` on Linux). It never
+records:
+
+- content its source app marks as secret (Windows: the
+  `ExcludeClipboardContentFromMonitorProcessing`, `CanIncludeInClipboardHistory`
+  and `CanUploadToCloudClipboard` formats; macOS: `org.nspasteboard.ConcealedType`,
+  `TransientType` and `AutoGeneratedType`), which is what password managers use;
+- copies made while an app in `ignore_apps` had focus (matched, ignoring case,
+  against the program name such as `KeePassXC`/`keepassxc.exe`, or the app name
+  on macOS);
+- text over `max_item_bytes`, blank text, images and files;
+- anything Sevak itself copied or pasted.
+
+On Linux there is no secret marker to read, so use `ignore_apps`. On Wayland the
+history only sees copies made in XWayland apps and is best effort. Images and
+files are not supported yet. To delete the history type `cb clear` and pick
+"Clear clipboard history", or delete the file; turning the option off stops
+recording but keeps the file.
+
+**Snippets** live in `[[snippet]]` entries (`name`, optional `keyword`, `text`).
+Search by name or keyword. Placeholders in `text`, filled in when you press
+Enter:
+
+| Placeholder | Result |
+|---|---|
+| `{date}`, `{time}`, `{datetime}` | `2026-10-03`, `14:05`, `2026-10-03 14:05` |
+| `{date:FORMAT}` | Custom [strftime](https://docs.rs/chrono/latest/chrono/format/strftime/index.html) format, e.g. `{date:%d %B %Y}` (`{time:..}` and `{datetime:..}` too) |
+| `{clipboard}` | The clipboard's text |
+| `{uuid}` | A new random UUID |
+| `{{` and `}}` | A literal `{` and `}` |
+
+Other text in braces is kept as written. Typing a snippet's keyword in any app
+and having it expand in place (text expansion) needs a global keyboard hook and
+is not implemented.
 
 ## Command line
 
@@ -178,6 +263,13 @@ there is a new version (GitHub sees your IP address, nothing else is sent).
 Turn it off with `general.check_for_updates = false` or in Settings; "Check
 for updates" in the tray menu still works on demand. Updates are signed and
 only installed after you agree.
+
+Clipboard history is off unless you turn it on. When on, copied text is stored
+unencrypted in `clipboard-history.json` in Sevak's data folder (readable only by
+you on Linux and macOS, in your profile folder on Windows) and never leaves your
+machine; see [above](#paste-clipboard-history-and-snippets) for what is skipped.
+Anyone with access to your account can read that file, so add password-like
+apps to `ignore_apps` and clear the history when in doubt.
 
 Otherwise, the only network traffic is your browser opening a web search URL
 when you pick a web search result. (On Windows, the installer may download the

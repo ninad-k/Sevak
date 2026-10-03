@@ -14,8 +14,10 @@ serde.workspace = true
 tracing.workspace = true
 # OS random bytes for the example UUID plugin (see `example_uuid`).
 getrandom = "0.4"
+# Local date and time for snippet placeholders (no timezone database needed).
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+serde_json.workspace = true
 walkdir = "2"
 
 [dev-dependencies]
-serde_json.workspace = true
 tempfile.workspace = true

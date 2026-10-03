@@ -7,10 +7,11 @@ use std::time::Instant;
 use sevak_core::{AppEntry, IconData, IconSource, LaunchTarget};
 
 use crate::error::{PlatformError, Result};
+use crate::paste::{ClipboardRead, ForegroundApp, PasteOutcome, PasteSupport};
 use crate::provider::PlatformProvider;
 
 use super::com::ComGuard;
-use super::{allow_foreground_handoff, icons, packaged, shell_execute_in, shortcuts};
+use super::{allow_foreground_handoff, icons, packaged, paste, shell_execute_in, shortcuts};
 
 pub(crate) struct WindowsProvider;
 
@@ -102,6 +103,30 @@ impl PlatformProvider for WindowsProvider {
                 "builtin icons are drawn by the UI",
             )),
         }
+    }
+
+    fn remember_foreground_app(&self) {
+        paste::remember_foreground_app();
+    }
+
+    fn foreground_app(&self) -> Option<ForegroundApp> {
+        paste::foreground_app()
+    }
+
+    fn paste_support(&self) -> PasteSupport {
+        paste::paste_support()
+    }
+
+    fn paste_text(&self, text: &str, restore_clipboard: bool) -> Result<PasteOutcome> {
+        paste::paste_text(text, restore_clipboard)
+    }
+
+    fn clipboard_sequence(&self) -> Option<u64> {
+        paste::clipboard_sequence()
+    }
+
+    fn read_clipboard(&self) -> Result<ClipboardRead> {
+        paste::read_clipboard()
     }
 }
 
