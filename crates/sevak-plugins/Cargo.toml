@@ -13,7 +13,7 @@ sevak-platform.workspace = true
 serde.workspace = true
 tracing.workspace = true
 # OS random bytes for the example UUID plugin (see `example_uuid`).
-getrandom = "0.3"
+getrandom = "0.4"
 walkdir = "2"
 
 [dev-dependencies]
