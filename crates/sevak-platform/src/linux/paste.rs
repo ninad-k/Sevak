@@ -17,7 +17,9 @@ use x11rb::protocol::xtest::{self, ConnectionExt as _};
 use x11rb::rust_connection::RustConnection;
 
 use crate::error::{PlatformError, Result};
-use crate::paste::{self, ForegroundApp, PasteDriver, PasteOutcome, PasteSupport, SystemClipboard};
+use crate::paste::{
+    self, ForegroundApp, PasteContent, PasteDriver, PasteOutcome, PasteSupport, SystemClipboard,
+};
 use crate::session::DisplayServer;
 
 /// The window that was active when Sevak was shown.
@@ -205,11 +207,24 @@ fn detect_support() -> PasteSupport {
 }
 
 pub(crate) fn paste_text(text: &str, restore_clipboard: bool) -> Result<PasteOutcome> {
+    paste_content(PasteContent::Text(text), restore_clipboard)
+}
+
+pub(crate) fn paste_content(
+    content: PasteContent<'_>,
+    restore_clipboard: bool,
+) -> Result<PasteOutcome> {
     if let PasteSupport::CopyOnly(reason) = paste_support() {
-        crate::clipboard::set_text(text)?;
+        content.copy()?;
         return Ok(PasteOutcome::CopiedOnly(reason));
     }
-    paste::paste(text, restore_clipboard, &SystemClipboard, &X11Driver, true)
+    paste::paste(
+        content,
+        restore_clipboard,
+        &SystemClipboard,
+        &X11Driver,
+        true,
+    )
 }
 
 struct X11Driver;

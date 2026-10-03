@@ -11,14 +11,14 @@ use std::io::Read;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use sevak_core::{AppEntry, IconData, IconSource, LaunchTarget};
+use sevak_core::{AppEntry, ClipContent, IconData, IconSource, LaunchTarget};
 
 use crate::capture::{CaptureOptions, SelectionCapture};
 use crate::desktop_entry::Locale;
 use crate::error::{PlatformError, Result};
 use crate::icon_file;
 use crate::icon_theme::{self, IconResolver};
-use crate::paste::{ForegroundApp, PasteOutcome, PasteSupport};
+use crate::paste::{ForegroundApp, PasteContent, PasteOutcome, PasteSupport};
 use crate::provider::PlatformProvider;
 use crate::session;
 
@@ -81,6 +81,10 @@ impl PlatformProvider for LinuxProvider {
 
     fn paste_text(&self, text: &str, restore_clipboard: bool) -> Result<PasteOutcome> {
         paste::paste_text(text, restore_clipboard)
+    }
+
+    fn paste_clip(&self, content: &ClipContent, restore_clipboard: bool) -> Result<PasteOutcome> {
+        paste::paste_content(PasteContent::Clip(content), restore_clipboard)
     }
 
     fn capture_selection(&self, options: &CaptureOptions) -> SelectionCapture {

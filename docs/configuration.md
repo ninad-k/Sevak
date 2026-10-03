@@ -156,8 +156,11 @@ Browser ids: `chrome`, `edge`, `brave`, `vivaldi`, `chromium`, `opera`,
 ```toml
 [clipboard]
 enabled = false        # clipboard history is opt-in
-max_items = 200
+max_items = 200        # text, images and files together
 max_item_bytes = 65536 # longer text is not recorded
+images = true          # also record copied images (PNG files, unencrypted)
+files = true           # also record copied files and folders (their paths)
+max_image_bytes = 10485760 # an image whose PNG is larger is not recorded
 ignore_apps = []       # e.g. ["KeePassXC", "1Password"]
 
 [paste]
@@ -292,6 +295,7 @@ available in the tray menu. Update installation requires your agreement.
 | `system.confirm` / `disabled` | `true` / `[]` | Confirmation for destructive commands |
 | `shell.terminal` / `shell` / `keep_open` | `""` / `""` / `true` | Empty auto-detects |
 | `clipboard.enabled` | `false` | Clipboard history is opt-in |
+| `clipboard.images` / `files` / `max_image_bytes` | `true` / `true` / `10485760` | What the history records besides text (when it is on) |
 | `paste.restore_clipboard` | `false` | Restore the clipboard after pasting |
 | `files.directories` | Desktop, Documents, Downloads under `~` | Replaced when explicitly set |
 | `files.max_depth` | `4` | Settings accepts 0–32 |
@@ -321,7 +325,8 @@ The data folder holds:
 | File | Contents |
 |---|---|
 | `usage.json` | Launch counts for ranking, your last 50 searches (if `query_history` is on) and the `>` commands you ran |
-| `clipboard-history.json` | Clipboard history, unencrypted, only if enabled |
+| `clipboard-history.json` | Clipboard history (text and the paths of copied files), unencrypted, only if enabled |
+| `clipboard/` | The images of the clipboard history as PNG files with thumbnails, unencrypted, only if enabled and `images = true`; deleted with the entries |
 | `currency-rates.json` | Cached ECB exchange rates, only if currency conversion is on |
 | `script-plugin-approvals.json` | Script plugins you allowed |
 | `logs/` | Log files |

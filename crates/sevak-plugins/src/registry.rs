@@ -186,7 +186,7 @@ impl PluginRegistry {
         registry.register(PluginDescriptor::new(
             "clipboard",
             "Clipboard history",
-            "Type `cb` to paste text you copied earlier. Off until [clipboard] enabled = true.",
+            "Type `cb` to paste text, images and files you copied earlier. Off until [clipboard] enabled = true.",
             |config, platform| {
                 vec![Arc::new(ClipboardPlugin::new(
                     &config.clipboard,

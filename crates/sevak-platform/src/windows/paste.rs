@@ -29,7 +29,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 use crate::error::{PlatformError, Result};
 use crate::paste::{
-    self, ClipboardRead, ForegroundApp, PasteDriver, PasteOutcome, PasteSupport, SystemClipboard,
+    self, ClipboardRead, ForegroundApp, PasteContent, PasteDriver, PasteOutcome, PasteSupport,
+    SystemClipboard,
 };
 
 /// The window that had focus when Sevak was shown (an `HWND` as an integer, so
@@ -115,8 +116,15 @@ pub(crate) fn paste_support() -> PasteSupport {
 }
 
 pub(crate) fn paste_text(text: &str, restore_clipboard: bool) -> Result<PasteOutcome> {
+    paste_content(PasteContent::Text(text), restore_clipboard)
+}
+
+pub(crate) fn paste_content(
+    content: PasteContent<'_>,
+    restore_clipboard: bool,
+) -> Result<PasteOutcome> {
     paste::paste(
-        text,
+        content,
         restore_clipboard,
         &SystemClipboard,
         &WindowsDriver,

@@ -31,6 +31,7 @@ pub mod apps;
 pub mod bookmarks;
 pub mod calculator;
 pub mod clipboard_history;
+mod clipboard_store;
 pub mod currency;
 pub mod example_uuid;
 pub mod files;

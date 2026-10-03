@@ -202,11 +202,38 @@ you opened Sevak: Sevak hides, brings that window back and presses Ctrl+V
 - **Linux X11**: works. **Wayland**: Sevak can only copy.
 
 **Clipboard history** (`cb <text>`) is off by default; turn it on with
-`[clipboard] enabled = true`. It keeps recent copied *text* (newest first) and
-never records content that password managers mark as secret (Windows and
-macOS), copies made in apps listed in `ignore_apps`, very long text, images,
-files, or Sevak's own pastes. On Linux there is no secret marker, so use
-`ignore_apps`. Type `cb clear` to show a "Clear clipboard history" row.
+`[clipboard] enabled = true`. It keeps what you copy, newest first, up to
+`max_items` entries of all kinds together:
+
+| You copy | The row shows | Enter | Other actions |
+|---|---|---|---|
+| Text | The first line, with its length in lines | Pastes the text | |
+| An image (a screenshot, "Copy image" in a browser) | A thumbnail, `Image 1920 × 1080` and the file size | Pastes the image | `Ctrl+Enter` copies it without pasting; `Shift+Enter` **Save image as…** writes a PNG to the Desktop (else Downloads) as `Clipboard image <date> <time>.png`, never over an existing file, and shows it in the file manager |
+| Files or folders (a file manager's copy) | The file names and how many | Pastes the files, as a file manager's paste would | `Ctrl+Enter` shows the first one in the file manager; `Shift+Enter` copies the files without pasting; `Ctrl+C` copies their paths as text |
+
+Typing after `cb` filters by text, file name, or the word `image` (`cb image`).
+Copying the same text, picture or files again moves the existing entry to the
+top instead of adding another. Files are only recorded by their path: if one has
+been moved or deleted by the time you paste, the rest are pasted, and if none is
+left Sevak says so.
+
+Not recorded: content that password managers mark as secret (Windows and
+macOS), copies made in apps listed in `ignore_apps`, text longer than
+`max_item_bytes`, images whose PNG is larger than `max_image_bytes` (10 MB by
+default), a copy of more than 1000 files, Sevak's own pastes, and the copy
+Universal Actions makes to read your selection. On Linux there is no secret
+marker, so use `ignore_apps`. Turn the new kinds off with
+`[clipboard] images = false` / `files = false`. Images together are also kept
+under about 500 MB: the oldest go first.
+
+Everything is stored **unencrypted** in Sevak's data folder, only while the
+history is on: text and the paths of copied files in `clipboard-history.json`,
+and each image as a PNG file (plus a small thumbnail) in the `clipboard` folder
+next to it. A screenshot of a bank page is as readable there as it was on
+screen, so add apps that handle such things to `ignore_apps`, or turn images
+off. Type `cb clear` to show a "Clear clipboard history" row: it deletes the
+entries and the image files. Trimming the history (`max_items`) deletes the
+image files of the entries it drops too.
 
 **Snippets** (`s <name>`) paste text from your
 [`[[snippet]]` entries](configuration.md#snippets). Placeholders are filled in
@@ -265,8 +292,8 @@ shows what its keys do.
 How the selection is read: Sevak remembers the app you are in, saves the
 clipboard, presses `Ctrl+C` (`Cmd+C` on macOS) in that app, waits up to about
 0.3 seconds for the copy, reads the text or the list of files, and puts the
-clipboard back (plain text, HTML and files are restored; an image on the
-clipboard is not). The hotkey's own `Ctrl` / `Alt` keys are waited out first so
+clipboard back (plain text, HTML, files and a copied image are restored; any
+other format is not). The hotkey's own `Ctrl` / `Alt` keys are waited out first so
 the app sees a plain copy. Sevak's clipboard history does not record this copy.
 The app itself makes the copy, though, so an operating system clipboard history
 (Windows `Win+V`) or another clipboard manager can see it; and a few editors

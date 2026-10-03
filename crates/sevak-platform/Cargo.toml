@@ -12,11 +12,12 @@ sevak-core.workspace = true
 
 arboard.workspace = true
 dirs.workspace = true
+# Clipboard images are stored as PNG files (and the Windows icon extractor encodes PNG).
+png = "0.18"
 thiserror.workspace = true
 tracing.workspace = true
 
 [target.'cfg(windows)'.dependencies]
-png = "0.18"
 windows = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",

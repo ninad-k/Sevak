@@ -16,8 +16,8 @@ use objc2_core_graphics::{
 
 use crate::error::{PlatformError, Result};
 use crate::paste::{
-    self, pasteboard_marks_secret, ClipboardRead, ForegroundApp, PasteDriver, PasteOutcome,
-    PasteSupport, SystemClipboard,
+    self, pasteboard_marks_secret, ClipboardRead, ForegroundApp, PasteContent, PasteDriver,
+    PasteOutcome, PasteSupport, SystemClipboard,
 };
 
 #[link(name = "ApplicationServices", kind = "framework")]
@@ -86,11 +86,24 @@ pub(crate) fn paste_support() -> PasteSupport {
 }
 
 pub(crate) fn paste_text(text: &str, restore_clipboard: bool) -> Result<PasteOutcome> {
+    paste_content(PasteContent::Text(text), restore_clipboard)
+}
+
+pub(crate) fn paste_content(
+    content: PasteContent<'_>,
+    restore_clipboard: bool,
+) -> Result<PasteOutcome> {
     if let PasteSupport::CopyOnly(reason) = paste_support() {
-        crate::clipboard::set_text(text)?;
+        content.copy()?;
         return Ok(PasteOutcome::CopiedOnly(reason));
     }
-    paste::paste(text, restore_clipboard, &SystemClipboard, &MacDriver, true)
+    paste::paste(
+        content,
+        restore_clipboard,
+        &SystemClipboard,
+        &MacDriver,
+        true,
+    )
 }
 
 struct MacDriver;

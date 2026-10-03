@@ -174,6 +174,18 @@ pub enum Action {
         /// Put the clipboard's previous text back afterwards (`[paste]`).
         restore_clipboard: bool,
     },
+    /// Puts an image or a list of files on the clipboard and pastes it into the
+    /// app that had focus before Sevak opened, like [`Action::PasteText`] does
+    /// for text.
+    PasteClip {
+        content: ClipContent,
+        /// Put the clipboard's previous text back afterwards (`[paste]`).
+        restore_clipboard: bool,
+    },
+    /// Puts an image or a list of files on the clipboard, without pasting.
+    CopyClip {
+        content: ClipContent,
+    },
     /// Plugin-defined; only the owning plugin's `execute` understands it.
     Custom {
         payload: String,
@@ -205,7 +217,36 @@ impl Action {
             Self::Launch { target } | Self::RunAsAdmin { target } => target
                 .path()
                 .map(|path| path.to_string_lossy().into_owned()),
+            Self::PasteClip { content, .. } | Self::CopyClip { content } => content.copy_text(),
             Self::Custom { .. } => None,
+        }
+    }
+}
+
+/// Something other than text that can be put on the clipboard.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ClipContent {
+    /// A PNG file whose pixels become the clipboard's image.
+    Image { path: PathBuf },
+    /// Files and folders, as a file manager's "copy" leaves them.
+    Files { paths: Vec<PathBuf> },
+}
+
+impl ClipContent {
+    /// The text a plain Ctrl+C copies for this content: the paths of the
+    /// files, one per line. An image has no useful text.
+    pub fn copy_text(&self) -> Option<String> {
+        match self {
+            Self::Image { .. } => None,
+            Self::Files { paths } if paths.is_empty() => None,
+            Self::Files { paths } => Some(
+                paths
+                    .iter()
+                    .map(|path| path.to_string_lossy())
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            ),
         }
     }
 }
@@ -422,6 +463,39 @@ mod tests {
     fn action_serializes_with_type_tag() {
         let json = serde_json::to_string(&Action::CopyText { text: "4".into() }).unwrap();
         assert_eq!(json, r#"{"type":"copy_text","text":"4"}"#);
+    }
+
+    #[test]
+    fn clip_actions_copy_the_file_paths_but_not_an_image() {
+        let image = ClipContent::Image {
+            path: "/c/1.png".into(),
+        };
+        let files = ClipContent::Files {
+            paths: vec!["/a/x.txt".into(), "/a/y.txt".into()],
+        };
+        assert_eq!(image.copy_text(), None);
+        assert_eq!(files.copy_text().as_deref(), Some("/a/x.txt\n/a/y.txt"));
+        assert_eq!(ClipContent::Files { paths: vec![] }.copy_text(), None);
+
+        let paste = Action::PasteClip {
+            content: files,
+            restore_clipboard: false,
+        };
+        assert_eq!(paste.copy_text().as_deref(), Some("/a/x.txt\n/a/y.txt"));
+        assert_eq!(Action::CopyClip { content: image }.copy_text(), None);
+    }
+
+    #[test]
+    fn clip_actions_serialize_with_type_tags() {
+        let action = Action::CopyClip {
+            content: ClipContent::Image {
+                path: "a.png".into(),
+            },
+        };
+        assert_eq!(
+            serde_json::to_string(&action).unwrap(),
+            r#"{"type":"copy_clip","content":{"kind":"image","path":"a.png"}}"#
+        );
     }
 
     #[test]

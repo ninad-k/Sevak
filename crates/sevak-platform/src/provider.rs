@@ -2,10 +2,11 @@
 
 use std::path::Path;
 
-use sevak_core::{AppEntry, IconData, IconSource, LaunchTarget, ShellConfig};
+use sevak_core::{AppEntry, ClipContent, IconData, IconSource, LaunchTarget, ShellConfig};
 
 use crate::browsers::BrowserRoot;
 use crate::capture::{CaptureOptions, SelectionCapture};
+use crate::clipboard::{ClipboardMedia, MediaRequest};
 use crate::error::Result;
 use crate::paste::{ClipboardRead, ForegroundApp, PasteOutcome, PasteSupport, UNSUPPORTED_REASON};
 use crate::system::{SettingsPage, SystemCommand};
@@ -140,6 +141,19 @@ pub trait PlatformProvider: Send + Sync {
         Ok(PasteOutcome::CopiedOnly(UNSUPPORTED_REASON.to_owned()))
     }
 
+    /// Puts an image or files on the clipboard and pastes them into the app
+    /// remembered by [`PlatformProvider::remember_foreground_app`], like
+    /// [`PlatformProvider::paste_text`] does for text.
+    fn paste_clip(&self, content: &ClipContent, _restore_clipboard: bool) -> Result<PasteOutcome> {
+        crate::clipboard::set_clip(content, false)?;
+        Ok(PasteOutcome::CopiedOnly(UNSUPPORTED_REASON.to_owned()))
+    }
+
+    /// Replaces the clipboard's contents with an image or files.
+    fn set_clipboard_clip(&self, content: &ClipContent) -> Result<()> {
+        crate::clipboard::set_clip(content, false)
+    }
+
     /// Reads what is selected in the app that has focus (Universal Actions):
     /// the app is asked to copy it, and the clipboard is put back as it was.
     /// Call it from a background thread, before Sevak's window takes focus.
@@ -164,5 +178,13 @@ pub trait PlatformProvider: Send + Sync {
             text: crate::clipboard::read_text()?,
             sensitive: false,
         })
+    }
+
+    /// Reads the files and the image on the clipboard, as far as `request`
+    /// asks (they are only worth reading when the history records them).
+    /// Called after [`PlatformProvider::read_clipboard`] found the content not
+    /// secret. Something unreadable is simply absent.
+    fn read_clipboard_media(&self, request: MediaRequest) -> ClipboardMedia {
+        crate::clipboard::read_media(request)
     }
 }

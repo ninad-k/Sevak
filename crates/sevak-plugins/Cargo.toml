@@ -16,6 +16,10 @@ path = "tests/fixtures/script_fixture.rs"
 test = false
 doc = false
 
+# The real-clipboard tests (ignored by default) write images the way another app would.
+[target.'cfg(windows)'.dev-dependencies]
+arboard.workspace = true
+
 [dependencies]
 sevak-core.workspace = true
 sevak-platform.workspace = true

@@ -392,6 +392,7 @@ mod tests {
                     text: copied.text.clone(),
                     files: copied.files.clone(),
                     html: None,
+                    image: None,
                 };
             }
             Ok(())
@@ -415,6 +416,20 @@ mod tests {
             ["release", "snapshot", "copy", "read", "restore"]
         );
         assert_eq!(fake.clipboard.borrow().text.as_deref(), Some("original"));
+    }
+
+    #[test]
+    fn an_image_on_the_clipboard_is_put_back_after_the_capture() {
+        let image = crate::media::ClipboardImage::new(1, 1, vec![1, 2, 3, 255]).unwrap();
+        let fake = Fake::new(Some(Fake::text("hello")));
+        *fake.clipboard.borrow_mut() = ClipboardSnapshot {
+            image: Some(image.clone()),
+            ..ClipboardSnapshot::default()
+        };
+        assert_eq!(selected_text(&fake.run()).as_deref(), Some("hello"));
+        let restored = fake.clipboard.borrow();
+        assert_eq!(restored.image.as_ref(), Some(&image));
+        assert_eq!(restored.text, None);
     }
 
     #[test]

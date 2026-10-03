@@ -13,6 +13,7 @@ pub mod error;
 pub mod gnome;
 pub mod icon_file;
 pub mod icon_theme;
+pub mod media;
 pub mod open;
 pub mod paste;
 pub mod paths;
@@ -35,7 +36,9 @@ compile_error!("Sevak supports Windows, macOS and Linux only");
 
 pub use browsers::{BrowserFamily, BrowserRoot};
 pub use capture::{CaptureOptions, SelectionCapture};
+pub use clipboard::{ClipboardMedia, MediaRequest};
 pub use error::{PlatformError, Result};
+pub use media::ClipboardImage;
 pub use paste::{ClipboardRead, ForegroundApp, PasteOutcome, PasteSupport};
 pub use paths::AppPaths;
 pub use provider::PlatformProvider;
