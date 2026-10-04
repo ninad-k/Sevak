@@ -1,0 +1,85 @@
+name: Attest
+
+# Creates SLSA build-provenance attestations for the installers of a published
+# release, so a download can be checked with
+#
+#   gh attestation verify <file> --repo ninad-k/Sevak
+#
+# What this proves, and what it does not: the attestation is made by THIS
+# workflow, after the release is published, over the exact bytes of the assets
+# it downloads from the release (checked first against SHA256SUMS.txt). It
+# states that these files were published from this repository's release. It is
+# not a hermetic rebuild and does not, by itself, prove that release.yml's build
+# jobs produced the bytes; attesting inside the build jobs would. See
+# docs/security/supply-chain.md.
+#
+# Triggers: see sbom.yml. A release published by the default GITHUB_TOKEN (as
+# release.yml does) does not start this workflow by itself; call it from
+# release.yml (workflow_call, or `gh workflow run attest.yml -f tag=vX.Y.Z`) or
+# run it from the Actions tab.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag whose installers to attest (for example v0.2.0)
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag whose installers to attest (for example v0.2.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: attest-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  attest:
+    name: Attest the release installers
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # sign the attestation with the workflow's OIDC identity
+      attestations: write # store it
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - name: Check the tag
+        run: |
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$'; then
+            echo "::error::'$TAG' is not a release tag like v1.2.3"
+            exit 1
+          fi
+
+      - name: Download the installers
+        run: |
+          mkdir dist
+          for pattern in '*.exe' '*.msi' '*.dmg' '*.deb' '*.rpm' '*.AppImage' '*.tar.gz'; do
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir dist --pattern "$pattern" || true
+          done
+          if [ -z "$(ls -A dist)" ]; then
+            echo "::error::No installers found on release $TAG"
+            exit 1
+          fi
+          ls -l dist
+
+      # The release workflow publishes SHA256SUMS.txt; the files must still match it.
+      - name: Check the files against SHA256SUMS.txt
+        run: |
+          if gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern SHA256SUMS.txt --output SHA256SUMS.txt; then
+            (cd dist && sha256sum --check --ignore-missing --strict ../SHA256SUMS.txt)
+          else
+            echo "::warning::Release $TAG has no SHA256SUMS.txt; attesting the downloaded bytes without that check."
+          fi
+
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/*
