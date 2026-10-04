@@ -8,8 +8,10 @@
 //! thread runs and no file is read or written.
 //!
 //! When on, a background thread notices clipboard changes and keeps them in
-//! `clipboard-history.json` in Sevak's data folder (readable by the user only
-//! on Unix). It records three kinds of entry:
+//! `clipboard-history.json` in Sevak's *local* data folder (readable by the user
+//! only on Unix; on Windows `%LOCALAPPDATA%\sevak`, which does not roam with the
+//! user's profile). Earlier versions kept it in the roaming data folder; the
+//! first load moves it (see [`migrate_legacy`]). It records three kinds of entry:
 //!
 //! - **text**;
 //! - **images** (`[clipboard] images`): the picture is saved as a PNG file in
@@ -19,13 +21,28 @@
 //! - **files** (`[clipboard] files`): the paths of copied files and folders.
 //!   The files stay where they are.
 //!
+//! # Encrypted at rest
+//!
+//! Where the system can encrypt files for the current user (Windows: DPAPI) the
+//! history file and the image files are encrypted (`[clipboard] encrypt`, on by
+//! default); see [`sevak_core::sealed`]. A plain history from before is
+//! encrypted on the next load. If the file cannot be decrypted (another Windows
+//! user or machine, a reset account) the history starts again from empty, the
+//! old file is not kept, and the `cb` list says so. Elsewhere the files are
+//! plain but readable by their owner only.
+//!
 //! A copy that carries files is a files entry, otherwise text wins over an
 //! image (a spreadsheet range is text and a picture of it). It skips:
 //!
 //! - content the copying app marked secret (see
 //!   [`sevak_platform::ClipboardRead::sensitive`]: password managers set these
 //!   markers on Windows and macOS);
-//! - copies made while an app from `[clipboard] ignore_apps` had focus;
+//! - copies made while the app in front could not be identified (where the
+//!   system can normally tell, see [`PlatformProvider::identifies_apps`]): the
+//!   ignore list cannot be checked, so the copy is not kept;
+//! - copies made while an app from `[clipboard] ignore_apps` had focus, or one
+//!   of the built-in password managers and credential prompts
+//!   ([`DEFAULT_CLIPBOARD_IGNORE_APPS`], unless `default_ignore_apps` is off);
 //! - text longer than `max_item_bytes`, images whose PNG is larger than
 //!   `max_image_bytes`, empty and whitespace-only text;
 //! - anything Sevak itself put on the clipboard (a paste or copy it made);
@@ -67,13 +84,15 @@ use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
-use sevak_core::config::{ClipboardConfig, PasteConfig};
+use sevak_core::config::{ClipboardConfig, PasteConfig, DEFAULT_CLIPBOARD_IGNORE_APPS};
 use sevak_core::model::score;
+use sevak_core::sealed::Sealer;
 use sevak_core::{
     Action, ClipContent, FuzzyQuery, IconSource, Modifier, Plugin, PluginError, PluginResult,
     PreviewHint, ResultItem,
 };
 use sevak_platform::clip_media::{self, files_hash, ClipboardImage};
+use sevak_platform::private_file::{read_capped, read_sealed, write_atomic_sealed, SealedRead};
 use sevak_platform::{
     AppPaths, ClipboardMedia, ClipboardRead, MediaRequest, PasteSupport, PlatformProvider,
 };
@@ -117,11 +136,24 @@ const PAYLOAD_NOTHING: &str = "nothing";
 const PAYLOAD_SAVE_IMAGE: &str = "save-image:";
 const ENABLE_SNIPPET: &str = "[clipboard]\nenabled = true";
 
-/// Where the history is stored by default.
+/// The largest history file Sevak reads. `max_items` and `max_item_bytes` are
+/// capped by the configuration, and no history within them gets near this; a
+/// file over it was not written by Sevak and is left alone, unread.
+const MAX_HISTORY_FILE_BYTES: u64 = 256 * 1024 * 1024;
+
+/// Where the history is stored by default: the local, non-roaming data folder.
 pub fn default_history_path() -> Option<PathBuf> {
     AppPaths::resolve()
         .ok()
-        .map(|paths| paths.data_dir.join(FILE_NAME))
+        .map(|paths| paths.local_data_dir.join(FILE_NAME))
+}
+
+/// Where earlier versions stored the history (the roaming data folder), if
+/// that is a different place from [`default_history_path`]. Only Windows
+/// has two.
+pub fn legacy_history_path() -> Option<PathBuf> {
+    let paths = AppPaths::resolve().ok()?;
+    (paths.data_dir != paths.local_data_dir).then(|| paths.data_dir.join(FILE_NAME))
 }
 
 /// Deletes the saved history and the image files it keeps: what the Settings
@@ -281,6 +313,7 @@ struct Settings {
     images: bool,
     files: bool,
     max_image_bytes: usize,
+    encrypt: bool,
 }
 
 impl From<&ClipboardConfig> for Settings {
@@ -288,12 +321,27 @@ impl From<&ClipboardConfig> for Settings {
         Self {
             max_items: config.max_items,
             max_item_bytes: config.max_item_bytes,
-            ignore_apps: config.ignore_apps.clone(),
+            ignore_apps: effective_ignore_apps(config),
             images: config.images,
             files: config.files,
             max_image_bytes: config.max_image_bytes,
+            encrypt: config.encrypt,
         }
     }
+}
+
+/// The apps whose copies are never recorded: the user's `ignore_apps`, and the
+/// built-in list of password managers unless it is switched off.
+fn effective_ignore_apps(config: &ClipboardConfig) -> Vec<String> {
+    let mut apps = config.ignore_apps.clone();
+    if config.default_ignore_apps {
+        apps.extend(
+            DEFAULT_CLIPBOARD_IGNORE_APPS
+                .iter()
+                .map(|app| (*app).to_owned()),
+        );
+    }
+    apps
 }
 
 /// Entries, newest first. `Arc`s so a query can take a cheap snapshot.
@@ -380,10 +428,18 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 /// The history plus the monitor thread's life cycle.
 struct Shared {
     path: Option<PathBuf>,
+    /// Where an earlier version kept the history, to be moved on first load.
+    legacy: Option<PathBuf>,
     /// Where the images live; `None` for a history kept in memory only (which
     /// therefore records no images).
     store: Option<MediaStore>,
     platform: Arc<dyn PlatformProvider>,
+    /// What encrypts the files on this system, if anything. Used to read at
+    /// all times and to write while `[clipboard] encrypt` is on.
+    sealer: Option<Arc<dyn Sealer>>,
+    /// Something the user should be told in the list (the saved history could
+    /// not be decrypted).
+    notice: Mutex<Option<String>>,
     state: Mutex<State>,
     /// Serializes saves, so the last one to run writes the newest state.
     write: Mutex<()>,
@@ -396,9 +452,13 @@ type Live = Vec<(PathBuf, Weak<Shared>)>;
 static LIVE: Mutex<Live> = Mutex::new(Vec::new());
 
 impl Shared {
-    fn acquire(path: Option<PathBuf>, platform: Arc<dyn PlatformProvider>) -> Arc<Self> {
+    fn acquire(
+        path: Option<PathBuf>,
+        legacy: Option<PathBuf>,
+        platform: Arc<dyn PlatformProvider>,
+    ) -> Arc<Self> {
         let Some(file) = path.clone() else {
-            return Arc::new(Self::new(None, platform));
+            return Arc::new(Self::new(None, None, platform));
         };
         let mut live = lock(&LIVE);
         live.retain(|(_, shared)| shared.strong_count() > 0);
@@ -409,20 +469,27 @@ impl Shared {
         {
             return existing;
         }
-        let shared = Arc::new(Self::new(path, platform));
+        let shared = Arc::new(Self::new(path, legacy, platform));
         live.push((file, Arc::downgrade(&shared)));
         shared
     }
 
-    fn new(path: Option<PathBuf>, platform: Arc<dyn PlatformProvider>) -> Self {
+    fn new(
+        path: Option<PathBuf>,
+        legacy: Option<PathBuf>,
+        platform: Arc<dyn PlatformProvider>,
+    ) -> Self {
         let store = path
             .as_deref()
             .and_then(Path::parent)
             .map(|dir| MediaStore::new(dir.join(clipboard_store::DIR_NAME)));
         Self {
             path,
+            legacy,
             store,
+            sealer: platform.history_sealer(),
             platform,
+            notice: Mutex::new(None),
             state: Mutex::new(State::default()),
             write: Mutex::new(()),
             monitor_started: AtomicBool::new(false),
@@ -436,15 +503,69 @@ impl Shared {
     /// Applies new settings (after a config reload), trimming the history to a
     /// smaller `max_items`.
     fn configure(&self, settings: Settings) {
-        let dropped = {
+        let (dropped, encryption_changed) = {
             let mut state = lock(&self.state);
             let removed = state.trim(settings.max_items);
+            let was = state.settings.as_ref().map(|s| s.encrypt);
+            // Only a change after the first load: the load itself brings the
+            // files in line with the setting.
+            let changed = state.loaded && was.is_some_and(|was| was != settings.encrypt);
             state.settings = Some(settings);
-            (!removed.is_empty()).then(|| state.unreferenced(&removed))
+            (
+                (!removed.is_empty()).then(|| state.unreferenced(&removed)),
+                changed,
+            )
         };
-        if let Some(images) = dropped {
-            self.remove_images(&images);
+        if let Some(images) = &dropped {
+            self.remove_images(images);
+        }
+        if encryption_changed {
+            // Plain files become encrypted now; switching it off rewrites the
+            // history file plain (images already stored stay as they are).
+            self.seal_existing_images();
+        }
+        if dropped.is_some() || encryption_changed {
             self.persist();
+        }
+    }
+
+    /// The sealer to write with under `settings`: the system's while
+    /// `[clipboard] encrypt` is on and the system has one.
+    fn sealer_for(&self, settings: Option<&Settings>) -> Option<Arc<dyn Sealer>> {
+        settings
+            .filter(|settings| settings.encrypt)
+            .and_then(|_| self.sealer.clone())
+    }
+
+    fn write_sealer(&self) -> Option<Arc<dyn Sealer>> {
+        self.sealer_for(lock(&self.state).settings.as_ref())
+    }
+
+    /// Encrypts image files that are still plain, when encryption is on.
+    fn seal_existing_images(&self) {
+        if let (Some(store), Some(sealer)) = (&self.store, self.write_sealer()) {
+            let sealed = store.seal_existing(sealer.as_ref());
+            if sealed > 0 {
+                tracing::info!(files = sealed, "encrypted stored clipboard images");
+            }
+        }
+    }
+
+    fn notice(&self) -> Option<String> {
+        lock(&self.notice).clone()
+    }
+
+    /// Reads a stored image's file (decrypting it when needed).
+    fn read_image_file(&self, path: &Path) -> std::io::Result<Vec<u8>> {
+        match read_sealed(
+            path,
+            clipboard_store::MAX_IMAGE_FILE_BYTES,
+            self.sealer.as_deref(),
+        )? {
+            SealedRead::Contents(opened) => Ok(opened.bytes),
+            SealedRead::Unopenable(err) => {
+                Err(std::io::Error::new(std::io::ErrorKind::InvalidData, err))
+            }
         }
     }
 
@@ -458,10 +579,29 @@ impl Shared {
             }
             state.loaded = true;
             let Some(path) = &self.path else { return };
+            let write_sealer = self.sealer_for(state.settings.as_ref());
+            if let Some(legacy) = &self.legacy {
+                migrate_legacy(
+                    legacy,
+                    path,
+                    self.store.as_ref(),
+                    write_sealer.as_deref(),
+                    MAX_HISTORY_FILE_BYTES,
+                );
+            }
             let max_items = state.settings.as_ref().map_or(usize::MAX, |s| s.max_items);
-            let read = read_history_checked(path);
-            let readable = read.is_some();
-            let mut items = read.unwrap_or_default();
+            let (readable, mut items, plain_file) =
+                match read_history_file(path, self.sealer.as_deref()) {
+                    HistoryFile::Loaded { items, sealed } => (true, items, !sealed),
+                    HistoryFile::Undecryptable => {
+                        *lock(&self.notice) = Some(UNDECRYPTABLE_NOTICE.to_owned());
+                        // Nothing to recover (the images are encrypted the same
+                        // way), and nothing of it is kept: the file is replaced
+                        // by the next save.
+                        (true, Vec::new(), false)
+                    }
+                    HistoryFile::Unreadable => (false, Vec::new(), false),
+                };
             let listed = items.len();
             // An image whose files are gone cannot be pasted.
             items.retain(|entry| {
@@ -482,9 +622,16 @@ impl Shared {
                     if deleted > 0 {
                         tracing::info!(deleted, "removed unused clipboard image files");
                     }
+                    if let Some(sealer) = &write_sealer {
+                        let sealed = store.seal_existing(sealer.as_ref());
+                        if sealed > 0 {
+                            tracing::info!(files = sealed, "encrypted stored clipboard images");
+                        }
+                    }
                 }
             }
-            state.items.len() < listed
+            // A plain history file is rewritten encrypted.
+            state.items.len() < listed || (plain_file && write_sealer.is_some() && listed > 0)
         };
         if changed {
             self.persist();
@@ -493,6 +640,7 @@ impl Shared {
 
     fn clear(&self) {
         lock(&self.state).items.clear();
+        *lock(&self.notice) = None;
         self.persist();
         // Plaintext copies of the old history that are not the history file: a
         // file moved aside as unreadable, and a half-written temporary.
@@ -505,6 +653,10 @@ impl Shared {
         }
         if let Some(store) = &self.store {
             store.prune(&HashSet::new());
+        }
+        // Nothing of an earlier version's history is left behind either.
+        if let Some(legacy) = &self.legacy {
+            remove_legacy(legacy);
         }
     }
 
@@ -521,6 +673,7 @@ impl Shared {
     fn persist(&self) {
         let Some(path) = &self.path else { return };
         let _writing = lock(&self.write);
+        let sealer = self.write_sealer();
         let items = self.snapshot();
         let stored = StoredHistoryRef {
             version: HISTORY_VERSION,
@@ -528,7 +681,7 @@ impl Shared {
         };
         let result = serde_json::to_vec(&stored)
             .map_err(std::io::Error::other)
-            .and_then(|bytes| sevak_platform::private_file::write_atomic(path, &bytes));
+            .and_then(|bytes| write_atomic_sealed(path, &bytes, sealer.as_deref()));
         if let Err(err) = result {
             tracing::warn!("could not save the clipboard history: {err}");
         }
@@ -586,7 +739,8 @@ impl Shared {
             return None;
         }
         let thumb = image.thumbnail(THUMB_EDGE).encode_png().ok()?;
-        if let Err(err) = store.write(hash, &png, &thumb) {
+        let sealer = self.write_sealer();
+        if let Err(err) = store.write(hash, &png, &thumb, sealer.as_deref()) {
             tracing::warn!("could not save a clipboard image: {err}");
             store.remove(hash);
             return None;
@@ -774,6 +928,15 @@ fn media_hash(media: &ClipboardMedia) -> Option<u64> {
     }
 }
 
+/// Says once, at debug level and without any copied text, that a copy from an
+/// app that could not be identified was skipped.
+fn note_unknown_app() {
+    static NOTED: AtomicBool = AtomicBool::new(false);
+    if !NOTED.swap(true, Ordering::Relaxed) {
+        tracing::debug!("the app that copied could not be identified; the copy was not recorded");
+    }
+}
+
 /// Applies the privacy rules to a clipboard change.
 fn accept(
     read: ClipboardRead,
@@ -807,11 +970,16 @@ fn accept(
         CapturedContent::Image(image)
     };
     let app = platform.foreground_app();
-    if app
-        .as_ref()
-        .is_some_and(|app| app.matches_any(&settings.ignore_apps))
-    {
-        return None;
+    match &app {
+        Some(app) if app.matches_any(&settings.ignore_apps) => return None,
+        // The system can tell apps apart but could not tell this one (an
+        // elevated or protected process, a window without a class): it cannot
+        // be checked against the ignore list, so its copy is not recorded.
+        None if platform.identifies_apps() && !settings.ignore_apps.is_empty() => {
+            note_unknown_app();
+            return None;
+        }
+        _ => {}
     }
     Some(Captured {
         content,
@@ -819,26 +987,55 @@ fn accept(
     })
 }
 
-/// Reads the history file. A missing file is an empty history; an unreadable
-/// one is moved aside (never overwritten silently) and also yields an empty one.
-#[cfg(test)]
-fn read_history(path: &Path) -> Vec<Entry> {
-    read_history_checked(path).unwrap_or_default()
+/// Told in the list when the saved history cannot be decrypted.
+const UNDECRYPTABLE_NOTICE: &str = "The saved history was encrypted for another user or \
+     computer and cannot be read here; it was not kept, and a new history was started";
+
+/// What reading the history file came to.
+enum HistoryFile {
+    /// The entries (none for a missing file) and whether the file was encrypted.
+    Loaded { items: Vec<Entry>, sealed: bool },
+    /// The file is encrypted and this user cannot decrypt it.
+    Undecryptable,
+    /// The file exists and could not be used (unreadable, too large, damaged).
+    Unreadable,
 }
 
-/// Like [`read_history`], but `None` when the file exists and could not be
-/// used.
-fn read_history_checked(path: &Path) -> Option<Vec<Entry>> {
-    let bytes = match fs::read(path) {
-        Ok(bytes) => bytes,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Some(Vec::new()),
+/// Reads the history file. A missing file is an empty history; a damaged one is
+/// moved aside (never overwritten silently).
+#[cfg(test)]
+fn read_history(path: &Path) -> Vec<Entry> {
+    match read_history_file(path, None) {
+        HistoryFile::Loaded { items, .. } => items,
+        _ => Vec::new(),
+    }
+}
+
+/// Like [`read_history`], but says why the file could not be used.
+fn read_history_file(path: &Path, sealer: Option<&dyn Sealer>) -> HistoryFile {
+    let opened = match read_sealed(path, MAX_HISTORY_FILE_BYTES, sealer) {
+        Ok(SealedRead::Contents(opened)) => opened,
+        Ok(SealedRead::Unopenable(err)) => {
+            tracing::warn!("the clipboard history cannot be decrypted: {err}");
+            return HistoryFile::Undecryptable;
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return HistoryFile::Loaded {
+                items: Vec::new(),
+                sealed: false,
+            }
+        }
         Err(err) => {
             tracing::warn!("could not read {}: {err}", path.display());
-            return None;
+            return HistoryFile::Unreadable;
         }
     };
-    match serde_json::from_slice::<StoredHistory>(&bytes) {
-        Ok(stored) => Some(stored.items),
+    let sealed = opened.was_sealed;
+    match serde_json::from_slice::<StoredHistory>(&opened.bytes) {
+        Ok(stored) => HistoryFile::Loaded {
+            items: stored.items,
+            sealed,
+        },
         Err(err) => {
             let mut aside = path.as_os_str().to_owned();
             aside.push(".corrupt");
@@ -853,8 +1050,96 @@ fn read_history_checked(path: &Path) -> Option<Vec<Entry>> {
                 err.column()
             );
             let _ = fs::rename(path, aside);
-            None
+            HistoryFile::Unreadable
         }
+    }
+}
+
+/// Moves the history from where an earlier version kept it (`old_file` and the
+/// `clipboard` folder beside it) to `new_file` and `new_store`, then deletes the
+/// old copies, so the history stops sitting in the roaming profile.
+///
+/// Safe to run again after any failure: images are moved first, one file at a
+/// time and only deleted from the old folder once written to the new one; the
+/// history file is copied after that and deleted last. If anything cannot be
+/// moved nothing that could still be needed is deleted, and the next start
+/// tries again. A history already present at `new_file` is never overwritten;
+/// an old file next to it is a leftover and goes. A file over `cap` bytes is
+/// not read. With a `sealer` everything is written encrypted.
+fn migrate_legacy(
+    old_file: &Path,
+    new_file: &Path,
+    new_store: Option<&MediaStore>,
+    sealer: Option<&dyn Sealer>,
+    cap: u64,
+) {
+    if old_file == new_file {
+        return;
+    }
+    let old_store = old_file
+        .parent()
+        .map(|dir| MediaStore::new(dir.join(clipboard_store::DIR_NAME)));
+    if let (Some(new_store), Some(old_store)) = (new_store, &old_store) {
+        let moved = new_store.adopt_from(old_store, sealer);
+        if moved.retry > 0 {
+            tracing::warn!(
+                files = moved.retry,
+                "some clipboard images could not be moved yet; trying again next start"
+            );
+            return;
+        }
+        if moved.moved + moved.dropped > 0 {
+            tracing::info!(
+                files = moved.moved,
+                "moved clipboard images to the local data folder"
+            );
+        }
+    }
+
+    if !old_file.exists() {
+        return;
+    }
+    if new_file.exists() {
+        // A history is already here: what is left over is not needed.
+        remove_legacy(old_file);
+        return;
+    }
+    match read_capped(old_file, cap) {
+        Ok(bytes) => {
+            if serde_json::from_slice::<StoredHistory>(&bytes).is_ok() {
+                if let Err(err) = write_atomic_sealed(new_file, &bytes, sealer) {
+                    tracing::warn!("could not move the clipboard history: {err}");
+                    return;
+                }
+                tracing::info!("moved the clipboard history to the local data folder");
+            } else {
+                // Not a history: nothing worth keeping in the roaming profile.
+                tracing::warn!("the old clipboard history file is not valid; deleting it");
+            }
+            remove_legacy(old_file);
+        }
+        Err(err) => {
+            tracing::warn!(
+                "could not move the old clipboard history ({}); it stays where it is",
+                err.kind()
+            );
+        }
+    }
+}
+
+/// Deletes the history file of an earlier version, its plaintext leftovers and
+/// its image folder (only Sevak's own files in it).
+fn remove_legacy(old_file: &Path) {
+    for suffix in ["", ".corrupt", ".tmp"] {
+        let mut file = old_file.as_os_str().to_owned();
+        file.push(suffix);
+        let _ = fs::remove_file(file);
+    }
+    if let Some(dir) = old_file.parent() {
+        let folder = dir.join(clipboard_store::DIR_NAME);
+        MediaStore::new(folder.clone()).prune(&HashSet::new());
+        // Succeeds only if nothing of the user's own is in it.
+        let _ = fs::remove_dir(folder);
     }
 }
 
@@ -974,9 +1259,22 @@ impl ClipboardPlugin {
         platform: Arc<dyn PlatformProvider>,
         history_file: Option<PathBuf>,
     ) -> Self {
+        Self::new_migrating(config, paste, platform, history_file, None)
+    }
+
+    /// Like [`ClipboardPlugin::new`], and the first load moves a history that
+    /// an earlier version kept in `legacy_file` (see [`legacy_history_path`])
+    /// to `history_file`.
+    pub fn new_migrating(
+        config: &ClipboardConfig,
+        paste: &PasteConfig,
+        platform: Arc<dyn PlatformProvider>,
+        history_file: Option<PathBuf>,
+        legacy_file: Option<PathBuf>,
+    ) -> Self {
         let shared = config
             .enabled
-            .then(|| Shared::acquire(history_file, platform.clone()));
+            .then(|| Shared::acquire(history_file, legacy_file, platform.clone()));
         Self {
             settings: Settings::from(config),
             restore_clipboard: paste.restore_clipboard,
@@ -1032,6 +1330,7 @@ impl ClipboardPlugin {
         rows.sort_by(|a, b| b.score.total_cmp(&a.score));
         rows.truncate(MAX_ROWS);
 
+        let notice = shared.notice().filter(|_| input.is_empty());
         if rows.is_empty() && input.is_empty() {
             rows.push(
                 ResultItem::new(
@@ -1045,6 +1344,23 @@ impl ClipboardPlugin {
                 .with_subtitle(self.empty_hint())
                 .with_icon(IconSource::builtin("copy"))
                 .with_score(score::KEYWORD),
+            );
+        }
+
+        if let Some(notice) = notice {
+            rows.insert(
+                0,
+                ResultItem::new(
+                    self.id(),
+                    "notice",
+                    "Clipboard history was reset",
+                    Action::Custom {
+                        payload: PAYLOAD_NOTHING.to_owned(),
+                    },
+                )
+                .with_subtitle(notice)
+                .with_icon(IconSource::builtin("copy"))
+                .with_score(score::KEYWORD + 1_000.0),
             );
         }
 
@@ -1235,11 +1551,12 @@ impl ClipboardPlugin {
     /// Writes a stored image to the Desktop (else Downloads) under a name that
     /// is not taken, and shows it there.
     fn save_image(&self, hash: u64) -> PluginResult<()> {
-        let store = self
+        let shared = self
             .shared
             .as_ref()
-            .and_then(|shared| shared.store.as_ref())
+            .filter(|shared| shared.store.is_some())
             .ok_or_else(|| PluginError::Message("There is no stored image to save".to_owned()))?;
+        let store = shared.store.as_ref().expect("checked above");
         let source = store.png_path(hash);
         if !source.is_file() {
             return Err(PluginError::Message(
@@ -1253,7 +1570,11 @@ impl ClipboardPlugin {
             .ok_or_else(|| PluginError::Message("There is no folder to save into".to_owned()))?;
         let stamp = chrono::Local::now().format("%Y-%m-%d %H-%M-%S");
         let target = clip_media::unique_file_name(&dir, &format!("Clipboard image {stamp}"), "png");
-        fs::copy(&source, &target).map_err(PluginError::other)?;
+        // The stored file may be encrypted; the saved picture is a plain PNG.
+        let png = shared
+            .read_image_file(&source)
+            .map_err(PluginError::other)?;
+        fs::write(&target, png).map_err(PluginError::other)?;
         tracing::info!("saved a clipboard image to {}", target.display());
         if let Err(err) = self.platform.reveal_path(&target) {
             // Saved all the same; only showing it failed.
@@ -1372,6 +1693,9 @@ impl Plugin for ClipboardPlugin {
 mod tests {
     use sevak_platform::ForegroundApp;
 
+    use sevak_core::sealed::fake::XorSealer;
+    use sevak_platform::private_file::{is_sealed_file, write_atomic};
+
     use super::*;
     use crate::test_util::MockPlatform;
 
@@ -1383,6 +1707,7 @@ mod tests {
             images: true,
             files: true,
             max_image_bytes: 1_000_000,
+            encrypt: true,
         }
     }
 
@@ -1524,6 +1849,124 @@ mod tests {
         assert_eq!(monitor.poll(&*platform, &settings()), None);
         set_files(&platform, 5, &[Path::new("/a/b.txt")]);
         assert_eq!(monitor.poll(&*platform, &settings()), None);
+    }
+
+    fn settings_for(config: &ClipboardConfig) -> Settings {
+        Settings::from(config)
+    }
+
+    #[test]
+    fn password_managers_are_ignored_by_default_in_addition_to_the_users_list() {
+        let platform = MockPlatform::empty();
+        let mut monitor = primed_monitor(&platform);
+        let config = ClipboardConfig {
+            ignore_apps: vec!["Notepad".into()],
+            ..ClipboardConfig::default()
+        };
+        let settings = settings_for(&config);
+
+        let mut sequence = 1;
+        let mut copied_from = |app: ForegroundApp| {
+            sequence += 1;
+            *platform.foreground.lock().unwrap() = Some(app);
+            copy(&platform, sequence, "a secret value");
+            text_of(monitor.poll(platform.as_ref(), &settings))
+        };
+        // Names as the three systems report them.
+        for app in [
+            ForegroundApp::new("KeePassXC").with_identifier("KeePassXC.exe"),
+            ForegroundApp::new("1Password").with_identifier("1Password.exe"),
+            ForegroundApp::new("Bitwarden").with_identifier("com.bitwarden.desktop"),
+            ForegroundApp::new("keepassxc").with_identifier("org.keepassxc.KeePassXC"),
+            ForegroundApp::new("pinentry-gnome3"),
+            ForegroundApp::new("CredentialUIBroker").with_identifier("CredentialUIBroker.exe"),
+            // The user's own entry still works.
+            ForegroundApp::new("Notepad"),
+        ] {
+            let name = app.name.clone();
+            assert_eq!(copied_from(app), None, "{name} must not be recorded");
+        }
+        // An ordinary app is recorded.
+        assert_eq!(
+            copied_from(ForegroundApp::new("Code")),
+            Some("a secret value".to_owned())
+        );
+    }
+
+    #[test]
+    fn a_copy_from_an_app_that_cannot_be_identified_is_not_recorded() {
+        let platform = MockPlatform::empty();
+        let mut monitor = primed_monitor(&platform);
+        let settings = settings_for(&ClipboardConfig::default());
+
+        // A system that can tell apps apart, but not this one (say, an
+        // elevated process): the ignore list cannot be applied.
+        *platform.identifies_apps.lock().unwrap() = true;
+        *platform.foreground.lock().unwrap() = None;
+        copy(&platform, 2, "from who knows where");
+        assert_eq!(text_of(monitor.poll(platform.as_ref(), &settings)), None);
+
+        // Once it is known, the next copy is recorded.
+        *platform.foreground.lock().unwrap() = Some(ForegroundApp::new("Code"));
+        copy(&platform, 3, "from Code");
+        assert_eq!(
+            text_of(monitor.poll(platform.as_ref(), &settings)),
+            Some("from Code".to_owned())
+        );
+    }
+
+    #[test]
+    fn where_apps_cannot_be_told_apart_copies_are_recorded_as_before() {
+        // Wayland: nobody can tell, so the ignore list has nothing to act on.
+        let platform = MockPlatform::empty();
+        let mut monitor = primed_monitor(&platform);
+        copy(&platform, 2, "from a Wayland app");
+        assert_eq!(
+            text_of(monitor.poll(
+                platform.as_ref(),
+                &settings_for(&ClipboardConfig::default())
+            )),
+            Some("from a Wayland app".to_owned())
+        );
+    }
+
+    #[test]
+    fn with_no_ignore_list_at_all_an_unknown_app_is_recorded() {
+        let platform = MockPlatform::empty();
+        let mut monitor = primed_monitor(&platform);
+        *platform.identifies_apps.lock().unwrap() = true;
+        let config = ClipboardConfig {
+            default_ignore_apps: false,
+            ..ClipboardConfig::default()
+        };
+        copy(&platform, 2, "nothing to check against");
+        assert_eq!(
+            text_of(monitor.poll(platform.as_ref(), &settings_for(&config))),
+            Some("nothing to check against".to_owned())
+        );
+    }
+
+    #[test]
+    fn the_built_in_list_can_be_switched_off() {
+        let config = ClipboardConfig {
+            default_ignore_apps: false,
+            ignore_apps: vec!["Notepad".into()],
+            ..ClipboardConfig::default()
+        };
+        assert_eq!(effective_ignore_apps(&config), ["Notepad"]);
+        let on = ClipboardConfig::default();
+        let apps = effective_ignore_apps(&on);
+        assert_eq!(apps.len(), DEFAULT_CLIPBOARD_IGNORE_APPS.len());
+        assert!(apps.iter().any(|app| app == "KeePassXC"));
+
+        let platform = MockPlatform::empty();
+        let mut monitor = primed_monitor(&platform);
+        *platform.foreground.lock().unwrap() = Some(ForegroundApp::new("KeePassXC"));
+        copy(&platform, 2, "from a password manager");
+        assert_eq!(
+            text_of(monitor.poll(platform.as_ref(), &settings_for(&config))),
+            Some("from a password manager".to_owned())
+        );
     }
 
     #[test]
@@ -2164,6 +2607,437 @@ mod tests {
         assert_eq!(items[0].source.as_deref(), Some("Code"));
     }
 
+    /// An earlier version's data folder with a history, an image and the
+    /// user's own file next to them.
+    fn old_install(dir: &Path) -> (PathBuf, MediaStore) {
+        let old_file = dir.join("roaming").join(FILE_NAME);
+        let old_store = MediaStore::new(dir.join("roaming").join(clipboard_store::DIR_NAME));
+        let image = ImageRef {
+            hash: 7,
+            width: 2,
+            height: 2,
+            bytes: 4,
+        };
+        let entries = [
+            Entry::new_text("from the old place".into(), 5, None),
+            Entry::new_image(image, 6, None),
+        ];
+        let stored = StoredHistoryRef {
+            version: HISTORY_VERSION,
+            items: entries.iter().collect(),
+        };
+        write_atomic(&old_file, &serde_json::to_vec(&stored).unwrap()).unwrap();
+        old_store.write(7, b"full", b"thumb", None).unwrap();
+        (old_file, old_store)
+    }
+
+    fn migrating_plugin(
+        platform: &Arc<MockPlatform>,
+        file: &Path,
+        legacy: &Path,
+    ) -> ClipboardPlugin {
+        ClipboardPlugin::new_migrating(
+            &ClipboardConfig {
+                enabled: true,
+                ..ClipboardConfig::default()
+            },
+            &PasteConfig::default(),
+            platform.clone(),
+            Some(file.to_path_buf()),
+            Some(legacy.to_path_buf()),
+        )
+    }
+
+    #[test]
+    fn an_earlier_versions_history_moves_to_the_new_folder_and_the_old_one_goes() {
+        let dir = tempfile::tempdir().unwrap();
+        let (old_file, old_store) = old_install(dir.path());
+        let file = dir.path().join("local").join(FILE_NAME);
+
+        let plugin = migrating_plugin(&MockPlatform::empty(), &file, &old_file);
+        open(&plugin);
+
+        let shared = plugin.shared.as_ref().unwrap();
+        let texts: Vec<String> = shared.snapshot().iter().map(|e| e.text.clone()).collect();
+        assert_eq!(texts, ["from the old place", ""]);
+        assert!(shared.store.as_ref().unwrap().contains(7));
+        // Nothing is left in the old place, not even its folder.
+        assert!(!old_file.exists());
+        assert!(!old_store.contains(7));
+        assert!(!dir.path().join("roaming").join("clipboard").exists());
+        // And it was written to the new one, so a restart finds it there.
+        assert!(file.is_file());
+    }
+
+    #[test]
+    fn a_history_already_in_the_new_folder_is_not_overwritten() {
+        let dir = tempfile::tempdir().unwrap();
+        let (old_file, _) = old_install(dir.path());
+        let file = dir.path().join("local").join(FILE_NAME);
+        let entry = Entry::new_text("already here".into(), 1, None);
+        let stored = StoredHistoryRef {
+            version: HISTORY_VERSION,
+            items: vec![&entry],
+        };
+        write_atomic(&file, &serde_json::to_vec(&stored).unwrap()).unwrap();
+
+        migrate_legacy(&old_file, &file, None, None, MAX_HISTORY_FILE_BYTES);
+
+        assert_eq!(read_history(&file)[0].text, "already here");
+        assert!(!old_file.exists(), "the old copy is only a leftover");
+    }
+
+    #[test]
+    fn a_history_that_cannot_be_written_stays_in_the_old_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        let (old_file, _) = old_install(dir.path());
+        // The new folder is a file, so nothing can be created in it.
+        let blocker = dir.path().join("local");
+        fs::write(&blocker, b"not a folder").unwrap();
+        let file = blocker.join(FILE_NAME);
+
+        migrate_legacy(&old_file, &file, None, None, MAX_HISTORY_FILE_BYTES);
+
+        assert!(old_file.is_file(), "nothing is deleted before it is safe");
+        assert!(!file.exists());
+    }
+
+    #[test]
+    fn images_that_cannot_be_moved_keep_the_old_history_for_the_next_try() {
+        let dir = tempfile::tempdir().unwrap();
+        let (old_file, old_store) = old_install(dir.path());
+        let blocked = dir.path().join("blocked");
+        fs::write(&blocked, b"not a folder").unwrap();
+        let store = MediaStore::new(blocked);
+        let file = dir.path().join("local").join(FILE_NAME);
+
+        migrate_legacy(&old_file, &file, Some(&store), None, MAX_HISTORY_FILE_BYTES);
+
+        assert!(old_file.is_file());
+        assert!(old_store.contains(7));
+        assert!(!file.exists());
+    }
+
+    #[test]
+    fn a_history_over_the_size_cap_is_not_read_or_moved() {
+        let dir = tempfile::tempdir().unwrap();
+        let (old_file, _) = old_install(dir.path());
+        let file = dir.path().join("local").join(FILE_NAME);
+
+        migrate_legacy(&old_file, &file, None, None, 16);
+
+        assert!(old_file.is_file(), "left where it is");
+        assert!(!file.exists());
+        // The same cap applies to the history in its usual place.
+        assert_eq!(read_history(&old_file).len(), 2);
+    }
+
+    #[test]
+    fn an_old_file_that_is_not_a_history_is_deleted_not_kept() {
+        let dir = tempfile::tempdir().unwrap();
+        let old_file = dir.path().join("roaming").join(FILE_NAME);
+        write_atomic(&old_file, b"{not json").unwrap();
+        let file = dir.path().join("local").join(FILE_NAME);
+
+        migrate_legacy(&old_file, &file, None, None, MAX_HISTORY_FILE_BYTES);
+
+        assert!(!old_file.exists());
+        assert!(!file.exists());
+    }
+
+    #[test]
+    fn clearing_also_clears_the_old_place() {
+        let dir = tempfile::tempdir().unwrap();
+        let (old_file, old_store) = old_install(dir.path());
+        // A migration that has not happened yet (the user clears first).
+        let file = dir.path().join("local").join(FILE_NAME);
+        let plugin = migrating_plugin(&MockPlatform::empty(), &file, &old_file);
+        plugin.shared.as_ref().unwrap().clear();
+        assert!(!old_file.exists());
+        assert!(!old_store.contains(7));
+    }
+
+    fn sealed_platform(key: u8) -> Arc<MockPlatform> {
+        let platform = MockPlatform::empty();
+        *platform.sealer.lock().unwrap() = Some(Arc::new(XorSealer(key)));
+        platform
+    }
+
+    fn save_entry(plugin: &ClipboardPlugin, text: &str) {
+        let shared = plugin.shared.as_ref().unwrap();
+        lock(&shared.state).push(Entry::new_text(text.into(), 42, None), 200);
+        shared.persist();
+    }
+
+    #[test]
+    fn the_history_file_is_encrypted_and_reads_back_with_the_same_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join(FILE_NAME);
+        let platform = sealed_platform(5);
+        {
+            let plugin = plugin(&platform, true, Some(file.clone()));
+            open(&plugin);
+            save_entry(&plugin, "the password is hunter2");
+        }
+        let on_disk = fs::read(&file).unwrap();
+        assert!(is_sealed_file(&file));
+        assert!(!on_disk.windows(7).any(|w| w == b"hunter2"));
+        assert!(!on_disk.windows(8).any(|w| w == b"password"));
+
+        let again = plugin(&platform, true, Some(file));
+        open(&again);
+        assert_eq!(
+            again.shared.as_ref().unwrap().snapshot()[0].text,
+            "the password is hunter2"
+        );
+        assert_eq!(again.shared.as_ref().unwrap().notice(), None);
+    }
+
+    #[test]
+    fn encrypt_off_or_no_system_encryption_leaves_the_file_plain() {
+        let dir = tempfile::tempdir().unwrap();
+        // The system can encrypt, the setting is off.
+        let off = ClipboardConfig {
+            enabled: true,
+            encrypt: false,
+            ..ClipboardConfig::default()
+        };
+        let file = dir.path().join("off").join(FILE_NAME);
+        let platform = sealed_platform(5);
+        let plugin =
+            ClipboardPlugin::new(&off, &PasteConfig::default(), platform, Some(file.clone()));
+        open(&plugin);
+        save_entry(&plugin, "plain text");
+        assert!(!is_sealed_file(&file));
+        assert!(fs::read(&file).unwrap().windows(5).any(|w| w == b"plain"));
+
+        // The setting is on, the system has no encryption (macOS, Linux).
+        let file = dir.path().join("none").join(FILE_NAME);
+        let plugin = plugin_at(&MockPlatform::empty(), &file);
+        open(&plugin);
+        save_entry(&plugin, "plain text");
+        assert!(!is_sealed_file(&file));
+        assert_eq!(read_history(&file)[0].text, "plain text");
+    }
+
+    fn plugin_at(platform: &Arc<MockPlatform>, file: &Path) -> ClipboardPlugin {
+        plugin(platform, true, Some(file.to_path_buf()))
+    }
+
+    #[test]
+    fn a_plain_history_is_encrypted_on_the_next_load() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join(FILE_NAME);
+        // Written by a Sevak without encryption.
+        {
+            let plugin = plugin_at(&MockPlatform::empty(), &file);
+            open(&plugin);
+            save_entry(&plugin, "written before encryption");
+        }
+        assert!(!is_sealed_file(&file));
+
+        let platform = sealed_platform(7);
+        let plugin = plugin_at(&platform, &file);
+        open(&plugin);
+
+        assert!(is_sealed_file(&file), "rewritten encrypted");
+        assert_eq!(
+            plugin.shared.as_ref().unwrap().snapshot()[0].text,
+            "written before encryption"
+        );
+    }
+
+    #[test]
+    fn a_history_for_another_user_starts_fresh_says_so_and_keeps_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join(FILE_NAME);
+        {
+            let plugin = plugin_at(&sealed_platform(1), &file);
+            open(&plugin);
+            save_entry(&plugin, "somebody else's text");
+        }
+        let before = fs::read(&file).unwrap();
+
+        let me = sealed_platform(2);
+        let plugin = plugin_at(&me, &file);
+        open(&plugin);
+
+        let shared = plugin.shared.as_ref().unwrap();
+        assert!(shared.snapshot().is_empty());
+        // The list says what happened, first.
+        let rows = plugin.rows("", 100);
+        assert_eq!(rows[0].title, "Clipboard history was reset");
+        assert!(rows[0].subtitle.contains("another user"));
+        assert_eq!(rows[1].title, "Clipboard history is empty");
+        // Searching shows no notice among the results.
+        assert!(plugin
+            .rows("x", 100)
+            .iter()
+            .all(|row| row.title != "Clipboard history was reset"));
+        // Nothing was moved aside, and nothing is readable in plain.
+        assert_eq!(
+            fs::read(&file).unwrap(),
+            before,
+            "untouched until a new save"
+        );
+        let names: Vec<String> = fs::read_dir(dir.path())
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, [FILE_NAME]);
+
+        // The first new copy replaces the old file with one this user can read.
+        save_entry(&plugin, "mine");
+        // (After a restart: the notice belongs to the session that reset it.)
+        drop(plugin);
+        let again = plugin_at(&me, &file);
+        open(&again);
+        assert_eq!(again.shared.as_ref().unwrap().snapshot()[0].text, "mine");
+        assert_eq!(again.shared.as_ref().unwrap().notice(), None);
+    }
+
+    #[test]
+    fn clearing_forgets_the_notice() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join(FILE_NAME);
+        {
+            let plugin = plugin_at(&sealed_platform(1), &file);
+            open(&plugin);
+            save_entry(&plugin, "x");
+        }
+        let plugin = plugin_at(&sealed_platform(2), &file);
+        open(&plugin);
+        assert!(plugin.shared.as_ref().unwrap().notice().is_some());
+        plugin.shared.as_ref().unwrap().clear();
+        assert_eq!(plugin.rows("", 100)[0].title, "Clipboard history is empty");
+    }
+
+    #[test]
+    fn an_encrypted_file_on_a_system_without_encryption_is_not_guessed_at() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join(FILE_NAME);
+        {
+            let plugin = plugin_at(&sealed_platform(1), &file);
+            open(&plugin);
+            save_entry(&plugin, "x");
+        }
+        let plugin = plugin_at(&MockPlatform::empty(), &file);
+        open(&plugin);
+        assert!(plugin.shared.as_ref().unwrap().snapshot().is_empty());
+        assert!(plugin.shared.as_ref().unwrap().notice().is_some());
+    }
+
+    #[test]
+    fn images_are_encrypted_on_disk_and_pasting_and_saving_still_work() {
+        let mut rig = Rig::sealed(6);
+        let image = picture(3);
+        rig.copy_image(&image);
+        let hash = image.content_hash();
+
+        let png = rig.store().png_path(hash);
+        let thumb = rig.store().thumb_path(hash);
+        assert!(is_sealed_file(&png));
+        assert!(is_sealed_file(&thumb));
+        // The picture on disk is not a PNG any more.
+        assert!(!fs::read(&png).unwrap().starts_with(b"\x89PNG"));
+
+        // Saving writes a normal PNG.
+        let desktop = tempfile::tempdir().unwrap();
+        rig.plugin.save_dir = Some(desktop.path().to_path_buf());
+        let row = rig.plugin.rows("", 100).remove(0);
+        let save = row.secondary_as_primary(1).unwrap();
+        rig.plugin.execute(&save).unwrap();
+        let saved = fs::read_dir(desktop.path())
+            .unwrap()
+            .flatten()
+            .next()
+            .unwrap();
+        assert_eq!(
+            ClipboardImage::decode_png(&fs::read(saved.path()).unwrap()).unwrap(),
+            image
+        );
+    }
+
+    #[test]
+    fn plain_images_are_encrypted_when_the_history_loads() {
+        let mut rig = Rig::new();
+        let image = picture(4);
+        rig.copy_image(&image);
+        let hash = image.content_hash();
+        let png = rig.store().png_path(hash);
+        assert!(!is_sealed_file(&png));
+        let file = rig.dir.path().join(FILE_NAME);
+        drop((rig.plugin, rig.monitor));
+
+        let platform = sealed_platform(9);
+        let again = plugin_at(&platform, &file);
+        open(&again);
+
+        assert!(is_sealed_file(&png));
+        assert!(is_sealed_file(&file));
+        assert_eq!(again.shared.as_ref().unwrap().snapshot().len(), 1);
+        drop(rig.dir);
+    }
+
+    #[test]
+    fn turning_encryption_on_later_encrypts_what_is_stored() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join(FILE_NAME);
+        let platform = sealed_platform(2);
+        let off = ClipboardConfig {
+            enabled: true,
+            encrypt: false,
+            ..ClipboardConfig::default()
+        };
+        let plugin = ClipboardPlugin::new(
+            &off,
+            &PasteConfig::default(),
+            platform.clone(),
+            Some(file.clone()),
+        );
+        open(&plugin);
+        save_entry(&plugin, "was plain");
+        assert!(!is_sealed_file(&file));
+
+        // A config reload with the setting on: the same history, reconfigured.
+        let on = ClipboardConfig {
+            enabled: true,
+            encrypt: true,
+            ..ClipboardConfig::default()
+        };
+        let reloaded =
+            ClipboardPlugin::new(&on, &PasteConfig::default(), platform, Some(file.clone()));
+        reloaded.refresh().unwrap();
+        assert!(is_sealed_file(&file));
+        assert_eq!(
+            reloaded.shared.as_ref().unwrap().snapshot()[0].text,
+            "was plain"
+        );
+    }
+
+    #[test]
+    fn a_moved_history_is_encrypted_by_the_move() {
+        let dir = tempfile::tempdir().unwrap();
+        let (old_file, old_store) = old_install(dir.path());
+        let file = dir.path().join("local").join(FILE_NAME);
+        let new_store = MediaStore::new(dir.path().join("local").join("clipboard"));
+        let sealer = XorSealer(3);
+
+        migrate_legacy(
+            &old_file,
+            &file,
+            Some(&new_store),
+            Some(&sealer),
+            MAX_HISTORY_FILE_BYTES,
+        );
+
+        assert!(is_sealed_file(&file));
+        assert!(is_sealed_file(&new_store.png_path(7)));
+        assert!(!old_file.exists());
+        assert!(!old_store.contains(7));
+    }
+
     #[test]
     fn a_text_only_history_file_from_before_images_still_loads() {
         let dir = tempfile::tempdir().unwrap();
@@ -2268,8 +3142,19 @@ mod tests {
         }
 
         fn with(config: ClipboardConfig) -> Self {
-            let dir = tempfile::tempdir().unwrap();
+            Self::on(config, MockPlatform::empty())
+        }
+
+        /// A system that encrypts files for the user with `key` (another key is
+        /// another user).
+        fn sealed(key: u8) -> Self {
             let platform = MockPlatform::empty();
+            *platform.sealer.lock().unwrap() = Some(Arc::new(XorSealer(key)));
+            Self::on(ClipboardConfig::default(), platform)
+        }
+
+        fn on(config: ClipboardConfig, platform: Arc<MockPlatform>) -> Self {
+            let dir = tempfile::tempdir().unwrap();
             let config = ClipboardConfig {
                 enabled: true,
                 ..config
@@ -2734,7 +3619,7 @@ mod tests {
         // Files nothing refers to: a leftover pair, a temp file of an
         // interrupted write, and the user's own file in the same folder.
         let store = rig.store().clone();
-        store.write(0xdead, b"x", b"x").unwrap();
+        store.write(0xdead, b"x", b"x", None).unwrap();
         fs::write(store.dir().join("0000000000000bad.png.tmp"), b"half").unwrap();
         fs::write(store.dir().join("keep-me.png"), b"mine").unwrap();
         let file = rig.dir.path().join(FILE_NAME);
@@ -2801,7 +3686,7 @@ mod tests {
         let file = dir.path().join(FILE_NAME);
         fs::write(&file, "{ broken").unwrap();
         let store = MediaStore::new(dir.path().join(clipboard_store::DIR_NAME));
-        store.write(5, b"png", b"thumb").unwrap();
+        store.write(5, b"png", b"thumb", None).unwrap();
         let plugin = plugin(&MockPlatform::empty(), true, Some(file));
         plugin.refresh().unwrap();
         // The broken file was moved aside, and what it may have listed is kept

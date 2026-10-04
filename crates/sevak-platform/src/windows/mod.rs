@@ -2,11 +2,13 @@
 
 mod capture;
 mod com;
+pub(crate) mod dpapi;
 mod expand;
 mod icons;
 mod keyhook;
 mod keyhook_expand;
 mod keyhook_hotkey;
+mod keyhook_watch;
 pub(crate) mod media;
 pub(crate) mod os_search;
 pub(crate) mod os_version;
@@ -20,8 +22,10 @@ pub(crate) mod system;
 pub(crate) mod tasks;
 pub(crate) mod thumbnail;
 pub(crate) mod trash;
+mod uia;
 
 pub(crate) use keyhook_hotkey::{clock_ms as hook_clock_ms, service as hotkey_hook_service};
+pub(crate) use paste::clipboard_sequence;
 pub(crate) use provider::WindowsProvider;
 
 use std::ffi::OsStr;

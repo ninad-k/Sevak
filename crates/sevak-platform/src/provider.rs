@@ -219,6 +219,16 @@ pub trait PlatformProvider: Send + Sync {
         None
     }
 
+    /// Whether [`PlatformProvider::foreground_app`] works on this system at all
+    /// (not on Wayland, which tells apps nothing about other windows). When it
+    /// does and still answers `None` for a window, the app could not be told
+    /// (Windows: a process that cannot be opened; Linux: a window without
+    /// `WM_CLASS`; macOS: an app without a bundle id), and everything that
+    /// excludes apps by name treats that as "excluded".
+    fn identifies_apps(&self) -> bool {
+        false
+    }
+
     /// Whether [`PlatformProvider::paste_text`] can paste on this system right
     /// now (it can change at runtime: macOS needs a permission the user may
     /// grant later). Cheap enough to call on every keystroke.
@@ -316,6 +326,13 @@ pub trait PlatformProvider: Send + Sync {
         request: &OsSearchRequest,
     ) -> std::result::Result<Vec<OsHit>, OsSearchError> {
         crate::os_search::search(request)
+    }
+
+    /// What encrypts files for the current user on this system (Windows:
+    /// DPAPI), used for the clipboard history. `None` where there is nothing
+    /// of the kind: the files are then plain, readable by their owner only.
+    fn history_sealer(&self) -> Option<std::sync::Arc<dyn sevak_core::sealed::Sealer>> {
+        None
     }
 
     /// A counter that changes whenever the clipboard does, where the OS has one

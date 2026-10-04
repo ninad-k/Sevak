@@ -149,6 +149,14 @@ impl PlatformProvider for WindowsProvider {
         capture::capture_selection(options)
     }
 
+    fn identifies_apps(&self) -> bool {
+        true
+    }
+
+    fn history_sealer(&self) -> Option<std::sync::Arc<dyn sevak_core::sealed::Sealer>> {
+        Some(std::sync::Arc::new(super::dpapi::Dpapi))
+    }
+
     fn clipboard_sequence(&self) -> Option<u64> {
         paste::clipboard_sequence()
     }

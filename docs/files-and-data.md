@@ -11,8 +11,9 @@ Sevak stores configuration, themes, script plugins, workflows, logs, usage histo
 | **Data folder** | `%APPDATA%\sevak\` | `~/Library/Application Support/sevak/` | `~/.local/share/sevak/` |
 | **Logs** | `%APPDATA%\sevak\logs\` | `~/Library/Application Support/sevak/logs/` | `~/.local/share/sevak/logs/` |
 | **Usage history** | `%APPDATA%\sevak\usage.json` | `~/Library/Application Support/sevak/usage.json` | `~/.local/share/sevak/usage.json` |
-| **Clipboard history** | `%APPDATA%\sevak\clipboard-history.json` | `~/Library/Application Support/sevak/clipboard-history.json` | `~/.local/share/sevak/clipboard-history.json` |
-| **Clipboard images** | `%APPDATA%\sevak\clipboard\` | `~/Library/Application Support/sevak/clipboard/` | `~/.local/share/sevak/clipboard/` |
+| **Local data folder** | `%LOCALAPPDATA%\sevak\` | same as the data folder | same as the data folder |
+| **Clipboard history** | `%LOCALAPPDATA%\sevak\clipboard-history.json` | `~/Library/Application Support/sevak/clipboard-history.json` | `~/.local/share/sevak/clipboard-history.json` |
+| **Clipboard images** | `%LOCALAPPDATA%\sevak\clipboard\` | `~/Library/Application Support/sevak/clipboard/` | `~/.local/share/sevak/clipboard/` |
 | **Theme files** | `%APPDATA%\sevak\themes\` | `~/Library/Application Support/sevak/themes/` | `~/.config/sevak/themes/` |
 | **Script plugins** | `%APPDATA%\sevak\plugins\` | `~/Library/Application Support/sevak/plugins/` | `~/.config/sevak/plugins/` |
 | **Workflows** | `%APPDATA%\sevak\workflows\` | `~/Library/Application Support/sevak/workflows/` | `~/.config/sevak/workflows/` |
@@ -20,7 +21,9 @@ Sevak stores configuration, themes, script plugins, workflows, logs, usage histo
 
 Theme files, script plugins and workflows sit next to `config.toml` in the config folder; clipboard images, approvals and the data folders of plugins and workflows are in the data folder. On Windows and macOS the two folders are the same.
 
-Expand `~` to your home directory and `%APPDATA%` to your roaming app data folder.
+The *local* data folder holds what must not leave this computer: on Windows `%LOCALAPPDATA%\sevak\`, because `%APPDATA%` is the roaming profile that domain setups, folder redirection and backup tools copy to other machines. Only the clipboard history lives there; versions before the change kept it in `%APPDATA%\sevak\`, and the first start moves it (and deletes the old copy). On macOS and Linux, and when `SEVAK_DATA_DIR` is set, the local data folder is the data folder.
+
+Expand `~` to your home directory, `%APPDATA%` to your roaming app data folder and `%LOCALAPPDATA%` to your local one.
 
 ## Override locations
 
@@ -106,7 +109,7 @@ Records searches and actions you perform: what you typed, which results you ran,
 
 ### clipboard-history.json and clipboard/
 
-Optional clipboard history (only if `[clipboard] enabled = true`). `clipboard-history.json` records the text you copy and the paths of files you copy, with timestamps. The `clipboard/` folder next to it holds each copied image as a PNG file plus a small thumbnail (only if `[clipboard] images = true`, the default once the history is on). Both are unencrypted.
+Optional clipboard history (only if `[clipboard] enabled = true`). `clipboard-history.json` records the text you copy and the paths of files you copy, with timestamps. The `clipboard/` folder next to it holds each copied image as a PNG file plus a small thumbnail (only if `[clipboard] images = true`, the default once the history is on). On Windows both are encrypted for your account (DPAPI; `[clipboard] encrypt`), so a copy of the files on another computer or account is unreadable; on macOS and Linux they are plain files readable by your user only (mode `0600`).
 
 **Edited by:** Sevak (when you copy, and when you type `cb clear` and run **Clear clipboard history**, which deletes the entries and the image files).
 
@@ -193,7 +196,7 @@ rm -r ~/.local/share/sevak/clipboard-history.json ~/.local/share/sevak/clipboard
 On Windows:
 
 ```powershell
-Remove-Item "$env:APPDATA\sevak\clipboard-history.json", "$env:APPDATA\sevak\clipboard" -Recurse
+Remove-Item "$env:LOCALAPPDATA\sevak\clipboard-history.json", "$env:LOCALAPPDATA\sevak\clipboard" -Recurse
 ```
 
 Sevak will create a fresh file on next use.

@@ -262,7 +262,7 @@ More: [Bookmarks](features/bookmarks.md) plugin.
 
 Type **`cb `** to search what you copied recently: text, images and files. **++enter++** pastes the entry into your previous app. `cb image` shows copied images as a grid of thumbnails.
 
-Sevak never records content password managers mark as secret, copies made in apps listed in `ignore_apps`, very long text or very large images. Images are kept as PNG files in the data folder, unencrypted; turn them off with `[clipboard] images = false`.
+Sevak never records content password managers mark as secret, copies made in the common password managers or in apps listed in `ignore_apps`, very long text or very large images. The history and the images (PNG files) are kept in the local data folder, encrypted for your account on Windows and owner-only elsewhere; turn images off with `[clipboard] images = false`.
 
 More: [Clipboard history](features/clipboard.md) plugin.
 

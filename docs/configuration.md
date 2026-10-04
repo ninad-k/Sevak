@@ -323,13 +323,15 @@ Clipboard history settings (opt-in feature).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `enabled` | boolean | `false` | Enable clipboard history (`cb <text>` to search). Off by default: turning it on makes Sevak watch your clipboard and keep what you copy in its data folder, unencrypted: text and the paths of copied files in `clipboard-history.json`, images as PNG files in the `clipboard` folder. Content marked as secret by apps (password managers) is never recorded. |
+| `enabled` | boolean | `false` | Enable clipboard history (`cb <text>` to search). Off by default: turning it on makes Sevak watch your clipboard and keep what you copy in its local data folder (on Windows `%LOCALAPPDATA%\sevak\`, which does not roam): text and the paths of copied files in `clipboard-history.json`, images as PNG files in the `clipboard` folder. Encrypted for your account on Windows (see `encrypt`), plain but owner-only elsewhere. Content marked as secret by apps (password managers) is never recorded. |
 | `max_items` | integer | `200` | How many clipboard items to keep, of all kinds together. Older items are dropped (with their image files). Range: 1–5000. |
 | `max_item_bytes` | integer | `65536` (64 KiB) | Maximum size of a clipboard item in bytes. Longer text is not recorded. Range: 1–4,194,304 (4 MiB). |
 | `images` | boolean | `true` | Also record copied images (as PNG files with thumbnails). |
 | `files` | boolean | `true` | Also record copied files and folders (their paths only). |
 | `max_image_bytes` | integer | `10485760` (10 MiB) | An image whose PNG is larger is not recorded. Range: 1–67,108,864 (64 MiB). |
-| `ignore_apps` | array of strings | `[]` | Apps whose copies are never recorded, e.g. `["KeePassXC", "1Password"]`. Matched case-insensitively against the program or app name. |
+| `ignore_apps` | array of strings | `[]` | Apps whose copies are never recorded, e.g. `["Signal", "Messages"]`. Matched case-insensitively against the program or app name. |
+| `default_ignore_apps` | boolean | `true` | Also never record copies from the built-in list of password managers (KeePass, KeePassXC, 1Password, Bitwarden, LastPass, Dashlane, Enpass, NordPass, RoboForm, Keeper, Proton Pass and others), system credential prompts and ssh/gpg passphrase prompts, in addition to `ignore_apps`. The [full list](features/clipboard.md#password-managers-and-other-apps-skipped-by-default) is in the clipboard documentation. `false` turns it off. |
+| `encrypt` | boolean | `true` | Encrypt the history file and the image files for the current user where the system can: Windows (DPAPI). macOS and Linux have no such encryption here; their files are plain, readable by your user only. A history stored plain is encrypted at the next start. |
 
 ```toml
 [clipboard]
@@ -340,6 +342,8 @@ images = true
 files = true
 max_image_bytes = 10485760
 ignore_apps = []
+default_ignore_apps = true
+encrypt = true
 ```
 
 ### [file_buffer]
@@ -424,6 +428,7 @@ use_system = true
 | `case_sensitive` | boolean | `true` | `false`: `SIG` and `sig` both expand. |
 | `ignore_apps` | array of strings | `[]` | Never watch or expand in these apps, e.g. `["KeePassXC", "Firefox"]`. Matched case-insensitively against the program or app name, like `[clipboard] ignore_apps`. |
 | `expand_in_terminals` | boolean | `false` | Terminal windows are skipped unless this is on. |
+| `expand_in_browsers` | boolean | `false` | Web browsers (Chrome, Edge, Firefox, Brave, Vivaldi, Opera, Safari, Arc, Zen, LibreWolf, Chromium) are skipped unless this is on: a password field in a web page cannot be reliably told from other text boxes, so a keyword typed inside a password would expand there. Also in **Settings → Plugins**. |
 
 ```toml
 [snippets]
@@ -433,6 +438,7 @@ expand_on = "immediate"
 case_sensitive = true
 ignore_apps = []
 expand_in_terminals = false
+expand_in_browsers = false
 ```
 
 ## [[snippet]]
@@ -765,9 +771,10 @@ keep_between_shows = false
 [clipboard]
 # Clipboard history ("cb <text>"). Off by default: turning it on makes Sevak
 # watch the clipboard and keep what you copy in clipboard-history.json in its
-# data folder: text, images (as PNG files in a "clipboard" folder next to it)
-# and the paths of copied files. All of it is stored unencrypted. Content that
-# apps mark as secret (password managers) is never recorded.
+# local data folder (on Windows %LOCALAPPDATA%\sevak, which does not roam with your
+# profile): text, images (as PNG files in a "clipboard" folder next to it) and
+# the paths of copied files. Content that apps mark as secret (password
+# managers) is never recorded.
 enabled = false
 # Items kept, of all kinds together (the oldest are dropped).
 max_items = 200
@@ -778,9 +785,19 @@ images = true
 files = true
 # An image whose PNG is larger than this is not recorded.
 max_image_bytes = 10485760
-# Never record text copied from these apps, e.g. ["KeePassXC", "1Password"].
+# Never record text copied from these apps, e.g. ["Signal", "Messages"].
 # Matched case-insensitively against the program or app name.
 ignore_apps = []
+# Also skip password managers (KeePass, KeePassXC, 1Password, Bitwarden,
+# LastPass, Dashlane, Enpass, NordPass, RoboForm, Keeper, Proton Pass), the
+# system's credential prompts and ssh/gpg passphrase prompts, in addition to
+# ignore_apps. The full list is in the clipboard documentation. false turns it off.
+default_ignore_apps = true
+# Encrypt the history file and the image files for your Windows account
+# (DPAPI). macOS and Linux have no such encryption here: the files are plain,
+# readable by you only. Files already stored plain are encrypted on the next
+# start.
+encrypt = true
 
 [contacts]
 # Search your contacts ("c <name>" or "@name"): copy an email or phone number,
@@ -848,6 +865,11 @@ case_sensitive = true
 ignore_apps = []
 # Terminal windows are skipped unless this is on.
 expand_in_terminals = false
+# Web browsers are skipped unless this is on: a password field in a web page
+# cannot be reliably told from other text boxes, so a keyword typed inside a
+# password would expand there. Chrome, Edge, Firefox, Brave, Vivaldi, Opera,
+# Safari, Arc, Zen, LibreWolf and Chromium count as browsers.
+expand_in_browsers = false
 
 # Web search engines: type "<keyword> <terms>". "{query}" is replaced by the
 # URL-encoded terms. Defining any [[web_search]] entry replaces this list.

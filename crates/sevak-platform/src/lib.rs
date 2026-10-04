@@ -17,6 +17,7 @@ pub mod dictionary;
 pub mod error;
 mod expand;
 pub mod gnome;
+mod hook_watchdog;
 pub mod hotkey_hook;
 pub mod icon_file;
 pub mod icon_theme;
@@ -25,12 +26,14 @@ pub mod media;
 pub mod open;
 pub mod os_info;
 pub mod os_search;
+mod password_probe;
 pub mod paste;
 pub mod paths;
 pub mod private_file;
 pub mod process;
 pub mod process_tree;
 pub mod provider;
+mod secret_hint;
 pub mod session;
 pub mod spotlight;
 pub mod system;
@@ -68,8 +71,24 @@ pub use system::{SettingsPage, SystemCommand};
 pub use tasks::{Drive, ProcessInfo, RunningApp, Task, TaskKind};
 pub use terminal::ShellQuoting;
 
+/// What encrypts files for the current user on this system, if anything.
+pub fn native_sealer() -> Option<std::sync::Arc<dyn sevak_core::sealed::Sealer>> {
+    #[cfg(windows)]
+    {
+        Some(std::sync::Arc::new(windows::dpapi::Dpapi))
+    }
+    #[cfg(not(windows))]
+    {
+        None
+    }
+}
+
 /// The [`PlatformProvider`] for the operating system Sevak was built for.
+///
+/// Also installs [`native_sealer`] for the readers of encrypted files that have
+/// no provider at hand (see [`sevak_core::sealed::global`]).
 pub fn native_provider() -> Box<dyn PlatformProvider> {
+    sevak_core::sealed::install_global(native_sealer());
     #[cfg(windows)]
     {
         Box::new(windows::WindowsProvider::new())

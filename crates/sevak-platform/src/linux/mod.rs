@@ -6,6 +6,7 @@ mod expand;
 mod launch;
 mod paste;
 mod scan;
+mod secret_hint;
 pub(crate) mod tasks;
 mod xdg;
 
@@ -21,7 +22,7 @@ use crate::error::{PlatformError, Result};
 use crate::icon_file;
 use crate::icon_theme::{self, IconResolver};
 use crate::keyboard::{KeyListener, KeyListenerSupport, KeySink, TypingTarget};
-use crate::paste::{ForegroundApp, PasteContent, PasteOutcome, PasteSupport};
+use crate::paste::{ClipboardRead, ForegroundApp, PasteContent, PasteOutcome, PasteSupport};
 use crate::provider::PlatformProvider;
 use crate::session;
 
@@ -78,6 +79,10 @@ impl PlatformProvider for LinuxProvider {
         paste::foreground_app()
     }
 
+    fn identifies_apps(&self) -> bool {
+        paste::can_identify_apps()
+    }
+
     fn paste_support(&self) -> PasteSupport {
         paste::paste_support()
     }
@@ -88,6 +93,10 @@ impl PlatformProvider for LinuxProvider {
 
     fn paste_clip(&self, content: &ClipContent, restore_clipboard: bool) -> Result<PasteOutcome> {
         paste::paste_content(PasteContent::Clip(content), restore_clipboard)
+    }
+
+    fn read_clipboard(&self) -> Result<ClipboardRead> {
+        paste::read_clipboard()
     }
 
     fn key_listener_support(&self) -> KeyListenerSupport {

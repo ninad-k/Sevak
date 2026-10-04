@@ -351,6 +351,10 @@ fn post_key(keycode: u16, flags: CGEventFlags) -> Result<()> {
 }
 
 impl ExpandDriver for MacExpand {
+    fn foreground_token(&self) -> Option<u64> {
+        paste::frontmost_pid().and_then(|pid| u64::try_from(pid).ok())
+    }
+
     fn release_modifiers(&self) {
         wait_for_modifier_release();
     }

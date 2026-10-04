@@ -106,6 +106,7 @@ export interface Config {
     case_sensitive: boolean;
     ignore_apps: string[];
     expand_in_terminals: boolean;
+    expand_in_browsers: boolean;
   };
   /** The `>` command: which terminal and shell run it. */
   shell: { terminal: string; shell: string; keep_open: boolean };

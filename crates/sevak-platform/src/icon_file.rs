@@ -14,10 +14,9 @@ pub fn load(path: &Path) -> Result<IconData> {
         operation: "load_icon",
         message: format!("unsupported icon format: {}", path.display()),
     })?;
-    Ok(IconData {
-        mime,
-        bytes: fs::read(path)?,
-    })
+    // A thumbnail of the clipboard history may be encrypted.
+    let bytes = sevak_core::sealed::open_global(fs::read(path)?)?;
+    Ok(IconData { mime, bytes })
 }
 
 /// MIME type for the image formats web views render, by file extension.

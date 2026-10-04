@@ -8,6 +8,10 @@ authors.workspace = true
 rust-version.workspace = true
 publish = false
 
+[features]
+# A fake `Sealer` (`sealed::fake`) for other crates' tests.
+test-util = []
+
 [dependencies]
 nucleo-matcher.workspace = true
 serde.workspace = true
@@ -17,6 +21,7 @@ thiserror.workspace = true
 toml.workspace = true
 toml_edit.workspace = true
 tracing.workspace = true
+zeroize.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

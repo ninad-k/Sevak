@@ -40,6 +40,10 @@ tauri-plugin-notification = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-updater = "2"
 
+# Overwrites typed characters and selected text in memory when they are let go
+# (best effort; MIT or Apache-2.0, already in the dependency tree).
+zeroize = "1"
+
 tempfile = "3"
 
 [profile.release]

@@ -142,6 +142,16 @@ impl PasteDriver for MacDriver {
         Ok(())
     }
 
+    fn target_unchanged(&self) -> bool {
+        let remembered = *REMEMBERED
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        match remembered {
+            Some(pid) => frontmost().is_some_and(|app| app.processIdentifier() == pid),
+            None => false,
+        }
+    }
+
     fn press_paste(&self) -> Result<()> {
         let source = CGEventSource::new(CGEventSourceStateID::CombinedSessionState);
         for key_down in [true, false] {

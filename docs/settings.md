@@ -270,6 +270,7 @@ Off by default. When on, typing a snippet's keyword in any app replaces it with 
 
 - **Keyword prefix**: typed before every keyword, such as `;`, so that `;sig` expands and a plain `sig` does not.
 - **Expand**: as soon as the keyword is typed, or after a space or punctuation mark.
+- **Expand in web browsers**: off by default, because a password field in a web page cannot be told from other text boxes.
 
 A warning under the switch says what is missing (macOS Input Monitoring permission, Wayland). Three more fields appear:
 

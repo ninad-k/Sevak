@@ -90,6 +90,7 @@
       case_sensitive: true,
       ignore_apps: [],
       expand_in_terminals: false,
+      expand_in_browsers: false,
     },
     bookmarks: { browsers: [], keyword: "", global: true },
     file_buffer: { keep_between_shows: false },
@@ -966,6 +967,20 @@
                 <Toggle
                   bind:checked={draft.snippets.expand_in_terminals}
                   label="Expand in terminals"
+                />
+              </div>
+
+              <div class="row">
+                <div class="label">
+                  <span class="name">Expand in web browsers</span>
+                  <span class="hint">
+                    Off by default: a password field in a web page cannot be told from other text
+                    boxes, so a keyword typed inside a password would expand there.
+                  </span>
+                </div>
+                <Toggle
+                  bind:checked={draft.snippets.expand_in_browsers}
+                  label="Expand snippets in web browsers"
                 />
               </div>
 

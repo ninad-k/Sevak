@@ -228,8 +228,14 @@ Expansion is off until you turn it on (**Settings → Plugins**, or
   what you typed. Without a prefix a keyword only works at the start of a word.
 - With `expand_on = "delimiter"` finish with a space or punctuation mark.
 - Sevak does nothing in its own windows, in terminals (set
-  `expand_in_terminals = true`), in apps listed in `ignore_apps`, in a password
-  box, or in windows running as administrator when Sevak is not.
+  `expand_in_terminals = true`), in web browsers (set
+  `expand_in_browsers = true`, knowing that a password field in a page cannot
+  be detected reliably), in apps listed in `ignore_apps`, in a password box, in
+  an app it cannot identify, or in windows running as administrator when Sevak
+  is not.
+- **Windows:** if hotkeys or expansion stop after unlocking the PC, switching
+  monitors or waking it from sleep, Sevak puts its keyboard hook in again within
+  a few seconds; if it does not, restart Sevak and report it.
 - **macOS:** allow Sevak under *Privacy & Security → Input Monitoring* and
   *Accessibility*, then quit and start Sevak again. Settings shows what is
   missing.

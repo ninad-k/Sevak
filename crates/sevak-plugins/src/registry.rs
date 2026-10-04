@@ -27,7 +27,7 @@ use serde::Serialize;
 use sevak_core::{Config, Plugin};
 use sevak_platform::PlatformProvider;
 
-use crate::clipboard_history::default_history_path;
+use crate::clipboard_history::{default_history_path, legacy_history_path};
 use crate::emoji::Trigger;
 use crate::{
     files_family, AppsPlugin, BookmarksPlugin, CalculatorPlugin, ClipboardPlugin, ContactsPlugin,
@@ -208,11 +208,12 @@ impl PluginRegistry {
             "Clipboard history",
             "Type `cb` to paste text, images and files you copied earlier. Off until [clipboard] enabled = true.",
             |config, platform| {
-                vec![Arc::new(ClipboardPlugin::new(
+                vec![Arc::new(ClipboardPlugin::new_migrating(
                     &config.clipboard,
                     &config.paste,
                     platform.clone(),
                     default_history_path(),
+                    legacy_history_path(),
                 ))]
             },
         ));

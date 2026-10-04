@@ -152,6 +152,17 @@ impl PasteDriver for WindowsDriver {
         focus(target)
     }
 
+    fn target_unchanged(&self) -> bool {
+        let remembered = *REMEMBERED
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        match remembered.map(int_to_hwnd) {
+            Some(target) => is_foreground(target),
+            // Nothing was remembered: wherever focus is, unless that is Sevak.
+            None => foreground_window().is_some_and(|hwnd| !is_own_window(hwnd)),
+        }
+    }
+
     fn press_paste(&self) -> Result<()> {
         send_inputs(&ctrl_v())
     }
