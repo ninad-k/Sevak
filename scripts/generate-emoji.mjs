@@ -7,8 +7,10 @@
 // Windows, macOS and Linux fonts draw) and keywords from CLDR's English
 // annotations. Without arguments both are downloaded; the plugin itself never
 // touches the network. Only fully-qualified emoji without skin-tone modifiers
-// are kept, in Unicode's keyboard order. Data: Unicode License v3
-// (https://www.unicode.org/license.txt).
+// are kept, in Unicode's keyboard order. Licences: emoji-test.txt (Unicode
+// Emoji 15.1) carries "© 2023 Unicode®, Inc." and points to Unicode's Terms of
+// Use; the CLDR annotations are under the Unicode License v3
+// (https://www.unicode.org/license.txt). THIRD_PARTY_NOTICES.md has both.
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
