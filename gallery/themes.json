@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "themes": [
     {
       "id": "sevak-light",
@@ -7,7 +7,7 @@
       "author": "Sevak",
       "description": "Sevak's light theme.",
       "mode": "light",
-      "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/Sevak-Light.toml",
+      "url": "gallery/themes/Sevak-Light.toml",
       "sha256": "43c6ac42334ad4774fc8a5c67a4cfee3886410bba30ceb9d22d763aec0f1718f"
     },
     {
@@ -16,7 +16,7 @@
       "author": "Sevak",
       "description": "Sevak's dark theme.",
       "mode": "dark",
-      "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/Sevak-Dark.toml",
+      "url": "gallery/themes/Sevak-Dark.toml",
       "sha256": "d494745f82bf094737c7a76618e0dda88743e8c4ca052e461275412e93bdf31a"
     },
     {
@@ -25,7 +25,7 @@
       "author": "Sevak",
       "description": "Arctic, north-bluish dark colors after the Nord palette.",
       "mode": "dark",
-      "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/Nord.toml",
+      "url": "gallery/themes/Nord.toml",
       "sha256": "12283cb8a1499fa44202b0884b04f62a9ad2eed107ae84f52fb89309f4b0345a"
     },
     {
@@ -34,7 +34,7 @@
       "author": "Sevak",
       "description": "A dark theme with vivid purple accents after the Dracula palette.",
       "mode": "dark",
-      "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/Dracula.toml",
+      "url": "gallery/themes/Dracula.toml",
       "sha256": "48afb8ca21a5df1ab8ba19fc85d3c35dd9d9471c3d1fc73b6ae441e6e3e8ccb4"
     },
     {
@@ -43,7 +43,7 @@
       "author": "Sevak",
       "description": "Low-glare light colors after the Solarized palette.",
       "mode": "light",
-      "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/Solarized-Light.toml",
+      "url": "gallery/themes/Solarized-Light.toml",
       "sha256": "3091683b3bb0162f10bd08472cf1a502920bb4a12de3da37b2ff4abf4e2b03c3"
     },
     {
@@ -52,7 +52,7 @@
       "author": "Sevak",
       "description": "Low-glare dark colors after the Solarized palette.",
       "mode": "dark",
-      "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/Solarized-Dark.toml",
+      "url": "gallery/themes/Solarized-Dark.toml",
       "sha256": "f404fae2325db604374f803893fcc6f120bf6edf1afd53280042dc6343cf298e"
     },
     {
@@ -61,7 +61,7 @@
       "author": "Sevak",
       "description": "Warm, retro dark colors after the Gruvbox palette.",
       "mode": "dark",
-      "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/Gruvbox.toml",
+      "url": "gallery/themes/Gruvbox.toml",
       "sha256": "9e6e511e1749233526b1d44c3364ccc56e0e03356dd5e321df5c1e082c43d11c"
     },
     {
@@ -70,7 +70,7 @@
       "author": "Sevak",
       "description": "Black and white with a yellow accent; the text pairs reach AAA.",
       "mode": "dark",
-      "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/High-Contrast.toml",
+      "url": "gallery/themes/High-Contrast.toml",
       "sha256": "f3f9434f8931bc2a38bc0ae324c035bef555686cf3639458348fec70eecfde2a"
     }
   ]

@@ -1394,14 +1394,17 @@ Design notes:
   name nodes by id, and a program's stderr is only logged when its node sets
   `log_stderr`.
 - **Gallery** (`gallery.rs`): the download is `sevak_plugins::net::fetch_https`
-  (HTTPS only, size limit, timeout, redirects must stay on HTTPS) and the hash
+  (HTTPS only, only the addresses of `sevak_core::gallery_source` at the first
+  request and at every redirect, size limit, timeout) and the hash
   check `sevak_core::checksum`, both shared with the theme gallery
   (`src-tauri/src/themes.rs`, `sevak_core::theme_store`);
   `install_bytes` verifies the SHA-256 first, then unpacks with strict path
   rules (no `..`, drive letters, links, trailing dots or spaces, more than 200
   files, 2 MiB per file, 10 MiB in all), validates the manifest and renames a
   staging folder into place. The shell's `gallery_install` looks the entry up in
-  the last loaded index by id, so the page cannot name a URL.
+  the last loaded index by id, so the page cannot name a URL. The index is read
+  from the tag of the running build and entries name files relative to it (see
+  [Gallery trust](security/gallery-trust.md)).
 - **Adding a node kind**: a variant of `NodeKind` (and `type_name`, `category`,
   `needs_approval`), a case in `validate.rs::check_node`, one in
   `exec.rs::execute`, an entry in `ui/src/lib/workflows/model.ts` (`KINDS`), and

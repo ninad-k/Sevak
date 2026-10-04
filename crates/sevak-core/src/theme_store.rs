@@ -11,14 +11,20 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::checksum::verify_sha256;
+use crate::gallery_source::Pin;
+use crate::safe_names::is_reserved_device_name;
 use crate::theme::{load_custom_css, MAX_CUSTOM_CSS_BYTES};
 use crate::theme_file::{self, builtin_by_name, builtin_themes, ParsedTheme, ThemeSpec};
 
 /// Folder of theme files inside the config folder.
 pub const THEMES_DIR: &str = "themes";
-/// Where the gallery index lives. Fetched only when the user asks for it.
-pub const GALLERY_INDEX_URL: &str =
-    "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes.json";
+/// The gallery index inside the repository's `gallery` folder, read from the
+/// tag of the running build ([`crate::gallery_source::Pin`]). Fetched only when
+/// the user asks for it.
+pub const GALLERY_INDEX_FILE: &str = "themes.json";
+/// The gallery index version this Sevak reads. Version 2 names theme files by a
+/// path relative to the release (version 1 used absolute `main` addresses).
+pub const GALLERY_INDEX_VERSION: u32 = 2;
 /// Largest gallery index that is accepted.
 pub const MAX_INDEX_BYTES: u64 = 256 * 1024;
 /// Largest theme file that is read, imported or downloaded.
@@ -54,14 +60,7 @@ pub fn file_stem(name: &str) -> String {
         return "theme".to_owned();
     }
     // Names Windows reserves, with or without an extension.
-    let upper = stem.to_ascii_uppercase();
-    let reserved = matches!(upper.as_str(), "CON" | "PRN" | "AUX" | "NUL")
-        || ["COM", "LPT"].iter().any(|p| {
-            upper
-                .strip_prefix(p)
-                .is_some_and(|n| n.len() == 1 && n != "0" && n.as_bytes()[0].is_ascii_digit())
-        });
-    if reserved {
+    if is_reserved_device_name(&stem) {
         stem.push_str(" theme");
     }
     stem
@@ -182,13 +181,28 @@ pub fn install_builtin(config_dir: &Path, name: &str) -> Result<StoredTheme, Str
     Ok(stored(file.clone(), load(config_dir, &file)?))
 }
 
+/// What to do when the theme being installed has the name of one that is
+/// already in the themes folder.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Existing {
+    /// Replace it (importing a file the user picked).
+    Replace,
+    /// Leave it alone and say so (installing from the gallery).
+    Refuse,
+    /// Replace it only if it is this file (`themes/Nord.toml`): the user asked
+    /// to reinstall that theme, and the download must not name another one.
+    ReplaceOnly(String),
+}
+
 /// Validates the text of a theme file (imported or downloaded) and writes it
-/// as `themes/<name>.toml`, replacing a theme of that name. The name is the
-/// theme's own, or `fallback_name` for a file without one.
+/// as `themes/<name>.toml`; `existing` says what happens to a theme of that
+/// name. The name is the theme's own, or `fallback_name` for a file without
+/// one.
 pub fn install_text(
     config_dir: &Path,
     text: &str,
     fallback_name: &str,
+    existing: &Existing,
 ) -> Result<StoredTheme, String> {
     if text.len() as u64 > MAX_THEME_BYTES {
         return Err(format!(
@@ -211,6 +225,26 @@ pub fn install_text(
         return Err("The file defines no colors, fonts or sizes, so it is not a theme.".to_owned());
     }
     let file = file_for(&parsed.spec.name);
+    if config_dir.join(&file).symlink_metadata().is_ok() {
+        match existing {
+            Existing::Replace => {}
+            Existing::Refuse => {
+                return Err(format!(
+                    "A theme named \"{}\" is already in your themes folder, so it was not \
+                     replaced. Remove it first, or use Reinstall to replace it.",
+                    parsed.spec.name
+                ));
+            }
+            Existing::ReplaceOnly(expected) if file.eq_ignore_ascii_case(expected) => {}
+            Existing::ReplaceOnly(_) => {
+                return Err(format!(
+                    "The download is a theme called \"{}\", which is not the theme being \
+                     reinstalled and is already in your themes folder, so nothing was replaced.",
+                    parsed.spec.name
+                ));
+            }
+        }
+    }
     write_atomic(&config_dir.join(&file), parsed.spec.to_toml().as_bytes())?;
     Ok(stored(file.clone(), load(config_dir, &file)?))
 }
@@ -228,7 +262,8 @@ pub struct GalleryEntry {
     pub description: String,
     /// `light` or `dark`: only a hint for the gallery's list.
     pub mode: String,
-    /// Where the theme file is downloaded from (https only).
+    /// Where the theme file is downloaded from: the full address at the
+    /// release the index was read from (see [`parse_index`]).
     pub url: String,
     /// Lowercase hex SHA-256 of the file at `url`.
     pub sha256: String,
@@ -240,14 +275,18 @@ struct RawIndex {
     themes: Vec<serde_json::Value>,
 }
 
-/// Parses the gallery index. Entries that are not valid (no name, a URL that is
-/// not https, a hash that is not 64 hex digits) are left out.
-pub fn parse_index(text: &str) -> Result<Vec<GalleryEntry>, String> {
+/// Parses the gallery index, read from the release `pin`. Each entry's `url` is
+/// a path relative to the repository root at that release (`gallery/themes/
+/// Nord.toml`) and is turned into the full address; an address outside the
+/// release (another host, branch or tag) is refused. Entries that are not valid
+/// (no name, a bad id or path, a hash that is not 64 hex digits) are left out.
+pub fn parse_index(text: &str, pin: &Pin) -> Result<Vec<GalleryEntry>, String> {
     let index: RawIndex = serde_json::from_str(text)
         .map_err(|err| format!("the gallery index is not valid: {err}"))?;
-    if index.version != 1 {
+    if index.version != GALLERY_INDEX_VERSION {
         return Err(format!(
-            "the gallery index has version {}, which this Sevak does not understand",
+            "the gallery index has version {}, but this Sevak reads version \
+             {GALLERY_INDEX_VERSION}",
             index.version
         ));
     }
@@ -272,8 +311,14 @@ pub fn parse_index(text: &str) -> Result<Vec<GalleryEntry>, String> {
             url: text("url"),
             sha256: text("sha256").to_ascii_lowercase(),
         };
+        let mut entry = entry;
+        if entry.id.is_empty() {
+            entry.id = slug(&entry.name);
+        }
+        let resolved = pin.resolve(&entry.url);
         let valid = !entry.name.is_empty()
-            && is_https_url(&entry.url)
+            && valid_id(&entry.id)
+            && resolved.is_ok()
             && entry.sha256.len() == 64
             && entry.sha256.chars().all(|c| c.is_ascii_hexdigit());
         if !valid {
@@ -283,9 +328,8 @@ pub fn parse_index(text: &str) -> Result<Vec<GalleryEntry>, String> {
             );
             continue;
         }
-        let mut entry = entry;
-        if entry.id.is_empty() {
-            entry.id = file_stem(&entry.name).to_lowercase().replace(' ', "-");
+        if let Ok(url) = resolved {
+            entry.url = url;
         }
         if entries.iter().any(|other| other.id == entry.id) {
             continue;
@@ -295,17 +339,28 @@ pub fn parse_index(text: &str) -> Result<Vec<GalleryEntry>, String> {
     Ok(entries)
 }
 
-/// `https://host/path` with no spaces, user info or fragment.
-pub fn is_https_url(url: &str) -> bool {
-    let Some(rest) = url.strip_prefix("https://") else {
-        return false;
-    };
-    let host = rest.split(['/', '?', '#']).next().unwrap_or_default();
-    url.len() <= 500
-        && !host.is_empty()
-        && !host.contains('@')
-        && !url.chars().any(|c| c.is_whitespace() || c.is_control())
-        && !url.contains('#')
+/// A gallery id: lower case letters, digits, `-` and `_`, at most 48, and not a
+/// name Windows reserves.
+fn valid_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 48
+        && id
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '-' | '_'))
+        && !is_reserved_device_name(id)
+}
+
+/// An id made from a name: `Solarized Dark` becomes `solarized-dark`.
+fn slug(name: &str) -> String {
+    let mut out = String::new();
+    for c in name.chars() {
+        if c.is_ascii_alphanumeric() {
+            out.push(c.to_ascii_lowercase());
+        } else if !out.ends_with('-') {
+            out.push('-');
+        }
+    }
+    out.trim_matches('-').chars().take(48).collect()
 }
 
 /// Checks a downloaded file against the hash the index promised (with the
@@ -430,21 +485,79 @@ mod tests {
     fn imported_text_is_validated_and_rewritten_in_canonical_form() {
         let dir = tempfile::tempdir().unwrap();
         let text = "name = \"Imported\"\n[dark]\nbackground = \"#ABC\"\ntext = \"rubbish\"\nevil = \"x\"\n";
-        let stored = install_text(dir.path(), text, "ignored").unwrap();
+        let stored = install_text(dir.path(), text, "ignored", &Existing::Replace).unwrap();
         assert_eq!(stored.file, "themes/Imported.toml");
         assert_eq!(stored.spec.dark.as_ref().unwrap().len(), 1);
         let on_disk = std::fs::read_to_string(dir.path().join(&stored.file)).unwrap();
         assert!(on_disk.contains("background = \"#aabbcc\""), "{on_disk}");
         assert!(!on_disk.contains("rubbish"));
 
-        let unnamed = install_text(dir.path(), "[light]\ntext = \"#111\"\n", "From File").unwrap();
+        let unnamed = install_text(
+            dir.path(),
+            "[light]\ntext = \"#111\"\n",
+            "From File",
+            &Existing::Replace,
+        )
+        .unwrap();
         assert_eq!(unnamed.spec.name, "From File");
 
-        assert!(install_text(dir.path(), "name = ", "x").is_err());
-        assert!(install_text(dir.path(), "name = \"Empty\"\n", "x").is_err());
-        assert!(install_text(dir.path(), "[light]\ntext = \"#111\"\n", " ").is_err());
+        let install =
+            |text: &str, name: &str| install_text(dir.path(), text, name, &Existing::Replace);
+        assert!(install("name = ", "x").is_err());
+        assert!(install("name = \"Empty\"\n", "x").is_err());
+        assert!(install("[light]\ntext = \"#111\"\n", " ").is_err());
         let huge = format!("#{}", "a".repeat(MAX_THEME_BYTES as usize));
-        assert!(install_text(dir.path(), &huge, "x").is_err());
+        assert!(install(&huge, "x").is_err());
+    }
+
+    const MINE: &str = "name = \"Mine\"\n[dark]\ntext = \"#111111\"\n";
+    const THEIRS: &str = "name = \"Mine\"\n[dark]\ntext = \"#222222\"\n";
+
+    #[test]
+    fn a_gallery_install_never_replaces_a_theme_of_the_same_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let first = install_text(dir.path(), MINE, "x", &Existing::Refuse).unwrap();
+        assert_eq!(first.file, "themes/Mine.toml");
+        let before = std::fs::read(dir.path().join(&first.file)).unwrap();
+
+        let err = install_text(dir.path(), THEIRS, "x", &Existing::Refuse).unwrap_err();
+        assert!(err.contains("already in your themes folder"), "{err}");
+        assert!(err.contains("Mine"), "{err}");
+        assert_eq!(std::fs::read(dir.path().join(&first.file)).unwrap(), before);
+        // Not even by another spelling of the name on a case-insensitive disk,
+        // and no temporary file is left behind.
+        let leftovers: Vec<_> = std::fs::read_dir(dir.path().join(THEMES_DIR))
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert_eq!(leftovers.len(), 1, "{leftovers:?}");
+    }
+
+    #[test]
+    fn reinstalling_replaces_only_the_theme_that_was_asked_for() {
+        let dir = tempfile::tempdir().unwrap();
+        install_text(dir.path(), MINE, "x", &Existing::Refuse).unwrap();
+        let other = "name = \"Other\"\n[dark]\ntext = \"#333333\"\n";
+        install_text(dir.path(), other, "x", &Existing::Refuse).unwrap();
+        let other_before = std::fs::read(dir.path().join("themes/Other.toml")).unwrap();
+
+        // The download turns out to be a different theme than the one the user
+        // is reinstalling: refused.
+        let wrong = Existing::ReplaceOnly("themes/Mine.toml".to_owned());
+        let err = install_text(dir.path(), other, "x", &wrong).unwrap_err();
+        assert!(err.contains("not the theme being reinstalled"), "{err}");
+        assert_eq!(
+            std::fs::read(dir.path().join("themes/Other.toml")).unwrap(),
+            other_before
+        );
+
+        // The right one is replaced.
+        let stored = install_text(dir.path(), THEIRS, "x", &wrong).unwrap();
+        assert_eq!(stored.spec.dark.as_ref().unwrap()["text"], "#222222");
+
+        // Importing a file the user picked still replaces, as before.
+        let stored = install_text(dir.path(), MINE, "x", &Existing::Replace).unwrap();
+        assert_eq!(stored.spec.dark.as_ref().unwrap()["text"], "#111111");
     }
 
     #[test]
@@ -467,57 +580,108 @@ mod tests {
         assert!(verify_download(&binary, &sha256_hex(&binary)).is_err());
     }
 
+    fn pin() -> Pin {
+        Pin::new("v1.2.3").unwrap()
+    }
+
     fn entry_json(name: &str, url: &str, sha: &str) -> String {
         format!(r#"{{"name":"{name}","url":"{url}","sha256":"{sha}"}}"#)
     }
 
     #[test]
-    fn the_gallery_index_keeps_only_valid_https_entries() {
+    fn the_gallery_index_keeps_only_entries_inside_the_release() {
         let sha = "a".repeat(64);
+        let raw = "https://raw.githubusercontent.com/ninad-k/Sevak";
         let index = format!(
-            r#"{{"version":1,"themes":[{},{},{},{},{},{},{},"nonsense",{}]}}"#,
-            entry_json("Good", "https://example.com/good.toml", &sha),
+            r#"{{"version":2,"themes":[{},{},{},{},{},{},{},{},{},{},"nonsense",{}]}}"#,
+            entry_json("Good", "gallery/themes/Good.toml", &sha),
             entry_json("Plain http", "http://example.com/a.toml", &sha),
             entry_json("File URL", "file:///etc/passwd", &sha),
-            entry_json("Short hash", "https://example.com/b.toml", "abc"),
-            entry_json("Not hex", "https://example.com/c.toml", &"z".repeat(64)),
-            entry_json("", "https://example.com/d.toml", &sha),
-            entry_json("Credentials", "https://user:pw@example.com/e.toml", &sha),
-            entry_json("Good", "https://example.com/dup.toml", &sha.to_uppercase()),
+            entry_json("Other host", "https://example.com/b.toml", &sha),
+            entry_json(
+                "Main branch",
+                &format!("{raw}/main/gallery/themes/m.toml"),
+                &sha
+            ),
+            entry_json(
+                "Other tag",
+                &format!("{raw}/v1.2.4/gallery/themes/m.toml"),
+                &sha
+            ),
+            entry_json("Dots", "gallery/../../main/x.toml", &sha),
+            entry_json("Short hash", "gallery/themes/b.toml", "abc"),
+            entry_json("Not hex", "gallery/themes/c.toml", &"z".repeat(64)),
+            entry_json("", "gallery/themes/d.toml", &sha),
+            entry_json("Good", "gallery/themes/dup.toml", &sha.to_uppercase()),
         );
-        let entries = parse_index(&index).unwrap();
+        let entries = parse_index(&index, &pin()).unwrap();
         assert_eq!(entries.len(), 1, "{entries:?}");
         assert_eq!(entries[0].name, "Good");
         assert_eq!(entries[0].id, "good");
         assert_eq!(entries[0].sha256, sha);
+        assert_eq!(
+            entries[0].url,
+            "https://raw.githubusercontent.com/ninad-k/Sevak/v1.2.3/gallery/themes/Good.toml"
+        );
     }
 
     #[test]
-    fn the_gallery_index_must_be_version_one_json() {
-        assert!(parse_index("not json").is_err());
-        assert!(parse_index(r#"{"version":2,"themes":[]}"#).is_err());
-        assert!(parse_index(r#"{"themes":[]}"#).is_err());
-        assert_eq!(parse_index(r#"{"version":1,"themes":[]}"#).unwrap(), vec![]);
+    fn gallery_ids_are_plain_and_not_device_names() {
+        let sha = "b".repeat(64);
+        let with_id = |id: &str, name: &str| {
+            format!(
+                r#"{{"id":"{id}","name":"{name}","url":"gallery/themes/x.toml","sha256":"{sha}"}}"#
+            )
+        };
+        let index = format!(
+            r#"{{"version":2,"themes":[{},{},{},{},{},{},{}]}}"#,
+            with_id("fine_id-2", "A"),
+            with_id("Upper", "B"),
+            with_id("has space", "C"),
+            with_id("../x", "D"),
+            with_id("nul", "E"),
+            with_id("com1", "F"),
+            // No id: made from the name, which may itself be a device name.
+            with_id("", "CON"),
+        );
+        let entries = parse_index(&index, &pin()).unwrap();
+        let ids: Vec<_> = entries.iter().map(|e| e.id.as_str()).collect();
+        assert_eq!(ids, ["fine_id-2"]);
+        // A name that is not usable as an id on its own gets a plain one.
+        let named = parse_index(
+            &format!(
+                r#"{{"version":2,"themes":[{}]}}"#,
+                entry_json("Solarized (Dark)", "gallery/x.toml", &sha)
+            ),
+            &pin(),
+        )
+        .unwrap();
+        assert_eq!(named[0].id, "solarized-dark");
     }
 
     #[test]
-    fn urls_must_be_plain_https() {
-        assert!(is_https_url(
-            "https://raw.githubusercontent.com/a/b/main/x.toml"
-        ));
-        for bad in [
-            "http://x.test/a",
-            "https://",
-            "https:///a",
-            "https://u@x.test/a",
-            "https://x.test/a b",
-            "https://x.test/a#frag",
-            "ftp://x.test/a",
-            "//x.test/a",
-            "",
-        ] {
-            assert!(!is_https_url(bad), "{bad:?}");
+    fn the_gallery_index_must_be_version_two_json() {
+        assert!(parse_index("not json", &pin()).is_err());
+        let err = parse_index(r#"{"version":1,"themes":[]}"#, &pin()).unwrap_err();
+        assert!(err.contains("version 1"), "{err}");
+        assert!(parse_index(r#"{"version":3,"themes":[]}"#, &pin()).is_err());
+        assert!(parse_index(r#"{"themes":[]}"#, &pin()).is_err());
+        assert_eq!(
+            parse_index(r#"{"version":2,"themes":[]}"#, &pin()).unwrap(),
+            vec![]
+        );
+    }
+
+    #[test]
+    fn theme_names_that_windows_reserves_get_a_safe_file() {
+        for name in ["CON", "nul", "Com1", "LPT9", "COM\u{b9}", "aux"] {
+            let stem = file_stem(name);
+            assert!(stem.ends_with(" theme"), "{name:?} -> {stem:?}");
+            assert!(!is_reserved_device_name(&stem), "{stem:?}");
         }
+        // The extension does not save it either: dots become spaces.
+        assert_eq!(file_stem("nul.txt"), "nul txt");
+        assert_eq!(file_stem("Console"), "Console");
     }
 
     /// `ui/src/lib/builtin-themes.json` is what the browser preview of the
@@ -547,15 +711,18 @@ mod tests {
     fn the_shipped_gallery_matches_the_theme_files() {
         let gallery = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../gallery");
         let index = std::fs::read_to_string(gallery.join("themes.json")).unwrap();
-        let entries = parse_index(&index).unwrap();
+        let entries = parse_index(&index, &pin()).unwrap();
         assert!(entries.len() >= 8);
-        let raw_url = "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/";
+        let raw_url = "https://raw.githubusercontent.com/ninad-k/Sevak/v1.2.3/gallery/themes/";
         for theme in builtin_themes() {
             let entry = entries
                 .iter()
                 .find(|e| e.name == theme.spec.name)
                 .unwrap_or_else(|| panic!("{} is not in the gallery", theme.spec.name));
-            let file = entry.url.strip_prefix(raw_url).expect("raw GitHub URL");
+            let file = entry
+                .url
+                .strip_prefix(raw_url)
+                .expect("a file in gallery/themes");
             let bytes = std::fs::read(gallery.join("themes").join(file)).unwrap();
             assert_eq!(entry.sha256, sha256_hex(&bytes), "{}", entry.name);
             // What the gallery serves is exactly the built-in.
@@ -565,9 +732,10 @@ mod tests {
         // Every entry, community ones included, must be a valid theme file in
         // this repository.
         for entry in &entries {
-            let Some(file) = entry.url.strip_prefix(raw_url) else {
-                continue;
-            };
+            let file = entry
+                .url
+                .strip_prefix(raw_url)
+                .unwrap_or_else(|| panic!("{} is not in gallery/themes", entry.url));
             let bytes = std::fs::read(gallery.join("themes").join(file)).unwrap();
             assert_eq!(entry.sha256, sha256_hex(&bytes), "{}", entry.name);
             assert!(theme_file::parse(&String::from_utf8(bytes).unwrap())

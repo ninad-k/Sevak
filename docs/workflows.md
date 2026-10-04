@@ -297,7 +297,12 @@ recorded like any result).
 
 1. Opening the page requests nothing. **Load gallery** downloads one small file,
    `gallery/index.json` from the Sevak repository on GitHub
-   (`raw.githubusercontent.com`), and shows what it lists.
+   (`raw.githubusercontent.com`) **at the tag of your Sevak version**, and shows
+   what it lists. A change made to the repository later does not change what
+   your version offers. A build without a published release (a local or
+   pre-release build) reads the latest release's list and says so on the page.
+   Files are requested only from Sevak's own repository, also when a request is
+   redirected; see [Gallery trust](security/gallery-trust.md).
 2. **Install** on an entry downloads that one package, a zip, over HTTPS, checks
    it against the SHA-256 in the index and **discards it if it does not match**,
    refuses any path that would leave the folder (and links, oversized or
@@ -314,7 +319,8 @@ keeps no account or identifier. The bundled examples are in
 
 To offer your own package: pack the folder (`cargo run -p sevak-plugins --example
 gallery_pack -- <folder> <out.zip>` prints the SHA-256), add an entry to
-`gallery/index.json` and open a pull request. See
+`gallery/index.json` (its `source` is the path of the zip relative to the
+repository root, `gallery/packages/<id>.zip`) and open a pull request. See
 [plugins.md](plugins.md#workflows-for-contributors).
 
 ## The file format

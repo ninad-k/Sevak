@@ -1,10 +1,20 @@
 # Sevak galleries
 
 This folder holds the two opt-in online galleries. Sevak reads them from
-`https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/` only when you
-ask: nothing is fetched at startup or in the background. Both use the same
-download code (HTTPS only, a size limit, a timeout, a `Sevak/<version> (gallery)`
-user agent) and install a file only if its SHA-256 matches the one in the index.
+`https://raw.githubusercontent.com/ninad-k/Sevak/v<version>/gallery/` (the tag
+of the running build, not `main`) only when you ask: nothing is fetched at
+startup or in the background. Both use the same download code (HTTPS only,
+addresses in this repository only, a size limit, a timeout, a
+`Sevak/<version> (gallery)` user agent) and install a file only if its SHA-256
+matches the one in the index. See
+[docs/security/gallery-trust.md](../docs/security/gallery-trust.md).
+
+Index entries name files by a **path relative to the repository root**
+(`gallery/packages/<id>.zip`, `gallery/themes/<Name>.toml`), never by an
+absolute address; Sevak joins the path to the tag it is reading. A change you
+merge here reaches users with the next release, not at once. `index.json` has
+`"format": 2` and `themes.json` has `"version": 2`; builds older than that show
+"update Sevak".
 
 | Gallery | Index | Files | Opened from | What the app does |
 |---|---|---|---|---|
@@ -22,9 +32,8 @@ user agent) and install a file only if its SHA-256 matches the one in the index.
 
    The command prints the zip's SHA-256.
 2. Add an entry to `index.json` with `id`, `kind` (`workflow` or `plugin`),
-   `name`, `description`, `author`, `version`, `source` (the
-   `https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/<id>.zip`
-   address), `sha256` and optionally `homepage`.
+   `name`, `description`, `author`, `version`, `source` (the path
+   `gallery/packages/<id>.zip`), `sha256` and optionally `homepage`.
 3. `cargo test -p sevak-plugins gallery` checks that every package matches its
    hash and the example it was built from. An installed package still has to be
    allowed before anything in it runs.
@@ -43,7 +52,7 @@ user agent) and install a file only if its SHA-256 matches the one in the index.
      "author": "you",
      "description": "One sentence.",
      "mode": "dark",
-     "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/My-Theme.toml",
+     "url": "gallery/themes/My-Theme.toml",
      "sha256": "<the SHA-256 of the file>"
    }
    ```
@@ -55,5 +64,6 @@ user agent) and install a file only if its SHA-256 matches the one in the index.
 3. `cargo test -p sevak-core` checks that every entry whose `url` points into
    this folder has the right hash and is a valid theme without warnings.
 
-Only `https://` URLs are accepted by either gallery, and `id`s must be unique
-within an index.
+Only paths inside this release are accepted by either gallery (an absolute
+address must lie below the same tag), and `id`s must be unique within an index
+and may not be a Windows device name such as `con` or `nul`.

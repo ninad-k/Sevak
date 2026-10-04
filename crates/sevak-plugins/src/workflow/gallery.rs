@@ -9,13 +9,16 @@
 //! into the workflows or plugins folder as a *new, unapproved* folder: the
 //! normal Allow dialog still decides whether it may run.
 //!
-//! The index is a JSON file, `gallery/index.json` in the Sevak repository:
+//! The index is a JSON file, `gallery/index.json` in the Sevak repository,
+//! read from the tag of the running build (see [`sevak_core::gallery_source`]
+//! and `docs/security/gallery-trust.md`). Entries name their package by a path
+//! relative to the repository root at that tag:
 //!
 //! ```json
-//! {"format": 1, "name": "Sevak gallery", "entries": [
+//! {"format": 2, "name": "Sevak gallery", "entries": [
 //!   {"id": "search-docs", "kind": "workflow", "name": "Search docs",
 //!    "description": "...", "author": "...", "version": "1.0",
-//!    "source": "https://raw.githubusercontent.com/.../search-docs.zip",
+//!    "source": "gallery/packages/search-docs.zip",
 //!    "sha256": "<64 hex digits>"}
 //! ]}
 //! ```
@@ -34,14 +37,17 @@ use serde::{Deserialize, Serialize};
 
 use super::model::{valid_folder_name, Workflow, FILE as WORKFLOW_FILE};
 use super::validate::error_summary;
-use crate::net::{fetch_https, verify_sha256};
+use crate::net::{fetch_https, fetch_pinned, verify_sha256, Https, Transport};
 use crate::script::{Manifest, MANIFEST_FILE as PLUGIN_FILE};
+use sevak_core::gallery_source::Pin;
+use sevak_core::safe_names::is_reserved_device_name;
 
-/// Where the index lives. The settings window fetches it only on request.
-pub const INDEX_URL: &str =
-    "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/index.json";
-/// The index format this Sevak reads.
-pub const INDEX_FORMAT: u32 = 1;
+/// The index file inside the repository's `gallery` folder. The settings window
+/// fetches it only on request.
+pub const INDEX_FILE: &str = "index.json";
+/// The index format this Sevak reads. Format 2 names packages by a path
+/// relative to the release (format 1 used absolute `main` addresses).
+pub const INDEX_FORMAT: u32 = 2;
 
 pub const MAX_INDEX_BYTES: usize = 512 * 1024;
 pub const MAX_PACKAGE_BYTES: usize = 5 * 1024 * 1024;
@@ -83,7 +89,9 @@ pub struct Entry {
     pub author: String,
     #[serde(default)]
     pub version: String,
-    /// The zip package: an `https://` URL.
+    /// The zip package. In the index file a path relative to the repository
+    /// root at the release (`gallery/packages/x.zip`); after parsing, the full
+    /// `https://` address at that release.
     pub source: String,
     /// SHA-256 of the zip, as 64 hex digits.
     pub sha256: String,
@@ -106,6 +114,12 @@ impl Entry {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Index {
     pub name: String,
+    /// Where the index was read from (shown, so the request is no secret).
+    pub source: String,
+    /// The release the index and its packages belong to.
+    pub tag: String,
+    /// Set when that is not this build's own release, and why.
+    pub note: Option<String>,
     pub entries: Vec<Entry>,
     /// Entries that were left out (unknown kind, invalid), with the reason.
     pub skipped: Vec<String>,
@@ -122,7 +136,11 @@ struct RawIndex {
 
 /// Parses the index file. A bad entry is skipped, not fatal: one typo should
 /// not take the whole gallery away.
-pub fn parse_index(text: &str) -> Result<Index, String> {
+///
+/// Each entry's `source` is resolved against `pin` (the release the index was
+/// read from) and must lie inside it: an entry that names another host, branch
+/// or release is skipped.
+pub fn parse_index(text: &str, pin: &Pin) -> Result<Index, String> {
     let raw: RawIndex = serde_json::from_str(text.trim_start_matches('\u{feff}'))
         .map_err(|err| format!("the gallery index is not valid: {err}"))?;
     if raw.format != INDEX_FORMAT {
@@ -148,7 +166,7 @@ pub fn parse_index(text: &str) -> Result<Index, String> {
             }
         };
         entry.sha256 = entry.sha256.trim().to_ascii_lowercase();
-        if let Err(reason) = check_entry(&entry) {
+        if let Err(reason) = check_entry(&mut entry, pin) {
             skipped.push(format!("{label}: {reason}"));
             continue;
         }
@@ -160,18 +178,22 @@ pub fn parse_index(text: &str) -> Result<Index, String> {
     }
     Ok(Index {
         name: raw.name,
+        source: pin.index_url(INDEX_FILE),
+        tag: pin.tag().to_owned(),
+        note: None,
         entries,
         skipped,
     })
 }
 
-fn check_entry(entry: &Entry) -> Result<(), String> {
+fn check_entry(entry: &mut Entry, pin: &Pin) -> Result<(), String> {
     let valid_id = |id: &str| {
         !id.is_empty()
             && id.len() <= 48
             && id
                 .chars()
                 .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+            && !is_reserved_device_name(id)
     };
     if !valid_id(&entry.id) {
         return Err("the id may only use a-z, 0-9 and -".to_owned());
@@ -184,20 +206,33 @@ fn check_entry(entry: &Entry) -> Result<(), String> {
     if entry.name.trim().is_empty() {
         return Err("the name is empty".to_owned());
     }
-    if !entry.source.to_ascii_lowercase().starts_with("https://") {
-        return Err("the source must be an https:// address".to_owned());
+    // Windows device names cannot be a folder, whatever the package says.
+    if is_reserved_device_name(entry.folder_name()) {
+        return Err("the folder name is not valid".to_owned());
     }
+    entry.source = pin
+        .resolve(&entry.source)
+        .map_err(|why| format!("the source is refused: {why}"))?;
     if entry.sha256.len() != 64 || !entry.sha256.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err("sha256 must be 64 hex digits".to_owned());
     }
     Ok(())
 }
 
-/// Fetches and parses the index at [`INDEX_URL`].
+/// Fetches and parses the index of this build's release (or, for a build
+/// without one, of the latest stable release, which [`Index::note`] then says).
 pub fn fetch_index() -> Result<Index, String> {
-    let body = fetch_https(INDEX_URL, MAX_INDEX_BYTES)?;
-    let text = String::from_utf8(body).map_err(|_| "the gallery index is not text".to_owned())?;
-    parse_index(&text)
+    fetch_index_with(&Https, Pin::for_build().as_ref())
+}
+
+/// [`fetch_index`] over `transport`, for a build that is `build`'s release.
+pub fn fetch_index_with(transport: &dyn Transport, build: Option<&Pin>) -> Result<Index, String> {
+    let pinned = fetch_pinned(transport, build, INDEX_FILE, MAX_INDEX_BYTES)?;
+    let text =
+        String::from_utf8(pinned.body).map_err(|_| "the gallery index is not text".to_owned())?;
+    let mut index = parse_index(&text, &pinned.pin)?;
+    index.note = pinned.note;
+    Ok(index)
 }
 
 /// Where installs go.
@@ -242,6 +277,9 @@ pub fn install(entry: &Entry, dirs: &Dirs<'_>) -> Result<Installed, String> {
 pub fn install_bytes(entry: &Entry, bytes: &[u8], dirs: &Dirs<'_>) -> Result<Installed, String> {
     verify_sha256(bytes, &entry.sha256)?;
     let folder = entry.folder_name();
+    if !valid_folder_name(folder) {
+        return Err("the folder name is not valid".to_owned());
+    }
     let root = dirs.root(entry.kind);
     let target = root.join(folder);
     if target.exists() {
@@ -395,6 +433,10 @@ fn clean_path(raw: &str) -> Result<String, String> {
             part if part.ends_with('.') || part.ends_with(' ') => {
                 return Err("a path in the package is not allowed".to_owned())
             }
+            // `CON`, `NUL`, `COM1`... (also `nul.txt`) are devices on Windows.
+            part if is_reserved_device_name(part) => {
+                return Err("a path in the package is not allowed".to_owned())
+            }
             part => parts.push(part),
         }
     }
@@ -452,7 +494,11 @@ mod tests {
     use zip::write::SimpleFileOptions;
 
     use super::*;
-    use crate::net::sha256_hex;
+    use crate::net::{sha256_hex, FetchError};
+
+    fn pin() -> Pin {
+        Pin::new("v1.2.3").unwrap()
+    }
 
     fn zip_of(files: &[(&str, &[u8])]) -> Vec<u8> {
         let mut out = Cursor::new(Vec::new());
@@ -526,7 +572,7 @@ mod tests {
     fn good_entry(id: &str) -> serde_json::Value {
         serde_json::json!({
             "id": id, "kind": "workflow", "name": id, "description": "d", "author": "a",
-            "version": "1", "source": "https://example.com/x.zip",
+            "version": "1", "source": "gallery/packages/x.zip",
             "sha256": "A".repeat(64)
         })
     }
@@ -534,40 +580,139 @@ mod tests {
     #[test]
     fn parses_an_index_and_skips_bad_entries() {
         let text = serde_json::json!({
-            "format": 1, "name": "Test gallery",
+            "format": 2, "name": "Test gallery",
             "entries": [
                 good_entry("one"),
-                {"id": "future", "kind": "theme", "name": "T", "source": "https://x.test/t.zip", "sha256": "0".repeat(64)},
-                {"id": "http", "kind": "plugin", "name": "T", "source": "http://x.test/t.zip", "sha256": "0".repeat(64)},
-                {"id": "short-hash", "kind": "plugin", "name": "T", "source": "https://x.test/t.zip", "sha256": "abc"},
-                {"id": "Bad Id", "kind": "plugin", "name": "T", "source": "https://x.test/t.zip", "sha256": "0".repeat(64)},
+                {"id": "future", "kind": "theme", "name": "T", "source": "gallery/t.zip", "sha256": "0".repeat(64)},
+                {"id": "elsewhere", "kind": "plugin", "name": "T", "source": "https://x.test/t.zip", "sha256": "0".repeat(64)},
+                {"id": "short-hash", "kind": "plugin", "name": "T", "source": "gallery/t.zip", "sha256": "abc"},
+                {"id": "Bad Id", "kind": "plugin", "name": "T", "source": "gallery/t.zip", "sha256": "0".repeat(64)},
                 good_entry("one"),
                 {"kind": "plugin"},
                 "not an object",
-                {"id": "plug", "kind": "plugin", "name": "P", "source": "HTTPS://x.test/p.zip", "sha256": "f".repeat(64), "folder": "plug-dir"}
+                {"id": "plug", "kind": "plugin", "name": "P", "source": "gallery/packages/p.zip", "sha256": "f".repeat(64), "folder": "plug-dir"}
             ]
         })
         .to_string();
-        let index = parse_index(&text).unwrap();
+        let index = parse_index(&text, &pin()).unwrap();
         assert_eq!(index.name, "Test gallery");
+        assert_eq!(index.tag, "v1.2.3");
+        assert_eq!(
+            index.source,
+            "https://raw.githubusercontent.com/ninad-k/Sevak/v1.2.3/gallery/index.json"
+        );
         let ids: Vec<_> = index.entries.iter().map(|e| e.id.as_str()).collect();
         assert_eq!(ids, ["one", "plug"]);
         // Hashes are normalized to lower case.
         assert_eq!(index.entries[0].sha256, "a".repeat(64));
         assert_eq!(index.entries[1].folder_name(), "plug-dir");
         assert_eq!(index.entries[0].folder_name(), "one");
+        // Sources are the release's own addresses.
+        assert_eq!(
+            index.entries[0].source,
+            "https://raw.githubusercontent.com/ninad-k/Sevak/v1.2.3/gallery/packages/x.zip"
+        );
         assert_eq!(index.skipped.len(), 7, "{:?}", index.skipped);
         assert!(index.skipped.iter().any(|s| s.starts_with("future")));
     }
 
     #[test]
+    fn sources_outside_the_release_are_skipped() {
+        let entry = |id: &str, source: &str| {
+            serde_json::json!({
+                "id": id, "kind": "workflow", "name": id, "source": source,
+                "sha256": "0".repeat(64)
+            })
+        };
+        let text = serde_json::json!({
+            "format": 2,
+            "entries": [
+                entry("relative", "gallery/packages/a.zip"),
+                entry("own-absolute", "https://raw.githubusercontent.com/ninad-k/Sevak/v1.2.3/gallery/packages/b.zip"),
+                entry("own-release", "https://github.com/ninad-k/Sevak/releases/download/v1.2.3/c.zip"),
+                entry("main-branch", "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/d.zip"),
+                entry("other-tag", "https://raw.githubusercontent.com/ninad-k/Sevak/v1.2.4/gallery/packages/e.zip"),
+                entry("other-host", "https://example.com/f.zip"),
+                entry("other-repo", "https://raw.githubusercontent.com/evil/Sevak/v1.2.3/gallery/g.zip"),
+                entry("plain-http", "http://raw.githubusercontent.com/ninad-k/Sevak/v1.2.3/gallery/h.zip"),
+                entry("dot-dot", "gallery/../../../main/i.zip"),
+                entry("credentials", "https://u@raw.githubusercontent.com/ninad-k/Sevak/v1.2.3/gallery/j.zip"),
+                entry("empty", "")
+            ]
+        })
+        .to_string();
+        let index = parse_index(&text, &pin()).unwrap();
+        let ids: Vec<_> = index.entries.iter().map(|e| e.id.as_str()).collect();
+        assert_eq!(ids, ["relative", "own-absolute", "own-release"]);
+        assert_eq!(index.skipped.len(), 8, "{:?}", index.skipped);
+        assert!(index
+            .skipped
+            .iter()
+            .all(|s| s.contains("source is refused")));
+    }
+
+    #[test]
+    fn windows_device_names_are_not_ids_or_folders() {
+        let entry = |id: &str, folder: Option<&str>| {
+            let mut value = serde_json::json!({
+                "id": id, "kind": "workflow", "name": "N", "source": "gallery/x.zip",
+                "sha256": "0".repeat(64)
+            });
+            if let Some(folder) = folder {
+                value["folder"] = folder.into();
+            }
+            value
+        };
+        let text = serde_json::json!({
+            "format": 2,
+            "entries": [
+                entry("con", None), entry("nul", None), entry("com1", None), entry("lpt9", None),
+                entry("ok-id", Some("CON")), entry("ok-id-2", Some("aux.txt")),
+                entry("fine", None), entry("console", None)
+            ]
+        })
+        .to_string();
+        let index = parse_index(&text, &pin()).unwrap();
+        let ids: Vec<_> = index.entries.iter().map(|e| e.id.as_str()).collect();
+        assert_eq!(ids, ["fine", "console"]);
+    }
+
+    #[test]
     fn the_index_format_and_json_are_checked() {
-        let err = parse_index(r#"{"format": 2, "entries": []}"#).unwrap_err();
-        assert!(err.contains("format 2"), "{err}");
-        assert!(parse_index("not json").is_err());
-        assert!(parse_index(r#"{"entries": []}"#).is_err());
-        let empty = parse_index("\u{feff}{\"format\": 1}").unwrap();
+        let err = parse_index(r#"{"format": 1, "entries": []}"#, &pin()).unwrap_err();
+        assert!(err.contains("format 1"), "{err}");
+        let err = parse_index(r#"{"format": 3, "entries": []}"#, &pin()).unwrap_err();
+        assert!(err.contains("format 3"), "{err}");
+        assert!(parse_index("not json", &pin()).is_err());
+        assert!(parse_index(r#"{"entries": []}"#, &pin()).is_err());
+        let empty = parse_index("\u{feff}{\"format\": 2}", &pin()).unwrap();
         assert!(empty.entries.is_empty());
+    }
+
+    /// A transport that serves one canned index and nothing else.
+    struct Canned(String);
+
+    impl Transport for Canned {
+        fn get(&self, url: &str, _max: usize) -> Result<Vec<u8>, FetchError> {
+            if url.ends_with("/v1.2.3/gallery/index.json") {
+                Ok(self.0.clone().into_bytes())
+            } else {
+                Err(FetchError::NotFound)
+            }
+        }
+
+        fn latest_release_page(&self) -> Result<String, String> {
+            Err("not asked".to_owned())
+        }
+    }
+
+    #[test]
+    fn fetching_the_index_reads_the_builds_release() {
+        let text = serde_json::json!({"format": 2, "name": "G", "entries": [good_entry("one")]});
+        let index = fetch_index_with(&Canned(text.to_string()), Some(&pin())).unwrap();
+        assert_eq!(index.entries.len(), 1);
+        assert_eq!(index.note, None);
+        assert!(index.entries[0].source.contains("/v1.2.3/"));
     }
 
     // ---- installing ---------------------------------------------------
@@ -686,6 +831,46 @@ mod tests {
             &[("docs/workflow.toml", w), ("docs/a\u{7}b", b"x")],
             "not allowed",
         );
+    }
+
+    #[test]
+    fn windows_device_names_are_refused_as_entry_names() {
+        let w = WORKFLOW.as_bytes();
+        for name in [
+            "docs/NUL",
+            "docs/nul.txt",
+            "docs/scripts/CON.py",
+            "docs/Aux",
+            "docs/COM1",
+            "docs/com9.json",
+            "docs/lpt3.txt",
+            "docs/PRN.",
+            "docs/COM\u{b9}",
+            "docs/con/inner.txt",
+        ] {
+            refused(&[("docs/workflow.toml", w), (name, b"x")], "not allowed");
+        }
+        // Names that merely start like one are fine.
+        let r = roots();
+        let bytes = zip_of(&[
+            ("docs/workflow.toml", w),
+            ("docs/console.txt", b"x"),
+            ("docs/connect.py", b"x"),
+        ]);
+        let entry = entry_for(&bytes, Kind::Workflow, "docs");
+        install_bytes(&entry, &bytes, &r.dirs()).unwrap();
+    }
+
+    #[test]
+    fn a_package_under_a_device_name_is_refused() {
+        let w = WORKFLOW.as_bytes();
+        let r = roots();
+        let bytes = zip_of(&[("nul/workflow.toml", w)]);
+        let mut entry = entry_for(&bytes, Kind::Workflow, "docs");
+        entry.folder = Some("nul".to_owned());
+        let err = install_bytes(&entry, &bytes, &r.dirs()).unwrap_err();
+        assert!(err.contains("folder name is not valid"), "{err}");
+        assert!(!r.workflows.exists());
     }
 
     #[test]
@@ -864,17 +1049,17 @@ mod tests {
     #[test]
     fn the_shipped_index_matches_the_shipped_packages() {
         let text = fs::read_to_string(repo_gallery().join("index.json")).unwrap();
-        let index = parse_index(&text).unwrap();
+        let index = parse_index(&text, &pin()).unwrap();
         assert!(index.skipped.is_empty(), "{:?}", index.skipped);
         assert!(index.entries.len() >= 3);
         let kinds: HashSet<_> = index.entries.iter().map(|e| e.kind).collect();
         assert_eq!(kinds.len(), 2, "both workflows and plugins are shown");
         for entry in &index.entries {
-            // The source is the raw GitHub URL of the committed package.
+            // The source is the release's raw address of the committed package.
             let file = entry.source.rsplit('/').next().unwrap();
             assert!(
                 entry.source.starts_with(
-                    "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/"
+                    "https://raw.githubusercontent.com/ninad-k/Sevak/v1.2.3/gallery/packages/"
                 ),
                 "{}",
                 entry.source
@@ -895,7 +1080,7 @@ mod tests {
     fn the_packages_match_the_examples_they_were_built_from() {
         let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
         let text = fs::read_to_string(repo_gallery().join("index.json")).unwrap();
-        let index = parse_index(&text).unwrap();
+        let index = parse_index(&text, &pin()).unwrap();
         for entry in &index.entries {
             let file = entry.source.rsplit('/').next().unwrap();
             let bytes = fs::read(repo_gallery().join("packages").join(file)).unwrap();
