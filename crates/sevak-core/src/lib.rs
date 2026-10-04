@@ -18,11 +18,12 @@ pub mod theme;
 pub mod theme_file;
 pub mod theme_store;
 pub mod usage;
+pub mod window_layout;
 
 pub use config::{
     ActionsConfig, ClipboardConfig, Config, ConfigError, ConfigOrigin, ExpandOn, FileBufferConfig,
     GeneralConfig, HotkeyBinding, HotkeyTarget, LinuxConfig, PasteConfig, ShellConfig, Snippet,
-    SnippetsConfig, UpdateChannel, WindowConfig,
+    SnippetsConfig, UpdateChannel, WindowConfig, WindowManagementConfig,
 };
 pub use engine::{EngineOptions, SearchEngine};
 pub use fuzzy::FuzzyQuery;
