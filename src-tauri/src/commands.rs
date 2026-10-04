@@ -185,7 +185,12 @@ pub async fn preview(app: AppHandle, id: String, ticket: u64) -> Result<PreviewC
             return Err("result expired".to_owned());
         };
         let hint = search.engine().preview_hint(&item);
-        Ok(preview::produce(&item, hint))
+        // PDF pages and document or video thumbnails are drawn by the OS (with
+        // a timeout, on this blocking thread); the pane gets a PNG data URL.
+        let platform = &search.platform;
+        Ok(preview::produce_with(&item, hint, &|path, kind| {
+            platform.render_thumbnail(path, kind)
+        }))
     })
     .await
     .map_err(|err| format!("the preview did not finish: {err}"))?

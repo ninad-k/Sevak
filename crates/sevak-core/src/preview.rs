@@ -13,6 +13,13 @@
 //!   listings at most [`MAX_FOLDER_ENTRIES`] names.
 //! - **No network.** A link shows its address, title and host; nothing is
 //!   fetched.
+//! - **Pages come from the operating system, not from here.** A PDF's first
+//!   page (and a thumbnail of an Office document or a video) is drawn by a
+//!   [`Renderer`] the shell passes to [`produce_with`]: the OS's own PDF engine
+//!   or thumbnailer, in a helper with a timeout. The result is a PNG that
+//!   travels as a `data:` URL like any image, so the page's content security
+//!   policy is unchanged. Only files up to [`MAX_RENDER_FILE_BYTES`] are handed
+//!   over, and a picture over [`MAX_RENDERED_BYTES`] is dropped.
 //!
 //! Failures never panic or error: a file that cannot be read becomes a
 //! [`PreviewContent`] with a `note` saying why.
@@ -44,6 +51,12 @@ const MAX_DETAIL_CHARS: usize = 500;
 /// Plain text of this many characters (or any text with a line break) can be
 /// opened in the Text View.
 pub const TEXT_VIEW_MIN_CHARS: usize = 160;
+/// Largest PDF or Office file handed to the operating system to draw.
+pub const MAX_RENDER_FILE_BYTES: u64 = 50 * 1024 * 1024;
+/// Widest picture asked of the operating system when drawing a page (pixels).
+pub const RENDER_WIDTH: u32 = 900;
+/// Largest drawn picture (PNG bytes) shown; anything bigger is dropped.
+pub const MAX_RENDERED_BYTES: usize = 4 * 1024 * 1024;
 /// Largest `Info.plist` read for an application's version.
 const MAX_PLIST_BYTES: u64 = 256 * 1024;
 
@@ -123,6 +136,61 @@ pub struct TextViewContent {
     pub truncated: bool,
 }
 
+/// A kind of file the operating system can draw a picture of.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RenderKind {
+    /// First page of a PDF.
+    Pdf,
+    /// Thumbnail of an Office or OpenDocument file.
+    Document,
+    /// Thumbnail (a frame) of a video.
+    Video,
+}
+
+impl RenderKind {
+    /// The kind for a lowercase file extension, if it is one we draw.
+    pub fn of_extension(extension: &str) -> Option<Self> {
+        Some(match extension {
+            "pdf" => Self::Pdf,
+            "doc" | "docx" | "xls" | "xlsx" | "ppt" | "pptx" | "odt" | "ods" | "odp" => {
+                Self::Document
+            }
+            "mp4" | "m4v" | "mov" | "mkv" | "avi" | "webm" | "wmv" => Self::Video,
+            _ => return None,
+        })
+    }
+
+    /// Largest file handed to the OS; videos are only probed, never read whole.
+    pub fn max_file_bytes(self) -> Option<u64> {
+        match self {
+            Self::Pdf | Self::Document => Some(MAX_RENDER_FILE_BYTES),
+            Self::Video => None,
+        }
+    }
+}
+
+/// What a [`Renderer`] made of a file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Rendered {
+    /// A PNG, at most [`RENDER_WIDTH`] wide, and the page count when known.
+    Image { png: Vec<u8>, pages: Option<u32> },
+    /// This system cannot draw this kind of file (no helper installed, or no
+    /// support at all). `hint` says what to install, if that helps.
+    Unavailable { hint: Option<String> },
+    /// The system could not draw this file (damaged, protected, too slow).
+    Failed,
+}
+
+/// Draws the first page of a file; supplied by the shell (backed by the
+/// platform layer), faked in tests. Called on the preview's worker thread, so it
+/// may take a moment but must give up by itself (a timeout) rather than hang.
+pub type Renderer<'a> = &'a dyn Fn(&Path, RenderKind) -> Rendered;
+
+/// A renderer for systems with nothing to draw with.
+pub fn no_renderer(_: &Path, _: RenderKind) -> Rendered {
+    Rendered::Unavailable { hint: None }
+}
+
 /// What a result is a preview *of*, once the hints are resolved.
 enum Subject<'a> {
     Hint(PreviewHint),
@@ -134,13 +202,23 @@ enum Subject<'a> {
 /// ([`crate::Plugin::preview`]); it wins over the hint carried by the item,
 /// which wins over what the item's action refers to.
 pub fn produce(item: &ResultItem, hint: Option<PreviewHint>) -> PreviewContent {
+    produce_with(item, hint, &no_renderer)
+}
+
+/// Like [`produce`], drawing PDF pages and document and video thumbnails with
+/// `render`.
+pub fn produce_with(
+    item: &ResultItem,
+    hint: Option<PreviewHint>,
+    render: Renderer<'_>,
+) -> PreviewContent {
     let mut content = PreviewContent::new(item);
     match subject(item, hint) {
         Subject::Hint(PreviewHint::Text { text }) => {
             let (text, truncated) = cut(&text, MAX_TEXT_BYTES);
             content.body = PreviewBody::Text { text, truncated };
         }
-        Subject::Hint(PreviewHint::Path { path }) => path_content(&mut content, &path),
+        Subject::Hint(PreviewHint::Path { path }) => path_content(&mut content, &path, render),
         Subject::Hint(PreviewHint::Url { url, title }) => {
             url_content(&mut content, &url, title.as_deref());
         }
@@ -229,7 +307,7 @@ pub fn text_view(item: &ResultItem, hint: Option<PreviewHint>) -> Option<TextVie
 
 // ---- files and folders ---------------------------------------------------
 
-fn path_content(content: &mut PreviewContent, path: &Path) {
+fn path_content(content: &mut PreviewContent, path: &Path, render: Renderer<'_>) {
     if let Some(reason) = refuse(path) {
         content.note = Some(reason.to_owned());
         return;
@@ -259,7 +337,7 @@ fn path_content(content: &mut PreviewContent, path: &Path) {
     if metadata.is_dir() {
         folder_content(content, path);
     } else if metadata.is_file() {
-        file_content(content, path, metadata.len());
+        file_content(content, path, metadata.len(), render);
     } else {
         content.note = Some("Not a regular file".to_owned());
     }
@@ -333,7 +411,7 @@ fn folder_content(content: &mut PreviewContent, path: &Path) {
     content.body = PreviewBody::Folder { entries, truncated };
 }
 
-fn file_content(content: &mut PreviewContent, path: &Path, size: u64) {
+fn file_content(content: &mut PreviewContent, path: &Path, size: u64, render: Renderer<'_>) {
     let extension = path
         .extension()
         .map(|ext| ext.to_string_lossy().to_lowercase())
@@ -363,9 +441,10 @@ fn file_content(content: &mut PreviewContent, path: &Path, size: u64) {
         }
         return;
     }
-    if extension == "pdf" {
-        content.note = Some("PDF pages are not previewed; Enter opens the file".to_owned());
-        return;
+    if let Some(kind) = RenderKind::of_extension(&extension) {
+        if rendered_content(content, path, size, kind, render) {
+            return;
+        }
     }
 
     match read_limited(path, MAX_TEXT_BYTES + 1) {
@@ -375,6 +454,78 @@ fn file_content(content: &mut PreviewContent, path: &Path, size: u64) {
         },
         Err(_) => content.note = Some("This file cannot be read".to_owned()),
     }
+}
+
+/// Shows the drawn first page of `path`. `true` when `content` is final (a
+/// picture, or a note saying why not); `false` when this kind of file simply
+/// has no picture here and the ordinary preview should go on. A PDF is always
+/// final: it is binary data, the ordinary preview has nothing to add.
+fn rendered_content(
+    content: &mut PreviewContent,
+    path: &Path,
+    size: u64,
+    kind: RenderKind,
+    render: Renderer<'_>,
+) -> bool {
+    let pdf = kind == RenderKind::Pdf;
+    if kind.max_file_bytes().is_some_and(|max| size > max) {
+        if pdf {
+            content.note = Some(format!(
+                "Too large to preview (limit {}); Enter opens the file",
+                format_size(MAX_RENDER_FILE_BYTES)
+            ));
+        }
+        return pdf;
+    }
+    if pdf && !has_pdf_header(path) {
+        content.note = Some("This file is not a valid PDF".to_owned());
+        return true;
+    }
+    match render(path, kind) {
+        Rendered::Image { png, pages } => {
+            if !is_png(&png) || png.len() > MAX_RENDERED_BYTES {
+                content.note = Some("The page picture was not usable".to_owned());
+                return pdf;
+            }
+            if let Some(pages) = pages.filter(|&pages| pages > 0) {
+                content
+                    .meta
+                    .insert(2, MetaRow::new("Pages", pages.to_string()));
+            }
+            content.body = PreviewBody::Image {
+                src: format!("data:image/png;base64,{}", base64(&png)),
+            };
+            true
+        }
+        Rendered::Unavailable { hint } => {
+            if pdf {
+                content.note = Some(hint.map_or_else(
+                    || "PDF pages are not previewed here; Enter opens the file".to_owned(),
+                    |hint| cut(&hint, MAX_DETAIL_CHARS).0,
+                ));
+            }
+            pdf
+        }
+        Rendered::Failed => {
+            if pdf {
+                content.note =
+                    Some("This PDF could not be previewed; Enter opens the file".to_owned());
+            }
+            pdf
+        }
+    }
+}
+
+const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+
+fn is_png(bytes: &[u8]) -> bool {
+    bytes.starts_with(&PNG_SIGNATURE)
+}
+
+/// Whether the file starts like a PDF (`%PDF-` within its first kilobyte, which
+/// is where readers look for it too).
+fn has_pdf_header(path: &Path) -> bool {
+    read_limited(path, 1024).is_ok_and(|head| head.windows(5).any(|window| window == b"%PDF-"))
 }
 
 /// Reads at most `limit` bytes of the file.
@@ -785,7 +936,7 @@ mod tests {
     }
 
     #[test]
-    fn pdfs_show_details_not_pages() {
+    fn pdfs_show_details_not_pages_without_a_renderer() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("paper.pdf");
         fs::write(&path, "%PDF-1.7 not really").unwrap();
@@ -793,6 +944,260 @@ mod tests {
         assert_eq!(content.body, PreviewBody::None);
         assert_eq!(meta(&content, "Kind"), Some("PDF document"));
         assert!(content.note.unwrap().contains("PDF"));
+    }
+
+    // --- rendered pages -----------------------------------------------------
+
+    use std::cell::RefCell;
+
+    /// A "PNG": only the signature matters to the preview.
+    fn fake_png(len: usize) -> Vec<u8> {
+        let mut bytes = PNG_SIGNATURE.to_vec();
+        bytes.resize(len.max(PNG_SIGNATURE.len()), 7);
+        bytes
+    }
+
+    fn write_pdf(dir: &Path) -> PathBuf {
+        let path = dir.join("paper.pdf");
+        fs::write(&path, "%PDF-1.4\n% fixture, not a real document\n").unwrap();
+        path
+    }
+
+    /// Runs `produce_with` against a fake renderer that answers `answer`, and
+    /// returns the content and what the renderer was asked.
+    fn render_with(path: &Path, answer: Rendered) -> (PreviewContent, Vec<(PathBuf, RenderKind)>) {
+        let calls = RefCell::new(Vec::new());
+        let renderer = |path: &Path, kind: RenderKind| {
+            calls.borrow_mut().push((path.to_path_buf(), kind));
+            answer.clone()
+        };
+        let content = produce_with(&open(path), None, &renderer);
+        (content, calls.into_inner())
+    }
+
+    #[test]
+    fn a_pdfs_first_page_becomes_a_data_url_with_its_page_count() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = write_pdf(dir.path());
+        let png = fake_png(100);
+        let (content, calls) = render_with(
+            &path,
+            Rendered::Image {
+                png: png.clone(),
+                pages: Some(12),
+            },
+        );
+        assert_eq!(calls, [(path.clone(), RenderKind::Pdf)]);
+        let PreviewBody::Image { src } = &content.body else {
+            panic!("{:?}", content.body);
+        };
+        assert_eq!(
+            src.strip_prefix("data:image/png;base64,")
+                .map(str::to_owned),
+            Some(base64(&png))
+        );
+        assert_eq!(content.note, None);
+        // The details table stays, with the page count after the size.
+        let labels: Vec<&str> = content.meta.iter().map(|r| r.label.as_str()).collect();
+        assert_eq!(labels, ["Kind", "Size", "Pages", "Path"]);
+        assert_eq!(meta(&content, "Pages"), Some("12"));
+        assert_eq!(meta(&content, "Kind"), Some("PDF document"));
+    }
+
+    #[test]
+    fn the_page_count_is_optional() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = write_pdf(dir.path());
+        for pages in [None, Some(0)] {
+            let (content, _) = render_with(
+                &path,
+                Rendered::Image {
+                    png: fake_png(10),
+                    pages,
+                },
+            );
+            assert!(matches!(content.body, PreviewBody::Image { .. }));
+            assert_eq!(meta(&content, "Pages"), None);
+        }
+    }
+
+    #[test]
+    fn a_rendered_picture_must_be_a_small_png() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = write_pdf(dir.path());
+        for png in [
+            b"<svg onload=alert(1)>".to_vec(),
+            Vec::new(),
+            fake_png(MAX_RENDERED_BYTES + 1),
+        ] {
+            let (content, _) = render_with(&path, Rendered::Image { png, pages: None });
+            assert_eq!(content.body, PreviewBody::None);
+            assert!(content.note.is_some());
+        }
+        let (content, _) = render_with(
+            &path,
+            Rendered::Image {
+                png: fake_png(MAX_RENDERED_BYTES),
+                pages: None,
+            },
+        );
+        assert!(matches!(content.body, PreviewBody::Image { .. }));
+    }
+
+    #[test]
+    fn a_pdf_the_system_cannot_draw_says_why() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = write_pdf(dir.path());
+
+        let hint = "Install poppler-utils to preview PDF pages".to_owned();
+        let (content, _) = render_with(
+            &path,
+            Rendered::Unavailable {
+                hint: Some(hint.clone()),
+            },
+        );
+        assert_eq!(content.body, PreviewBody::None);
+        assert_eq!(content.note, Some(hint));
+        assert_eq!(meta(&content, "Kind"), Some("PDF document"));
+
+        let (content, _) = render_with(&path, Rendered::Unavailable { hint: None });
+        assert!(content.note.unwrap().contains("not previewed"));
+
+        let (content, _) = render_with(&path, Rendered::Failed);
+        assert!(content
+            .note
+            .as_deref()
+            .unwrap()
+            .contains("could not be previewed"));
+        assert!(meta(&content, "Size").is_some());
+    }
+
+    #[test]
+    fn big_and_fake_pdfs_never_reach_the_renderer() {
+        let dir = tempfile::tempdir().unwrap();
+
+        let huge = dir.path().join("huge.pdf");
+        let file = File::create(&huge).unwrap();
+        file.set_len(MAX_RENDER_FILE_BYTES + 1).unwrap();
+        let (content, calls) = render_with(&huge, Rendered::Failed);
+        assert!(calls.is_empty());
+        assert_eq!(content.body, PreviewBody::None);
+        assert!(content.note.unwrap().starts_with("Too large to preview"));
+
+        let fake = dir.path().join("fake.pdf");
+        fs::write(&fake, "<html>not a pdf</html>").unwrap();
+        let (content, calls) = render_with(&fake, Rendered::Failed);
+        assert!(calls.is_empty());
+        assert_eq!(
+            content.note.as_deref(),
+            Some("This file is not a valid PDF")
+        );
+
+        // The limit is inclusive: a PDF exactly that big is drawn.
+        let edge = dir.path().join("edge.pdf");
+        let mut file = File::create(&edge).unwrap();
+        std::io::Write::write_all(
+            &mut file,
+            b"%PDF-1.4
+",
+        )
+        .unwrap();
+        file.set_len(MAX_RENDER_FILE_BYTES).unwrap();
+        let (_, calls) = render_with(&edge, Rendered::Failed);
+        assert_eq!(calls.len(), 1);
+    }
+
+    #[test]
+    fn paths_are_validated_before_anything_is_drawn() {
+        let calls = RefCell::new(0);
+        let renderer = |_: &Path, _: RenderKind| {
+            *calls.borrow_mut() += 1;
+            Rendered::Failed
+        };
+        for path in [
+            Path::new("relative/paper.pdf"),
+            Path::new(r"\\server\share\paper.pdf"),
+        ] {
+            let content = produce_with(&open(path), None, &renderer);
+            assert_eq!(content.body, PreviewBody::None);
+            assert!(content.note.is_some());
+        }
+        let missing = std::env::temp_dir().join("sevak-no-such-dir").join("a.pdf");
+        let content = produce_with(&open(&missing), None, &renderer);
+        assert_eq!(content.note.as_deref(), Some("This item no longer exists"));
+        assert_eq!(*calls.borrow(), 0);
+    }
+
+    #[test]
+    fn documents_and_videos_get_thumbnails_when_the_system_has_one() {
+        let dir = tempfile::tempdir().unwrap();
+        for (name, kind) in [
+            ("report.DOCX", RenderKind::Document),
+            ("sheet.xlsx", RenderKind::Document),
+            ("deck.pptx", RenderKind::Document),
+            ("clip.mp4", RenderKind::Video),
+            ("movie.mkv", RenderKind::Video),
+        ] {
+            let path = dir.path().join(name);
+            fs::write(&path, [0u8, 1, 2, 3]).unwrap();
+            let (content, calls) = render_with(
+                &path,
+                Rendered::Image {
+                    png: fake_png(50),
+                    pages: None,
+                },
+            );
+            assert_eq!(calls, [(path.clone(), kind)], "{name}");
+            assert!(matches!(content.body, PreviewBody::Image { .. }), "{name}");
+            assert!(meta(&content, "Size").is_some());
+        }
+    }
+
+    #[test]
+    fn without_a_thumbnail_documents_and_videos_keep_the_plain_preview() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("report.docx");
+        fs::write(&path, [0u8, 1, 2, 3]).unwrap();
+        for answer in [Rendered::Failed, Rendered::Unavailable { hint: None }] {
+            let (content, calls) = render_with(&path, answer);
+            assert_eq!(calls.len(), 1);
+            assert_eq!(content.body, PreviewBody::None);
+            assert_eq!(
+                content.note.as_deref(),
+                Some("No preview for this kind of file")
+            );
+            assert_eq!(meta(&content, "Kind"), Some("Word document"));
+        }
+    }
+
+    #[test]
+    fn large_documents_are_not_handed_over_but_large_videos_are() {
+        let dir = tempfile::tempdir().unwrap();
+        let doc = dir.path().join("big.docx");
+        File::create(&doc)
+            .unwrap()
+            .set_len(MAX_RENDER_FILE_BYTES + 1)
+            .unwrap();
+        let (_, calls) = render_with(&doc, Rendered::Failed);
+        assert!(calls.is_empty());
+
+        let video = dir.path().join("big.mp4");
+        File::create(&video)
+            .unwrap()
+            .set_len(MAX_RENDER_FILE_BYTES + 1)
+            .unwrap();
+        let (_, calls) = render_with(&video, Rendered::Failed);
+        assert_eq!(calls.len(), 1);
+    }
+
+    #[test]
+    fn render_kinds_follow_the_extension() {
+        assert_eq!(RenderKind::of_extension("pdf"), Some(RenderKind::Pdf));
+        assert_eq!(RenderKind::of_extension("odt"), Some(RenderKind::Document));
+        assert_eq!(RenderKind::of_extension("mov"), Some(RenderKind::Video));
+        for other in ["", "txt", "png", "exe", "docm", "svg", "zip"] {
+            assert_eq!(RenderKind::of_extension(other), None, "{other}");
+        }
     }
 
     #[test]

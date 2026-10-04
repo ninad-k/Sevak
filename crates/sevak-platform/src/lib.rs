@@ -34,6 +34,7 @@ pub mod spotlight;
 pub mod system;
 pub mod tasks;
 pub mod terminal;
+pub mod thumbnail;
 pub mod trash;
 
 #[cfg(target_os = "linux")]
