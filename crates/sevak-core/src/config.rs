@@ -40,7 +40,7 @@ hide_on_blur = true
 # Start Sevak in the background when you log in.
 launch_at_login = false
 
-# Check GitHub for a new version at startup and once a day. Updates are only
+# Check GitHub for a new version at startup, every six hours and when you open Sevak. Updates are only
 # installed after you agree. Apart from the optional currency rates (see
 # [calculator]), this is the only request Sevak makes on its own.
 check_for_updates = true
@@ -76,6 +76,9 @@ font_size = 15
 font_family = ""
 # How opaque the search bar's background is, in percent (30-100).
 opacity = 100
+# Frosted-glass blur of the desktop behind the search bar (Windows and macOS).
+# You only see it when opacity is below 100.
+blur = false
 # Corner radius of the search bar in pixels (0-32).
 radius = 14
 # A theme file inside this config folder, for example "themes/Nord.toml". Settings,
@@ -568,6 +571,9 @@ pub struct AppearanceConfig {
     pub font_family: String,
     /// Background opacity of the search bar, in percent.
     pub opacity: u32,
+    /// Frosted-glass blur behind the search bar (Windows and macOS). Only
+    /// visible when `opacity` is below 100.
+    pub blur: bool,
     /// Corner radius of the search bar, in pixels.
     pub radius: u32,
     /// Theme file inside the config directory (`themes/Nord.toml`); empty uses none.
@@ -584,6 +590,7 @@ impl Default for AppearanceConfig {
             font_size: crate::theme::DEFAULT_FONT_SIZE,
             font_family: String::new(),
             opacity: crate::theme::MAX_OPACITY,
+            blur: false,
             radius: crate::theme::DEFAULT_RADIUS,
             theme_file: String::new(),
             custom_css: String::new(),
@@ -2201,6 +2208,7 @@ query = "no key, dropped"
         config.appearance.font_size = 18;
         config.appearance.font_family = "Fira Sans, sans-serif".to_owned();
         config.appearance.opacity = 85;
+        config.appearance.blur = true;
         config.appearance.radius = 4;
         config.appearance.theme_file = "themes/Nord.toml".to_owned();
         config.appearance.custom_css = "theme.css".to_owned();

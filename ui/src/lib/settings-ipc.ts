@@ -24,6 +24,8 @@ export interface Appearance {
   font_size: number;
   font_family: string;
   opacity: number;
+  /** Frosted-glass blur behind the search bar (Windows and macOS). */
+  blur: boolean;
   radius: number;
   /** A theme file in the config folder, such as `themes/Nord.toml`; empty uses none. */
   theme_file: string;

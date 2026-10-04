@@ -55,6 +55,7 @@
       font_size: 15,
       font_family: "",
       opacity: 100,
+      blur: false,
       radius: 14,
       theme_file: "",
       custom_css: "",
@@ -704,6 +705,7 @@
             bind:appearance={draft.appearance}
             errors={problems.appearance}
             warnings={status?.appearance.warnings ?? []}
+            blurSupported={loaded?.platform !== "linux"}
           />
 
           <ThemeEditor bind:appearance={draft.appearance} />

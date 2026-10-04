@@ -63,7 +63,7 @@ Main hotkeys and startup behaviour.
 | `actions_hotkey` | string | `"Ctrl+Alt+Space"` | Hotkey for Universal Actions: capture the selection in the foreground app and offer actions on it. Empty string `""` turns Universal Actions off. On Wayland, run `sevak --setup-hotkey` to bind this in GNOME. |
 | `hide_on_blur` | boolean | `true` | Hide the launcher when it loses focus to another window. Press Esc or click elsewhere to close; this setting hides it automatically. |
 | `launch_at_login` | boolean | `false` | Start Sevak when you log in to your desktop. |
-| `check_for_updates` | boolean | `true` | Check GitHub for a new version at startup and once daily. Updates are only installed after you confirm. Apart from optional currency rates, this is the only automatic network request. |
+| `check_for_updates` | boolean | `true` | Check GitHub for a new version shortly after startup, every six hours, and whenever you open Sevak (if the last check is over an hour old). Updates are only installed after you confirm. Apart from optional currency rates, this is the only automatic network request. |
 
 ```toml
 [general]
@@ -128,6 +128,7 @@ Launcher theme and styling.
 | `font_size` | integer | `15` | 12–22 (pixels) | Size of result titles. The rest of the launcher (icons, text, spacing) scales with it. Clamped to the range. |
 | `font_family` | string | `""` (empty) | any font family name, comma-separated | Comma-separated font family list, e.g. `"Fira Sans, sans-serif"`. Empty uses your system font. CSS font-family syntax; if the font is missing, the next in the list is used. |
 | `opacity` | integer | `100` | 30–100 (percent) | Background opacity of the search bar. 100 is fully opaque; 30 is quite transparent. Whole numbers only. |
+| `blur` | boolean | `false` | `true`, `false` | Frosted-glass blur of the desktop behind the search bar (Windows Acrylic, macOS vibrancy); ignored on Linux. You only see it when `opacity` is below 100. On Windows 11 the corners are rounded by the system, so `radius` is fixed at 8 px while blur is on. |
 | `radius` | integer | `14` | 0–32 (pixels) | Corner radius of the search bar. 0 is sharp corners; 32 is very rounded. Whole numbers only. |
 | `theme_file` | string | `""` (empty) | path in config folder, or `""` | A theme file, such as `"themes/Nord.toml"`, made, imported or installed in **Settings → Appearance → Theme editor**. Applied between the built-in light/dark look and the settings above; `""` uses none. See [Theme files and the editor](themes.md#theme-files-and-the-editor). |
 | `custom_css` | string | `""` (empty) | filename in config folder, or `""` | Stylesheet to override theme colours and layout. Must be a file in the config folder (same folder as `config.toml`), e.g. `"theme.css"`. `""` loads none. See [Themes guide](themes.md) for available CSS variables. |
@@ -577,7 +578,7 @@ hide_on_blur = true
 # Start Sevak in the background when you log in.
 launch_at_login = false
 
-# Check GitHub for a new version at startup and once a day. Updates are only
+# Check GitHub for a new version at startup, every six hours and when you open Sevak. Updates are only
 # installed after you agree. Apart from the optional currency rates (see
 # [calculator]), this is the only request Sevak makes on its own.
 check_for_updates = true
@@ -613,6 +614,9 @@ font_size = 15
 font_family = ""
 # How opaque the search bar's background is, in percent (30-100).
 opacity = 100
+# Frosted-glass blur of the desktop behind the search bar (Windows and macOS).
+# You only see it when opacity is below 100.
+blur = false
 # Corner radius of the search bar in pixels (0-32).
 radius = 14
 # A theme file inside this config folder, for example "themes/Nord.toml". Settings,

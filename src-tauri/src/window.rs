@@ -41,6 +41,7 @@ pub fn show_with(app: &AppHandle, payload: ShowPayload) {
     };
 
     tracing::info!("showing window");
+    crate::updater::check_on_open(app);
     // While the user's app still has focus: pasting returns to it later.
     if let Some(state) = app.try_state::<AppState>() {
         state.search.platform.remember_foreground_app();

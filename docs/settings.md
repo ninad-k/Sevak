@@ -150,6 +150,10 @@ Background opacity of the search bar as a percentage. Range: 30–100%. Text sta
 
 Links to: `[appearance] opacity` in configuration.
 
+### Frosted-glass blur
+
+Blurs the desktop behind the search bar (Windows and macOS; hidden on Linux). Lower **Background opacity** to see it. Links to: `[appearance] blur` in configuration.
+
 ### Corner radius
 
 Rounding of the search bar's corners in pixels. Range: 0–32 px (0 = sharp corners).

@@ -372,6 +372,7 @@ export function mockSettings(): SettingsDto {
         font_size: 15,
         font_family: "",
         opacity: 100,
+        blur: false,
         radius: 14,
         theme_file: "",
         custom_css: "",

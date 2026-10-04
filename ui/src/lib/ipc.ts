@@ -45,6 +45,8 @@ export interface CustomHotkeyStatus {
 export interface AppearanceCss {
   css: string;
   custom_css: string;
+  /** The window has a blurred backdrop. */
+  blur?: boolean;
   /** Why a setting was ignored. */
   warnings: string[];
 }
