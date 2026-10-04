@@ -257,8 +257,8 @@ fn the_report_has_every_section() {
     assert!(report.contains(r"- **Config folder:** ~\AppData\Roaming\sevak"));
     assert!(report.contains("- **Shortcut:** Super+Space via the keyboard hook"));
     assert!(report.contains("- **OK** The config file parses."));
-    assert!(report.contains("- **FAIL** The global shortcut is registered."));
-    assert!(report.contains("- **?** The tray icon exists. needs the running app"));
+    assert!(report.contains("- **FAIL** The global shortcut is registered: taken by"));
+    assert!(report.contains("- **?** The tray icon exists: needs the running app"));
     assert!(report.contains("- `general.hotkey` = Super+Space"));
     assert!(report.contains("- `files.directories` = 1"));
     assert!(report.contains("- `>`: built in"));

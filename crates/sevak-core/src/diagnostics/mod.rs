@@ -339,12 +339,12 @@ fn health(out: &mut Writer<'_>, input: &DiagnosticsInput) {
             Health::Unknown => "?",
         };
         let detail = out.redactor.log_line(&check.detail);
-        let detail = if detail.is_empty() {
-            String::new()
+        let line = if detail.is_empty() {
+            format!("- **{mark}** {}.", check.name)
         } else {
-            format!(" {detail}")
+            format!("- **{mark}** {}: {detail}", check.name)
         };
-        out.line(&format!("- **{mark}** {}.{detail}", check.name));
+        out.line(&line);
     }
 }
 
@@ -521,8 +521,9 @@ fn logs(out: &mut Writer<'_>, input: &DiagnosticsInput) {
     ));
     out.blank();
     out.line(&format!(
-        "The last {} lines, with private text removed:",
-        logs.tail.len()
+        "The last {} line{}, with private text removed:",
+        logs.tail.len(),
+        if logs.tail.len() == 1 { "" } else { "s" }
     ));
     out.blank();
     out.line("```text");

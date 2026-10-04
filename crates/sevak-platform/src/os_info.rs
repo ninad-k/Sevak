@@ -22,6 +22,8 @@ fn platform_details(info: &mut OsInfo) {
         return;
     };
     let build_number: u32 = raw.build.parse().unwrap_or(0);
+    // The kernel version Windows reports is just the build number.
+    info.kernel = None;
     info.name = osinfo::windows_name(&raw.product_name, build_number);
     info.version = raw.display_version;
     info.build = Some(match raw.revision {
