@@ -118,6 +118,19 @@ impl ApprovalStore {
         Approvals(self.read())
     }
 
+    /// Drops what is recorded for `id` (the plugin or workflow was removed), so
+    /// a later install under the same name asks again and the file does not
+    /// keep names of things that are gone. Nothing happens if there is no record.
+    pub fn forget(&self, id: &str) -> io::Result<()> {
+        let mut record = self.read();
+        if record.approved.remove(id).is_none() {
+            return Ok(());
+        }
+        record.version = FORMAT;
+        let text = serde_json::to_string_pretty(&record).map_err(io::Error::other)?;
+        sevak_platform::private_file::write_atomic(&self.path, text.as_bytes())
+    }
+
     /// Records that plugin `id` may run exactly `key`.
     pub fn approve(&self, id: &str, key: &str) -> io::Result<()> {
         let mut record = self.read();

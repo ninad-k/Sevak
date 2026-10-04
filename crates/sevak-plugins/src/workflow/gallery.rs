@@ -299,6 +299,13 @@ fn check_native(entry: &mut Entry, pin: &Pin) -> Result<(), String> {
     if !entry.source.is_empty() || !entry.sha256.is_empty() {
         return Err("a native extension has `platforms`, not `source` and `sha256`".to_owned());
     }
+    if entry
+        .folder
+        .as_deref()
+        .is_some_and(|folder| folder != entry.id)
+    {
+        return Err("a native extension installs under its id, so it has no `folder`".to_owned());
+    }
     if semver::Version::parse(entry.version.trim()).is_err() {
         return Err("`version` must be like 1.2.3".to_owned());
     }
@@ -397,6 +404,30 @@ pub fn install(entry: &Entry, dirs: &Dirs<'_>) -> Result<Installed, String> {
 /// unpacks it into a new folder below the workflows or plugins folder. An
 /// existing folder of that name is never touched.
 pub fn install_bytes(entry: &Entry, bytes: &[u8], dirs: &Dirs<'_>) -> Result<Installed, String> {
+    install_bytes_as(entry, bytes, dirs, Mode::New, &|| {})
+}
+
+/// Whether an install may replace what is there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mode {
+    /// A new folder; an existing one of that name is never touched.
+    New,
+    /// An update: the folder is replaced as one step. Nothing is replaced when
+    /// the package is refused, and a failure while swapping puts the old folder
+    /// back.
+    Replace,
+}
+
+/// [`install_bytes`] with a choice of [`Mode`]. `before_swap` runs once the new
+/// package is checked and written aside, right before it replaces the old
+/// folder: the place to stop a program that still runs from it.
+pub fn install_bytes_as(
+    entry: &Entry,
+    bytes: &[u8],
+    dirs: &Dirs<'_>,
+    mode: Mode,
+    before_swap: &dyn Fn(),
+) -> Result<Installed, String> {
     if entry.kind == Kind::Native {
         return Err(NATIVE_ELSEWHERE.to_owned());
     }
@@ -407,7 +438,8 @@ pub fn install_bytes(entry: &Entry, bytes: &[u8], dirs: &Dirs<'_>) -> Result<Ins
     }
     let root = dirs.root(entry.kind);
     let target = root.join(folder);
-    if target.exists() {
+    let replace = mode == Mode::Replace;
+    if target.exists() && !replace {
         return Err(format!(
             "\"{folder}\" is already installed. To reinstall it, remove that folder first: {}",
             target.display()
@@ -419,9 +451,8 @@ pub fn install_bytes(entry: &Entry, bytes: &[u8], dirs: &Dirs<'_>) -> Result<Ins
     fs::create_dir_all(root).map_err(|err| format!("could not create the folder: {err}"))?;
     let staging = root.join(format!(".installing-{folder}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&staging);
-    let result = write_package(&package, &staging).and_then(|()| {
-        fs::rename(&staging, &target).map_err(|err| format!("could not finish the install: {err}"))
-    });
+    let result = write_package(&package, &staging)
+        .and_then(|()| place(&staging, &target, replace && target.exists(), before_swap));
     if let Err(err) = result {
         let _ = fs::remove_dir_all(&staging);
         return Err(err);
@@ -432,6 +463,68 @@ pub fn install_bytes(entry: &Entry, bytes: &[u8], dirs: &Dirs<'_>) -> Result<Ins
         path: target,
         files: package.files.len(),
     })
+}
+
+/// Moves the finished `staging` folder to `target`. With `replace`, the old
+/// folder is moved aside first and put back if the new one cannot take its
+/// place, so an update either happens whole or not at all.
+///
+/// A folder whose program is still running cannot be moved on Windows, so the
+/// first move is retried for a moment (the program has just been stopped).
+pub(crate) fn place(
+    staging: &Path,
+    target: &Path,
+    replace: bool,
+    before_swap: &dyn Fn(),
+) -> Result<(), String> {
+    if !replace {
+        return fs::rename(staging, target)
+            .map_err(|err| format!("could not finish the install: {err}"));
+    }
+    before_swap();
+    let backup = staging.with_file_name(format!(
+        ".replaced-{}-{}",
+        target
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default(),
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&backup);
+    retry(|| fs::rename(target, &backup))
+        .map_err(|err| format!("could not replace the old version (is it running?): {err}"))?;
+    if let Err(err) = fs::rename(staging, target) {
+        // Put the old version back; it is the only copy.
+        let restored = fs::rename(&backup, target);
+        return Err(match restored {
+            Ok(()) => format!("could not finish the update, the old version is back: {err}"),
+            Err(back) => format!(
+                "could not finish the update ({err}) and could not put the old version back \
+                 ({back}); it is in {}",
+                backup.display()
+            ),
+        });
+    }
+    let _ = fs::remove_dir_all(&backup);
+    Ok(())
+}
+
+/// Runs `action`, retrying for about two seconds while it fails (Windows holds
+/// a folder until the program that ran from it has really exited).
+pub(crate) fn retry<T>(mut action: impl FnMut() -> std::io::Result<T>) -> std::io::Result<T> {
+    let mut attempts = 0;
+    loop {
+        match action() {
+            Ok(done) => return Ok(done),
+            Err(err) => {
+                attempts += 1;
+                if attempts >= 20 {
+                    return Err(err);
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+        }
+    }
 }
 
 /// A package's files, checked and held in memory.
@@ -841,6 +934,143 @@ mod tests {
         let index = parse_index(&text, &pin()).unwrap();
         let ids: Vec<_> = index.entries.iter().map(|e| e.id.as_str()).collect();
         assert_eq!(ids, ["fine", "console"]);
+    }
+
+    fn native_entry(id: &str) -> serde_json::Value {
+        serde_json::json!({
+            "id": id, "kind": "native", "name": "Tool", "description": "d",
+            "author": "Ada", "version": "1.2.3", "license": "MIT",
+            "min_sevak": "0.1.0", "permissions": ["network", "Bad Permission"],
+            "repository": "https://github.com/example/tool",
+            "platforms": {
+                "linux-x86_64": {
+                    "source": "gallery/extensions/tool/tool-1.2.3-linux-x86_64.sevakext",
+                    "sha256": "A".repeat(64)
+                },
+                "windows-x86_64": {
+                    "source": "gallery/extensions/tool/tool-1.2.3-windows-x86_64.sevakext",
+                    "sha256": "b".repeat(64)
+                }
+            }
+        })
+    }
+
+    #[test]
+    fn native_entries_have_one_package_per_platform() {
+        let text = serde_json::json!({"format": 2, "entries": [native_entry("tool")]}).to_string();
+        let index = parse_index(&text, &pin()).unwrap();
+        assert!(index.skipped.is_empty(), "{:?}", index.skipped);
+        let entry = &index.entries[0];
+        assert_eq!(entry.kind, Kind::Native);
+        assert_eq!(entry.folder_name(), "tool");
+        assert_eq!(entry.permissions, ["network"], "invalid labels are dropped");
+        let linux = &entry.platforms["linux-x86_64"];
+        assert_eq!(
+            linux.source,
+            "https://raw.githubusercontent.com/ninad-k/Sevak/v1.2.3/gallery/extensions/tool/tool-1.2.3-linux-x86_64.sevakext"
+        );
+        assert_eq!(linux.sha256, "a".repeat(64), "hashes are lower case");
+        assert!(entry.source.is_empty() && entry.sha256.is_empty());
+    }
+
+    #[test]
+    fn bad_native_entries_are_skipped_not_fatal() {
+        let with = |change: &dyn Fn(&mut serde_json::Value)| {
+            let mut entry = native_entry("tool");
+            change(&mut entry);
+            entry
+        };
+        let bad = vec![
+            with(&|e| {
+                e.as_object_mut().unwrap().remove("platforms");
+            }),
+            with(&|e| e["platforms"] = serde_json::json!({})),
+            with(&|e| e["platforms"]["beos-x86_64"] = e["platforms"]["linux-x86_64"].clone()),
+            with(&|e| e["platforms"]["linux-x86_64"]["sha256"] = "abc".into()),
+            with(&|e| e["platforms"]["linux-x86_64"]["source"] = "https://example.com/x".into()),
+            with(&|e| {
+                e["platforms"]["linux-x86_64"]["source"] = "gallery/../../main/x.sevakext".into()
+            }),
+            with(&|e| e["source"] = "gallery/x.zip".into()),
+            with(&|e| e["version"] = "latest".into()),
+            with(&|e| e["author"] = "".into()),
+            with(&|e| {
+                e.as_object_mut().unwrap().remove("license");
+            }),
+            with(&|e| e["min_sevak"] = "soon".into()),
+            with(&|e| e["repository"] = "http://example.com".into()),
+            with(&|e| e["folder"] = "elsewhere".into()),
+        ];
+        let count = bad.len();
+        let mut entries = bad;
+        entries.push(native_entry("good"));
+        let text = serde_json::json!({"format": 2, "entries": entries}).to_string();
+        let index = parse_index(&text, &pin()).unwrap();
+        assert_eq!(index.entries.len(), 1, "{:?}", index.skipped);
+        assert_eq!(index.entries[0].id, "good");
+        assert_eq!(index.skipped.len(), count, "{:?}", index.skipped);
+    }
+
+    #[test]
+    fn only_native_entries_have_platforms() {
+        let mut entry = good_entry("one");
+        entry["platforms"] = native_entry("x")["platforms"].clone();
+        let text = serde_json::json!({"format": 2, "entries": [entry]}).to_string();
+        let index = parse_index(&text, &pin()).unwrap();
+        assert!(index.entries.is_empty());
+        assert!(
+            index.skipped[0].contains("only native"),
+            "{:?}",
+            index.skipped
+        );
+    }
+
+    #[test]
+    fn a_native_entry_does_not_install_through_the_old_page() {
+        let r = roots();
+        let text = serde_json::json!({"format": 2, "entries": [native_entry("tool")]}).to_string();
+        let entry = parse_index(&text, &pin()).unwrap().entries.remove(0);
+        let err = install_bytes(&entry, b"x", &r.dirs()).unwrap_err();
+        assert!(err.contains("Settings > Extensions"), "{err}");
+        assert!(!r.plugins.exists());
+    }
+
+    #[test]
+    fn an_update_swaps_the_folder_and_a_failure_puts_the_old_one_back() {
+        let r = roots();
+        let v1 = zip_of(&[
+            ("docs/workflow.toml", WORKFLOW.as_bytes()),
+            ("docs/old.txt", b"old"),
+        ]);
+        let v2 = zip_of(&[
+            ("docs/workflow.toml", WORKFLOW.as_bytes()),
+            ("docs/new.txt", b"new"),
+        ]);
+        let one = entry_for(&v1, Kind::Workflow, "docs");
+        let two = entry_for(&v2, Kind::Workflow, "docs");
+        install_bytes(&one, &v1, &r.dirs()).unwrap();
+        // A plain install never replaces.
+        assert!(install_bytes(&two, &v2, &r.dirs()).is_err());
+        let stopped = std::cell::Cell::new(0);
+        install_bytes_as(&two, &v2, &r.dirs(), Mode::Replace, &|| {
+            stopped.set(stopped.get() + 1);
+        })
+        .unwrap();
+        assert_eq!(stopped.get(), 1);
+        assert!(r.workflows.join("docs/new.txt").is_file());
+        assert!(!r.workflows.join("docs/old.txt").exists());
+        // A package that is refused leaves the folder alone and never calls the hook.
+        let bad = zip_of(&[("docs/readme.txt", b"no manifest")]);
+        let refused = entry_for(&bad, Kind::Workflow, "docs");
+        stopped.set(0);
+        assert!(
+            install_bytes_as(&refused, &bad, &r.dirs(), Mode::Replace, &|| {
+                stopped.set(1);
+            })
+            .is_err()
+        );
+        assert_eq!(stopped.get(), 0);
+        assert!(r.workflows.join("docs/new.txt").is_file());
     }
 
     #[test]
