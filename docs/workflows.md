@@ -119,7 +119,7 @@ workflow, enabled, and valid; otherwise the launcher opens and says why.
 |---|---|---|
 | **Run script** | runs a program; what it prints becomes the argument | [details below](#run-script) |
 | **Open URL** | opens a web or mail link | only `http`, `https` and `mailto`; placeholders are URL-encoded |
-| **Open file** | opens a file or folder with its default program | `~` is your home folder; a relative path is inside the workflow's folder |
+| **Open file** | opens a file or folder with its default program | `~` is your home folder; a relative path is inside the workflow's folder; a program or script opens by running, so needs permission |
 | **Launch app** | starts an application by name (as in the launcher) or by path | runs code, so needs permission |
 | **System command** | `lock`, `sleep`, `hibernate`, `restart`, `shutdown`, `logout`, `empty_trash` | needs permission; the destructive ones ask each time |
 | **Terminal command** | opens your terminal and runs a command line | needs permission; see [quoting](#placeholders-the-argument-and-variables) |
@@ -260,7 +260,8 @@ trigger's (a script filter row's), and nodes can add more.
 ## Permission, privacy and limits
 
 **Permission.** A workflow whose nodes can run code or commands (**Run script**,
-**Script filter**, **Launch app**, **System command**, **Terminal command**) does
+**Script filter**, **Launch app**, **System command**, **Terminal command**,
+**Open file**, because opening a program or script runs it) does
 nothing until you allow it. Sevak shows a dialog with the workflow's name, what
 starts it, what it runs and whether it will receive your Universal Actions
 selection, and remembers your answer in `script-plugin-approvals.json` (the
@@ -271,10 +272,11 @@ What you allow is **what can run**: the settings of those nodes, the
 connections, the workflow's variables and the *contents* of the script files
 they name. If any of that changes (an edit in the builder, or a script file
 changed on disk), Sevak asks again after the next reload. Moving boxes,
-renaming and retitling do not. A workflow that only opens links and files,
-copies, pastes and shows text runs without asking, because it can do no more
-than the actions in the launcher can; it still never runs anything you did not
-trigger.
+renaming and retitling do not. A workflow that only opens links, copies,
+pastes and shows text runs without asking, because it can do no more than the
+actions in the launcher can; it still never runs anything you did not trigger.
+A file that an **Open file** node names inside the workflow's folder is part
+of what you allow, like a script.
 
 Two caveats. A script may read other files the workflow folder refers to (a
 module it imports) without Sevak noticing a change in them: install workflows
