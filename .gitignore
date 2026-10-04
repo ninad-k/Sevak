@@ -30,3 +30,4 @@ src-tauri/gen/schemas/
 
 # Documentation site build output
 site/
+ui/coverage/
