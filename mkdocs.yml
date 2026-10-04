@@ -97,6 +97,7 @@ plugins:
         - brand.md
         - security/*
         - decisions/*
+        - marketplace/*
 
 nav:
   - Home: index.md
@@ -152,6 +153,11 @@ nav:
       - How Sevak works: architecture.md
       - Writing plugins: plugins.md
       - Writing extensions in Rust: writing-extensions-in-rust.md
+      - Publishing to the gallery:
+          - Publishing: marketplace/publishing.md
+          - How review works: marketplace/review-process.md
+          - Updating and removal: marketplace/updating-and-removal.md
+          - For maintainers: marketplace/maintainers.md
       - Development: development.md
       - Releasing: releasing.md
       - Testing: testing.md

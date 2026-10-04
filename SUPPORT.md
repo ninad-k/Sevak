@@ -32,6 +32,15 @@ See [SECURITY.md](SECURITY.md) for details on what is in scope and what to inclu
 Open a [feature request](https://github.com/ninad-k/Sevak/issues/new?template=feature_request.yml) on GitHub Issues.
 First, read [ROADMAP.md](ROADMAP.md) to see what is already planned.
 
+## Publish to the gallery
+
+To share a workflow, script plugin, native extension or theme, read
+[Publishing to the gallery](docs/marketplace/publishing.md) and open a
+[gallery submission](https://github.com/ninad-k/Sevak/issues/new?template=extension_submission.yml)
+or a pull request. To report a gallery entry that is unsafe or malicious, use the
+private [vulnerability report](https://github.com/ninad-k/Sevak/security/advisories/new),
+not a public issue; see [updating and removal](docs/marketplace/updating-and-removal.md).
+
 ## Supported versions
 
 Only the [latest release](https://github.com/ninad-k/Sevak/releases/latest) gets bug fixes and security patches.

@@ -22,8 +22,9 @@ merge here reaches users with the next release, not at once. `index.json` has
 | Native extensions (programs written in Rust) | `index.json` (kind `native`) | `extensions/<id>/*.sevakext` | Settings → Extensions, or `ext` in the launcher | [docs/writing-extensions-in-rust.md](../docs/writing-extensions-in-rust.md) |
 | Themes | `themes.json` | `themes/*.toml` | Settings → Appearance → Theme editor → **Browse online themes** | [docs/themes.md](../docs/themes.md#theme-gallery) |
 
-Everything here is written by the Sevak project and licensed under Apache-2.0
-like the rest of the repository (palettes of third-party themes: see
+Workflows, script plugins and themes here are licensed under Apache-2.0 like the
+rest of the repository, whether the Sevak project or a contributor wrote them; a
+native extension keeps the licence its entry names (palettes of third-party themes: see
 [Theme palettes and licences](#theme-palettes-and-licences)).
 
 ## What is in it
@@ -68,6 +69,13 @@ Dark, Ayu Mirage, Nightfox, GitHub Light, GitHub Dark and Sevak Amber Glass.
 The gallery is opt-in and every install is a click, but people install what is
 listed here, so the bar is deliberate. A change is reviewed against this list,
 and `cargo test` enforces most of it (see [Checking your change](#checking-your-change)).
+
+Anyone can propose an entry. The step-by-step guide for each kind is
+[docs/marketplace/publishing.md](../docs/marketplace/publishing.md); what review
+involves is [docs/marketplace/review-process.md](../docs/marketplace/review-process.md);
+updating, deprecating and removing are in
+[docs/marketplace/updating-and-removal.md](../docs/marketplace/updating-and-removal.md).
+The sections below are the reference for the files.
 
 - **No surprises.** A package does what its description says and nothing else.
   A workflow description ends with "Runs no code." or says that it runs a script
@@ -216,8 +224,18 @@ and may not be a Windows device name such as `con` or `nul`.
 
 ```sh
 node scripts/gallery-check.mjs                       # hashes, paths, orphans; no build needed
+node scripts/gallery-check.mjs --base origin/main    # also compare with main: a changed package needs a higher version
 cargo test -p sevak-core -p sevak-plugins            # the full checks, below
 ```
+
+The script also checks, for every entry: a well-formed id (not a Windows device
+name), numeric `version`, an SPDX `license` (required unless the author is the
+Sevak project, and always for a native extension), tag rules (`no-code` only on
+workflows; `official`, `verified` and `featured` are reserved), size limits on
+name and description, unique keywords, and the optional `deprecated` and
+`replaced_by` fields. It prints warnings (a new permission, a licence that needs a
+decision, a removed entry) that do not fail the check but that a reviewer reads.
+A pull request is checked the same way by the *Gallery review* workflow.
 
 `cargo test` checks that
 
@@ -236,6 +254,9 @@ cargo test -p sevak-core -p sevak-plugins            # the full checks, below
 
 ### Pre-merge checklist
 
+The [gallery submission pull request template](../.github/PULL_REQUEST_TEMPLATE/gallery_submission.md)
+carries this list (open a pull request with `?template=gallery_submission.md`).
+
 - [ ] The description says what the package does, and whether it runs code.
 - [ ] No network access, subprocess, file write or `eval` in any script; no secrets.
 - [ ] Links open only hosts on the allow list (and the list change is justified).
@@ -246,6 +267,19 @@ cargo test -p sevak-core -p sevak-plugins            # the full checks, below
 - [ ] Themes: contrast lines are all AA; the palette's author and licence are named.
 - [ ] Anything a human has to judge (does the theme look good, does the Universal
       Actions entry appear in the right apps) is mentioned in the pull request.
+
+## After you open the pull request
+
+Workflows check the files and post a report; a maintainer then reviews it, and
+anything that runs code or a binary also gets a security review before it can be
+merged. A merged entry reaches users with the release that contains it, because
+builds read this folder at their own release tag. An entry can later be updated
+(bump its `version`), deprecated or removed. Removal and takedown change future
+releases only: Sevak has no way yet to recall an entry from builds that were
+already released or from computers where it was installed. Details and target
+response times (goals, not promises) are in
+[docs/marketplace](../docs/marketplace/review-process.md). Report an unsafe entry
+privately through [GitHub's vulnerability reporting](https://github.com/ninad-k/Sevak/security/advisories/new).
 
 ## Theme palettes and licences
 
