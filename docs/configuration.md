@@ -613,6 +613,8 @@ Some settings are files of their own in the config folder rather than keys in `c
 
 Everything Sevak writes itself is in the data folders, not here: the approvals file, usage history, logs, and the clipboard history with its images, which on Windows is in the *local* data folder (`%LOCALAPPDATA%\sevak\`) and encrypted for your account (`[clipboard] encrypt`).
 
+See [Files and data](files-and-data.md) for the data folders.
+
 [Settings → Backup & restore](backup-and-restore.md) saves `config.toml` (without its `[onepassword]` section and anything that looks like a key or token), these folders and the stylesheet as one file. See [Files and data](files-and-data.md) for the data folder.
 
 ## Complete example

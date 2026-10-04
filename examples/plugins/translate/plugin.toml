@@ -1,0 +1,8 @@
+protocol = 1
+id = "script:translate"
+name = "Translate in browser"
+description = "Type tr fr hello to open Google Translate with automatic source detection. Text is sent only when you open the result. Requires Node.js 22+."
+keyword = "tr"
+mode = "oneshot"
+script = "main.mjs"
+files = ["translate.mjs"]

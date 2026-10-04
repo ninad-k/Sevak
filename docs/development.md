@@ -68,7 +68,7 @@ query flows through plugins and how to add one is in [plugins.md](plugins.md).
 
 ## Running
 
-Use **Rust 1.90+**, **Node.js 22+**, and the native dependencies for your platform:
+Use **Rust 1.95+**, **Node.js 22+**, and the native dependencies for your platform:
 
 | Platform | Native prerequisites |
 |---|---|
@@ -122,6 +122,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 npm run check
 npm run gallery:check                                  # gallery checksums, themes and tags
+npm run test:extensions   # Extension behavior and script entry points (Node.js 22+)
 npm run build
 npm run test:scripts
 node scripts/generate-third-party-notices.mjs --check  # THIRD_PARTY_NOTICES.md is current (Linux job)

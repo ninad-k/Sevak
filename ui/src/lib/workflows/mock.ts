@@ -4,6 +4,7 @@
 
 import type {
   Gallery,
+  GalleryKind,
   InstalledEntry,
   LoadedWorkflow,
   Result,
@@ -12,6 +13,7 @@ import type {
   WorkflowList,
   WorkflowSummary,
 } from "./ipc";
+import catalog from "../../../../gallery/index.json";
 import { isStart, kindOf, normalize, outputPorts, portOf, type Problem, type Workflow } from "./model";
 
 function wf(partial: Partial<Workflow> & Pick<Workflow, "name" | "node" | "connection">): Workflow {
@@ -325,60 +327,25 @@ export function review(folder: string): Result<boolean> {
 }
 
 // ---- the gallery ----------------------------------------------------------------
-
+// Use the shipped catalog so the browser preview stays in sync with packages.
 const installed = new Set<string>(["duckduckgo"]);
 
 export function gallery(): Result<Gallery> {
   return {
     ok: true,
     value: {
-      source: "https://raw.githubusercontent.com/ninad-k/Sevak/v0.1.0/gallery/index.json",
-      name: "Sevak gallery",
+      source: "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/index.json",
+      note: "Browser preview of the checkout catalog; released apps use their release catalog.",
+      name: catalog.name,
       skipped: 0,
-      entries: [
-        {
-          id: "duckduckgo",
-          kind: "workflow",
-          name: "DuckDuckGo search",
-          description: "Type ddg and some words to search DuckDuckGo; ddg alone opens its home page. Runs no code.",
-          author: "Sevak",
-          version: "1.0",
-          source: "https://raw.githubusercontent.com/ninad-k/Sevak/v0.1.0/gallery/packages/duckduckgo.zip",
-          sha256: "dbb2901b3023ba0a876e7fd02d510f800154a79c7b496ca77bb37c0a52eb1e9c",
-          homepage: "https://github.com/ninad-k/Sevak/tree/main/examples/workflows/duckduckgo",
-          installed: installed.has("duckduckgo"),
-        },
-        {
-          id: "tidy-text",
-          kind: "workflow",
-          name: "Tidy up whitespace",
-          description: "Universal Actions: select text in any app, collapse its spaces and line breaks, and paste it back. Runs no code.",
-          author: "Sevak",
-          version: "1.0",
-          source: "https://raw.githubusercontent.com/ninad-k/Sevak/v0.1.0/gallery/packages/tidy-text.zip",
-          sha256: "48f4c149b0a2863b33cdd79ab3094fed937b2aa6da006061b00b1de008e16501",
-          homepage: "https://github.com/ninad-k/Sevak/tree/main/examples/workflows/tidy-text",
-          installed: installed.has("tidy-text"),
-        },
-        {
-          id: "case-converter-node",
-          kind: "plugin",
-          name: "Case converter (Node, Alfred format)",
-          description: "Type case and some words to get camelCase, snake_case, kebab-case and more. A script plugin that needs Node.js.",
-          author: "Sevak",
-          version: "1.0",
-          source: "https://raw.githubusercontent.com/ninad-k/Sevak/v0.1.0/gallery/packages/case-converter-node.zip",
-          sha256: "a2b1605fdf4c817ac9558cb89e1a21aded4868bb20cf97f6c98208b5e6a0f801",
-          homepage: "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/case-converter-node",
-          installed: installed.has("case-converter-node"),
-        },
-      ],
+      entries: catalog.entries.filter(entry => entry.kind !== "native").map(entry => ({ ...entry, source: `https://raw.githubusercontent.com/ninad-k/Sevak/main/${entry.source}`, kind: entry.kind as GalleryKind, installed: installed.has(entry.id) })),
     },
   };
 }
 
 export function install(id: string): Result<InstalledEntry> {
+  const entry = catalog.entries.find(entry => entry.id === id && entry.kind !== "native");
+  if (!entry) return { ok: false, error: "Reload the gallery; that package is no longer listed." };
   installed.add(id);
-  const kind = id === "case-converter-node" ? "plugin" : "workflow";
-  return { ok: true, value: { id, kind, folder: id } };
+  return { ok: true, value: { id, kind: entry.kind as GalleryKind, folder: id } };
 }

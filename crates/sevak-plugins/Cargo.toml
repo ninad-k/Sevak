@@ -62,12 +62,12 @@ plist = "1"
 walkdir = "2"
 # Compress to .zip in the file buffer, and unpack the workflow gallery's packages
 # (pure Rust; the version the updater already links, with only deflate).
-zip = { version = "4", default-features = false, features = ["deflate-flate2"] }
+zip = { version = "8", default-features = false, features = ["deflate-flate2"] }
 # zip's deflate encoder is flate2, which needs one backend picked; the pure-Rust one.
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 # Unpacks the bundled WordNet dictionary (zlib) for `define` and `spell`; pure
 # Rust, already in the dependency tree through flate2 and png.
-miniz_oxide = "0.8"
+miniz_oxide = "0.9"
 # Daily ECB exchange rates for the opt-in currency conversion (see `currency`).
 # Same crates and TLS backend (rustls + ring) the updater already links; the
 # blocking client runs on a plain background thread, never on the typing path.
@@ -76,7 +76,7 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 # Workflows: regex conditions and replacements (linear-time matching), and the
 # SHA-256 behind the opt-in gallery's downloads.
 regex = "1"
-sha2 = "0.10"
+sha2.workspace = true
 # The gallery downloads are held to an allow-list of parsed addresses.
 url.workspace = true
 

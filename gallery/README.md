@@ -75,8 +75,12 @@ and `cargo test` enforces most of it (see [Checking your change](#checking-your-
 - **No network from the content itself.** Workflows may *open* a link in the
   browser on a host from the allow list in `crates/sevak-plugins/tests/gallery_content.rs`
   (adding a host is a review decision), with the user's text percent-encoded.
-  Scripts must not use sockets, HTTP, subprocesses, `eval`/`exec` or write files;
-  the test checks the imports against a list of safe standard-library modules.
+  Scripts must not use sockets, HTTP, subprocesses or `eval`/`exec`.
+  The test checks imports against an explicit allow list and checks every helper
+  file declared in the manifest. ES modules must list their local helpers in
+  `files` so approval covers them. Scripts do not write files except Pomodoro,
+  whose reviewed timer module saves `timer.json` in `SEVAK_PLUGIN_DATA` and uses
+  the persistent protocol. Its state handling is covered by the extension tests.
 - **Only these workflow nodes:** triggers (keyword, Universal Actions), Transform,
   Conditional, Set variable, Open URL, Copy, Paste, Notification, Large Type,
   Text view, and Run script with a script file from the package. No Launch app,
@@ -93,6 +97,12 @@ and `cargo test` enforces most of it (see [Checking your change](#checking-your-
   or text from sources whose licence does not allow it.
 
 ## Adding a workflow or script plugin
+
+The [productivity pack](../docs/extensions.md) adds Pomodoro, color tools,
+browser translation, Tauri documentation links and a Catppuccin Mocha theme.
+The four script packages require Node.js 22+; they have no npm dependencies.
+Run `npm run test:extensions` before packaging a changed extension. Packages
+must be committed with their index hashes to become available from the online gallery.
 
 1. Put the folder in `examples/` (workflows in `examples/workflows/`, script
    plugins in `examples/plugins/`). The folder name is the entry's `id`: lower

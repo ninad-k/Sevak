@@ -52,6 +52,7 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run gallery:check
+      - run: npm run test:extensions
       - run: npm run build
 
       # Tests of the release, packaging and installer scripts, on every OS (the

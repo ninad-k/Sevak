@@ -1030,10 +1030,10 @@
           <WorkflowsPage />
         {:else if active === "gallery"}
           <GalleryPage />
-        {:else if active === "extensions"}
-          <ExtensionsPage />
         {:else if active === "backup"}
           <BackupPage onrestored={load} />
+        {:else if active === "extensions"}
+          <ExtensionsPage />
         {:else if active === "help"}
           <HelpPage />
         {:else if active === "web"}

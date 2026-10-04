@@ -463,7 +463,7 @@ fn host_of(url: &str) -> Option<String> {
 }
 
 /// Why `script` is not an acceptable gallery script, if it is not.
-fn script_problem(name: &str, text: &str) -> Option<String> {
+fn script_problem(name: &str, text: &str, allowed_imports: &[String]) -> Option<String> {
     if text.len() > 20 * 1024 {
         return Some("longer than 20 KiB; the gallery keeps scripts small enough to read".into());
     }
@@ -482,10 +482,12 @@ fn script_problem(name: &str, text: &str) -> Option<String> {
             "eval(",
             "__import__",
         ],
-        Some("js") => &[
+        Some("js" | "mjs") => &[
             "child_process",
             "require(",
-            "import ",
+            "import(",
+            "eval(",
+            "Function(",
             "fetch(",
             "XMLHttpRequest",
         ],
@@ -504,6 +506,19 @@ fn script_problem(name: &str, text: &str) -> Option<String> {
     };
     if let Some(word) = denied.iter().find(|word| text.contains(**word)) {
         return Some(format!("uses {word:?}"));
+    }
+    if name.ends_with(".js") || name.ends_with(".mjs") {
+        // This is a review guard, not a JavaScript sandbox. Only simple static
+        // imports of approved local helpers or explicitly reviewed Node modules.
+        let import = regex::Regex::new(r#"^import\s+.+\s+from\s+["']([^"']+)["'];?$"#).unwrap();
+        for line in text.lines().map(str::trim) {
+            if line.starts_with("import") {
+                let module = import.captures(line).map(|m| m[1].to_owned());
+                if !module.as_ref().is_some_and(|m| allowed_imports.contains(m)) {
+                    return Some(format!("import is not in the allow list: {line}"));
+                }
+            }
+        }
     }
     if name.ends_with(".py") {
         for line in text.lines() {
@@ -526,6 +541,28 @@ fn script_problem(name: &str, text: &str) -> Option<String> {
         }
     }
     None
+}
+
+#[test]
+fn javascript_imports_must_be_explicitly_reviewed() {
+    let allowed = vec!["./colors.mjs".to_owned()];
+    assert!(script_problem(
+        "main.mjs",
+        "import { results } from \"./colors.mjs\";",
+        &allowed
+    )
+    .is_none());
+    for source in [
+        "import { results } from \"./unlisted.mjs\";",
+        "import http from \"node:http\";",
+        "import(\"node:fs\");",
+        "eval(query);",
+    ] {
+        assert!(
+            script_problem("main.mjs", source, &allowed).is_some(),
+            "{source}"
+        );
+    }
 }
 
 #[test]
@@ -580,7 +617,7 @@ fn gallery_workflows_validate_and_stay_within_the_policy() {
                     let name = script.as_deref().unwrap();
                     let text = std::fs::read_to_string(dir.join(name))
                         .unwrap_or_else(|err| panic!("{id}: {name}: {err}"));
-                    if let Some(problem) = script_problem(name, &text) {
+                    if let Some(problem) = script_problem(name, &text, &[]) {
                         panic!("{id}: {name} {problem}");
                     }
                 }
@@ -1038,7 +1075,12 @@ fn gallery_plugins_load_have_free_keywords_and_stay_within_the_policy() {
             "{id}: {:?}",
             manifest.warnings
         );
-        assert_eq!(manifest.mode, Mode::Oneshot, "{id}");
+        let expected_mode = if id == "pomodoro" {
+            Mode::Persistent
+        } else {
+            Mode::Oneshot
+        };
+        assert_eq!(manifest.mode, expected_mode, "{id}");
         assert!(
             matches!(manifest.format, Format::Sevak | Format::Alfred),
             "{id}"
@@ -1048,13 +1090,21 @@ fn gallery_plugins_load_have_free_keywords_and_stay_within_the_policy() {
             manifest.name == entry.name,
             "{id}: name differs from the index"
         );
-        let Launch::Script(script) = &manifest.launch else {
+        let Launch::Script(_) = &manifest.launch else {
             panic!("{id}: use `script`, not `command`, so the interpreter is Sevak's choice");
         };
-        let text =
-            std::fs::read_to_string(dir.join(script)).unwrap_or_else(|err| panic!("{id}: {err}"));
-        if let Some(problem) = script_problem(script, &text) {
-            panic!("{id}: {script} {problem}");
+        let support = manifest.support_files();
+        let mut imports: Vec<String> = manifest.files.iter().map(|f| format!("./{f}")).collect();
+        // Pomodoro saves only its documented timer state in SEVAK_PLUGIN_DATA.
+        if id == "pomodoro" {
+            imports.extend(["node:fs", "node:path", "node:readline"].map(str::to_owned));
+        }
+        for file in &support {
+            let text =
+                std::fs::read_to_string(dir.join(file)).unwrap_or_else(|err| panic!("{id}: {err}"));
+            if let Some(problem) = script_problem(file, &text, &imports) {
+                panic!("{id}: {file} {problem}");
+            }
         }
         // The keyword is free: no built-in, search engine, workflow or other plugin.
         let keyword = manifest.keyword.to_lowercase();
@@ -1075,7 +1125,9 @@ fn gallery_plugins_load_have_free_keywords_and_stay_within_the_policy() {
             }
         }
         assert!(
-            entry.description.contains("Offline") || entry.description.contains("needs "),
+            entry.description.contains("Offline")
+                || entry.description.contains("needs ")
+                || entry.description.contains("Requires "),
             "{id}"
         );
         assert!(
@@ -1085,7 +1137,8 @@ fn gallery_plugins_load_have_free_keywords_and_stay_within_the_policy() {
         for file in std::fs::read_dir(&dir).unwrap() {
             let name = file.unwrap().file_name().to_string_lossy().into_owned();
             assert!(
-                name == "plugin.toml" || name == *script,
+                matches!(name.as_str(), "plugin.toml" | "README.md" | "LICENSE")
+                    || support.contains(&name),
                 "{id}: stray file {name}"
             );
         }

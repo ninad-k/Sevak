@@ -15,6 +15,45 @@ const installedGallery = new Set<string>();
 
 /** Community themes the preview's gallery offers beyond the built-ins. */
 const communityThemes: Record<string, ThemeSpec> = {
+  "catppuccin-mocha": {
+    "name": "Catppuccin Mocha",
+    "author": "Sevak; palette by Catppuccin",
+    "description": "Soft mauve accents and deep blue-gray surfaces from the Catppuccin Mocha palette.",
+    "font": {
+      "size": 15,
+      "family": ""
+    },
+    "layout": {
+      "radius": 14,
+      "opacity": 100,
+      "row_height": 48,
+      "search_size": 22,
+      "icon_size": 32,
+      "window_width": 720
+    },
+    "dark": {
+      "background": "#1e1e2e",
+      "text": "#cdd6f4",
+      "subtext": "#bac2de",
+      "border": "#45475a",
+      "accent": "#cba6f7",
+      "accent_strong": "#b4befe",
+      "on_accent": "#1e1e2e",
+      "selection": "rgba(203, 166, 247, 0.18)",
+      "tile": "#313244",
+      "kbd_background": "#313244",
+      "kbd_border": "#585b70",
+      "shadow": "0 8px 28px rgba(17, 17, 27, 0.55), 0 1px 3px rgba(17, 17, 27, 0.4)",
+      "surface": "#181825",
+      "input_background": "#313244",
+      "input_border": "#585b70",
+      "switch_off": "#585b70",
+      "warn": "#f9e2af",
+      "error": "#f38ba8",
+      "ok": "#a6e3a1"
+    },
+    "light": null
+  },
   "midnight-ocean": {
     name: "Midnight Ocean",
     author: "someone",

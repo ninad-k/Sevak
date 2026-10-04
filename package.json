@@ -7,6 +7,7 @@
     "dev": "vite --config ui/vite.config.ts",
     "build": "vite build --config ui/vite.config.ts",
     "check": "svelte-check --tsconfig ui/tsconfig.json",
+    "test:extensions": "node --test scripts/tests/extensions.test.mjs",
     "icons": "node scripts/generate-icons.mjs",
     "gallery:check": "node scripts/gallery-check.mjs",
     "installer-images": "node scripts/generate-installer-images.mjs",

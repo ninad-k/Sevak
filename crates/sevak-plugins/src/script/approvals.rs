@@ -159,7 +159,7 @@ impl ApprovalStore {
 
     fn write(&self, record: &Record) -> io::Result<()> {
         let text = serde_json::to_string_pretty(record).map_err(io::Error::other)?;
-        // Owner-only on Unix (0600, in a 0700 folder it creates).
+        // Preserve owner-only, atomic storage for both approvals and revocations.
         sevak_platform::private_file::write_atomic(&self.path, text.as_bytes())
     }
 }

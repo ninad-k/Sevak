@@ -4,6 +4,8 @@ Sevak includes built-in result sources (plugins) for applications, calculations,
 
 ## All built-in features
 
+For optional additions, browse the [extensions catalog](../extensions.md).
+
 | Plugin | Trigger | Keyword | What Enter does | Learn more |
 |---|---|---|---|---|
 | Applications | Type any app name | (global) | Launch the application | [Applications →](apps.md) |

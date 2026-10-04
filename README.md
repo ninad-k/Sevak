@@ -141,7 +141,8 @@ Sevak also includes:
 - **Gallery** — an optional list of ready-made workflows (site searches,
   Markdown, Base64 and JSON helpers) and offline script plugins (passwords,
   IDs, colors, lorem ipsum, hashes), fetched only when you press **Load
-  gallery**, installed only when you press **Install**, checksum-verified.
+  gallery**, installed only when you press **Install**, checksum-verified. Search and filter packages, including
+  [Pomodoro, color tools, translation and Tauri docs](docs/extensions.md).
 - **Extensions** — Settings → Extensions (and `ext` in the launcher) browses
   that gallery and the theme gallery, shows who published each item and what
   it declares, and installs, updates, switches off and removes them. Developers
@@ -376,7 +377,7 @@ readable right here on GitHub:
 
 ## Build from source
 
-You need **Rust 1.90+**, **Node.js 22+**, and the native libraries required by
+You need **Rust 1.95+**, **Node.js 22+**, and the native libraries required by
 [Tauri 2](https://v2.tauri.app/start/prerequisites/). See the
 [development guide](docs/development.md#running) for platform dependencies.
 

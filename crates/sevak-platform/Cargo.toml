@@ -19,7 +19,7 @@ png = "0.18"
 # (see `thumbnail`).
 tempfile = "3"
 # Process list (name, CPU, memory) for the `kill` task; nothing else of it is used.
-sysinfo = { version = "0.38", default-features = false, features = ["system"] }
+sysinfo = { version = "0.39", default-features = false, features = ["system"] }
 thiserror.workspace = true
 tracing.workspace = true
 
@@ -73,7 +73,7 @@ libc = "0.2"
 # Pure-Rust X11 client (already pulled in by arboard): active window and the
 # XTest extension for the paste keystroke, RECORD to watch typed keywords,
 # RandR for the monitor layout (window management).
-x11rb = { version = "0.13", features = ["randr", "record", "xtest"] }
+x11rb = { version = "0.14", features = ["randr", "record", "xtest"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 plist = "1"
