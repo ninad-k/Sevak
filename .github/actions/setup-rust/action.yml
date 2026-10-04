@@ -1,0 +1,34 @@
+name: Set up Rust
+description: >
+  Install the Rust toolchain pinned in rust-toolchain.toml (the single source of
+  truth for the toolchain version, profile and components). Run after checkout.
+
+inputs:
+  targets:
+    description: Extra compilation targets to add, comma separated (for example the macOS universal build).
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Install the toolchain from rust-toolchain.toml
+      shell: bash
+      env:
+        TARGETS: ${{ inputs.targets }}
+      run: |
+        # GitHub-hosted runners ship rustup; the Fedora container does not.
+        if ! command -v rustup >/dev/null 2>&1; then
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs |
+            sh -s -- -y --profile minimal --default-toolchain none
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.cargo/bin:$PATH"
+        fi
+        # With no argument rustup installs what rust-toolchain.toml asks for
+        # (channel, profile, components, targets).
+        rustup toolchain install
+        for target in ${TARGETS//,/ }; do
+          rustup target add "$target"
+        done
+        rustup show active-toolchain
+        cargo --version

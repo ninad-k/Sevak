@@ -54,6 +54,11 @@ CI also builds and tests on Windows, macOS, Ubuntu and Fedora, so you don't
 need every OS locally. Say in the pull request which platforms you tested on
 by hand.
 
+The Rust version is pinned in `rust-toolchain.toml` (rustup uses it
+automatically). If you add or update a dependency, run `cargo deny check`; see
+[Security and supply chain](docs/development.md#security-and-supply-chain) for
+the licence policy and how to handle an advisory.
+
 ## Pull request titles decide the version
 
 `main` is protected: every change lands through a pull request with passing

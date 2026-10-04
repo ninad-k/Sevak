@@ -1,0 +1,51 @@
+name: CodeQL
+
+# Static analysis of the TypeScript/JavaScript (UI and scripts) and of the
+# GitHub Actions workflows themselves (script injection, untrusted checkout,
+# excessive permissions). Rust is covered by clippy (-D warnings) and
+# cargo-deny instead; see docs/development.md, "Security and supply chain".
+#
+# Needs "Code scanning > CodeQL analysis" set to "Advanced" (or off) in the
+# repository settings: GitHub rejects an advanced workflow's results while the
+# "Default" setup is enabled.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "41 4 * * 2" # Tuesdays 04:41 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write # upload the results to code scanning
+      actions: read # workflow run metadata (needed on private repositories)
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript, actions]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+
+      - uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          category: /language:${{ matrix.language }}
