@@ -61,6 +61,7 @@
   let brokenIcons = $state<Record<string, boolean>>({});
   let input: HTMLInputElement | undefined = $state();
   let shell: HTMLElement | undefined = $state();
+  let opening = $state(false);
   let list: HTMLElement | undefined = $state();
 
   /** The action panel (Right arrow / Ctrl+K): all actions of the selected row. */
@@ -285,6 +286,7 @@
 
   /** The window is being shown; `payload` can prefill the query or carry an error. */
   function applyShow(payload: ShowPayload | null) {
+    playOpen();
     reset();
     void refreshBuffer();
     if (payload?.selection) {
@@ -301,6 +303,12 @@
       return;
     }
     focusInput(true);
+  }
+
+  /** Restarts the short fade-and-settle animation of the card (see `.opening`). */
+  function playOpen() {
+    opening = false;
+    requestAnimationFrame(() => (opening = true));
   }
 
   /** Shows what a workflow's Large Type or text view node produced. */
@@ -1198,7 +1206,7 @@
 <svelte:window onkeydown={onKeydown} onkeyup={onKeyup} onfocus={() => focusInput()} oncontextmenu={onContextMenu} />
 
 <main class="shell" bind:this={shell}>
-  <div class="card" class:covered={largeFull}>
+  <div class="card" class:covered={largeFull} class:opening>
     <div class="bar">
       <img
         class="brand-icon"
@@ -1402,8 +1410,34 @@
     isolation: isolate;
     border: 1px solid var(--border);
     border-radius: var(--radius, 14px);
-    box-shadow: var(--shadow);
+    box-shadow: var(--shadow), var(--card-highlight, inset 0 1px 0 rgba(255, 255, 255, 0.1));
     overflow: hidden;
+  }
+
+  .card.opening {
+    animation: open 150ms cubic-bezier(0.2, 0.8, 0.25, 1);
+  }
+
+  @keyframes open {
+    from {
+      opacity: 0.4;
+      transform: translateY(-6px) scale(0.985);
+    }
+  }
+
+  /* A blurred backdrop fills the whole window: no padding or drop shadow around the card. */
+  :global(:root[data-blur]) .shell {
+    padding: 0;
+  }
+
+  :global(:root[data-blur]) .card {
+    box-shadow: var(--card-highlight, inset 0 1px 0 rgba(255, 255, 255, 0.1));
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card.opening {
+      animation: none;
+    }
   }
 
   /* The background is its own layer so `opacity` fades it, not the content. */

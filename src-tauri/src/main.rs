@@ -3,6 +3,7 @@
 
 mod app;
 mod autostart;
+mod backdrop;
 mod cli;
 mod commands;
 mod direct;

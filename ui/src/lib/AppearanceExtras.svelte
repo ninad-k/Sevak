@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Toggle from "./Toggle.svelte";
   import type { Appearance } from "./settings-ipc";
   import {
     MAX_FONT_SIZE,
@@ -14,11 +15,14 @@
     appearance = $bindable(),
     errors,
     warnings = [],
+    blurSupported = true,
   }: {
     appearance: Appearance;
     errors: AppearanceErrors;
     /** Settings Sevak ignored when it last applied the config, with the reason. */
     warnings?: string[];
+    /** The platform can blur what is behind the window (not Linux). */
+    blurSupported?: boolean;
   } = $props();
 
   /** `#rrggbb` for the native color picker, from any accepted spelling. */
@@ -123,6 +127,18 @@
       <output for="opacity">{appearance.opacity}%</output>
     </div>
   </div>
+
+  {#if blurSupported}
+    <div class="row">
+      <div class="label">
+        <span class="name">Frosted-glass blur</span>
+        <span class="hint">
+          Blurs the desktop behind the search bar. Lower the opacity above to see it.
+        </span>
+      </div>
+      <Toggle bind:checked={appearance.blur} label="Frosted-glass blur" />
+    </div>
+  {/if}
 
   <div class="row">
     <div class="label">

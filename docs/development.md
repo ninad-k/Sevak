@@ -241,7 +241,7 @@ release with `node scripts/package-manifests.mjs <version> SHA256SUMS.txt out`.
 Installed copies poll
 `https://github.com/ninad-k/Sevak/releases/latest/download/latest.json`
 (`plugins.updater` in `tauri.conf.json`; code in `src-tauri/src/updater.rs`) at
-startup and daily, and from the tray's "Check for updates". They install an
+startup, every six hours and when the launcher opens, and from the tray's "Check for updates". They install an
 update only after the user agrees, and only if its signature matches the
 `pubkey` in `tauri.conf.json`.
 
