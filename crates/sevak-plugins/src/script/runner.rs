@@ -693,8 +693,10 @@ mod tests {
     #[test]
     fn query_is_passed_as_the_last_argument_with_the_plugin_environment() {
         let mut spec = spec("mode = \"oneshot\"\nformat = \"alfred\"");
+        // A program PATH has: Unix pins bare names to the file found there.
+        let program = if cfg!(unix) { "sh" } else { "prog" };
         spec.manifest.launch =
-            super::super::manifest::Launch::Command(vec!["prog".into(), "a".into()]);
+            super::super::manifest::Launch::Command(vec![program.into(), "a".into()]);
         let command = spec.command(Some("hello world")).unwrap();
         let args: Vec<_> = command
             .get_args()
