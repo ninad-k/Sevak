@@ -4,7 +4,7 @@ site_url: https://ninad-k.github.io/Sevak/docs/
 repo_url: https://github.com/ninad-k/Sevak
 repo_name: ninad-k/Sevak
 edit_uri: edit/main/docs/
-copyright: Sevak is licensed under the Apache License 2.0.
+copyright: Sevak is licensed under the Apache License 2.0. Alfred is a trademark of Running with Crayons Ltd and 1Password of AgileBits Inc.; Sevak is not affiliated with or endorsed by either.
 
 docs_dir: docs
 # docs/README.md is the folder's landing page when browsing on github.com;
@@ -131,6 +131,8 @@ nav:
       - Troubleshooting: troubleshooting.md
       - FAQ: faq.md
       - Privacy: privacy.md
+  - Security:
+      - Supply chain: security/supply-chain.md
   - Developers:
       - How Sevak works: architecture.md
       - Writing plugins: plugins.md

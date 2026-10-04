@@ -6,6 +6,22 @@ Download Sevak for your operating system from the [Releases page](https://github
 
     Release builds are currently unsigned. Your OS may show a security warning on first run. This is normal; see the platform-specific instructions below.
 
+## Verify your download
+
+Every release lists the SHA-256 of each file in `SHA256SUMS.txt`, and its
+installers carry a build-provenance attestation. Because the installers are not
+code-signed yet, it is worth a minute:
+
+```bash
+# Linux:   sha256sum --check --ignore-missing SHA256SUMS.txt
+# macOS:   shasum -a 256 Sevak_<version>_universal.dmg   (compare with SHA256SUMS.txt)
+# Windows: Get-FileHash .\Sevak_<version>_x64-setup.exe  (compare with SHA256SUMS.txt)
+gh attestation verify <downloaded file> --repo ninad-k/Sevak
+```
+
+What each check proves, the SBOM files and the licence list are explained in
+[Supply chain](security/supply-chain.md).
+
 ## Package managers (coming soon)
 
 Packages for winget (`NinadKulkarni.Sevak`), Scoop, Homebrew and the AUR

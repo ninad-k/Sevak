@@ -125,11 +125,12 @@ Sevak also includes:
   several fallback engines for queries with no match.
 - **Plugins** — enable the sources you need, build a compiled-in extension, or
   drop in a [script plugin](docs/plugins.md#external-plugins) (Python,
-  PowerShell, Node…). Many Alfred Script Filter scripts run unchanged.
+  PowerShell, Node…). Scripts that print the Script Filter JSON format used by
+  Alfred run unchanged in many cases.
 - **Workflows** — chain a keyword, hotkey, Universal Actions entry or
   `sevak --trigger` to actions and outputs in a visual builder (Settings →
-  Workflows). Script filters run your own scripts, with Alfred Script Filter
-  JSON supported; anything that runs code asks first.
+  Workflows). Script filters run your own scripts, and the Script Filter JSON
+  format used by Alfred is understood; anything that runs code asks first.
   [How workflows work →](docs/workflows.md)
 - **Gallery** — an optional list of ready-made workflows and script plugins,
   fetched only when you press **Load gallery**, installed only when you press
@@ -345,4 +346,13 @@ Questions and ideas are welcome in
 [Discussions](https://github.com/ninad-k/Sevak/discussions).
 
 [Apache License 2.0](LICENSE) · Built with Rust, Tauri and Svelte ·
-[Third-party notices](THIRD_PARTY_NOTICES.md) (the bundled WordNet dictionary).
+[Third-party notices](THIRD_PARTY_NOTICES.md) (every dependency's licence, the
+bundled WordNet dictionary and Unicode emoji data) ·
+[Supply chain: checksums, SBOM and build provenance](docs/security/supply-chain.md).
+
+Alfred is a trademark of Running with Crayons Ltd; Sevak is not affiliated with
+or endorsed by it, and mentions it only to describe a compatible file format.
+1Password is a trademark of AgileBits Inc.; Sevak is not affiliated with or
+endorsed by it and works with its official `op` command-line tool. Other product
+names (Google, Apple, Microsoft and so on) belong to their owners and are used
+only to identify them.
