@@ -255,7 +255,8 @@ pub fn parse_remote(argv: &[String]) -> Remote {
             }
         }
         Err(err) => {
-            tracing::warn!(%err, ?argv, "could not parse forwarded arguments; showing");
+            // The count only: the arguments can carry a query.
+            tracing::warn!(%err, args = argv.len(), "could not parse forwarded arguments; showing");
             Remote {
                 launch: Launch::Show,
                 config: None,
