@@ -440,10 +440,18 @@ fn quote(arg: &str) -> String {
 }
 
 /// `dir` joined with `relative`, provided `relative` is a plain relative path:
-/// not absolute, no drive or root, and no `..` anywhere.
+/// not absolute, no drive or root, no backslash and no `..` anywhere (the same
+/// answer on every system).
 pub fn relative_inside(dir: &Path, relative: &str) -> Option<PathBuf> {
     let path = Path::new(relative);
+    // Backslashes and drive prefixes are separators and roots on Windows only,
+    // but a manifest is portable text: it means the same on every system.
+    let windows_style = relative.contains('\\')
+        || relative.split_once(':').is_some_and(|(drive, _)| {
+            drive.len() == 1 && drive.as_bytes()[0].is_ascii_alphabetic()
+        });
     let plain = !relative.is_empty()
+        && !windows_style
         && path
             .components()
             .all(|part| matches!(part, Component::Normal(_) | Component::CurDir));
@@ -571,7 +579,16 @@ mod tests {
 
     #[test]
     fn support_files_cannot_leave_the_plugin_folder() {
-        for bad in ["../x.py", "/etc/passwd", "a/../../b", "C:\\\\x.py", ""] {
+        for bad in [
+            "../x.py",
+            "/etc/passwd",
+            "a/../../b",
+            "C:\\\\x.py",
+            "C:x.py",
+            "a\\b.py",
+            "..\\x.py",
+            "",
+        ] {
             let text = format!("{MINIMAL}files = [{bad:?}]\n");
             let err = Manifest::parse(&text, "x").expect_err(bad);
             assert!(err.contains("files"), "{err}");
