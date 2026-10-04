@@ -356,7 +356,7 @@ export function mockSettings(): SettingsDto {
   return {
     config: {
       general: {
-        hotkey: "Alt+Space",
+        hotkey: "Super+Space",
         actions_hotkey: "Ctrl+Alt+Space",
         hide_on_blur: true,
         launch_at_login: false,

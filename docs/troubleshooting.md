@@ -20,7 +20,7 @@ Before diving into specific issues, try these first:
 
 1. **Choose a different key** in Settings → General. Your current key may be in use by another app or your desktop.
 
-2. **macOS:** The default is ++option+space++ (Alt and Option are the same key on Mac). If it doesn't work, Option+Space might be reserved by Spotlight or another app—try a different key.
+2. **macOS:** The default is ++cmd+space++, which is also Spotlight's shortcut. Sevak asks once whether it may turn Spotlight's shortcut off; if you said No it uses ++option+space++ (Alt and Option are the same key on Mac). See [Win+Space, Cmd+Space and Super+Space](#super-space).
 
 3. **Linux Wayland (GNOME):** Sevak cannot register global keys on Wayland. Run this command:
 
@@ -28,15 +28,71 @@ Before diving into specific issues, try these first:
    sevak --setup-hotkey
    ```
    
-   This creates a GNOME custom keyboard shortcut. If you get a conflict warning, follow the instructions to free ++alt+space++ or choose another key.
+   This creates a GNOME custom keyboard shortcut. If GNOME's input-source switcher uses the same key (++super+space++), the command offers to move it; see [below](#super-space). For other conflict warnings, follow the instructions to free the key or choose another one.
 
-4. **Linux Wayland (other desktops):** Bind ++alt+space++ or another key to `sevak --toggle` in your desktop's keyboard settings (KDE Settings, Sway config, etc.).
+4. **Linux Wayland (other desktops):** Bind a key such as ++alt+space++ to `sevak --toggle` in your desktop's keyboard settings (KDE Settings, Sway config, etc.).
 
-5. **Linux X11 on GNOME:** ++alt+space++ is reserved for the window menu. Try ++ctrl+space++ or ++super+space++ (but ++super+space++ switches input sources if you have multiple layouts). Or free ++alt+space++:
+5. **Linux X11 on GNOME:** ++super+space++ switches input sources: Sevak asks once whether it may move that shortcut (see [below](#super-space)). ++alt+space++ is reserved for the window menu. Try ++ctrl+space++, or free ++alt+space++:
 
    ```bash
    gsettings set org.gnome.desktop.wm.keybindings activate-window-menu "[]"
    ```
+
+## Win+Space, Cmd+Space and Super+Space {#super-space}
+
+Sevak's default shortcut is **Super+Space**: ++win+space++ on Windows, ++cmd+space++ on macOS and ++super+space++ on Linux. Every system already uses that key (Windows switches the input language, macOS opens Spotlight, GNOME switches input sources), so Sevak takes it over. **Settings → General → Shortcut** always says how the key reaches Sevak:
+
+| Status line | Meaning |
+|---|---|
+| (nothing) | Registered with the system in the normal way |
+| Taken over with the Windows keyboard hook | Windows, no setting changed |
+| Spotlight's shortcut is turned off, with your permission | macOS |
+| GNOME's input-source shortcut was moved ... | GNOME |
+| Cmd+Space stays with Spotlight, so Sevak is using Option+Space | macOS, you said No |
+
+Existing installations keep the shortcut already in their `config.toml`; only new config files default to Super+Space. Sevak never edits another app's settings.
+
+### Windows: the input-language switch
+
+Windows uses ++win+space++ to switch the input language. Sevak takes the key with a keyboard hook: it sees the key before Windows, recognises exactly your shortcut and swallows it, so Windows does not also switch language and the Start menu does not open when you release ++win++. Nothing in Windows' settings changes, and the key is Windows' again when Sevak quits.
+
+- Only the exact combination is taken. ++win+shift+space++ (previous input language) keeps working, as does ++alt+shift++ if it is your switcher. If you rely on ++win+space++ to change layout, switch with those or pick another Sevak shortcut.
+- The hook only compares key presses with your shortcuts. It does not read, keep, log or send what you type.
+- Windows does not hand keys of an administrator window to a program that is not running as administrator, so while such a window has focus the shortcut does not reach Sevak. Run Sevak as administrator if you need it there.
+- If the status says the keyboard hook could not be installed (some security software blocks hooks), choose ++alt+space++ or another key Windows lets Sevak register.
+- The hook also takes any other shortcut that another app has already registered, and says so in the status.
+
+### macOS: Spotlight
+
+Spotlight owns ++cmd+space++, so registering it fails while Spotlight's shortcut is on. The first time that happens Sevak shows a dialog: "Cmd+Space is used by Spotlight. Let Sevak use it?"
+
+- **Yes:** Sevak turns off Spotlight's "Show Spotlight search" keyboard shortcut (it writes that one entry of `com.apple.symbolichotkeys` and asks macOS to reload its settings) and registers ++cmd+space++. Nothing else about Spotlight changes. If the shortcut still opens Spotlight, log out and in again, or switch it off in System Settings → Keyboard → Keyboard Shortcuts → Spotlight.
+- **No:** Sevak uses ++option+space++ instead and does not ask again.
+
+Your answer is kept in `hotkey-takeover.json` in the data folder. To restore Spotlight's shortcut, click **Restore Spotlight's shortcut** in Settings → General, or run `sevak --restore-hotkey`. To let Sevak have the key later, click **Let Sevak use Cmd+Space** in Settings (it asks again). If a macOS update turns Spotlight's shortcut back on, Sevak turns it off again, because you allowed it.
+
+### GNOME: input sources
+
+GNOME uses ++super+space++ to switch input sources (keyboard layouts). `sevak --setup-hotkey`, the **Set up GNOME shortcut** button (Wayland) and, on X11, the first failed registration of ++super+space++ offer to move that shortcut: `switch-input-source` and `switch-input-source-backward` in `org.gnome.desktop.wm.keybindings` get ++ctrl++ added (++super+space++ becomes ++ctrl+super+space++, ++shift+super+space++ becomes ++ctrl+shift+super+space++). Sevak shows the old and new values, changes nothing without your yes, logs what it changed and keeps the old values in `hotkey-takeover.json`.
+
+To put GNOME's shortcuts back, click **Restore GNOME's input-source shortcut** in Settings or run:
+
+```bash
+sevak --restore-hotkey
+```
+
+Sevak's own shortcut may then clash with GNOME's again: choose another key, for example ++alt+space++ or ++ctrl+space++.
+
+### Going back to Alt+Space
+
+Open **Settings → General → Shortcut**, choose **Presets → Alt+Space** (Option+Space on macOS) and press **Save**, or set it in `config.toml`:
+
+```toml
+[general]
+hotkey = "Alt+Space"
+```
+
+Reload with the tray menu. Then use the **Restore** button or `sevak --restore-hotkey` if you want the system shortcut back.
 
 ## There is no tray icon on Linux
 

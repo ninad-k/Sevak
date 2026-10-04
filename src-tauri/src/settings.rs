@@ -5,17 +5,18 @@ use std::collections::HashSet;
 use serde::Serialize;
 use sevak_core::config::{Config, Theme};
 use sevak_core::theme;
-use sevak_platform::{gnome, open, paths, session, HotkeyStrategy};
+use sevak_platform::accelerator;
+use sevak_platform::{gnome, hotkey_hook, open, paths, session, HotkeyStrategy};
 use sevak_plugins::keywords::{
     configurable_keywords, ConfigurableKeyword, KeywordOwners, FIXED_KEYWORDS,
 };
 use sevak_plugins::{PluginInfo, PluginRegistry};
 use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
-use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 use crate::state::AppState;
-use crate::{app, hotkey, window};
+use crate::{app, hotkey, takeover, window};
 
 const WINDOW_TITLE: &str = "Sevak Settings";
 /// Same frontend as the launcher; `main.ts` picks the view from the hash.
@@ -103,14 +104,28 @@ pub async fn get_settings(app: AppHandle) -> SettingsDto {
     }
 }
 
-/// Parses a shortcut with the same parser the global-shortcut plugin uses.
+/// Parses a shortcut with the same parser the global-shortcut plugin uses
+/// (after rewriting the key names it does not know, such as `Win`).
 fn check_accelerator(accelerator: &str) -> Result<(), String> {
-    accelerator.parse::<Shortcut>().map(|_| ()).map_err(|err| {
-        format!(
-            "\"{accelerator}\" is not a valid shortcut: {}",
-            hotkey::parse_error_reason(&err)
-        )
-    })
+    hotkey::parse_shortcut(accelerator)
+        .map(|_| ())
+        .map_err(|reason| format!("\"{accelerator}\" is not a valid shortcut: {reason}"))
+}
+
+/// Writes the shortcuts the portable way: `Win`, `Windows` and `Meta` become
+/// `Super`, which every OS's parser knows (and which shows as Win, Cmd or
+/// Super on each). Everything else is left as typed.
+fn normalize_hotkeys(config: &mut Config) {
+    let fix = |key: &mut String| *key = accelerator::normalize(key);
+    fix(&mut config.general.hotkey);
+    if !config.general.actions_hotkey.trim().is_empty() {
+        fix(&mut config.general.actions_hotkey);
+    }
+    for binding in &mut config.hotkeys {
+        if !binding.key.trim().is_empty() {
+            fix(&mut binding.key);
+        }
+    }
 }
 
 /// Checks a configuration the way the settings form does, so a hand-crafted
@@ -230,7 +245,7 @@ fn validate_builtin_keywords(config: &Config, web: &HashSet<String>) -> Result<(
 /// A key's identity for finding duplicates: spelling variants of one
 /// shortcut (`ctrl+alt+t`, `Control + Alt + T`) must compare equal.
 fn key_identity(accelerator: &str, strategy: HotkeyStrategy) -> String {
-    match (strategy, accelerator.parse::<Shortcut>()) {
+    match (strategy, hotkey::parse_shortcut(accelerator)) {
         (HotkeyStrategy::InApp, Ok(shortcut)) => shortcut.id().to_string(),
         _ => accelerator
             .chars()
@@ -305,6 +320,23 @@ pub fn suspend_hotkey(app: AppHandle) {
     if let Err(err) = app.global_shortcut().unregister_all() {
         tracing::warn!("could not suspend the hotkey: {err}");
     }
+    // The keyboard hook's keys too (Win+Space would toggle the launcher instead
+    // of reaching the form).
+    hotkey_hook::set_suspended(true);
+}
+
+/// The recorder asks the keyboard hook for the next shortcut, because Windows
+/// never lets the form see Win+Space (or a key another app owns). The answer
+/// comes as the `sevak:hotkey-recorded` event. Fails where there is no hook:
+/// the form then records with the keys it sees itself.
+#[tauri::command]
+pub fn start_hotkey_recording() -> Result<(), String> {
+    hotkey_hook::start_recording()
+}
+
+#[tauri::command]
+pub fn stop_hotkey_recording() {
+    hotkey_hook::stop_recording();
 }
 
 #[tauri::command]
@@ -319,8 +351,9 @@ pub async fn save_settings(app: AppHandle, config: Config) -> Result<(), String>
         .map_err(|err| format!("saving did not finish: {err}"))?
 }
 
-fn save(app: &AppHandle, config: Config) -> Result<(), String> {
+fn save(app: &AppHandle, mut config: Config) -> Result<(), String> {
     let state = app.state::<AppState>();
+    normalize_hotkeys(&mut config);
     validate(&config, state.display.hotkey_strategy())?;
     let config = config.normalized();
     config
@@ -363,9 +396,15 @@ pub async fn pick_directory(app: AppHandle, window: WebviewWindow) -> Option<Str
 #[tauri::command]
 pub async fn setup_wayland_hotkey(app: AppHandle, hotkey: String) -> Result<String, String> {
     let customs = hotkey::custom_shortcuts(&app.state::<AppState>().config());
-    tauri::async_runtime::spawn_blocking(move || gnome::setup_for_ui(hotkey.trim(), &customs))
-        .await
-        .map_err(|err| format!("the setup did not finish: {err}"))?
+    tauri::async_runtime::spawn_blocking(move || {
+        // Super+Space is GNOME's input-source switcher: offer to move it first.
+        let moved = takeover::offer_gnome_for_setup(&app, hotkey.trim());
+        gnome::setup_for_ui(hotkey.trim(), &customs)
+            .map(|text| format!("{moved}{text}"))
+            .map_err(|text| format!("{moved}{text}"))
+    })
+    .await
+    .map_err(|err| format!("the setup did not finish: {err}"))?
 }
 
 #[tauri::command]
@@ -438,7 +477,17 @@ mod tests {
     #[test]
     fn hotkeys_are_parsed_like_the_plugin_does() {
         let mut config = Config::default();
-        for good in ["Alt+Space", "Ctrl+Shift+K", "Super+F12", "CmdOrCtrl+Comma"] {
+        for good in [
+            "Alt+Space",
+            "Ctrl+Shift+K",
+            "Super+F12",
+            "CmdOrCtrl+Comma",
+            "Super+Space",
+            "Win+Space",
+            "windows + space",
+            "Meta+F9",
+            "Cmd+Space",
+        ] {
             config.general.hotkey = good.to_owned();
             assert_eq!(check(&config), Ok(()), "{good}");
         }
@@ -446,6 +495,45 @@ mod tests {
             config.general.hotkey = bad.to_owned();
             assert!(check(&config).is_err(), "{bad:?} should be rejected");
         }
+    }
+
+    #[test]
+    fn the_default_super_space_validates_and_round_trips() {
+        let mut config = Config::default();
+        assert_eq!(config.general.hotkey, "Super+Space");
+        assert_eq!(check(&config), Ok(()));
+        // Spelled the way Windows users say it, it is saved the portable way
+        // and is still the same key.
+        config.general.hotkey = " Win + Space ".to_owned();
+        normalize_hotkeys(&mut config);
+        assert_eq!(config.general.hotkey, "Super+Space");
+        assert_eq!(check(&config), Ok(()));
+        assert_eq!(
+            config.clone().normalized().general.hotkey,
+            "Super+Space",
+            "saving keeps it"
+        );
+    }
+
+    #[test]
+    fn normalizing_rewrites_every_kind_of_key_but_leaves_the_rest() {
+        let mut config = Config::default();
+        config.general.actions_hotkey = "Ctrl+Windows+A".to_owned();
+        config.hotkeys = vec![
+            entry("Meta+T", Some("> "), None),
+            entry("ctrl+alt+k", Some("x"), None),
+            entry("", Some("x"), None),
+        ];
+        normalize_hotkeys(&mut config);
+        assert_eq!(config.general.actions_hotkey, "Ctrl+Super+A");
+        assert_eq!(config.hotkeys[0].key, "Super+T");
+        // Only spellings are touched, not case or order.
+        assert_eq!(config.hotkeys[1].key, "ctrl+alt+k");
+        assert_eq!(config.hotkeys[2].key, "");
+        // An off Universal Actions key stays off.
+        config.general.actions_hotkey = "  ".to_owned();
+        normalize_hotkeys(&mut config);
+        assert_eq!(config.general.actions_hotkey, "  ");
     }
 
     #[test]
@@ -629,8 +717,12 @@ mod tests {
     #[test]
     fn the_actions_key_cannot_clash_with_other_keys() {
         let mut config = Config::default();
+        config.general.actions_hotkey = "win + space".to_owned();
+        assert!(check(&config).unwrap_err().contains("same as the main"));
+        config.general.hotkey = "Alt+Space".to_owned();
         config.general.actions_hotkey = "alt+space".to_owned();
         assert!(check(&config).unwrap_err().contains("same as the main"));
+        config.general.hotkey = Config::default().general.hotkey;
 
         let mut config = with_entries(vec![entry("ctrl + alt + space", Some("x"), None)]);
         assert!(check(&config).unwrap_err().contains("more than once"));
@@ -647,7 +739,7 @@ mod tests {
         assert!(check(&twice).unwrap_err().contains("more than once"));
 
         // The main shortcut counts, however it is spelled.
-        let clash = with_entries(vec![entry("alt+space", Some("a"), None)]);
+        let clash = with_entries(vec![entry("meta + SPACE", Some("a"), None)]);
         assert!(check(&clash).is_err());
     }
 

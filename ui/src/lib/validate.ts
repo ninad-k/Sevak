@@ -2,6 +2,7 @@
 // the Rust shell, which re-checks everything on save; the shortcut itself is
 // parsed by Rust only (see `validateHotkey`).
 
+import { acceleratorId } from "./accelerator";
 import {
   fallbackList,
   type Appearance,
@@ -66,8 +67,8 @@ export function isColor(text: string): boolean {
   return match !== null && match.slice(1).every((channel) => Number(channel) <= 255);
 }
 
-/** Spellings of one key that Sevak treats as the same shortcut. */
-const keyId = (key: string) => key.replace(/\s+/g, "").toLowerCase();
+/** Spellings of one key that Sevak treats as the same shortcut (Win and Super, order, case, spaces). */
+const keyId = (key: string) => (key.trim() === "" ? "" : acceleratorId(key));
 
 export function hotkeyErrors(
   binding: HotkeyBinding,

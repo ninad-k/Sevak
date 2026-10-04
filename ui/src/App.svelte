@@ -5,6 +5,7 @@
   import PreviewPane from "./lib/PreviewPane.svelte";
   import ResultRow from "./lib/ResultRow.svelte";
   import TextView from "./lib/TextView.svelte";
+  import { displayAccelerator } from "./lib/accelerator";
   import { applyAppearance } from "./lib/appearance";
   import { parentPath } from "./lib/path";
   import { applyTheme } from "./lib/theme";
@@ -222,6 +223,13 @@
 
   const hotkeyError = $derived(status?.hotkey.error ?? null);
   const accelerator = $derived(status?.hotkey.accelerator ?? "");
+  /** The shortcut by this OS's names for the keys (Win+Space, Cmd+Space...). */
+  const shownAccelerator = $derived(
+    displayAccelerator(
+      accelerator,
+      status?.display === "windows" ? "windows" : status?.display === "macos" ? "macos" : "linux",
+    ),
+  );
   const hasQuery = $derived(query.trim() !== "");
   // While the index is still filling, a query often yields nothing but the
   // "search the web" fallback; say why instead of looking like a miss.
@@ -1229,8 +1237,8 @@
 
     {#if hotkeyError}
       <div class="notice" role="status">
-        Shortcut "{accelerator}" is unavailable: {hotkeyError}. Choose another one in Settings
-        (tray menu).
+        Shortcut "{shownAccelerator}" is unavailable: {hotkeyError}. Choose another one in
+        Settings (tray menu).
       </div>
     {/if}
 

@@ -638,7 +638,8 @@ testable without an OS:
 
 - `PlatformProvider::start_key_listener` reports `KeyEvent::{Char, Backspace,
   Reset}` (never key codes) from a low-level keyboard hook (Windows,
-  `windows/keyhook_expand.rs`), a listen-only event tap (macOS) or the X11
+  `windows/keyhook_expand.rs`, on the hook thread it shares with the global
+  hotkeys in `windows/keyhook.rs`), a listen-only event tap (macOS) or the X11
   RECORD extension (Linux). Listeners translate with the focused app's layout,
   ignore events Sevak injects, and turn everything that is not plain typing
   (shortcuts, caret keys, clicks, focus changes) into `Reset`. `KeyEvent`'s

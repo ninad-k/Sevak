@@ -12,13 +12,15 @@ Open Sevak once. You'll see a tray or menu-bar icon that keeps it always accessi
 
 ## 2. Bring up the search bar
 
-Press **++alt+space++** (++option+space++ on macOS) to open the launcher.
+Press **++win+space++** (++cmd+space++ on macOS, ++super+space++ on Linux) to open the launcher.
+
+That key already means something to your system (Windows switches the input language, macOS opens Spotlight), so Sevak takes it over. On Windows nothing needs to be asked. On macOS and GNOME, Sevak asks once whether it may turn the system shortcut off; say No and it uses ++option+space++ instead. See [the Win+Space, Cmd+Space and Super+Space notes](troubleshooting.md#super-space).
 
 ![An empty Sevak search bar, ready for input](media/launcher-ready.png)
 
 Type immediately—the cursor is already in the search box. Press **++esc++** to hide it.
 
-If ++alt+space++ is already used by another app, open **Settings** from the tray and change it.
+If the shortcut does not work or is already used by another app, open **Settings** from the tray and pick another one (the **Presets** list has ++alt+space++).
 
 ## 3. Launch an app
 

@@ -658,6 +658,235 @@ pub fn manual_custom_instructions(customs: &[CustomShortcut]) -> String {
     text
 }
 
+// ---- Taking Super+Space from GNOME's input-source switcher -----------------
+
+/// Reads and writes GNOME settings. The real one runs `gsettings`
+/// ([`system_gsettings`]); tests use a fake, so nothing here touches the user's
+/// settings unless a caller on Linux asks it to.
+pub trait Gsettings {
+    /// `gsettings get schema key`.
+    fn get(&self, schema: &str, key: &str) -> Result<String>;
+    /// `gsettings set schema key value` (`value` is a GVariant literal).
+    fn set(&self, schema: &str, key: &str, value: &str) -> Result<()>;
+    /// `gsettings list-recursively schema`.
+    fn list_recursively(&self, schema: &str) -> Result<String>;
+}
+
+/// The real `gsettings`, on Linux.
+#[cfg(target_os = "linux")]
+struct SystemGsettings;
+
+#[cfg(target_os = "linux")]
+impl Gsettings for SystemGsettings {
+    fn get(&self, schema: &str, key: &str) -> Result<String> {
+        gsettings(&["get", schema, key])
+    }
+
+    fn set(&self, schema: &str, key: &str, value: &str) -> Result<()> {
+        gsettings(&["set", schema, key, value]).map(|_| ())
+    }
+
+    fn list_recursively(&self, schema: &str) -> Result<String> {
+        gsettings(&["list-recursively", schema])
+    }
+}
+
+/// The real GNOME settings, or `None` off Linux.
+pub fn system_gsettings() -> Option<Box<dyn Gsettings>> {
+    #[cfg(target_os = "linux")]
+    {
+        Some(Box::new(SystemGsettings))
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        None
+    }
+}
+
+/// Where GNOME keeps the window-manager shortcuts, including the input-source
+/// switcher (Super+Space by default).
+const INPUT_SOURCE_SCHEMA: &str = "org.gnome.desktop.wm.keybindings";
+/// The input-source switcher and its backward twin (Shift+Super+Space).
+const INPUT_SOURCE_KEYS: [&str; 2] = ["switch-input-source", "switch-input-source-backward"];
+/// Modifiers tried, in this order, to move a shortcut out of the way.
+const MOVE_MODIFIERS: [(&str, &str); 2] = [("<Control>", "control"), ("<Alt>", "alt")];
+
+/// One GNOME shortcut Sevak changed, with what it was before.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InputSourceMove {
+    pub schema: String,
+    pub key: String,
+    /// The accelerators before the change (what [`restore_input_sources`] writes back).
+    pub previous: Vec<String>,
+    /// The accelerators Sevak wrote.
+    pub updated: Vec<String>,
+}
+
+impl InputSourceMove {
+    /// One line for a log or a confirmation: `switch-input-source: [..] -> [..]`.
+    pub fn describe(&self) -> String {
+        format!(
+            "{}: {} -> {}",
+            self.key,
+            format_gvariant_strv(&self.previous),
+            format_gvariant_strv(&self.updated)
+        )
+    }
+}
+
+/// Rewrites one accelerator of the family `target` (and `target` with Shift,
+/// the backward switcher) with `modifier` added, or drops it with `None`.
+fn moved_accelerator(
+    existing: &str,
+    target: &(BTreeSet<String>, String),
+    modifier: Option<&str>,
+) -> Option<Option<String>> {
+    let (mods, key) = normalize_accelerator(existing)?;
+    let mut without_shift = mods.clone();
+    without_shift.remove("shift");
+    if without_shift != target.0 || *key != target.1 {
+        return None;
+    }
+    Some(modifier.map(|modifier| format!("{modifier}{existing}")))
+}
+
+/// Works out how to move GNOME's input-source shortcuts off `accelerator` (in
+/// GNOME syntax, such as `<Super>space`), without changing anything.
+///
+/// Empty when neither switcher key uses `accelerator`. Otherwise the shortcut
+/// is not removed but moved: Control (or Alt, if that is taken or already part
+/// of the key) is added, so Super+Space becomes Ctrl+Super+Space and the
+/// backward switcher Shift+Super+Space becomes Ctrl+Shift+Super+Space. Only
+/// accelerators of that pair are touched; other bindings in the lists stay.
+pub fn plan_input_source_move(
+    gs: &dyn Gsettings,
+    accelerator: &str,
+) -> Result<Vec<InputSourceMove>> {
+    let Some(target) = normalize_accelerator(accelerator) else {
+        return Ok(Vec::new());
+    };
+    let mut lists = Vec::new();
+    for key in INPUT_SOURCE_KEYS {
+        let raw = gs.get(INPUT_SOURCE_SCHEMA, key)?;
+        let list = parse_gvariant_strv(&raw).ok_or_else(|| PlatformError::UnexpectedOutput {
+            command: format!("gsettings get {INPUT_SOURCE_SCHEMA} {key}"),
+            output: raw.trim().to_owned(),
+        })?;
+        lists.push((key, list));
+    }
+    let conflicts = lists.iter().any(|(_, list)| {
+        list.iter()
+            .any(|item| normalize_accelerator(item).as_ref() == Some(&target))
+    });
+    if !conflicts {
+        return Ok(Vec::new());
+    }
+
+    // A modifier whose result no other GNOME shortcut uses.
+    let mut taken = String::new();
+    for schema in [
+        INPUT_SOURCE_SCHEMA,
+        "org.gnome.shell.keybindings",
+        "org.gnome.mutter.keybindings",
+        "org.gnome.settings-daemon.plugins.media-keys",
+    ] {
+        match gs.list_recursively(schema) {
+            Ok(output) => taken.push_str(&output),
+            Err(err) => tracing::debug!(schema, %err, "skipping conflict check"),
+        }
+    }
+    let modifier = MOVE_MODIFIERS.iter().find_map(|(syntax, name)| {
+        let free = !target.0.contains(*name)
+            && [
+                format!("{syntax}{accelerator}"),
+                format!("<Shift>{syntax}{accelerator}"),
+            ]
+            .iter()
+            .all(|candidate| find_conflicts(&taken, candidate).is_empty());
+        free.then_some(*syntax)
+    });
+
+    let mut moves = Vec::new();
+    for (key, previous) in lists {
+        let mut changed = false;
+        let mut updated = Vec::new();
+        for item in &previous {
+            match moved_accelerator(item, &target, modifier) {
+                Some(Some(new)) => {
+                    changed = true;
+                    updated.push(new);
+                }
+                Some(None) => changed = true,
+                None => updated.push(item.clone()),
+            }
+        }
+        if changed {
+            moves.push(InputSourceMove {
+                schema: INPUT_SOURCE_SCHEMA.to_owned(),
+                key: key.to_owned(),
+                previous,
+                updated,
+            });
+        }
+    }
+    Ok(moves)
+}
+
+/// Writes the moves. If one fails, the ones already written are undone, so
+/// the settings are never left half changed.
+pub fn apply_input_source_move(gs: &dyn Gsettings, moves: &[InputSourceMove]) -> Result<()> {
+    for (done, change) in moves.iter().enumerate() {
+        if let Err(err) = gs.set(
+            &change.schema,
+            &change.key,
+            &format_gvariant_strv(&change.updated),
+        ) {
+            for undone in &moves[..done] {
+                let _ = gs.set(
+                    &undone.schema,
+                    &undone.key,
+                    &format_gvariant_strv(&undone.previous),
+                );
+            }
+            return Err(err);
+        }
+        tracing::info!("GNOME shortcut changed: {}", change.describe());
+    }
+    Ok(())
+}
+
+/// Puts the input-source shortcuts back as they were. Returns one line per
+/// change for the log and the CLI; a shortcut changed by someone else since is
+/// restored too, and the line says so.
+pub fn restore_input_sources(
+    gs: &dyn Gsettings,
+    moves: &[InputSourceMove],
+) -> std::result::Result<Vec<String>, String> {
+    let mut lines = Vec::new();
+    for change in moves {
+        let now = gs
+            .get(&change.schema, &change.key)
+            .ok()
+            .and_then(|raw| parse_gvariant_strv(&raw));
+        gs.set(
+            &change.schema,
+            &change.key,
+            &format_gvariant_strv(&change.previous),
+        )
+        .map_err(|err| format!("could not restore {}: {err}", change.key))?;
+        let note = match now {
+            Some(now) if now != change.updated => " (it had been changed since Sevak moved it)",
+            _ => "",
+        };
+        lines.push(format!(
+            "{}: restored to {}{note}",
+            change.key,
+            format_gvariant_strv(&change.previous)
+        ));
+    }
+    Ok(lines)
+}
+
 /// Runs `gsettings` with `args` (no shell involved) and returns its stdout.
 #[cfg(target_os = "linux")]
 fn gsettings(args: &[&str]) -> Result<String> {
@@ -941,5 +1170,256 @@ org.gnome.desktop.wm.keybindings weird uint32 3
     fn toggle_command_ends_with_toggle() {
         let command = toggle_command().unwrap();
         assert!(command.ends_with(" --toggle"));
+    }
+
+    // ---- moving the input-source switcher ----
+
+    use std::cell::RefCell;
+    use std::collections::BTreeMap;
+
+    /// GNOME's settings as a map; records every write.
+    #[derive(Default)]
+    struct FakeGnome {
+        values: RefCell<BTreeMap<(String, String), String>>,
+        writes: RefCell<Vec<(String, String)>>,
+        fail_set_of: Option<&'static str>,
+    }
+
+    impl FakeGnome {
+        fn with(entries: &[(&str, &str)]) -> Self {
+            let fake = Self::default();
+            for (key, value) in entries {
+                fake.values.borrow_mut().insert(
+                    (INPUT_SOURCE_SCHEMA.to_owned(), (*key).to_owned()),
+                    (*value).to_owned(),
+                );
+            }
+            fake
+        }
+
+        fn stock() -> Self {
+            Self::with(&[
+                ("switch-input-source", "['<Super>space', 'XF86Keyboard']"),
+                (
+                    "switch-input-source-backward",
+                    "['<Shift><Super>space', '<Shift>XF86Keyboard']",
+                ),
+                ("activate-window-menu", "['<Alt>space']"),
+            ])
+        }
+
+        fn value(&self, key: &str) -> String {
+            self.values.borrow()[&(INPUT_SOURCE_SCHEMA.to_owned(), key.to_owned())].clone()
+        }
+    }
+
+    impl Gsettings for FakeGnome {
+        fn get(&self, schema: &str, key: &str) -> Result<String> {
+            self.values
+                .borrow()
+                .get(&(schema.to_owned(), key.to_owned()))
+                .cloned()
+                .ok_or_else(|| PlatformError::CommandFailed {
+                    command: format!("gsettings get {schema} {key}"),
+                    message: "no such key".to_owned(),
+                })
+        }
+
+        fn set(&self, schema: &str, key: &str, value: &str) -> Result<()> {
+            if self.fail_set_of == Some(key) {
+                return Err(PlatformError::CommandFailed {
+                    command: format!("gsettings set {schema} {key}"),
+                    message: "denied".to_owned(),
+                });
+            }
+            self.writes
+                .borrow_mut()
+                .push((key.to_owned(), value.to_owned()));
+            self.values
+                .borrow_mut()
+                .insert((schema.to_owned(), key.to_owned()), value.to_owned());
+            Ok(())
+        }
+
+        fn list_recursively(&self, schema: &str) -> Result<String> {
+            let values = self.values.borrow();
+            Ok(values
+                .iter()
+                .filter(|((s, _), _)| s == schema)
+                .map(|((s, k), v)| format!("{s} {k} {v}\n"))
+                .collect())
+        }
+    }
+
+    #[test]
+    fn super_space_is_moved_to_ctrl_super_space() {
+        let gnome = FakeGnome::stock();
+        let moves = plan_input_source_move(&gnome, "<Super>space").unwrap();
+        assert_eq!(moves.len(), 2);
+        assert_eq!(moves[0].key, "switch-input-source");
+        assert_eq!(
+            moves[0].previous,
+            ["<Super>space".to_owned(), "XF86Keyboard".to_owned()]
+        );
+        assert_eq!(
+            moves[0].updated,
+            [
+                "<Control><Super>space".to_owned(),
+                "XF86Keyboard".to_owned()
+            ]
+        );
+        assert_eq!(moves[1].key, "switch-input-source-backward");
+        assert_eq!(
+            moves[1].updated,
+            [
+                "<Control><Shift><Super>space".to_owned(),
+                "<Shift>XF86Keyboard".to_owned()
+            ]
+        );
+        // Planning changes nothing.
+        assert!(gnome.writes.borrow().is_empty());
+        assert!(moves[0]
+            .describe()
+            .starts_with("switch-input-source: ['<Super>space'"));
+    }
+
+    #[test]
+    fn nothing_is_planned_when_the_switcher_does_not_use_the_key() {
+        let gnome = FakeGnome::stock();
+        assert!(plan_input_source_move(&gnome, "<Alt>space")
+            .unwrap()
+            .is_empty());
+        assert!(plan_input_source_move(&gnome, "<Control>space")
+            .unwrap()
+            .is_empty());
+        assert!(plan_input_source_move(&gnome, "").unwrap().is_empty());
+        // The user already moved it off Super+Space.
+        let moved = FakeGnome::with(&[
+            ("switch-input-source", "['<Control><Super>space']"),
+            ("switch-input-source-backward", "@as []"),
+        ]);
+        assert!(plan_input_source_move(&moved, "<Super>space")
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn the_replacement_avoids_a_key_gnome_already_uses() {
+        let gnome = FakeGnome::stock();
+        gnome.values.borrow_mut().insert(
+            (
+                INPUT_SOURCE_SCHEMA.to_owned(),
+                "toggle-maximized".to_owned(),
+            ),
+            "['<Control><Super>space']".to_owned(),
+        );
+        let moves = plan_input_source_move(&gnome, "<Super>space").unwrap();
+        assert_eq!(moves[0].updated[0], "<Alt><Super>space");
+    }
+
+    #[test]
+    fn with_no_free_modifier_the_binding_is_removed() {
+        let gnome = FakeGnome::with(&[
+            ("switch-input-source", "['<Control><Alt><Super>space']"),
+            ("switch-input-source-backward", "@as []"),
+        ]);
+        let moves = plan_input_source_move(&gnome, "<Control><Alt><Super>space").unwrap();
+        assert_eq!(moves.len(), 1);
+        assert!(moves[0].updated.is_empty());
+    }
+
+    #[test]
+    fn only_the_conflicting_pair_is_touched() {
+        let gnome = FakeGnome::with(&[
+            (
+                "switch-input-source",
+                "['<Super>space', '<Super>k', '<Alt>Shift_L']",
+            ),
+            ("switch-input-source-backward", "['<Super>j']"),
+        ]);
+        let moves = plan_input_source_move(&gnome, "<Super>space").unwrap();
+        // The backward switcher had nothing of the pair.
+        assert_eq!(moves.len(), 1);
+        assert_eq!(
+            moves[0].updated,
+            [
+                "<Control><Super>space".to_owned(),
+                "<Super>k".to_owned(),
+                "<Alt>Shift_L".to_owned()
+            ]
+        );
+    }
+
+    #[test]
+    fn applying_writes_gvariant_lists_and_restoring_puts_them_back() {
+        let gnome = FakeGnome::stock();
+        let before = (
+            gnome.value("switch-input-source"),
+            gnome.value("switch-input-source-backward"),
+        );
+        let moves = plan_input_source_move(&gnome, "<Super>space").unwrap();
+        apply_input_source_move(&gnome, &moves).unwrap();
+        assert_eq!(
+            gnome.value("switch-input-source"),
+            "['<Control><Super>space', 'XF86Keyboard']"
+        );
+        // Super+Space is now free of the switcher.
+        assert!(plan_input_source_move(&gnome, "<Super>space")
+            .unwrap()
+            .is_empty());
+
+        let lines = restore_input_sources(&gnome, &moves).unwrap();
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].starts_with("switch-input-source: restored to"));
+        assert!(!lines[0].contains("changed since"));
+        assert_eq!(
+            (
+                gnome.value("switch-input-source"),
+                gnome.value("switch-input-source-backward")
+            ),
+            before
+        );
+    }
+
+    #[test]
+    fn restoring_notes_a_shortcut_changed_in_the_meantime() {
+        let gnome = FakeGnome::stock();
+        let moves = plan_input_source_move(&gnome, "<Super>space").unwrap();
+        apply_input_source_move(&gnome, &moves).unwrap();
+        gnome
+            .set(
+                INPUT_SOURCE_SCHEMA,
+                "switch-input-source",
+                "['<Alt>Shift_L']",
+            )
+            .unwrap();
+        let lines = restore_input_sources(&gnome, &moves).unwrap();
+        assert!(lines[0].contains("changed since"), "{}", lines[0]);
+    }
+
+    #[test]
+    fn a_failed_write_undoes_the_ones_before_it() {
+        let mut gnome = FakeGnome::stock();
+        let moves = plan_input_source_move(&gnome, "<Super>space").unwrap();
+        gnome.fail_set_of = Some("switch-input-source-backward");
+        let before = gnome.value("switch-input-source");
+        assert!(apply_input_source_move(&gnome, &moves).is_err());
+        assert_eq!(gnome.value("switch-input-source"), before);
+    }
+
+    #[test]
+    fn unreadable_values_are_an_error() {
+        let gnome = FakeGnome::with(&[
+            ("switch-input-source", "garbage"),
+            ("switch-input-source-backward", "@as []"),
+        ]);
+        assert!(plan_input_source_move(&gnome, "<Super>space").is_err());
+        let missing = FakeGnome::default();
+        assert!(plan_input_source_move(&missing, "<Super>space").is_err());
+    }
+
+    #[test]
+    fn the_real_gsettings_only_exists_on_linux() {
+        assert_eq!(system_gsettings().is_some(), cfg!(target_os = "linux"));
     }
 }

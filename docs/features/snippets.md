@@ -149,9 +149,9 @@ Rules worth knowing:
     What Sevak keeps and where it does not look:
 
     - Only the last 64 characters you typed, in memory, to compare with your keywords. They are never written to disk, never logged and never sent anywhere, and Sevak has no telemetry. They are overwritten whenever the text could have changed under them (see above) and after every expansion.
-    - Nothing is observed while the setting is off; the operating system's keyboard hook is not even installed.
+    - Nothing is observed while the setting is off: expansion does not listen to the keyboard. (On Windows the launcher shortcut can use the same keyboard hook when it needs to, for Win+Space; it only compares key presses with your shortcuts and reads nothing. See [Privacy](../privacy.md#the-launcher-shortcut).)
     - Typing in Sevak's own windows, in terminals (unless `expand_in_terminals = true`) and in apps listed in `ignore_apps` (`["KeePassXC", "1Password"]`, matched like [clipboard history](clipboard.md)) is not recorded. Where the system can say so, a focused password box is skipped too: Windows edit controls in password mode, and macOS when "secure input" is on. A password field inside a web page is not detectable on Windows or Linux, so add your browser to `ignore_apps` if you type secrets next to your keywords, or use a `prefix` you never type in a password.
-    - Security software may flag any program that installs a keyboard hook. Sevak installs it only when you turn this on.
+    - Security software may flag any program that installs a keyboard hook. Sevak installs it only when you turn this on, or on Windows when a shortcut such as Win+Space needs it.
 
 | System | What happens |
 |---|---|

@@ -14,7 +14,7 @@ body:
       label: What happened?
       description: What did you do, what did you expect, and what happened instead?
       placeholder: |
-        1. Press Alt+Space
+        1. Press the Sevak shortcut (default Win+Space / Cmd+Space)
         2. Type "firefox" and press Enter
         3. Nothing starts; the window shows "..."
     validations:

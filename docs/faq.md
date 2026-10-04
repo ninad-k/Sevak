@@ -218,7 +218,7 @@ Settings, usage history and clipboard history are in the same folder on Windows 
 
 ## Wayland (Linux)
 
-### Why doesn't Alt+Space work on GNOME Wayland?
+### Why doesn't the shortcut work on GNOME Wayland?
 
 Wayland prevents apps from registering global hotkeys directly. Sevak asks you to run `sevak --setup-hotkey` to create a GNOME desktop shortcut instead.
 
@@ -245,7 +245,7 @@ See [Installing on Linux](install.md).
 
 ### Why doesn't Cmd+Space work?
 
-Cmd+Space is reserved by Spotlight. Choose another key in **Settings → General**.
+Cmd+Space is Spotlight's key and Sevak's default. The first time it cannot register it, Sevak asks whether it may turn off Spotlight's shortcut; if you said No, it uses Option+Space instead. You can change your mind in **Settings → General** (**Let Sevak use Cmd+Space**, or **Restore Spotlight's shortcut**). See [Win+Space, Cmd+Space and Super+Space](troubleshooting.md#super-space).
 
 ## Performance and limits
 

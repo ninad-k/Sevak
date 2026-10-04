@@ -1,7 +1,7 @@
 Sevak logo design
 
 Repository understanding
-Sevak is a keyboard-first desktop launcher using a Rust workspace, Tauri 2, and Svelte 5. The resident shell provides an Alt+Space shortcut, a search window, and tray actions. The core contains fuzzy matching, plugin routing, result ranking, and usage history. Built-in plugin code covers installed apps, files, calculations, and keyword web search.
+Sevak is a keyboard-first desktop launcher using a Rust workspace, Tauri 2, and Svelte 5. The resident shell provides a global Super+Space shortcut, a search window, and tray actions. The core contains fuzzy matching, plugin routing, result ranking, and usage history. Built-in plugin code covers installed apps, files, calculations, and keyword web search.
 
 Design direction
 The original icon (preserved as sevak-icon-original.svg here) uses an amber lamp on indigo, and the tray tooltip says "Sevak - at your service". The new logo evolves that established motif into a flowing flame with an S-shaped opening above a shallow lamp bowl. The warm mark communicates helpfulness; its rising tip suggests quick action. The primary logo pairs it with the Sevak name in dark rounded sans-serif lettering.
