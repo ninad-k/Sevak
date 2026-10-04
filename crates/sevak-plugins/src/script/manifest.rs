@@ -270,7 +270,7 @@ pub fn resolve_launch(launch: &Launch, dir: &Path) -> Result<Vec<String>, String
                 argv[0] = resolved.to_string_lossy().into_owned();
             } else if !has_path {
                 argv[0] = pin_program(&argv[0])
-                    .map_err(|err| format!("cannot run `{}`: {err}", argv[0]))?;
+                    .map_err(|err| format!("could not start `{}`: {err}", argv[0]))?;
             }
             Ok(argv)
         }
@@ -288,7 +288,7 @@ pub fn resolve_launch(launch: &Launch, dir: &Path) -> Result<Vec<String>, String
                 ScriptRunner::Interpreter(mut prefix) => {
                     if let Some(first) = prefix.first_mut() {
                         *first = pin_program(first)
-                            .map_err(|err| format!("cannot run `{first}`: {err}"))?;
+                            .map_err(|err| format!("could not start `{first}`: {err}"))?;
                     }
                     prefix
                 }
