@@ -47,7 +47,7 @@ function rustTable(file) {
   const line = (name, row) =>
     `| ${name} | ${cell(...row.lines)} | ${cell(...row.functions)} | ${cell(...row.regions)} |`;
   return [
-    "### Rust (cargo-llvm-cov, Linux)",
+    "### Rust (cargo-llvm-cov)",
     "",
     "| Crate | Lines | Functions | Regions |",
     "|---|---|---|---|",

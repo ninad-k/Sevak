@@ -57,7 +57,7 @@ jobs:
         run: >
           cargo llvm-cov --no-report
           -p sevak-core -p sevak-platform -p sevak-plugins
-          --ignore-filename-regex '(/tests/|/benches/|test_util\.rs)'
+          --ignore-filename-regex '([/\\](tests|benches)[/\\]|test_util\.rs)'
 
       - name: Write the Rust reports
         run: |
