@@ -853,7 +853,13 @@ the title (a contact's phone number).
 
 ### The `DeepLink` allow-list
 
-`open_url` accepts only `http(s):` and `mailto:` and must stay that way. Three
+`open_url` accepts only `http(s):` and `mailto:` and must stay that way. The
+address is parsed by `sevak_core::url_check::check_open_url` before it is handed
+to the system: `http(s)` needs a host and no user name or password;
+control characters, `"`, `<`, `>`, `\` and addresses over 8192 bytes are refused;
+spaces are percent-encoded; and `mailto:` takes a plain address list with only
+`subject`, `body`, `to`, `cc` and `bcc` options (no `attach`). The normalised
+form is what reaches ShellExecute, `open` or `xdg-open`. Three
 plugin features need one more scheme each, so instead of loosening `open_url`
 there is a closed type, `DeepLink`, that can only be built by constructors that
 validate every piece and build the whole URL themselves:

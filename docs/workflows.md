@@ -118,7 +118,7 @@ workflow, enabled, and valid; otherwise the launcher opens and says why.
 | Node | Does | Notes |
 |---|---|---|
 | **Run script** | runs a program; what it prints becomes the argument | [details below](#run-script) |
-| **Open URL** | opens a web or mail link | only `http`, `https` and `mailto`; placeholders are URL-encoded |
+| **Open URL** | opens a web or mail link | only `http`, `https` and `mailto`; placeholders are URL-encoded; the address must be well formed (a host, no user name or password in it, no control characters or quotes, at most 8192 bytes; a `mailto:` link only recipients, `subject` and `body`) |
 | **Open file** | opens a file or folder with its default program | `~` is your home folder; a relative path is inside the workflow's folder; a program or script opens by running, so needs permission |
 | **Launch app** | starts an application by name (as in the launcher) or by path | runs code, so needs permission |
 | **System command** | `lock`, `sleep`, `hibernate`, `restart`, `shutdown`, `logout`, `empty_trash` | needs permission; the destructive ones ask each time |

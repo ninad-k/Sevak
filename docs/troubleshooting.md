@@ -132,6 +132,7 @@ Check these in order:
 | New or moved file | Reload the index |
 | Permissions | Ensure your user account can read that directory |
 | Index size | Reduce broad roots if you hit the 100,000-entry cap |
+| Network share (Windows) | A folder on another computer or a mapped network drive is skipped while [`allow_network_paths`](configuration.md#files) is off (the log says so) |
 
 `f` matches names in your indexed folders, not document contents. A file
 outside them, or a word that is only inside a document, needs `ff` or `in`
@@ -259,7 +260,7 @@ The Settings window shows validation errors if there are problems. Fix them in o
 
 **Hand-edited TOML files:**
 
-Check for syntax errors (unmatched quotes, missing brackets, typos in section names). If the file can't be read, Sevak starts with default settings (or, on **Reload index**, keeps the settings already in use) and writes the reason to the log. See [Files and data](files-and-data.md) for the config path and how to back it up.
+Check for syntax errors (unmatched quotes, missing brackets, typos in section names). A config file larger than 4 MiB is refused with a message naming the limit (the same goes for plugin manifests over 256 KiB and workflow files over 2 MiB); a real one is far smaller. If the file can't be read, Sevak starts with default settings (or, on **Reload index**, keeps the settings already in use) and writes the reason to the log. See [Files and data](files-and-data.md) for the config path and how to back it up.
 
 ## An update check fails
 
