@@ -16,6 +16,8 @@ Sevak includes built-in result sources (plugins) for applications, calculations,
 | System commands | Type a command name | (global) | Run the command | [System →](system.md) |
 | Automation tasks | Type a task name, or `t ` | t (also global) | Run the task | [Tasks →](tasks.md) |
 | Media controls | `pause`, `next`, `play ` | play (also global) | Press the media button | [Media →](media.md) |
+| Window layouts | `win left`, `win max`, `win next display` | win | Snap or move the window you were using | [Window management →](../window-management.md) |
+| Window switcher | `w <title or app>` | w | Bring that window to the front | [Window management →](../window-management.md#switch-windows) |
 | Terminal commands | `> <command>` | > | Run in a terminal | [Shell →](shell.md) |
 | Clipboard history | `cb <text>` | cb | Paste the text, image or files | [Clipboard →](clipboard.md) |
 | Snippets | `s <snippet>`, or the keyword in any app | s | Paste the saved text | [Snippets →](snippets.md) |
@@ -111,7 +113,7 @@ disabled = ["clipboard", "web:yt"]   # turn off clipboard history and YouTube
 Family ids turn off all instances: `disabled = ["web"]` turns off every web engine.
 Instance ids turn off one instance: `disabled = ["web:g"]` turns off Google only.
 
-The built-in ids are `apps`, `calculator`, `web` (instances `web:<keyword>`), `files` (its instances `files:names` and `files:content` are the `ff` and `in` searches), `bookmarks`, `system`, `tasks`, `media`, `shell`, `clipboard`, `snippets`, `emoji` (`emoji:word` and `emoji:colon` are its two keywords), `selection` (Universal Actions), `contacts`, `1password`, `dict` and `uuid`. Script plugins use `script:<name>` (or `script` for all), and workflows `workflow:<folder>` (or `workflow` for all). The full list is in the [configuration reference](../configuration.md#plugins).
+The built-in ids are `apps`, `calculator`, `web` (instances `web:<keyword>`), `files` (its instances `files:names` and `files:content` are the `ff` and `in` searches), `bookmarks`, `system`, `tasks`, `media`, `windows` (`windows:switch` is the window switcher), `shell`, `clipboard`, `snippets`, `emoji` (`emoji:word` and `emoji:colon` are its two keywords), `selection` (Universal Actions), `contacts`, `1password`, `dict` and `uuid`. Script plugins use `script:<name>` (or `script` for all), and workflows `workflow:<folder>` (or `workflow` for all). The full list is in the [configuration reference](../configuration.md#plugins).
 
 To find a plugin's id, hover over a result for a moment—the id appears at the bottom.
 
@@ -123,6 +125,7 @@ Read individual feature pages for options:
 - [Bookmarks keyword and browsers](bookmarks.md)
 - [Calculator functions and units](calculator.md)
 - [Automation tasks](tasks.md) and [media controls](media.md)
+- [Window management](../window-management.md)
 - [Contacts](contacts.md), [1Password](1password.md) and [the dictionary](dictionary.md)
 
 Every plugin has its options in **Settings** (see [Settings window](../settings.md)) and in a `[section]` of `config.toml`. After editing the file by hand, choose **Reload index** from the tray menu or restart Sevak.
