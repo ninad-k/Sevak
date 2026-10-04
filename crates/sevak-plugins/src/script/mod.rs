@@ -26,6 +26,7 @@ mod oneshot;
 mod plugin;
 mod protocol;
 mod runner;
+mod stderr;
 
 pub use alfred::RawPick;
 pub use approvals::{script_approval_key, ApprovalStore, Approvals, ContentHasher};

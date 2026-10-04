@@ -45,8 +45,6 @@ const MAX_BACKOFF: Duration = Duration::from_secs(60);
 const TICK: Duration = Duration::from_millis(500);
 /// After `shutdown` the script gets this long to exit before it is killed.
 const GRACE: Duration = Duration::from_millis(500);
-/// Stderr lines logged per process before the rest is dropped.
-const MAX_STDERR_LINES: usize = 200;
 /// Non-protocol stdout lines logged per process.
 const MAX_BAD_LINES: usize = 5;
 
@@ -654,17 +652,12 @@ fn stop_child(link: &Link, mut stdin: ChildStdin) {
 }
 
 /// Forwards the script's stderr to the log, tagged with the plugin id.
+///
+/// Bounded: a line is cut at 1 KiB, at most 200 lines and 32 KiB are kept per
+/// process, and the rest is read and dropped so the script never blocks on a
+/// full pipe (see `stderr.rs`).
 fn log_stderr(plugin: &str, stderr: impl Read) {
-    let lines = BufReader::new(stderr).lines().map_while(Result::ok);
-    for (logged, line) in lines.enumerate() {
-        if logged == MAX_STDERR_LINES {
-            tracing::info!(plugin, "further stderr output is not logged");
-        }
-        if logged < MAX_STDERR_LINES {
-            let shown: String = line.chars().take(500).collect();
-            tracing::info!(plugin, "stderr: {shown}");
-        }
-    }
+    super::stderr::forward(stderr, |line| tracing::info!(plugin, "stderr: {line}"));
 }
 
 /// Parses one-shot output into items according to the manifest's format.

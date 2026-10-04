@@ -1047,7 +1047,9 @@ The default mode. Sevak starts **one long-lived process** the first time the
 keyword is used and talks to it with **newline-delimited JSON**: one object per
 line on stdin (Sevak to script) and on stdout (script to Sevak), UTF-8. stdout
 is for the protocol only; **stderr is captured into Sevak's log** tagged with
-the plugin id (the first 200 lines per process).
+the plugin id. Only the start is kept: lines are cut at 1 KiB, and at most 200
+lines and 32 KiB are logged per process; the rest is read and dropped, so a
+chatty script never blocks.
 
 ```jsonc
 // Sevak -> script

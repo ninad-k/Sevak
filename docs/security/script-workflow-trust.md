@@ -69,3 +69,12 @@ Limits: a helper that starts its own session or process group escapes on Linux
 and macOS; a crash of Sevak does not end the group there. The process is
 assigned to its job a moment after it starts, so something it starts in that
 instant escapes on Windows.
+
+## A script's error output is read with limits
+
+A persistent script's standard error is written to Sevak's log. A line without
+a line break, or endless output, could make Sevak's memory grow, and text that
+was not valid UTF-8 stopped the reading. Now each line is cut at 1 KiB, at most
+200 lines and 32 KiB are logged per process, and everything else is read and
+dropped (so the script never blocks on a full pipe). One-shot and workflow
+scripts already had a 64 KiB cap.
