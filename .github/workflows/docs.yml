@@ -41,7 +41,7 @@ jobs:
       - run: mkdocs build --strict --site-dir site/docs
       - name: Add the product page at the site root
         run: cp -r landing/. site/
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         if: github.event_name != 'pull_request'
         with:
           path: site
