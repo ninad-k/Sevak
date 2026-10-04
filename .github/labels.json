@@ -1,0 +1,137 @@
+[
+  {
+    "name": "area:Launcher/search",
+    "color": "0366d6",
+    "description": "App search, fuzzy matching, ranking"
+  },
+  {
+    "name": "area:Settings",
+    "color": "0366d6",
+    "description": "Settings window or configuration"
+  },
+  {
+    "name": "area:Hotkey",
+    "color": "0366d6",
+    "description": "Global hotkeys, keyboard hooks, shortcuts"
+  },
+  {
+    "name": "area:Clipboard/paste",
+    "color": "0366d6",
+    "description": "Clipboard history, clipboard expansion"
+  },
+  {
+    "name": "area:Snippets",
+    "color": "0366d6",
+    "description": "Text snippets, snippet expansion"
+  },
+  {
+    "name": "area:Files/OS search",
+    "color": "0366d6",
+    "description": "File search, folder browsing, OS integration"
+  },
+  {
+    "name": "area:Plugins/Workflows",
+    "color": "0366d6",
+    "description": "Plugins, workflows, gallery"
+  },
+  {
+    "name": "area:Themes",
+    "color": "0366d6",
+    "description": "Themes, appearance, styling"
+  },
+  {
+    "name": "area:Installer/updater",
+    "color": "0366d6",
+    "description": "Installer, packaging, updates"
+  },
+  {
+    "name": "area:Docs",
+    "color": "0366d6",
+    "description": "Documentation, README, guides"
+  },
+  {
+    "name": "os:Windows",
+    "color": "1f6feb",
+    "description": "Windows platform"
+  },
+  {
+    "name": "os:macOS",
+    "color": "1f6feb",
+    "description": "macOS platform"
+  },
+  {
+    "name": "os:Linux",
+    "color": "1f6feb",
+    "description": "Linux platform"
+  },
+  {
+    "name": "type:bug",
+    "color": "d73a4a",
+    "description": "Something isn't working"
+  },
+  {
+    "name": "type:enhancement",
+    "color": "a2eeef",
+    "description": "New feature or request"
+  },
+  {
+    "name": "type:question",
+    "color": "d876e3",
+    "description": "Further information is requested"
+  },
+  {
+    "name": "type:security",
+    "color": "ee0701",
+    "description": "Security vulnerability or concern"
+  },
+  {
+    "name": "type:toolchain",
+    "color": "cccccc",
+    "description": "Build, test, CI/CD infrastructure"
+  },
+  {
+    "name": "type:dependencies",
+    "color": "cccccc",
+    "description": "Pull requests that update a dependency"
+  },
+  {
+    "name": "priority:P0",
+    "color": "b60205",
+    "description": "Critical: blocks release or core functionality"
+  },
+  {
+    "name": "priority:P1",
+    "color": "ff7619",
+    "description": "High: important feature or significant bug"
+  },
+  {
+    "name": "priority:P2",
+    "color": "fbca04",
+    "description": "Medium: nice to have, improvement"
+  },
+  {
+    "name": "priority:P3",
+    "color": "d4c5f9",
+    "description": "Low: minor issue, ideas for later"
+  },
+  {
+    "name": "good first issue",
+    "color": "7057ff",
+    "description": "Good for newcomers"
+  },
+  {
+    "name": "help wanted",
+    "color": "008672",
+    "description": "Extra attention is needed"
+  },
+  {
+    "name": "needs-triage",
+    "color": "cccccc",
+    "description": "Needs review and prioritization"
+  },
+  {
+    "name": "blocked",
+    "color": "999999",
+    "description": "Blocked by another issue or external dependency"
+  }
+]
