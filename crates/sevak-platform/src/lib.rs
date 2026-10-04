@@ -17,6 +17,7 @@ pub mod dictionary;
 pub mod error;
 mod expand;
 pub mod gnome;
+mod hook_watchdog;
 pub mod hotkey_hook;
 pub mod icon_file;
 pub mod icon_theme;

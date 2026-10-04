@@ -8,6 +8,7 @@ mod icons;
 mod keyhook;
 mod keyhook_expand;
 mod keyhook_hotkey;
+mod keyhook_watch;
 pub(crate) mod media;
 pub(crate) mod os_search;
 mod packaged;
