@@ -33,7 +33,7 @@ A minimal config works: missing fields use their defaults, so a nearly empty fil
 
 ### Keywords
 
-Every keyword is one word, and no two searches may share one: the configurable keywords (`[files]` `keyword` / `index_keyword` / `content_keyword`, `[bookmarks]`, `[tasks]`, `[media]`, `[contacts]`, `[onepassword]`, `[dictionary]` `define_keyword` / `spell_keyword`, `[ai]`), the fixed ones (`>`, `cb`, `s`, `emoji`, `:`, `@`, `uuid`) and your web search keywords. Settings refuses to save a clash; in a hand-edited file a clashing keyword is ignored and logged. An empty keyword turns that keyword off.
+Every keyword is one word, and no two searches may share one: the configurable keywords (`[files]` `keyword` / `index_keyword` / `content_keyword`, `[bookmarks]`, `[tasks]`, `[media]`, `[window_management]` `keyword` / `switcher_keyword`, `[contacts]`, `[onepassword]`, `[dictionary]` `define_keyword` / `spell_keyword`, `[ai]`), the fixed ones (`>`, `cb`, `s`, `emoji`, `:`, `@`, `uuid`) and your web search keywords. Settings refuses to save a clash; in a hand-edited file a clashing keyword is ignored and logged. An empty keyword turns that keyword off.
 
 Keywords of [workflows](workflows.md) and [script plugins](features/script-plugins.md) are checked the same way but only produce a warning (in Settings and in the log), because both plugins then answer the keyword and show their results.
 
@@ -155,7 +155,7 @@ Which plugins are active. Each built-in plugin can be disabled.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `disabled` | array of strings | `[]` | Plugin ids to turn off. Available ids: `"apps"`, `"calculator"`, `"web"` (all engines) or `"web:<keyword>"` (one engine), `"files"` (its instances `"files:names"` and `"files:content"` are the `ff` and `in` searches), `"bookmarks"`, `"system"`, `"tasks"` (automation tasks), `"media"` (media controls), `"shell"`, `"clipboard"`, `"snippets"`, `"emoji"` (the emoji picker; `"emoji:word"` and `"emoji:colon"` are its two keywords), `"selection"` (Universal Actions), `"contacts"`, `"1password"`, `"dict"` (`define` and `spell`), `"uuid"`, `"script"` or `"script:<name>"` (script plugins) and `"workflow"` or `"workflow:<folder>"` ([workflows](workflows.md); each also has its own switch in **Settings → Workflows**). Example: `disabled = ["files", "web:yt"]` turns off file search and YouTube search. Unknown ids are ignored. |
+| `disabled` | array of strings | `[]` | Plugin ids to turn off. Available ids: `"apps"`, `"calculator"`, `"web"` (all engines) or `"web:<keyword>"` (one engine), `"files"` (its instances `"files:names"` and `"files:content"` are the `ff` and `in` searches), `"bookmarks"`, `"system"`, `"tasks"` (automation tasks), `"media"` (media controls), `"windows"` (window layouts; `"windows:switch"` is the window switcher), `"shell"`, `"clipboard"`, `"snippets"`, `"emoji"` (the emoji picker; `"emoji:word"` and `"emoji:colon"` are its two keywords), `"selection"` (Universal Actions), `"contacts"`, `"1password"`, `"dict"` (`define` and `spell`), `"uuid"`, `"script"` or `"script:<name>"` (script plugins) and `"workflow"` or `"workflow:<folder>"` ([workflows](workflows.md); each also has its own switch in **Settings → Workflows**). Example: `disabled = ["files", "web:yt"]` turns off file search and YouTube search. Unknown ids are ignored. |
 
 ```toml
 [plugins]
@@ -272,6 +272,29 @@ To turn the plugin off, add `"media"` to `[plugins] disabled`.
 keyword = "play"
 global = true
 now_playing = true
+```
+
+### [window_management]
+
+[Window management](window-management.md): snap, resize and move the window you were using (`win left`, `win max`, `win next display`) and switch between open windows (`w code`).
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | boolean | `true` | Turns the layouts and the window switcher on or off together. |
+| `keyword` | string | `"win"` | `win ` lists the layouts. `""` removes the keyword. |
+| `switcher_keyword` | string | `"w"` | `w ` lists the open windows; type part of a title or app to filter. `""` turns the switcher off. |
+| `gap` | integer | `0` | Space between snapped windows and the screen edge, in logical pixels (0 to 200; clamped when loaded, refused by Settings outside the range). |
+| `global` | boolean | `false` | Also match layout names in ordinary searches (`snap left`, `maximize`). |
+
+To turn the plugin off, add `"windows"` to `[plugins] disabled` (the layouts are `windows`, the switcher is `windows:switch`).
+
+```toml
+[window_management]
+enabled = true
+keyword = "win"
+switcher_keyword = "w"
+gap = 8
+global = false
 ```
 
 ### [shell]
@@ -556,6 +579,7 @@ Result ids:
 - Snippets: `snippets:<name>`
 - Shell commands: `shell:<command>`
 - Automation tasks: `tasks:dark_mode`, `tasks:volume:30`, `tasks:keep_awake:45`, `tasks:kill:chrome.exe` (see [Automation tasks](features/tasks.md#bind-a-task-to-a-hotkey))
+- Window layouts: `windows:left`, `windows:maximize`, `windows:next_display` and so on (see [Window management](window-management.md#global-shortcuts-for-layouts)); they act on the window that has focus when the key is pressed
 - Workflows: `workflow:<folder>:run:<node id>`, the result a workflow's hotkey trigger runs; usually it is simpler to give the workflow its own hotkey trigger in the builder (see [Triggers](workflows.md#triggers))
 
 Calculator, web search and clipboard history results have no stable id and cannot be bound.
@@ -686,7 +710,7 @@ custom_css = ""
 # Ids of built-in plugins to turn off: "apps", "calculator", "files",
 # "bookmarks", "system", "tasks", "media", "shell", "clipboard", "snippets",
 # "emoji", "selection" (Universal Actions), "contacts", "1password", "dict",
-# "web:<keyword>".
+# "windows" (window management), "web:<keyword>".
 disabled = []
 
 [calculator]
@@ -772,6 +796,23 @@ global = true
 # Show the track that is playing as a row (Enter plays or pauses it). It is read
 # from the system's media player on request; nothing is stored or sent anywhere.
 now_playing = true
+
+[window_management]
+# Arrange the window you were using: snap it to a half, quarter or third of the
+# screen, maximize, center, move it to another display, and undo ("win left",
+# "win max", "win next display"). A second search, "w <name>", lists the open
+# windows and brings the one you pick to the front. On macOS this needs the
+# Accessibility permission; on Linux it works on X11 sessions only.
+enabled = true
+# Type "<keyword> <layout>" to list the layouts. Empty turns the layouts off.
+keyword = "win"
+# Type "<keyword> <name>" to find an open window by its title or app. Empty
+# turns the window switcher off.
+switcher_keyword = "w"
+# Space in pixels between snapped windows and the screen edge (0-200).
+gap = 0
+# Also match layout names in plain searches ("snap left", "maximize window").
+global = false
 
 [shell]
 # Type "> <command>" (or ">command") to run a command in a terminal window. It

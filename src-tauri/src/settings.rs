@@ -231,6 +231,13 @@ fn validate_limits(config: &Config) -> Result<(), String> {
     if let Some(problem) = config.ai.problem() {
         return Err(problem);
     }
+    let gap = config.window_management.gap;
+    if !(0..=sevak_core::window_layout::MAX_GAP).contains(&gap) {
+        return Err(format!(
+            "Window management: the gap must be from 0 to {} pixels.",
+            sevak_core::window_layout::MAX_GAP
+        ));
+    }
     Ok(())
 }
 

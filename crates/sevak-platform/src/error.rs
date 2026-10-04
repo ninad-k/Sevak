@@ -27,6 +27,11 @@ pub enum PlatformError {
     #[error("{0} is not supported on this platform")]
     Unsupported(&'static str),
 
+    /// A failure whose text is already written for the user (window
+    /// management explains what the desktop or a missing permission prevents).
+    #[error("{0}")]
+    Message(String),
+
     #[error(transparent)]
     Io(#[from] io::Error),
 }

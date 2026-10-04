@@ -92,6 +92,7 @@ And more once you know the keys: preview a result, pick emoji from a grid, open 
 | Quit or kill an app | `quit`, `kill chrome` | Lists running apps or processes (force quit and kill ask first) |
 | Eject a drive, stay awake | `eject`, `awake 45` | Ejects the drive; keeps the computer awake for 45 minutes |
 | Control music and video | `pause`, `next`, `play ` | Presses the media button; `play ` also shows [what is playing](docs/features/media.md) |
+| Snap or move the window you were using | `win left`, `win max`, `win next display` | Arranges it ([window management](docs/window-management.md)); `w <title>` switches to any open window |
 | Run a terminal command | `> git status` | Opens your terminal and runs it |
 | Paste earlier clipboard text, images or files | `cb invoice` | Pastes into the app you were using (opt-in) |
 | Paste a snippet | `s sig` | Pastes the snippet with `{date}` etc. filled in |

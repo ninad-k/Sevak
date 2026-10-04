@@ -56,6 +56,7 @@ windows = { workspace = true, features = [
     "Win32_System_Threading",
     "Win32_System_Variant",
     "Win32_UI_Accessibility",
+    "Win32_UI_HiDpi",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",
     "Win32_UI_Shell_Common",
@@ -70,8 +71,9 @@ libc = "0.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # Pure-Rust X11 client (already pulled in by arboard): active window and the
-# XTest extension for the paste keystroke, RECORD to watch typed keywords.
-x11rb = { version = "0.13", features = ["record", "xtest"] }
+# XTest extension for the paste keystroke, RECORD to watch typed keywords,
+# RandR for the monitor layout (window management).
+x11rb = { version = "0.13", features = ["randr", "record", "xtest"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 plist = "1"

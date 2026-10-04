@@ -44,6 +44,7 @@ pub mod tasks;
 pub mod terminal;
 pub mod thumbnail;
 pub mod trash;
+pub mod window_manager;
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -73,6 +74,7 @@ pub use session::{DisplayServer, HotkeyStrategy};
 pub use system::{SettingsPage, SystemCommand};
 pub use tasks::{Drive, ProcessInfo, RunningApp, Task, TaskKind};
 pub use terminal::ShellQuoting;
+pub use window_manager::{RestoreMemory, WindowId, WindowInfo, WindowState, WindowSupport};
 
 /// What encrypts files for the current user on this system, if anything.
 pub fn native_sealer() -> Option<std::sync::Arc<dyn sevak_core::sealed::Sealer>> {

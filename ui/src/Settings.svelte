@@ -8,6 +8,7 @@
   import ListEditor from "./lib/settings-pages/ListEditor.svelte";
   import SystemPage from "./lib/settings-pages/SystemPage.svelte";
   import TasksMediaPage from "./lib/settings-pages/TasksMediaPage.svelte";
+  import WindowsPage from "./lib/settings/WindowsPage.svelte";
   import { tidyPluginSettings } from "./lib/settings-pages/tidy";
   import HotkeyField from "./lib/HotkeyField.svelte";
   import HelpPage from "./lib/HelpPage.svelte";
@@ -123,6 +124,7 @@
     system: { confirm: true, disabled: [] },
     tasks: { confirm: true, disabled: [], keyword: "t", global: true },
     media: { keyword: "play", global: true, now_playing: true },
+    window_management: { enabled: true, keyword: "win", switcher_keyword: "w", gap: 0, global: false },
     shell: { terminal: "", shell: "", keep_open: true },
     web_search: [],
     hotkey: [],
@@ -185,6 +187,7 @@
         { id: "files", label: "Files & bookmarks" },
         { id: "clipboard", label: "Clipboard & paste" },
         { id: "tasks", label: "Tasks & media" },
+        { id: "windows", label: "Windows" },
         { id: "integrations", label: "Integrations" },
         { id: "ai", label: "AI assistant" },
         { id: "system", label: "System & terminal" },
@@ -1256,6 +1259,8 @@
           />
         {:else if active === "tasks"}
           <TasksMediaPage bind:config={draft} {problems} {platform} {pluginOff} />
+        {:else if active === "windows"}
+          <WindowsPage bind:config={draft} {problems} {platform} {pluginOff} />
         {:else if active === "integrations"}
           <IntegrationsPage bind:config={draft} {problems} {platform} {pluginOff} />
         {:else if active === "ai"}

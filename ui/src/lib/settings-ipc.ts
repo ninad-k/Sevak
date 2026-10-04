@@ -108,6 +108,14 @@ export interface Config {
   /** Automation tasks (dark mode, volume, kill, ...). */
   tasks: { confirm: boolean; disabled: string[]; keyword: string; global: boolean };
   media: { keyword: string; global: boolean; now_playing: boolean };
+  /** Snapping and switching windows (`win left`, `w code`). `gap` is in pixels. */
+  window_management: {
+    enabled: boolean;
+    keyword: string;
+    switcher_keyword: string;
+    gap: number;
+    global: boolean;
+  };
   /** Expanding `[[snippet]]` keywords as you type in other apps (off by default). */
   snippets: {
     auto_expand: boolean;

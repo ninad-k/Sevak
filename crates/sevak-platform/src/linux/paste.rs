@@ -55,7 +55,7 @@ impl X {
         Ok(Self { conn, root })
     }
 
-    fn atom(&self, name: &str) -> Result<Atom> {
+    pub(super) fn atom(&self, name: &str) -> Result<Atom> {
         self.conn
             .intern_atom(false, name.as_bytes())
             .map_err(|e| x_error("X11", e))?
@@ -76,7 +76,7 @@ impl X {
         window.filter(|window| *window != 0)
     }
 
-    fn window_pid(&self, window: Window) -> Option<u32> {
+    pub(super) fn window_pid(&self, window: Window) -> Option<u32> {
         let atom = self.atom("_NET_WM_PID").ok()?;
         let reply = self
             .conn
@@ -178,6 +178,14 @@ pub(crate) fn remember_foreground_app() {
 /// applications nothing about other windows).
 pub(crate) fn can_identify_apps() -> bool {
     session_is_x11()
+}
+
+/// The window that was active when Sevak was last shown (window management
+/// acts on it).
+pub(super) fn remembered_window() -> Option<Window> {
+    *REMEMBERED
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 pub(crate) fn foreground_app() -> Option<ForegroundApp> {

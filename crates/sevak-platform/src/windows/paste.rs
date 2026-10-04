@@ -111,6 +111,15 @@ pub(crate) fn foreground_app() -> Option<ForegroundApp> {
     foreground_window().and_then(app_of)
 }
 
+/// The window that had focus when Sevak was last shown (window management acts
+/// on it).
+pub(super) fn remembered_window() -> Option<HWND> {
+    REMEMBERED
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .map(int_to_hwnd)
+}
+
 pub(crate) fn paste_support() -> PasteSupport {
     PasteSupport::Available
 }

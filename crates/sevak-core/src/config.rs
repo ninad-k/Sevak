@@ -108,7 +108,7 @@ custom_css = ""
 # Ids of built-in plugins to turn off: "apps", "calculator", "files",
 # "bookmarks", "system", "tasks", "media", "shell", "clipboard", "snippets",
 # "emoji", "selection" (Universal Actions), "contacts", "1password", "dict",
-# "web:<keyword>".
+# "windows" (window management), "web:<keyword>".
 disabled = []
 
 [calculator]
@@ -194,6 +194,23 @@ global = true
 # Show the track that is playing as a row (Enter plays or pauses it). It is read
 # from the system's media player on request; nothing is stored or sent anywhere.
 now_playing = true
+
+[window_management]
+# Arrange the window you were using: snap it to a half, quarter or third of the
+# screen, maximize, center, move it to another display, and undo ("win left",
+# "win max", "win next display"). A second search, "w <name>", lists the open
+# windows and brings the one you pick to the front. On macOS this needs the
+# Accessibility permission; on Linux it works on X11 sessions only.
+enabled = true
+# Type "<keyword> <layout>" to list the layouts. Empty turns the layouts off.
+keyword = "win"
+# Type "<keyword> <name>" to find an open window by its title or app. Empty
+# turns the window switcher off.
+switcher_keyword = "w"
+# Space in pixels between snapped windows and the screen edge (0-200).
+gap = 0
+# Also match layout names in plain searches ("snap left", "maximize window").
+global = false
 
 [shell]
 # Type "> <command>" (or ">command") to run a command in a terminal window. It
@@ -416,6 +433,7 @@ pub struct Config {
     pub system: SystemConfig,
     pub tasks: TasksConfig,
     pub media: MediaConfig,
+    pub window_management: WindowManagementConfig,
     pub shell: ShellConfig,
     pub paste: PasteConfig,
     pub actions: ActionsConfig,
@@ -452,6 +470,7 @@ impl Default for Config {
             system: SystemConfig::default(),
             tasks: TasksConfig::default(),
             media: MediaConfig::default(),
+            window_management: WindowManagementConfig::default(),
             shell: ShellConfig::default(),
             paste: PasteConfig::default(),
             actions: ActionsConfig::default(),
@@ -1196,6 +1215,35 @@ impl Default for MediaConfig {
     }
 }
 
+/// `[window_management]`: snapping, resizing and switching windows.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WindowManagementConfig {
+    /// Turns the layouts and the window switcher on or off together.
+    pub enabled: bool,
+    /// Type "<keyword> <layout>" to list the layouts (`win left`, `win max`).
+    pub keyword: String,
+    /// Type "<keyword> <name>" to find an open window (`w code`).
+    pub switcher_keyword: String,
+    /// Space between snapped windows and the screen edge, in logical pixels
+    /// (0 to [`crate::window_layout::MAX_GAP`]).
+    pub gap: i32,
+    /// Also match layout names in plain searches (`snap left`).
+    pub global: bool,
+}
+
+impl Default for WindowManagementConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            keyword: "win".to_owned(),
+            switcher_keyword: "w".to_owned(),
+            gap: 0,
+            global: false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BookmarksConfig {
@@ -1416,9 +1464,15 @@ impl Config {
             &mut self.bookmarks.keyword,
             &mut self.tasks.keyword,
             &mut self.media.keyword,
+            &mut self.window_management.keyword,
+            &mut self.window_management.switcher_keyword,
         ] {
             *keyword = keyword.trim().to_owned();
         }
+        self.window_management.gap = self
+            .window_management
+            .gap
+            .clamp(0, crate::window_layout::MAX_GAP);
         for list in [
             &mut self.system.disabled,
             &mut self.tasks.disabled,
@@ -1780,6 +1834,47 @@ url = "https://example.com"
         let config = Config::from_toml_str("").unwrap();
         assert!(config.bookmarks.browsers.is_empty());
         assert_eq!(config.bookmarks.keyword, "b");
+    }
+
+    #[test]
+    fn window_management_has_defaults_parses_and_is_clamped() {
+        let config = Config::from_toml_str("").unwrap();
+        let wm = &config.window_management;
+        assert!(wm.enabled && !wm.global);
+        assert_eq!(
+            (wm.keyword.as_str(), wm.switcher_keyword.as_str()),
+            ("win", "w")
+        );
+        assert_eq!(wm.gap, 0);
+
+        let config = Config::from_toml_str(
+            "[window_management]
+enabled = false
+keyword = \" snap \"
+switcher_keyword = \"\"
+gap = 12
+global = true
+",
+        )
+        .unwrap();
+        let wm = &config.window_management;
+        assert!(!wm.enabled && wm.global);
+        assert_eq!(wm.keyword, "snap");
+        assert_eq!(
+            wm.switcher_keyword, "",
+            "an empty keyword turns the switcher off"
+        );
+        assert_eq!(wm.gap, 12);
+
+        for (written, expected) in [("-5", 0), ("999999", 200), ("200", 200)] {
+            let config = Config::from_toml_str(&format!(
+                "[window_management]
+gap = {written}
+"
+            ))
+            .unwrap();
+            assert_eq!(config.window_management.gap, expected, "gap = {written}");
+        }
     }
 
     #[test]

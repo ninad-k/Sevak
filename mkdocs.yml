@@ -120,6 +120,7 @@ nav:
       - System commands: features/system.md
       - Automation tasks: features/tasks.md
       - Media controls: features/media.md
+      - Window management: window-management.md
       - Shell commands: features/shell.md
       - Selection actions: features/selection.md
       - Contacts: features/contacts.md
