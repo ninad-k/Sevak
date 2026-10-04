@@ -80,9 +80,13 @@ export interface Config {
     max_items: number;
     max_item_bytes: number;
     ignore_apps: string[];
+    /** Also skip password managers and credential prompts (a built-in list). */
+    default_ignore_apps: boolean;
     images: boolean;
     files: boolean;
     max_image_bytes: number;
+    /** Encrypt the history at rest for this Windows account (DPAPI); other systems keep owner-only files. */
+    encrypt: boolean;
   };
   contacts: { enabled: boolean; keyword: string; use_system: boolean; vcard_files: string[] };
   onepassword: {
