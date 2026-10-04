@@ -34,6 +34,17 @@ Options:
       --diagnostics      Print a report for bug reports (version, system, settings
                          summary, plugin status, recent log lines) with private
                          data removed. Reads files only; sends nothing anywhere.
+      --backup PATH      Save a backup of your settings, snippets, web searches,
+                         themes, script plugins and workflows to PATH (a file,
+                         or an existing folder). Never holds passwords, API keys,
+                         clipboard or search history. The file is not encrypted.
+      --restore PATH [--replace]
+                         Restore a backup made by --backup or by Settings. Adds
+                         what is missing and overwrites what has the same name;
+                         with --replace it makes everything match the backup.
+                         A safety copy is saved first. Scripts and workflows ask
+                         for your approval again.
+      --undo-restore     Put back what the last --restore (or Settings) replaced
       --config PATH      Use PATH as the config folder (or the config file, if
                          it ends in .toml) instead of the default; overrides
                          SEVAK_CONFIG_DIR. Only used when this process starts
@@ -97,6 +108,16 @@ pub enum Invocation {
     RestoreHotkey,
     /// Print the diagnostics report (see `diagnostics`) and exit.
     Diagnostics,
+    /// Write a settings backup to this file or folder and exit.
+    Backup(PathBuf),
+    /// Restore a settings backup and exit; `replace` makes the chosen
+    /// categories exactly like the backup instead of merging.
+    Restore {
+        path: PathBuf,
+        replace: bool,
+    },
+    /// Undo the last restore and exit.
+    UndoRestore,
     Help,
     Version,
 }
@@ -110,7 +131,14 @@ pub struct Command {
 }
 
 /// Options that take a value, as `--name VALUE` or `--name=VALUE`.
-const VALUE_OPTIONS: [&str; 4] = ["--config", "--query", "--run", "--trigger"];
+const VALUE_OPTIONS: [&str; 6] = [
+    "--config",
+    "--query",
+    "--run",
+    "--trigger",
+    "--backup",
+    "--restore",
+];
 
 /// Parses the arguments after the executable name.
 pub fn parse<I, S>(args: I) -> Result<Command, String>
@@ -124,6 +152,7 @@ where
         .peekable();
     let mut invocation: Option<Invocation> = None;
     let mut config: Option<PathBuf> = None;
+    let mut replace = false;
 
     while let Some(arg) = args.next() {
         let (name, inline) = match arg.split_once('=') {
@@ -152,6 +181,23 @@ where
                     }
                 }
                 "--query" => set(&mut invocation, Invocation::Run(Launch::Query(value)))?,
+                "--backup" | "--restore" => {
+                    if value.trim().is_empty() {
+                        return Err(format!("{name}: expected a path"));
+                    }
+                    let path = PathBuf::from(value);
+                    set(
+                        &mut invocation,
+                        if name == "--backup" {
+                            Invocation::Backup(path)
+                        } else {
+                            Invocation::Restore {
+                                path,
+                                replace: false,
+                            }
+                        },
+                    )?;
+                }
                 "--trigger" => {
                     let target = value.trim().to_owned();
                     if !target.contains('/') || target.starts_with('/') || target.ends_with('/') {
@@ -205,6 +251,8 @@ where
             "-V" | "--version" => set(&mut invocation, Invocation::Version)?,
             "--restore-hotkey" => set(&mut invocation, Invocation::RestoreHotkey)?,
             "--diagnostics" => set(&mut invocation, Invocation::Diagnostics)?,
+            "--undo-restore" => set(&mut invocation, Invocation::UndoRestore)?,
+            "--replace" => replace = true,
             "--setup-hotkey" => {
                 // The key is optional; `--config` after it is not the key.
                 let key = match args.peek() {
@@ -221,6 +269,13 @@ where
                 return Err(format!("unexpected argument \"{other}\""));
             }
             other => return Err(format!("unknown option \"{other}\"")),
+        }
+    }
+
+    if replace {
+        match &mut invocation {
+            Some(Invocation::Restore { replace, .. }) => *replace = true,
+            _ => return Err("--replace only goes with --restore".to_owned()),
         }
     }
 
@@ -545,6 +600,69 @@ mod tests {
         assert!(parse_strs(&["--diagnostics", "stray"]).is_err());
         // A running instance is never asked for a report: a plain launch.
         let remote = parse_remote(&argv(&["sevak", "--diagnostics"]));
+        assert_eq!(remote.launch, Launch::Show);
+    }
+
+    #[test]
+    fn backup_and_restore_take_a_path() {
+        assert_eq!(
+            parse_strs(&["--backup", "b.sevakbackup"]),
+            Ok(Invocation::Backup(PathBuf::from("b.sevakbackup")))
+        );
+        assert_eq!(
+            parse_strs(&["--backup=/tmp/dir"]),
+            Ok(Invocation::Backup(PathBuf::from("/tmp/dir")))
+        );
+        assert_eq!(
+            parse_strs(&["--restore", "b.sevakbackup"]),
+            Ok(Invocation::Restore {
+                path: PathBuf::from("b.sevakbackup"),
+                replace: false
+            })
+        );
+        assert_eq!(
+            parse_strs(&["--restore", "b.sevakbackup", "--replace"]),
+            Ok(Invocation::Restore {
+                path: PathBuf::from("b.sevakbackup"),
+                replace: true
+            })
+        );
+        assert_eq!(
+            parse_strs(&["--replace", "--restore=x"]),
+            Ok(Invocation::Restore {
+                path: PathBuf::from("x"),
+                replace: true
+            })
+        );
+        assert_eq!(
+            config_of(&["--config", "c", "--backup", "b"]),
+            Some(PathBuf::from("c"))
+        );
+        assert_eq!(parse_strs(&["--undo-restore"]), Ok(Invocation::UndoRestore));
+    }
+
+    #[test]
+    fn backup_and_restore_are_strict_about_their_arguments() {
+        assert!(parse_strs(&["--backup"]).is_err());
+        assert!(parse_strs(&["--restore"]).is_err());
+        assert!(parse_strs(&["--backup", ""]).is_err());
+        assert!(parse_strs(&["--backup", "a", "--restore", "b"]).is_err());
+        assert!(parse_strs(&["--backup", "a", "--toggle"]).is_err());
+        assert!(parse_strs(&["--backup", "a", "b"]).is_err());
+        // --replace belongs to --restore alone.
+        assert!(parse_strs(&["--replace"]).is_err());
+        assert!(parse_strs(&["--backup", "a", "--replace"]).is_err());
+        assert!(parse_strs(&["--undo-restore", "--replace"]).is_err());
+        // And --restore-hotkey is still its own flag.
+        assert_eq!(
+            parse_strs(&["--restore-hotkey"]),
+            Ok(Invocation::RestoreHotkey)
+        );
+    }
+
+    #[test]
+    fn a_forwarded_backup_command_just_shows() {
+        let remote = parse_remote(&argv(&["sevak", "--backup", "x"]));
         assert_eq!(remote.launch, Launch::Show);
     }
 

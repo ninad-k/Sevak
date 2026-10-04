@@ -12,6 +12,7 @@
   import { tidyPluginSettings } from "./lib/settings-pages/tidy";
   import HotkeyField from "./lib/HotkeyField.svelte";
   import HelpPage from "./lib/HelpPage.svelte";
+  import BackupPage from "./lib/settings/BackupPage.svelte";
   import HotkeyList from "./lib/HotkeyList.svelte";
   import ThemeEditor from "./lib/ThemeEditor.svelte";
   import Toggle from "./lib/Toggle.svelte";
@@ -144,7 +145,7 @@
   let hotkeyParseProblems = $state(0);
 
   /** The workflow pages keep their own files and are not part of the config form. */
-  type PageId = SectionId | "workflows" | "gallery" | "help";
+  type PageId = SectionId | "workflows" | "gallery" | "backup" | "help";
   let active = $state<PageId>("general");
   let hotkeyError = $state<string | null>(null);
   let actionsHotkeyError = $state<string | null>(null);
@@ -192,6 +193,7 @@
         { id: "ai", label: "AI assistant" },
         { id: "system", label: "System & terminal" },
         ...(showLinux ? [{ id: "linux", label: "Linux" }] : []),
+        { id: "backup", label: "Backup & restore" },
         { id: "help", label: "Help" },
       ] as { id: PageId; label: string }[]
     ).map((section) => ({
@@ -1020,6 +1022,8 @@
           <WorkflowsPage />
         {:else if active === "gallery"}
           <GalleryPage />
+        {:else if active === "backup"}
+          <BackupPage onrestored={load} />
         {:else if active === "help"}
           <HelpPage />
         {:else if active === "web"}

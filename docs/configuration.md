@@ -155,7 +155,7 @@ Which plugins are active. Each built-in plugin can be disabled.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `disabled` | array of strings | `[]` | Plugin ids to turn off. Available ids: `"apps"`, `"calculator"`, `"web"` (all engines) or `"web:<keyword>"` (one engine), `"files"` (its instances `"files:names"` and `"files:content"` are the `ff` and `in` searches), `"bookmarks"`, `"system"`, `"tasks"` (automation tasks), `"media"` (media controls), `"windows"` (window layouts; `"windows:switch"` is the window switcher), `"shell"`, `"clipboard"`, `"snippets"`, `"emoji"` (the emoji picker; `"emoji:word"` and `"emoji:colon"` are its two keywords), `"selection"` (Universal Actions), `"contacts"`, `"1password"`, `"dict"` (`define` and `spell`), `"uuid"`, `"script"` or `"script:<name>"` (script plugins) and `"workflow"` or `"workflow:<folder>"` ([workflows](workflows.md); each also has its own switch in **Settings → Workflows**). Example: `disabled = ["files", "web:yt"]` turns off file search and YouTube search. Unknown ids are ignored. |
+| `disabled` | array of strings | `[]` | Plugin ids to turn off. Available ids: `"apps"`, `"calculator"`, `"web"` (all engines) or `"web:<keyword>"` (one engine), `"files"` (its instances `"files:names"` and `"files:content"` are the `ff` and `in` searches), `"bookmarks"`, `"system"`, `"tasks"` (automation tasks), `"media"` (media controls), `"windows"` (window layouts; `"windows:switch"` is the window switcher), `"shell"`, `"clipboard"`, `"snippets"`, `"emoji"` (the emoji picker; `"emoji:word"` and `"emoji:colon"` are its two keywords), `"selection"` (Universal Actions), `"contacts"`, `"1password"`, `"dict"` (`define` and `spell`), `"uuid"`, `"backup"` (the `backup settings` and `restore settings` [launcher commands](backup-and-restore.md#from-the-command-line-and-the-launcher)), `"script"` or `"script:<name>"` (script plugins) and `"workflow"` or `"workflow:<folder>"` ([workflows](workflows.md); each also has its own switch in **Settings → Workflows**). Example: `disabled = ["files", "web:yt"]` turns off file search and YouTube search. Unknown ids are ignored. |
 
 ```toml
 [plugins]
@@ -609,10 +609,11 @@ Some settings are files of their own in the config folder rather than keys in `c
 | `plugins/` | [Script plugins](features/script-plugins.md), one folder each with a `plugin.toml` |
 | `workflows/` | [Workflows](workflows.md), one folder each with a `workflow.toml`; the builder in **Settings → Workflows** writes them |
 | `themes/` | [Theme files](themes.md#theme-files-and-the-editor) made, imported or installed in **Settings → Appearance**; `[appearance] theme_file` picks one |
+| `backup.toml` | The options of [automatic backups](backup-and-restore.md#automatic-backups) (`schedule`, `on_update`, `keep`, `folder`); off unless you turn it on, and never part of a backup itself |
 
 Everything Sevak writes itself is in the data folders, not here: the approvals file, usage history, logs, and the clipboard history with its images, which on Windows is in the *local* data folder (`%LOCALAPPDATA%\sevak\`) and encrypted for your account (`[clipboard] encrypt`).
 
-See [Files and data](files-and-data.md) for the data folders.
+[Settings → Backup & restore](backup-and-restore.md) saves `config.toml` (without its `[onepassword]` section and anything that looks like a key or token), these folders and the stylesheet as one file. See [Files and data](files-and-data.md) for the data folder.
 
 ## Complete example
 

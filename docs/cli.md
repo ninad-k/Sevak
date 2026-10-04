@@ -18,6 +18,9 @@ Sevak can be controlled from the command line or automated with scripts. When Se
 | `--setup-hotkey [KEY]` | Bind hotkeys to GNOME (Wayland desktop on Linux); offers to free Super+Space |
 | `--restore-hotkey` | Put back system shortcuts Sevak changed with your permission (GNOME input sources, macOS Spotlight) |
 | `--diagnostics` | Print a report for bug reports (version, system, settings summary, plugin status, recent log lines) with private data removed |
+| `--backup PATH` | Save a [backup](backup-and-restore.md) of your settings, snippets, web searches, themes, script plugins and workflows to a file (or a folder) |
+| `--restore PATH [--replace]` | Restore a backup (merge, or replace with `--replace`); a safety copy is saved first |
+| `--undo-restore` | Put back what the last restore replaced |
 | `--config PATH` | Use a custom config folder or file; overrides `SEVAK_CONFIG_DIR` |
 | `-h`, `--help` | Print help |
 | `-V`, `--version` | Print version |
@@ -218,6 +221,37 @@ sevak --diagnostics | Out-File -Encoding utf8 sevak-diagnostics.md
 ```
 
 or **Settings → Help → Save as file**, which works the same everywhere. `--help` and `--version` behave the same way.
+
+#### `--backup PATH`
+
+```bash
+sevak --backup ~/Documents/my.sevakbackup
+sevak --backup ~/Documents            # an existing folder: a dated name is made up
+sevak --backup my.sevakbackup --config ~/other-sevak
+```
+
+Write a [backup](backup-and-restore.md) of everything that may be backed up (settings, snippets, web searches, themes, script plugins and workflows) and exit. It prints what went in, what was left out on purpose and why, and where the file is. It never contains passwords, API keys, clipboard or search history, or which scripts you allowed; the file itself is **not encrypted**.
+
+It reads files only, so it works whether or not Sevak is running. Exit code 1 if the backup could not be made (for example a `config.toml` with a mistake).
+
+#### `--restore PATH [--replace]`
+
+```bash
+sevak --restore ~/Documents/my.sevakbackup
+sevak --restore my.sevakbackup --replace
+```
+
+Restore every category the backup holds, after checking the file as [Settings does](backup-and-restore.md#how-a-backup-is-checked), and exit. Without `--replace` it **merges**: it adds what is missing and overwrites what has the same name. With `--replace` the settings, snippets, engines, themes, plugins and workflows become exactly what the backup has. It prints what changes per category, then saves a safety copy and applies it all or nothing. Scripts and workflows it adds or changes ask for your approval again.
+
+It works on the files and does not contact a running Sevak: if Sevak is running, choose **Reload index** in its tray menu, or restart it, to use the restored settings. `--replace` is only valid with `--restore`.
+
+#### `--undo-restore`
+
+```bash
+sevak --undo-restore
+```
+
+Put back what the last restore (from the command line or from Settings) replaced, using its safety copy, and exit.
 
 ## Single-instance forwarding
 
