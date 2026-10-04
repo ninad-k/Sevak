@@ -825,12 +825,13 @@ mod tests {
         plugin.attach_notifier(Arc::new(move |_| {
             let _ = tx.lock().unwrap().send(());
         }));
-        let rows = plugin.query(input);
+        plugin.query(input);
+        // Check emptiness after the query: the list may arrive between the two,
+        // and the rows returned by that first query would then be stale.
         if plugin.windows.get().is_empty() {
             rx.recv_timeout(Duration::from_secs(5)).expect("a refresh");
-            return plugin.query(input);
         }
-        rows
+        plugin.query(input)
     }
 
     #[test]
