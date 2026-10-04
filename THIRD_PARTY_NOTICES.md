@@ -4,6 +4,14 @@ Sevak is licensed under the [Apache License 2.0](LICENSE). It includes the
 following third-party material. Rust and JavaScript dependencies keep their own
 licences, declared in their packages (see `Cargo.lock` and `package-lock.json`).
 
+## Catppuccin palette
+
+`gallery/themes/Catppuccin-Mocha.toml` adapts the Mocha colors from
+[Catppuccin's palette](https://github.com/catppuccin/palette), copyright
+2021 Catppuccin, under the MIT license. The full license is included in
+[Catppuccin-LICENSE.txt](gallery/themes/Catppuccin-LICENSE.txt) and as comments
+inside the distributed theme file.
+
 ## WordNet 3.0 (the bundled dictionary)
 
 `crates/sevak-plugins/data/wordnet-en.z` is a trimmed copy of Princeton

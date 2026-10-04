@@ -16,6 +16,16 @@
   let installing = $state<string | null>(null);
   let done = $state<Record<string, string>>({});
   let failed = $state<Record<string, string>>({});
+  let query = $state("");
+  let kind = $state("all");
+  let availability = $state("all");
+  const visible = $derived((gallery?.entries ?? []).filter(entry => {
+    const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const text = `${entry.name} ${entry.description} ${entry.author}`.toLowerCase();
+    return words.every(word => text.includes(word)) &&
+      (kind === "all" || entry.kind === kind) &&
+      (availability === "all" || entry.installed === (availability === "installed"));
+  }));
 
   async function load() {
     loading = true;
@@ -56,11 +66,9 @@
 <div class="wf-page">
   <h1>Gallery</h1>
   <p class="wf-lead">
-    Ready-made workflows and script plugins. The gallery is a short list kept in the Sevak
-    repository. Nothing is requested while you browse Settings: pressing <strong>Load gallery</strong>
-    fetches the list once, and pressing <strong>Install</strong> downloads that one package, checks
-    it against the checksum in the list, and unpacks it into your workflows or plugins folder.
-    Sevak then still asks for your permission before anything in it runs. No other data is sent.
+    Add tools to your launcher with ready-made extensions and workflows.
+    Choose <strong>Load gallery</strong> to browse packages from GitHub, then install what you need.
+    Script plugins ask for your permission before running. Themes are in Appearance → Theme editor.
   </p>
 
   {#if gallery === null}
@@ -77,7 +85,7 @@
         <code class="wf-code">{host(gallery.source)}</code>
         {#if gallery.skipped > 0}· {gallery.skipped} left out (not understood by this Sevak){/if}
       </span>
-      <button type="button" class="wf-btn small" disabled={loading} onclick={load}>
+      <button type="button" class="wf-btn small" disabled={loading || installing !== null} onclick={load}>
         {loading ? "Loading…" : "Reload"}
       </button>
     </div>
@@ -88,30 +96,60 @@
   {/if}
 
   {#if gallery}
+    <div class="filters">
+      <div class="field search">
+        <label for="gallery-query">Search extensions</label>
+        <input id="gallery-query" class="wf-input" type="search" bind:value={query} placeholder="Name, keyword or what you want to do…" />
+      </div>
+      <div class="field">
+        <label for="gallery-kind">Type</label>
+        <select id="gallery-kind" class="wf-input" bind:value={kind}>
+          <option value="all">All types</option>
+          <option value="plugin">Extensions</option>
+          <option value="workflow">Workflows</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="gallery-availability">Availability</label>
+        <select id="gallery-availability" class="wf-input" bind:value={availability}>
+          <option value="all">All packages</option>
+          <option value="available">Not installed</option>
+          <option value="installed">Installed</option>
+        </select>
+      </div>
+    </div>
+    <p class="wf-sub result-count" role="status">{visible.length} of {gallery.entries.length} packages</p>
     <ul class="rows" aria-label="Gallery entries">
-      {#each gallery.entries as entry (entry.id)}
+      {#each visible as entry (entry.id)}
         <li class="wf-card">
-          <div class="wf-row">
-            <div class="wf-grow">
-              <div class="wf-title">
-                {entry.name}
-                <span class="wf-chip kind">{entry.kind === "workflow" ? "Workflow" : "Script plugin"}</span>
-              </div>
-              <div class="wf-sub">{entry.description}</div>
-              <div class="meta wf-sub">
-                {#if entry.author}by {entry.author}{/if}
-                {#if entry.version}· version {entry.version}{/if}
-                · from <code class="wf-code">{host(entry.source)}</code>
-                · sha256 <code class="wf-code" title={entry.sha256}>{entry.sha256.slice(0, 12)}…</code>
-              </div>
-              {#if done[entry.id]}<p class="wf-msg ok" role="status">{done[entry.id]}</p>{/if}
-              {#if failed[entry.id]}<p class="wf-msg error" role="alert">{failed[entry.id]}</p>{/if}
+          <div class="card-heading">
+            <span class="monogram" aria-hidden="true">{entry.name.slice(0, 2)}</span>
+            <div>
+              <span class="wf-chip">{entry.kind === "workflow" ? "Workflow" : "Extension · script plugin"}</span>
+              <h2>{entry.name}</h2>
             </div>
+          </div>
+          <p class="wf-sub description">{entry.description}</p>
+          <div class="meta wf-sub">
+            {#if entry.author}by {entry.author}{/if}
+            {#if entry.version}· version {entry.version}{/if}
+          </div>
+          <details class="wf-sub package-details">
+            <summary>Package details</summary>
+            <p>Source: <code class="wf-code">{host(entry.source)}</code></p>
+            <p>SHA-256: <code class="checksum">{entry.sha256}</code></p>
+            {#if entry.homepage}<p>Project: <span class="checksum">{entry.homepage}</span></p>{/if}
+            <p>Downloaded only when you install. Sevak verifies the package checksum before installing.</p>
+          </details>
+          {#if done[entry.id]}<p class="wf-msg ok" role="status">{done[entry.id]}</p>{/if}
+          {#if failed[entry.id]}<p class="wf-msg error" role="alert">{failed[entry.id]}</p>{/if}
+          <div class="card-footer">
             <button
               type="button"
               class="wf-btn small"
               class:primary={!entry.installed}
               disabled={entry.installed || installing !== null}
+              aria-label={entry.installed ? `${entry.name} is installed` : `Install ${entry.name}`}
               onclick={() => install(entry)}
             >
               {entry.installed ? "Installed" : installing === entry.id ? "Installing…" : "Install"}
@@ -120,6 +158,15 @@
         </li>
       {/each}
     </ul>
+    {#if visible.length === 0}
+      <div class="wf-card empty">
+        <h2>{gallery.entries.length === 0 ? "The gallery has no packages yet" : "No matching extensions"}</h2>
+        <p class="wf-sub">{gallery.entries.length === 0 ? "Reload later to check for new packages." : "Try another search or reset the filters."}</p>
+        {#if gallery.entries.length > 0}
+          <button class="wf-btn" type="button" onclick={() => { query = ""; kind = "all"; availability = "all"; }}>Reset filters</button>
+        {/if}
+      </div>
+    {/if}
   {/if}
 </div>
 
@@ -128,14 +175,28 @@
     margin: 0;
     padding: 0;
     list-style: none;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(290px, 100%), 1fr));
+    gap: 12px;
   }
 
   .meta {
     margin-top: 4px;
   }
 
-  .kind {
-    margin-left: 6px;
-    vertical-align: 1px;
-  }
+  .filters { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0 10px; }
+  .filters .field { display: grid; gap: 5px; font-size: 12px; min-width: 130px; }
+  .filters .search { flex: 1; min-width: 210px; }
+  .result-count { margin-bottom: 12px; }
+  .rows .wf-card { display: flex; flex-direction: column; margin: 0; min-width: 0; padding: 16px; }
+  .card-heading { display: flex; align-items: center; gap: 12px; }
+  .monogram { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; border-radius: 12px; background: var(--selected); color: var(--fg); font-size: 19px; font-weight: 650; }
+  h2 { font-size: 15px; margin: 6px 0; font-weight: 600; }
+  .description { margin: 12px 0; line-height: 1.6; flex: 1; }
+  .package-details { margin: 12px 0; }
+  .package-details summary { cursor: pointer; }
+  .package-details summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .checksum { overflow-wrap: anywhere; }
+  .card-footer { display: flex; justify-content: flex-end; margin-top: 6px; }
+  .empty { padding: 20px; }
 </style>

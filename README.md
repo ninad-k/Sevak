@@ -125,7 +125,8 @@ Sevak also includes:
   [How workflows work →](docs/workflows.md)
 - **Gallery** — an optional list of ready-made workflows and script plugins,
   fetched only when you press **Load gallery**, installed only when you press
-  **Install**, checksum-verified.
+  **Install**, checksum-verified. Search and filter packages, including
+  [Pomodoro, color tools, translation and Tauri docs](docs/extensions.md).
 - **Custom hotkeys** — extra global keys that open Sevak with text typed in
   (`> `, `g `) or run a result directly.
 - **Themes** — light, dark or system, plus accent color, font, radius, opacity

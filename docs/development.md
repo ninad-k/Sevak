@@ -105,6 +105,7 @@ cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 npm run check
+npm run test:extensions   # Extension behavior and script entry points (Node.js 22+)
 npm run build
 ```
 

@@ -927,6 +927,13 @@ The examples:
 | `hello-python` | persistent | Python | `hello` |
 | `timestamp-powershell` | one-shot | PowerShell | `ts` |
 | `case-converter-node` | one-shot, Alfred format | Node.js | `case` |
+| `color-tools` | one-shot | Node.js 22+ | `color` |
+| `pomodoro` | persistent | Node.js 22+ | `pomo` |
+| `translate` | one-shot | Node.js 22+ | `tr` |
+| `tauri-docs` | one-shot | Node.js 22+ | `tauri` |
+
+The [extensions guide](extensions.md) covers installation, examples and the
+capabilities of each ready-made tool.
 
 ### The manifest (`plugin.toml`)
 

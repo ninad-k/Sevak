@@ -18,6 +18,7 @@ too:
 - [Keyboard shortcuts](keyboard.md): every key in the launcher and Settings
 - [Settings window](settings.md): each tab and what it changes
 - [Themes](themes.md): appearance options, the theme editor and gallery, custom CSS
+- [Extensions](extensions.md): installable Pomodoro, color tools, translation and Tauri docs
 
 ## Features
 

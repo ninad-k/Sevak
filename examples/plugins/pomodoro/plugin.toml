@@ -1,0 +1,7 @@
+protocol = 1
+id = "script:pomodoro"
+name = "Pomodoro"
+description = "Focus and break timers with pause, resume and saved progress. Type pomo start 25. Check time with pomo status; no background alarms. Requires Node.js 22+."
+keyword = "pomo"
+mode = "persistent"
+script = "main.mjs"

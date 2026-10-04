@@ -72,6 +72,15 @@
       "mode": "dark",
       "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/High-Contrast.toml",
       "sha256": "f3f9434f8931bc2a38bc0ae324c035bef555686cf3639458348fec70eecfde2a"
+    },
+    {
+      "id": "catppuccin-mocha",
+      "name": "Catppuccin Mocha",
+      "author": "Sevak; palette by Catppuccin",
+      "description": "Soft mauve accents and deep blue-gray surfaces from the Catppuccin Mocha palette.",
+      "mode": "dark",
+      "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/Catppuccin-Mocha.toml",
+      "sha256": "fefcbf6fd08ef1e14ce5704398cf23840dfda8a31a3ddb2f238edb85d59f85ec"
     }
   ]
 }

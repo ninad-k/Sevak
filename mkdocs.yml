@@ -103,6 +103,7 @@ nav:
       - Keyboard shortcuts: keyboard.md
       - Settings window: settings.md
       - Themes: themes.md
+      - Extensions: extensions.md
   - Features:
       - features/index.md
       - Applications: features/apps.md

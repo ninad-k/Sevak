@@ -1,0 +1,7 @@
+protocol = 1
+id = "script:color-tools"
+name = "Color tools"
+description = "Convert HEX, RGB and HSL colors or check text contrast. Try color #f5b52c or color #fff on #111. Requires Node.js 22+."
+keyword = "color"
+mode = "oneshot"
+script = "main.mjs"

@@ -13,6 +13,12 @@ user agent) and install a file only if its SHA-256 matches the one in the index.
 
 ## Adding a workflow or script plugin
 
+The [productivity pack](../docs/extensions.md) adds Pomodoro, color tools,
+browser translation, Tauri documentation links and a Catppuccin Mocha theme.
+The four script packages require Node.js 22+; they have no npm dependencies.
+Run `npm run test:extensions` before packaging a changed extension. Packages
+must be committed with their index hashes to become available from the online gallery.
+
 1. Put the folder in `examples/` (workflows in `examples/workflows/`, script
    plugins in `examples/plugins/`) and pack it:
 

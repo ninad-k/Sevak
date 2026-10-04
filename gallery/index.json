@@ -34,6 +34,50 @@
       "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/case-converter-node.zip",
       "sha256": "a2b1605fdf4c817ac9558cb89e1a21aded4868bb20cf97f6c98208b5e6a0f801",
       "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/case-converter-node"
+    },
+    {
+      "id": "color-tools",
+      "kind": "plugin",
+      "name": "Color tools",
+      "description": "Convert HEX, RGB and HSL colors or check text contrast. Try color #f5b52c or color #fff on #111. Requires Node.js 22+.",
+      "author": "Sevak",
+      "version": "1.0.0",
+      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/color-tools.zip",
+      "sha256": "3b1bd032141a238a61d0a552eaccd07d253dc6118b06e096d8a039e34759d319",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/color-tools"
+    },
+    {
+      "id": "pomodoro",
+      "kind": "plugin",
+      "name": "Pomodoro",
+      "description": "Focus and break timers with pause, resume and saved progress. Type pomo start 25. Check time with pomo status; no background alarms. Requires Node.js 22+.",
+      "author": "Sevak",
+      "version": "1.0.0",
+      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/pomodoro.zip",
+      "sha256": "7ad35560b5899e237fd2fda0bec57ae0931522c17a32ad43210b9d9ceef06158",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/pomodoro"
+    },
+    {
+      "id": "translate",
+      "kind": "plugin",
+      "name": "Translate in browser",
+      "description": "Type tr fr hello to open Google Translate with automatic source detection. Text is sent only when you open the result. Requires Node.js 22+.",
+      "author": "Sevak",
+      "version": "1.0.0",
+      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/translate.zip",
+      "sha256": "46234330926c7a01c5c8bfccf9ab6d1734bb6a9b8d9aa2712760cfa338a5be1a",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/translate"
+    },
+    {
+      "id": "tauri-docs",
+      "kind": "plugin",
+      "name": "Tauri docs",
+      "description": "Search a curated local index of Tauri 2 guides. Type tauri updater; Enter opens the official page. Requires Node.js 22+.",
+      "author": "Sevak",
+      "version": "1.0.0",
+      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/tauri-docs.zip",
+      "sha256": "d0bc7c687e782669d66013120ffc2908f6f3cc6e639ef12137e7ef1265607344",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/tauri-docs"
     }
   ]
 }
