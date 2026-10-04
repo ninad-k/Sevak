@@ -28,7 +28,7 @@ mod protocol;
 mod runner;
 
 pub use alfred::RawPick;
-pub use approvals::ApprovalStore;
+pub use approvals::{script_approval_key, ApprovalStore, Approvals, ContentHasher};
 pub use host::{Candidate, Scanned, ScriptPluginHost, FAMILY};
 pub use manifest::{
     relative_inside, resolve_launch, Format, Launch, Manifest, Mode, ID_PREFIX, MANIFEST_FILE,

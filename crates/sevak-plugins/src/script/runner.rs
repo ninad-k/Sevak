@@ -29,6 +29,7 @@ use std::time::{Duration, Instant};
 
 use sevak_platform::process::configure_helper_command;
 
+use super::approvals::script_approval_key;
 use super::delivery::Delivery;
 use super::items::{convert_items, ItemContext};
 use super::manifest::{Format, Manifest, Mode, PROTOCOL};
@@ -64,9 +65,28 @@ pub struct Spec {
     pub data_dir: PathBuf,
     /// Extra environment for the script: a workflow's variables.
     pub env: Vec<(String, String)>,
+    /// The approval key this plugin was allowed under. It is checked again
+    /// every time a process starts, so a script replaced after Sevak loaded
+    /// the plugin does not run until the user has reviewed it (a reload asks).
+    /// `None` for workflow script nodes, which have their own approval.
+    pub expected_key: Option<String>,
 }
 
 impl Spec {
+    /// Fails when the plugin's files no longer match what was allowed.
+    fn check_approval(&self) -> Result<(), String> {
+        let Some(expected) = &self.expected_key else {
+            return Ok(());
+        };
+        match script_approval_key(&self.dir) {
+            Ok((_, key)) if key == *expected => Ok(()),
+            _ => Err(
+                "the plugin changed after it was allowed; choose Reload index to review it"
+                    .to_owned(),
+            ),
+        }
+    }
+
     pub fn item_context(&self) -> ItemContext<'_> {
         ItemContext {
             plugin_id: &self.manifest.id,
@@ -78,6 +98,7 @@ impl Spec {
     /// The command to start the script; `query` is appended as the last
     /// argument (one-shot mode).
     pub fn command(&self, query: Option<&str>) -> Result<Command, String> {
+        self.check_approval()?;
         let argv = self.manifest.resolve_argv(&self.dir)?;
         let mut command = Command::new(&argv[0]);
         command.args(&argv[1..]);
@@ -655,6 +676,7 @@ mod tests {
             dir: PathBuf::from("plugin"),
             data_dir: PathBuf::from("data"),
             env: Vec::new(),
+            expected_key: None,
         }
     }
 

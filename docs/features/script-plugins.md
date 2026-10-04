@@ -33,7 +33,8 @@ This page covers installing and using script plugins. For writing one, see [Writ
    - Restart Sevak or choose **Reload index** from the tray menu.
    - Sevak finds the new plugin and shows a warning dialog, **Sevak: new script plugin**, with its name, keyword, folder and the exact command it runs.
    - Click **Allow** only if you trust where the plugin came from: it runs with your account's permissions. **Not now** leaves it off and asks again the next time Sevak starts.
-   - Sevak remembers the answer per plugin and command. If a plugin's command changes, you are asked again.
+   - Sevak remembers the answer for that plugin's *contents*: its `plugin.toml`, the script files its command names, and the folder it lives in. If any of them changes (you edit the script, update it with `git pull`, or move or copy the folder) you are asked again, and the dialog says the plugin's contents changed. If a script that is already running changes on disk, Sevak refuses to start it again until you review it: choose **Reload index**.
+   - After upgrading to a Sevak that binds approvals to contents, every script plugin asks once more. That is expected.
 
 The plugin is now active. Type its keyword (defined in `plugin.toml`) to search it.
 

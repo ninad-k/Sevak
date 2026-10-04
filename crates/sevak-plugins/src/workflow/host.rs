@@ -18,7 +18,6 @@ use std::sync::{Arc, Mutex};
 use serde::Serialize;
 use sevak_core::{Config, HotkeyBinding, Plugin};
 use sevak_platform::PlatformProvider;
-use sha2::{Digest, Sha256};
 
 use super::exec::{Ctx, OutputSink, Runtime};
 use super::model::{slug, valid_folder_name, Accepts, Node, NodeKind, Workflow, FAMILY, FILE};
@@ -26,7 +25,7 @@ use super::plugins::{run_id, FilterPlugin, KeywordPlugin, TriggersPlugin};
 use super::templates;
 use super::validate::{error_summary, Problem};
 use crate::keywords::{workflow_key, KeywordOwners, KeywordUse, OwnerKind};
-use crate::script::{relative_inside, ApprovalStore};
+use crate::script::{relative_inside, ApprovalStore, ContentHasher};
 
 /// A workflow folder that loaded and is valid.
 #[derive(Debug, Clone)]
@@ -597,39 +596,31 @@ pub fn approval_key(workflow: &Workflow, dir: &Path) -> Option<String> {
     if !workflow.needs_approval() {
         return None;
     }
-    let mut hasher = Sha256::new();
-    let mut feed = |label: &str, bytes: &[u8]| {
-        hasher.update(label.as_bytes());
-        hasher.update((bytes.len() as u64).to_le_bytes());
-        hasher.update(bytes);
-    };
+    // The same hasher the script plugins use, fed in the same order as before
+    // so existing workflow approvals stay valid.
+    let mut hasher = ContentHasher::new();
     for node in workflow.nodes.iter().filter(|n| n.kind.needs_approval()) {
-        feed("node", node.id.as_bytes());
-        feed(
+        hasher.feed("node", node.id.as_bytes());
+        hasher.feed(
             "kind",
             serde_json::to_string(&node.kind)
                 .unwrap_or_default()
                 .as_bytes(),
         );
         for file in script_files(node) {
-            match relative_inside(dir, &file).map(fs::read) {
-                Some(Ok(bytes)) => feed("file", &bytes),
-                _ => feed("missing", file.as_bytes()),
-            }
+            hasher.file(dir, &file);
         }
     }
     for conn in &workflow.connections {
-        feed("from", conn.from.as_bytes());
-        feed("port", conn.port.as_bytes());
-        feed("to", conn.to.as_bytes());
+        hasher.feed("from", conn.from.as_bytes());
+        hasher.feed("port", conn.port.as_bytes());
+        hasher.feed("to", conn.to.as_bytes());
     }
     for (name, value) in &workflow.variables {
-        feed("var", name.as_bytes());
-        feed("value", value.as_bytes());
+        hasher.feed("var", name.as_bytes());
+        hasher.feed("value", value.as_bytes());
     }
-    let digest = hasher.finalize();
-    let hex: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
-    Some(format!("sha256:{hex}"))
+    Some(hasher.finish())
 }
 
 /// The files in the workflow folder a script node starts: its `script`, and

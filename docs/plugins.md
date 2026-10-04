@@ -952,11 +952,19 @@ format      = "sevak"            # one-shot output: "sevak" (default) or "alfred
 timeout_ms        = 50           # how long a query waits for the script (10-1000)
 hard_timeout_ms   = 3000         # unanswered this long = hung, restart it (500-60000)
 idle_timeout_secs = 300          # persistent: stop after this much inactivity (0 = never)
+
+files       = ["lib/util.py"]    # optional: more files of this folder the approval covers
 ```
 
 - `id` is **stable forever**, like every plugin id: it is part of result ids and
   usage statistics and is what `[plugins] disabled` lists. Ids must be unique;
-  when two folders claim one id the first (by folder name) wins.
+  when two folders claim one id the one you have already allowed keeps it, and
+  otherwise the first (by folder name) wins.
+- `files` lists support files (a module the script imports, a data file it
+  reads) that belong to the plugin. Sevak already covers `script` and every
+  argument of `command` that is a path inside the folder; `files` adds the rest
+  to what [an approval is bound to](#security). Paths must stay inside the
+  plugin folder.
 - Keywords are matched case-insensitively. A keyword that another plugin (built-in
   or script) also uses queries both and merges their results, so pick one
   that is not taken (`g`, `yt`, `gh`, `f`, `b`, `>`, `cb`, `s`, `c`, `@`, `1p`, `define`, `spell` and `uuid` are by
@@ -1266,11 +1274,23 @@ built-in plugins only the OS-index file searches use it.
   you start. Sevak does not sandbox them. Install only plugins you trust.
 - A new plugin does **not run until you allow it**. Sevak asks once per plugin,
   in a native dialog that shows the name, the folder and the exact command. The
-  answer is stored in `<data dir>/script-plugin-approvals.json`, bound to the
-  plugin id **and** its command line, mode and format: if `plugin.toml` changes
-  what runs, Sevak asks again. (Editing the script file itself is not detected;
-  the manifest is what you approve.) "Not now" asks again at the next start.
-  Disabled plugins are never asked about.
+  answer is stored in `<data dir>/script-plugin-approvals.json`, bound to a
+  SHA-256 over the plugin's **contents**: `plugin.toml`, the command line, mode
+  and format, the bytes of every file the command names inside the folder (the
+  `script`, and arguments such as `main.py` in `["python3", "main.py"]`), the
+  files listed in `files`, and the folder's location. Change any of them (a
+  `git pull` that edits the script, a gallery re-install, a moved or copied
+  folder) and Sevak asks again. A second folder that declares the same `id` and
+  command is a different plugin and is not covered by the first one's answer.
+  Sevak also checks the files again each time it starts the script, and
+  refuses to start one that changed since it was allowed (choose **Reload
+  index** to review it). What the hash does *not* cover: files the script
+  imports that you did not name (list them in `files`), the interpreter
+  itself, and anything the script downloads or reads at run time.
+  "Not now" asks again at the next start. Disabled plugins are never asked about.
+  The first time you start a Sevak with this rule, every existing script plugin
+  asks once more (the dialog says "the plugin's contents changed or this is the
+  first review under the new rules").
 - Only folders in your own config directory are loaded. Sevak never downloads,
   updates or installs plugins by itself; the only exception is the opt-in
   [gallery](workflows.md#the-gallery), which fetches a package after you press

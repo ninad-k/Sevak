@@ -273,6 +273,7 @@ impl FilterPlugin {
             description: runtime.workflow.description.clone(),
             keyword: keyword.trim().to_owned(),
             launch,
+            files: Vec::new(),
             mode: Mode::Oneshot,
             format: Format::AlfredWorkflow,
             timeout: std::time::Duration::from_millis(timeout_ms.unwrap_or(50).clamp(10, 1_000)),
@@ -287,6 +288,7 @@ impl FilterPlugin {
             dir: runtime.dir.clone(),
             data_dir: runtime.data_dir.clone(),
             env: runtime.script_environment(),
+            expected_key: None,
         };
         Some(Self {
             inner: ScriptPlugin::new(spec, platform),

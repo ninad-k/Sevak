@@ -54,8 +54,15 @@ pub fn review_new(app: &AppHandle) {
 /// Shows the question for one plugin; true when it was allowed and saved.
 fn ask(app: &AppHandle, candidate: &Candidate) -> bool {
     let manifest = &candidate.manifest;
+    let intro = if candidate.reviewed_before {
+        "Sevak found a script plugin to review again.\n\n\
+         The plugin's contents changed or this is the first review under the new rules: an \
+         allowance now covers the plugin's files and folder, not just its name.\n\n"
+    } else {
+        "Sevak found a script plugin it has not run before.\n\n"
+    };
     let prompt = format!(
-        "Sevak found a script plugin it has not run before.\n\n\
+        "{intro}\
          Name: {name}\n\
          Keyword: {keyword}\n\
          Folder: {folder}\n\

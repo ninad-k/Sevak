@@ -65,6 +65,9 @@ struct Raw {
     global: Option<bool>,
     command: Option<Vec<String>>,
     script: Option<String>,
+    /// Extra files in the plugin folder that are part of the approval.
+    #[serde(default)]
+    files: Vec<String>,
     #[serde(default)]
     mode: Mode,
     #[serde(default)]
@@ -92,6 +95,9 @@ pub struct Manifest {
     pub description: String,
     pub keyword: String,
     pub launch: Launch,
+    /// Support files (modules the script imports, data it reads) that the
+    /// approval also covers; plain paths inside the plugin folder.
+    pub files: Vec<String>,
     pub mode: Mode,
     pub format: Format,
     /// How long a query waits for the script before the list is shown without
@@ -109,14 +115,22 @@ impl Manifest {
     /// Reads and validates `<dir>/plugin.toml`. `dir` also names the plugin
     /// when the manifest gives no `id` or `name`.
     pub fn load(dir: &Path) -> Result<Self, String> {
+        Self::read(dir).map(|(manifest, _)| manifest)
+    }
+
+    /// [`Manifest::load`] together with the exact bytes of the file, which an
+    /// approval is bound to.
+    pub fn read(dir: &Path) -> Result<(Self, Vec<u8>), String> {
         let path = dir.join(MANIFEST_FILE);
-        let text = std::fs::read_to_string(&path)
-            .map_err(|err| format!("cannot read {}: {err}", path.display()))?;
+        let bytes =
+            std::fs::read(&path).map_err(|err| format!("cannot read {}: {err}", path.display()))?;
+        let text = String::from_utf8(bytes.clone())
+            .map_err(|_| format!("{} is not valid UTF-8 text", path.display()))?;
         let folder = dir
             .file_name()
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_default();
-        Self::parse(&text, &folder)
+        Self::parse(&text, &folder).map(|manifest| (manifest, bytes))
     }
 
     /// Validates manifest `text`; `folder` is the plugin folder's name.
@@ -177,6 +191,17 @@ impl Manifest {
             }
         };
 
+        let mut files = Vec::new();
+        for file in raw.files {
+            let file = file.trim().to_owned();
+            if relative_inside(Path::new(""), &file).is_none() {
+                return Err(format!(
+                    "`files` may only name files inside the plugin folder, not \"{file}\""
+                ));
+            }
+            files.push(file);
+        }
+
         if raw.mode == Mode::Persistent && raw.format == Format::Alfred {
             return Err("`format = \"alfred\"` needs `mode = \"oneshot\"`".to_owned());
         }
@@ -194,6 +219,7 @@ impl Manifest {
             description: raw.description.unwrap_or_default().trim().to_owned(),
             keyword,
             launch,
+            files,
             mode: raw.mode,
             format: raw.format,
             timeout: Duration::from_millis(
@@ -224,16 +250,24 @@ impl Manifest {
         }
     }
 
-    /// What an approval is bound to: the command and how it is run. A manifest
-    /// that changes either needs approving again.
-    pub fn approval_key(&self) -> String {
-        format!("{:?}/{:?}: {}", self.mode, self.format, self.command_line())
-    }
-
-    /// [`Manifest::approval_key`] together with the plugin id, for "not now"
-    /// bookkeeping that spans plugins.
-    pub fn approval_key_with_id(&self) -> String {
-        format!("{} {}", self.id, self.approval_key())
+    /// The files inside the plugin folder that the approval covers: the script
+    /// the manifest names, every argument of the command that is a plain
+    /// relative path (`["python", "main.py"]` names `main.py`), and the
+    /// manifest's `files`. A name that is not a file (a program on `PATH`) is
+    /// harmless: it counts as "missing" in the hash.
+    pub fn support_files(&self) -> Vec<String> {
+        let mut files: Vec<String> = match &self.launch {
+            Launch::Script(script) => vec![script.clone()],
+            Launch::Command(argv) => argv
+                .iter()
+                .filter(|arg| relative_inside(Path::new(""), arg).is_some())
+                .cloned()
+                .collect(),
+        };
+        files.extend(self.files.iter().cloned());
+        files.sort();
+        files.dedup();
+        files
     }
 
     /// The program and arguments to start, with relative paths resolved against
@@ -368,6 +402,34 @@ mod tests {
         assert_eq!(m.timeout, Duration::from_millis(120));
         assert_eq!(m.hard_timeout, Duration::from_secs(8));
         assert_eq!(m.idle_timeout, None);
+    }
+
+    #[test]
+    fn the_files_an_approval_covers() {
+        let m = Manifest::parse(MINIMAL, "x").unwrap();
+        assert_eq!(m.support_files(), ["main.py", "python"]);
+        let text = format!("{MINIMAL}files = [\"lib/util.py\", \"main.py\"]\n");
+        let m = Manifest::parse(&text, "x").unwrap();
+        assert_eq!(m.support_files(), ["lib/util.py", "main.py", "python"]);
+        let m =
+            Manifest::parse("protocol = 1\nkeyword = \"a\"\nscript = \"run.py\"\n", "x").unwrap();
+        assert_eq!(m.support_files(), ["run.py"]);
+        // An absolute interpreter is not a file of the plugin.
+        let m = Manifest::parse(
+            "protocol = 1\nkeyword = \"a\"\ncommand = [\"/usr/bin/python3\", \"-u\", \"m.py\"]\n",
+            "x",
+        )
+        .unwrap();
+        assert_eq!(m.support_files(), ["-u", "m.py"]);
+    }
+
+    #[test]
+    fn support_files_cannot_leave_the_plugin_folder() {
+        for bad in ["../x.py", "/etc/passwd", "a/../../b", "C:\\\\x.py", ""] {
+            let text = format!("{MINIMAL}files = [{bad:?}]\n");
+            let err = Manifest::parse(&text, "x").expect_err(bad);
+            assert!(err.contains("files"), "{err}");
+        }
     }
 
     #[test]

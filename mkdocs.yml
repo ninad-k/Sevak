@@ -140,6 +140,7 @@ nav:
       - Name and brand: brand.md
   - Security:
       - Threat model: security/threat-model.md
+      - "Script and workflow trust": security/script-workflow-trust.md
   - Design decisions:
       - decisions/index.md
       - "0001 Local-first, no telemetry": decisions/0001-local-first-no-telemetry.md
