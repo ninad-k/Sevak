@@ -387,6 +387,11 @@ understood. Differences worth knowing:
 - Anything that runs code needs your permission first, and the permission is
   tied to what runs.
 
+!!! note "Trademark"
+    Alfred is a trademark of Running with Crayons Ltd. Sevak is not affiliated
+    with or endorsed by it; the name is used only to describe the file format
+    and conventions Sevak reads.
+
 ## Troubleshooting
 
 | Symptom | Likely cause |

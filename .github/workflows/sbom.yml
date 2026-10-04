@@ -1,0 +1,92 @@
+name: SBOM
+
+# Generates the CycloneDX software bills of materials of a published release and
+# attaches them to it:
+#   sevak-sbom-rust.cdx.json   the Rust crates of the app (Cargo.lock)
+#   sevak-sbom-npm.cdx.json    the npm packages inside the shipped UI bundle
+#   SBOM-SHA256SUMS.txt        their sha256 (a separate file: the release
+#                              workflow owns SHA256SUMS.txt and it is not touched)
+# The generator is scripts/generate-sbom.mjs, which also pins the tool versions.
+# See docs/security/supply-chain.md.
+#
+# Triggers:
+#   release: published   works for releases published by hand or with a personal
+#                        access token. GitHub does NOT start workflows for events
+#                        caused by the default GITHUB_TOKEN, which the release
+#                        workflow uses to publish, so for automatic releases call
+#                        this workflow from release.yml (workflow_call, or
+#                        `gh workflow run sbom.yml -f tag=vX.Y.Z`).
+#   workflow_dispatch    run it for any existing tag from the Actions tab.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to attach the SBOMs to (for example v0.2.0)
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to attach the SBOMs to (for example v0.2.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sbom-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  sbom:
+    name: Generate and attach the SBOMs
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # upload release assets
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - name: Check the tag
+        run: |
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$'; then
+            echo "::error::'$TAG' is not a release tag like v1.2.3"
+            exit 1
+          fi
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isDraft --jq '"release \(.tagName), draft: \(.isDraft)"'
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # The release workflow stamps the version into the manifests in its runner
+      # without committing it; do the same so the SBOMs name the released version.
+      - name: Stamp the release version
+        run: |
+          if ! node scripts/release-version.mjs set "${TAG#v}"; then
+            echo "::warning::Could not stamp ${TAG#v}; the SBOMs will carry the version found in the tagged manifests."
+          fi
+
+      - name: Install cargo-cyclonedx
+        run: cargo install cargo-cyclonedx --version "$(node scripts/generate-sbom.mjs --tool-version cargo-cyclonedx)" --locked
+
+      - name: Generate the SBOMs
+        run: node scripts/generate-sbom.mjs --out sbom
+
+      - name: Attach them to the release
+        run: |
+          ls -l sbom
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            sbom/sevak-sbom-rust.cdx.json \
+            sbom/sevak-sbom-npm.cdx.json \
+            sbom/SBOM-SHA256SUMS.txt

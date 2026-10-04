@@ -890,7 +890,8 @@ You can add a keyword plugin without building Sevak: drop a folder with a
 `plugin.toml` and a script into the plugins folder and Sevak runs the script to
 answer queries. Scripts can be written in anything that reads and writes text
 (Python, PowerShell, Node, a shell script, a compiled program), and a one-shot
-mode runs many existing **Alfred Script Filter** scripts unchanged.
+mode understands the **Script Filter JSON** format used by Alfred, so many
+existing scripts run unchanged.
 
 - [Quick start](#quick-start)
 - [The manifest](#the-manifest-plugintoml)
@@ -1157,8 +1158,8 @@ JSON is logged and shows no results.
 
 `mode = "oneshot"` with `format = "alfred"` reads
 [Alfred's Script Filter JSON](https://www.alfredapp.com/help/workflows/inputs/script-filter/json/).
-Many existing Alfred workflow scripts that are not specific to macOS can be
-dropped into a folder with a four-line manifest:
+Many existing scripts written for Alfred's Script Filter that are not specific
+to macOS can be dropped into a folder with a four-line manifest:
 
 ```toml
 protocol = 1
@@ -1216,6 +1217,11 @@ does not open arbitrary schemes. Scripts that call `osascript`, read
 Only Script Filters are supported here, not whole `.alfredworkflow` packages with
 their other node types; [workflows](workflows.md) cover chaining actions after
 a Script Filter.
+
+!!! note "Trademark"
+    Alfred is a trademark of Running with Crayons Ltd. Sevak is not affiliated
+    with or endorsed by it; the name is used only to describe the Script Filter
+    JSON format that Sevak can read.
 
 ### Speed: queries never wait for scripts
 
