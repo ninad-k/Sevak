@@ -171,16 +171,16 @@ describe("validate", () => {
       const c = config();
       c.files.keyword = "GH";
       const problems = validate(c);
-      expect(problems.filesKeyword).toBe("Already a web search keyword");
+      expect(problems.keywords["files.keyword"]).toBe("Already a web search keyword");
       expect(problems.count.files).toBe(1);
     });
 
     it("lets the files keyword be empty (turned off) but not contain spaces", () => {
       const c = config();
       c.files.keyword = "";
-      expect(validate(c).filesKeyword).toBeUndefined();
+      expect(validate(c).keywords["files.keyword"]).toBeUndefined();
       c.files.keyword = "a b";
-      expect(validate(c).filesKeyword).toBe("No spaces");
+      expect(validate(c).keywords["files.keyword"]).toBe("No spaces");
     });
 
     it("checks the files depth bounds", () => {
@@ -203,10 +203,37 @@ describe("validate", () => {
       expect(validate(c).hotkeys[0].key).toBeUndefined();
     });
 
-    // Rust also rejects a web keyword equal to a fixed built-in one (`>`, `cb`,
-    // `s`, `emoji`, `:`, `@`, `uuid`) and clashes between the configurable
-    // built-in keywords (bookmarks, tasks, media, contacts, ...). The form only
-    // checks the pairs above; the rest is reported by Rust when saving.
-    it.todo("flags a web search keyword that a fixed built-in keyword owns (Rust: validate_builtin_keywords)");
+    // The form mirrors Rust's validate_builtin_keywords: fixed keywords and the
+    // configurable built-in ones (files, bookmarks, tasks, media, contacts,
+    // 1Password, dictionary) all clash with web searches and with each other.
+    it("flags a web search keyword that a fixed built-in keyword owns", () => {
+      const c = config();
+      c.web_search = [engine("emoji")];
+      c.search.fallback_web_search = [];
+      expect(validate(c).engines[0].keyword).toBe("Used by the emoji picker");
+    });
+
+    it("flags both sides of a clash between configurable built-in keywords", () => {
+      const c = config();
+      c.tasks.keyword = "ctt";
+      c.media.keyword = "ctt";
+      const problems = validate(c);
+      expect(problems.keywords["tasks.keyword"]).toBe("Already used by media controls");
+      expect(problems.keywords["media.keyword"]).toBe("Already used by automation tasks");
+    });
+
+    it("will not let the contacts, 1Password and dictionary keywords be empty", () => {
+      const c = config();
+      c.contacts.keyword = "";
+      c.onepassword.keyword = "";
+      c.dictionary.define_keyword = "";
+      c.dictionary.spell_keyword = "";
+      const problems = validate(c);
+      expect(problems.keywords["contacts.keyword"]).toBe("Required");
+      expect(problems.keywords["onepassword.keyword"]).toBe("Required");
+      expect(problems.keywords["dictionary.define_keyword"]).toBe("Required");
+      expect(problems.keywords["dictionary.spell_keyword"]).toBe("Required");
+      expect(problems.count.integrations).toBe(4);
+    });
   });
 });
