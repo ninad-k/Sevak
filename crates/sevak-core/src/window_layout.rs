@@ -810,6 +810,35 @@ mod tests {
         assert_eq!(Layout::from_key("restore"), None);
     }
 
+    /// The Windows settings page lists the commands in TypeScript
+    /// (`ui/src/lib/settings/windows-commands.ts`); a layout added here and not
+    /// there would be missing from the cheat sheet.
+    #[test]
+    fn the_settings_cheat_sheet_lists_every_command() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join("ui/src/lib/settings/windows-commands.ts");
+        let Ok(source) = std::fs::read_to_string(&path) else {
+            // Built outside the repository (a packaged crate): nothing to compare.
+            return;
+        };
+        let mut listed: Vec<String> = source
+            .lines()
+            .filter_map(|line| {
+                let rest = line.trim().strip_prefix("{ key: \"")?;
+                Some(rest[..rest.find('"')?].to_owned())
+            })
+            .collect();
+        let mut expected: Vec<String> = WindowCommand::all()
+            .into_iter()
+            .map(|command| command.key().to_owned())
+            .collect();
+        listed.sort();
+        expected.sort();
+        assert_eq!(listed, expected);
+    }
+
     #[test]
     fn rect_helpers() {
         let a = r(0, 0, 100, 100);

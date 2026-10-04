@@ -32,7 +32,7 @@ use crate::emoji::Trigger;
 use crate::{
     files_family, AppsPlugin, BookmarksPlugin, CalculatorPlugin, ClipboardPlugin, ContactsPlugin,
     DictionaryPlugin, EmojiPlugin, MediaPlugin, OnePasswordPlugin, SelectionPlugin, ShellPlugin,
-    SnippetsPlugin, SystemPlugin, TasksPlugin, UuidPlugin, WebSearchPlugin,
+    SnippetsPlugin, SystemPlugin, TasksPlugin, UuidPlugin, WebSearchPlugin, WindowManagerPlugin,
 };
 
 /// Builds the instances of one plugin family.
@@ -110,7 +110,7 @@ impl PluginRegistry {
     }
 
     /// Apps, calculator, web search, files, bookmarks, system commands,
-    /// automation tasks, media controls, shell, clipboard history, snippets,
+    /// automation tasks, media controls, window management, shell, clipboard history, snippets,
     /// emoji, Universal Actions, contacts, 1Password, the dictionary and the
     /// example UUID plugin, in that order.
     /// Order matters only for tie-breaking and logging.
@@ -190,6 +190,14 @@ impl PluginRegistry {
                     config.media.clone(),
                     platform.clone(),
                 ))]
+            },
+        ));
+        registry.register(PluginDescriptor::new(
+            "windows",
+            "Window management",
+            "Snap, resize and move the window you were using (`win left`, `win max`, `win next display`) and switch windows (`w <name>`).",
+            |config, platform| {
+                WindowManagerPlugin::instances(&config.window_management, platform.clone())
             },
         ));
         registry.register(PluginDescriptor::new(
@@ -394,6 +402,7 @@ mod tests {
                 "system",
                 "tasks",
                 "media",
+                "windows",
                 "shell",
                 "clipboard",
                 "snippets",
@@ -424,6 +433,8 @@ mod tests {
                 "system",
                 "tasks",
                 "media",
+                "windows",
+                "windows:switch",
                 "shell",
                 "clipboard",
                 "snippets",
@@ -455,6 +466,8 @@ mod tests {
                 "system",
                 "tasks",
                 "media",
+                "windows",
+                "windows:switch",
                 "shell",
                 "clipboard",
                 "snippets",
@@ -487,6 +500,8 @@ mod tests {
                 "bookmarks",
                 "tasks",
                 "media",
+                "windows",
+                "windows:switch",
                 "shell",
                 "clipboard",
                 "snippets",
@@ -532,6 +547,8 @@ mod tests {
                 ("system", true),
                 ("tasks", true),
                 ("media", true),
+                ("windows", true),
+                ("windows:switch", true),
                 ("shell", true),
                 ("clipboard", true),
                 ("snippets", true),

@@ -228,6 +228,13 @@ fn validate_limits(config: &Config) -> Result<(), String> {
             "1Password: the cache time must be from 1 to {MAX_ONEPASSWORD_CACHE_MINUTES} minutes."
         ));
     }
+    let gap = config.window_management.gap;
+    if !(0..=sevak_core::window_layout::MAX_GAP).contains(&gap) {
+        return Err(format!(
+            "Window management: the gap must be from 0 to {} pixels.",
+            sevak_core::window_layout::MAX_GAP
+        ));
+    }
     Ok(())
 }
 
