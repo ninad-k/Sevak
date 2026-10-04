@@ -22,8 +22,11 @@ release exactly as before.
 `.github/workflows/release.yml` runs on every push to `main` that changes more
 than docs: it works out the version, builds on Windows, macOS and Linux, signs the
 installers for the updater, writes `latest.json` and `SHA256SUMS.txt`, publishes
-the release and then updates the package managers. Details are in
-[Development](development.md#releasing).
+the release and then updates the package managers. It also calls
+`sbom.yml` and `attest.yml`, which attach the SBOMs and the build-provenance
+attestations to the published release. Details are in
+[Development](development.md#releasing) and
+[Supply chain](security/supply-chain.md).
 
 ### Staged flow
 
@@ -43,8 +46,9 @@ the release and then updates the package managers. Details are in
 4. **Promote.** Actions, **Promote**, enter the beta tag (for example
    `v1.3.0-beta.2`). The workflow downloads the release's assets, verifies
    `SHA256SUMS.txt` and the signatures, writes `latest.json` from them, makes the
-   release the newest stable one and then updates the package managers. **Nothing is
-   rebuilt**: the files stable users get are the files beta users tested.
+   release the newest stable one, updates the package managers and attaches the
+   SBOMs and attestations (betas get neither before this). **Nothing is rebuilt**: the
+   files stable users get are the files beta users tested.
 
 You can also cut a beta without switching modes: Actions, **Release**, Run workflow,
 `channel` = `beta` (builds from `main`), or `channel` = `stable` to cut a stable
@@ -142,6 +146,11 @@ page exists; until then this list is the plan.
    the new one and installing it works.
 5. **Package managers** (stable releases): the winget pull request, the Scoop and
    Homebrew commits and the AUR push appear; each is skipped while its secret is unset.
+6. **SBOMs and attestations** (stable releases): the release has
+   `sevak-sbom-rust.cdx.json`, `sevak-sbom-npm.cdx.json` and `SBOM-SHA256SUMS.txt`,
+   and `gh attestation verify <installer> --repo ninad-k/Sevak` succeeds. If the
+   `SBOM` or `Attest` job failed, the release itself is fine: re-run the job, or run
+   the workflow from the Actions tab with the tag.
 
 ## Rolling back
 
@@ -219,6 +228,7 @@ Sevak keeps that guard, and there is no downgrade flag in `latest.json`. So:
 |---|---|
 | `.github/workflows/release.yml` | Plan, build, publish, distribute; stable or beta |
 | `.github/workflows/promote.yml` | Publish an existing release as stable, without rebuilding |
+| `.github/workflows/sbom.yml`, `.github/workflows/attest.yml` | SBOMs and build-provenance attestations; called by Release and Promote for stable releases, or run by hand for a tag |
 | `.github/workflows/rollback.yml` | Serve an earlier release as stable again |
 | `.github/workflows/pr-labels.yml`, `.github/release.yml` | Group the generated release notes by commit type |
 | `.github/workflows/release-checks.yml` | Tests the scripts below and parses the workflows on pull requests |

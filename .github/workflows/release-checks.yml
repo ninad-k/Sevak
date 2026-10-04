@@ -16,6 +16,8 @@ on:
       - ".github/workflows/promote.yml"
       - ".github/workflows/rollback.yml"
       - ".github/workflows/pr-labels.yml"
+      - ".github/workflows/sbom.yml"
+      - ".github/workflows/attest.yml"
   workflow_dispatch:
 
 permissions:
@@ -52,7 +54,7 @@ jobs:
           python3 - <<'EOF'
           import subprocess, yaml
           failed = False
-          for name in ["release", "promote", "rollback", "pr-labels"]:
+          for name in ["release", "promote", "rollback", "pr-labels", "sbom", "attest"]:
               doc = yaml.safe_load(open(f".github/workflows/{name}.yml", encoding="utf-8"))
               for job, spec in doc["jobs"].items():
                   for step in spec.get("steps", []):

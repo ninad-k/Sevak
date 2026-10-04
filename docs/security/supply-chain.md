@@ -116,13 +116,16 @@ npm ci
 node scripts/generate-sbom.mjs --out sbom
 ```
 
-The SBOM and attestation workflows run automatically for releases that are
-published by hand or with a personal token. GitHub does not start a workflow
-for an event caused by the built-in `GITHUB_TOKEN`, which is what the automatic
-release workflow publishes with, so that workflow has to call them
-(`workflow_call`) or start them (`gh workflow run sbom.yml -f tag=vX.Y.Z`). Either
-workflow can also be run for an existing release from the Actions tab. If a
-release has no `sevak-sbom-*` assets, they were not run for it yet.
+The SBOM and attestation workflows run automatically for every stable release.
+GitHub does not start a workflow for an event caused by the built-in
+`GITHUB_TOKEN`, which is what the release workflow publishes with, so
+`release.yml` calls both (`workflow_call`) once the stable release is published,
+and `promote.yml` does the same when it promotes a beta. They also still start
+by themselves for a release published by hand or with a personal token. Betas
+get neither until they are promoted. Either workflow can be run for an existing
+release from the Actions tab (or `gh workflow run sbom.yml -f tag=vX.Y.Z`). If a
+release has no `sevak-sbom-*` assets, the job failed or was skipped for it; run
+the workflow for its tag.
 
 ## Third-party notices and licences
 

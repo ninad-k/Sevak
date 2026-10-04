@@ -151,6 +151,31 @@ jobs:
           done
           echo "::warning::latest.json does not serve $VERSION yet; check releases/latest/download/latest.json by hand."
 
+  # The same two calls release.yml makes for a stable release (see the comment
+  # there): a release published with GITHUB_TOKEN does not start sbom.yml or
+  # attest.yml by itself. A promoted beta has had neither yet.
+  sbom:
+    name: Attach the SBOMs
+    needs: promote
+    if: needs.promote.outputs.promoted == 'true'
+    permissions:
+      contents: write # upload release assets
+    uses: ./.github/workflows/sbom.yml
+    with:
+      tag: ${{ inputs.tag }}
+
+  attest:
+    name: Attest the installers
+    needs: promote
+    if: needs.promote.outputs.promoted == 'true'
+    permissions:
+      id-token: write # sign the attestation with the workflow's OIDC identity
+      attestations: write # store it
+      contents: read
+    uses: ./.github/workflows/attest.yml
+    with:
+      tag: ${{ inputs.tag }}
+
   distribute:
     name: Update package managers
     needs: promote

@@ -191,9 +191,11 @@ Bundle settings are the `bundle` object in `src-tauri/tauri.conf.json`:
   app. `THIRD_PARTY_NOTICES.md` is generated: run
   `node scripts/generate-third-party-notices.mjs` after any dependency change
   (see [Supply chain](security/supply-chain.md#regenerating-the-third-party-notices)).
-- After a release is published, `.github/workflows/sbom.yml` attaches the
+- Once a stable release is published, `.github/workflows/sbom.yml` attaches the
   CycloneDX SBOMs and `.github/workflows/attest.yml` creates the build-provenance
-  attestations (see [Supply chain](security/supply-chain.md)).
+  attestations. `release.yml` and `promote.yml` call them (a release published
+  with `GITHUB_TOKEN` does not trigger them by itself); see
+  [Supply chain](security/supply-chain.md).
 - `crates/sevak-plugins/data/wordnet-en.z` is the bundled dictionary (about 2.7
   MB), generated from Princeton WordNet 3.0 by `scripts/build-dictionary.py`
   (`python scripts/build-dictionary.py <path to WordNet-3.0>`, Python 3, no

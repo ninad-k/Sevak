@@ -77,6 +77,11 @@ jobs:
             echo "::warning::Could not stamp ${TAG#v}; the SBOMs will carry the version found in the tagged manifests."
           fi
 
+      # The toolchain pinned in rust-toolchain.toml at the tag. Tags from before
+      # the pin existed fall back to the runner's own Rust.
+      - uses: ./.github/actions/setup-rust
+        if: hashFiles('.github/actions/setup-rust/action.yml') != ''
+
       - name: Install cargo-cyclonedx
         run: cargo install cargo-cyclonedx --version "$(node scripts/generate-sbom.mjs --tool-version cargo-cyclonedx)" --locked
 

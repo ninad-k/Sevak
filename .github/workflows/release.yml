@@ -299,6 +299,36 @@ jobs:
           fi
           gh release upload channel-beta release-assets/latest-beta.json --clobber
 
+  # A release published with the default GITHUB_TOKEN does not start workflows
+  # that listen for `release: published` (GitHub ignores events caused by that
+  # token), so sbom.yml and attest.yml are called from here, once the stable
+  # release is out. Betas are not attested or given an SBOM until promote.yml
+  # publishes them as stable (it makes the same calls). The permissions below
+  # are exactly what each called workflow's job declares. A failure here does
+  # not undo the release; re-run just that job, or run the workflow by hand
+  # for the tag (docs/security/supply-chain.md).
+  sbom:
+    name: Attach the SBOMs
+    needs: [plan, publish]
+    if: needs.plan.outputs.channel == 'stable'
+    permissions:
+      contents: write # upload release assets
+    uses: ./.github/workflows/sbom.yml
+    with:
+      tag: v${{ needs.plan.outputs.version }}
+
+  attest:
+    name: Attest the installers
+    needs: [plan, publish]
+    if: needs.plan.outputs.channel == 'stable'
+    permissions:
+      id-token: write # sign the attestation with the workflow's OIDC identity
+      attestations: write # store it
+      contents: read
+    uses: ./.github/workflows/attest.yml
+    with:
+      tag: v${{ needs.plan.outputs.version }}
+
   distribute:
     name: Update package managers
     needs: [plan, publish]
