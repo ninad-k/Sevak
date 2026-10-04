@@ -221,7 +221,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn a_link_in_the_way_is_not_followed_or_replaced() {
+    fn links_at_the_target_count_as_existing() {
         let dir = tempfile::tempdir().unwrap();
         let victim = dir.path().join("victim.txt");
         fs::write(&victim, "precious").unwrap();

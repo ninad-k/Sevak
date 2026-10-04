@@ -1115,7 +1115,7 @@ mod tests {
     /// started: the item that has not been placed yet is not.
     #[cfg(unix)]
     #[test]
-    fn a_destination_swapped_for_a_link_is_not_followed() {
+    fn a_move_checks_the_destination_folder_again_before_placing() {
         let dir = tempfile::tempdir().unwrap();
         let src = dir.path().join("from/a.txt");
         write(&src, "a");
@@ -1138,7 +1138,7 @@ mod tests {
     /// becomes a link, and the rest are refused.
     #[cfg(unix)]
     #[test]
-    fn a_batch_stops_following_a_destination_that_became_a_link() {
+    fn a_batch_checks_the_destination_folder_before_each_item() {
         let dir = tempfile::tempdir().unwrap();
         let first = dir.path().join("from/one.txt");
         let second = dir.path().join("from/two.txt");
@@ -1170,7 +1170,7 @@ mod tests {
     /// through: the copy takes the next name.
     #[cfg(unix)]
     #[test]
-    fn a_planted_link_at_the_destination_name_is_not_written_through() {
+    fn links_at_the_destination_name_count_as_taken_names() {
         let dir = tempfile::tempdir().unwrap();
         let src = dir.path().join("from/a.txt");
         write(&src, "new");
