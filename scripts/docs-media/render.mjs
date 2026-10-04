@@ -27,45 +27,119 @@ const font = process.platform === "win32" ? "Sevak UI" : "sans-serif";
 const bold = process.platform === "win32" ? "Sevak Bold" : "sans-serif";
 const C = { bg: "#111020", panel: "#1b1932", ink: "#f3f0ff", muted: "#aaa6c3", amber: "#f5b52c", border: "#37334f" };
 
+const port = Number(process.env.SEVAK_MEDIA_PORT || 1436);
+const origin = `http://127.0.0.1:${port}`;
+const { $previews: previews = {}, $buffer: bufferItems = [], ...fixtureRows } = fixtures;
+// Rows need the fields the shell always sends; fixtures only spell out what differs.
+const queries = Object.fromEntries(Object.entries(fixtureRows).map(([query, list]) =>
+  [query, list.map((row) => ({ secondary: [], copy_text: null, ...row }))]));
+// Swaps one pattern in the mock; fails loudly if the mock was refactored.
+function swap(code, pattern, replacement) {
+  if (!pattern.test(code)) throw new Error(`docs fixtures: ${pattern} no longer matches ui/src/lib/mock.ts`);
+  return code.replace(pattern, () => replacement);
+}
 const server = await createServer({
   logLevel: "error",
   configFile: join(root, "ui", "vite.config.ts"),
-  server: { host: "127.0.0.1", port: 1436, strictPort: true, open: false },
+  server: { host: "127.0.0.1", port, strictPort: true, open: false },
   plugins: [{ name: "documentation-fixtures", enforce: "pre", transform(code, id) {
     if (!id.replaceAll("\\", "/").endsWith("/ui/src/lib/mock.ts")) return;
-    return code.replace(/export function mockSearch\(query: string\): ResultDto\[\] \{[\s\S]*?\n\}/,
-      `const docsRows: Record<string, ResultDto[]> = ${JSON.stringify(fixtures)};\nexport function mockSearch(query: string): ResultDto[] { return docsRows[query.trim()] ?? []; }`);
+    // Searches: the fixtures above, plus the emoji grid (`:face`), which is real emoji data.
+    code = swap(code, /export function mockSearch\(query: string\): ResultDto\[\] \{[\s\S]*?\n\}/,
+      `const docsRows: Record<string, ResultDto[]> = ${JSON.stringify(queries)};
+export function mockSearch(query: string): ResultDto[] {
+  const text = query.trim();
+  if (Object.hasOwn(docsRows, text)) return docsRows[text];
+  const grid = /^(?::|emoji\s)\s*(.*)$/.exec(text);
+  return grid ? emojiRows(grid[1]) : [];
+}`);
+    // Previews of the fixture rows; every other id keeps the mock's own preview.
+    code = swap(code, /export function mockPreview\(id: string\): PreviewContent \| null \{/,
+      `const docsPreviews: Record<string, PreviewContent> = ${JSON.stringify(previews)};
+export function mockPreview(id: string): PreviewContent | null { return docsPreviews[id] ?? mockPreviewBase(id); }
+function mockPreviewBase(id: string): PreviewContent | null {`);
+    // The file buffer shown at /#buffer.
+    return swap(code, /previewItems = \["m:file"[\s\S]*?\}\);\n/, `previewItems = ${JSON.stringify(bufferItems)};\n`);
   } }],
 });
 let browser;
 const shots = {};
+const pause = (page, ms) => page.waitForTimeout(ms);
 try {
   await server.listen();
   browser = await chromium.launch({ headless: true, ...(process.env.SEVAK_MEDIA_BROWSER ? { executablePath: process.env.SEVAK_MEDIA_BROWSER } : { channel: "chrome" }) });
   const page = await browser.newPage({ viewport: { width: 744, height: 600 }, deviceScaleFactor: 2, colorScheme: "dark" });
-  for (const [name, query] of Object.entries({ ready: "", apps: "code", calculator: "12*7", files: "f project", web: "g rust traits" })) {
-    await page.goto("http://127.0.0.1:1436/");
+  const noCaret = () => page.addStyleTag({ content: "input { caret-color: transparent !important }" });
+  // Opens the launcher at `hash`, types `query`, runs `act`, then saves the card as launcher-<name>.png.
+  async function launcher(name, { query = "", hash = "", act, wait = ".row" } = {}) {
+    await page.goto("about:blank");
+    await page.goto(`${origin}/${hash}`);
     await page.getByRole("combobox").fill(query);
-    if (query) await page.locator(".row").first().waitFor();
-    await page.addStyleTag({ content: "input { caret-color: transparent !important }" });
+    if (query && wait) await page.locator(wait).first().waitFor();
+    await noCaret();
+    if (act) await act();
+    await pause(page, 400);
     const path = join(media, `launcher-${name}.png`);
     await page.locator(".card").screenshot({ path, omitBackground: true });
     shots[name] = await loadImage(path);
   }
+  for (const [name, query] of Object.entries({ ready: "", apps: "code", calculator: "12*7", files: "f project", web: "g rust traits" })) {
+    await launcher(name, { query });
+  }
   await page.emulateMedia({ colorScheme: "light" });
-  await page.goto("http://127.0.0.1:1436/");
-  await page.getByRole("combobox").fill("code");
-  await page.locator(".row").first().waitFor();
-  await page.addStyleTag({ content: "input { caret-color: transparent !important }" });
-  await page.locator(".card").screenshot({ path: join(media, "launcher-light.png"), omitBackground: true });
-  shots.light = await loadImage(join(media, "launcher-light.png"));
+  await launcher("light", { query: "code" });
+  await page.emulateMedia({ colorScheme: "dark" });
+
+  // Features added in 0.5-0.7, all from the same components and the same sample data.
+  await page.setViewportSize({ width: 744, height: 900 });
+  // Ctrl+Y: the preview pane under the list follows the selected row.
+  await launcher("preview", { query: "f project", act: async () => {
+    await page.keyboard.press("Control+y");
+    await page.locator(".pane .meta").waitFor();
+  } });
+  // Ctrl+K (or the right arrow): every action for the selected row.
+  await launcher("actions", { query: "chrome", act: async () => {
+    await page.keyboard.press("Control+k");
+    await page.getByText("Actions for Google Chrome").waitFor();
+  } });
+  // The emoji picker is a grid; the arrow keys walk the tiles.
+  await launcher("grid", { query: ":", wait: ".cell", act: async () => { await page.keyboard.press("ArrowRight"); await page.keyboard.press("ArrowRight"); } });
+  // The file buffer: collected files stay in a strip above the results.
+  await launcher("buffer", { query: "f project", hash: "#buffer", act: async () => {
+    await page.reload();
+    await page.getByRole("combobox").fill("f project");
+    await page.locator(".row").first().waitFor();
+    await page.locator(".chip").first().waitFor();
+    await noCaret();
+  } });
+  // Universal Actions for a selected sentence (Ctrl+Alt+Space in any app).
+  await launcher("selection", { hash: "#selection", act: async () => {
+    await page.reload();
+    await page.getByText("Selected text").waitFor();
+    await noCaret();
+  }, wait: "" });
+
+  // Settings: General, then the theme editor and the workflow builder.
   await page.setViewportSize({ width: 1040, height: 700 });
   await page.goto("about:blank");
-  await page.goto("http://127.0.0.1:1436/#settings");
+  await page.goto(`${origin}/#settings`);
   await page.getByRole("heading", { name: "General", exact: true }).waitFor();
   await page.screenshot({ path: join(media, "settings-general.png") });
   shots.settings = await loadImage(join(media, "settings-general.png"));
-  console.log("Captured six launcher states and the actual Settings component.");
+  await page.setViewportSize({ width: 1040, height: 900 });
+  await page.getByRole("tab", { name: "Appearance" }).click();
+  await page.getByRole("heading", { name: "Theme editor" }).waitFor();
+  await page.locator("#panel").evaluate((el) => el.scrollTo(0, el.scrollTop + document.querySelector("#theme-editor-title").getBoundingClientRect().top - 16));
+  await pause(page, 500);
+  await page.screenshot({ path: join(media, "settings-theme-editor.png") });
+  await page.setViewportSize({ width: 1180, height: 560 });
+  await page.getByRole("tab", { name: "Workflows" }).click();
+  await page.getByRole("heading", { name: "Workflows", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Edit" }).first().click();
+  await page.getByText("Typed something?").waitFor();
+  await pause(page, 500);
+  await page.screenshot({ path: join(media, "settings-workflow-builder.png") });
+  console.log("Captured launcher states and the actual Settings component.");
 } finally {
   await browser?.close();
   await server.close();
@@ -112,8 +186,9 @@ text("Your desktop.",80,185,82,C.ink,true);
 text("At your service.",80,284,82,C.amber,true);
 text("Find apps and files. Calculate. Search the web.",84,400,29,C.muted);
 shot(shots.apps,240,494,960);
-key("Alt",501,766,80); text("+",596,780,24,C.muted); key("Space",628,766,128);
-text("Type. Enter. Done.",792,782,23,C.muted);
+key("Win",501,752,80); text("+",596,766,24,C.muted); key("Space",628,752,128);
+text("Type. Enter. Done.",792,768,23,C.muted);
+text("Win+Space on Windows  ·  Cmd+Space on macOS  ·  Super+Space on Linux",720,823,18,C.muted,false,"center");
 await save("sevak-overview.png");
 
 backdrop(1440,980);
@@ -149,8 +224,65 @@ shot(shots.settings,140,224,1160);
 text("Actual Settings UI · sample configuration",80,1061,18,C.muted);
 await save("sevak-settings.png");
 
-const workflow=`<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="290" viewBox="0 0 1440 290" role="img" aria-labelledby="title desc"><title id="title">Open, search, act</title><desc id="desc">Press Alt plus Space to open Sevak. Type an app, file, calculation or web keyword. Press Enter to launch, open or copy.</desc><rect width="1440" height="290" rx="24" fill="#1b1932"/>${[
-  [64,"01","OPEN","Win + Space","Bring Sevak into focus."],
+// Features that came after the first release, one tile each. Tile heights follow the captures.
+{
+  const more = [
+    ["01", "Preview any result", "Press Ctrl+Y (or tap Shift) for text, images, folders and details.", shots.preview],
+    ["02", "Pick emoji from a grid", "Type : and a word. The arrow keys walk the tiles.", shots.grid],
+    ["03", "Every action, one key away", "Press Ctrl+K or → to see what you can do with a result.", shots.actions],
+    ["04", "Collect files, then act", "Alt+↓ adds files to the buffer; Alt+→ opens its actions.", shots.buffer],
+  ];
+  const tileW = 592, head = 137, pad = 24;
+  const heights = more.map(([, , , img]) => Math.min(Math.round(tileW * img.height / img.width), 400));
+  const rowH = [0, 1].map((r) => Math.max(heights[r * 2], heights[r * 2 + 1]) + head + pad);
+  backdrop(1440, 200 + rowH[0] + 28 + rowH[1] + 90);
+  text("More than a search bar.", 64, 56, 48, C.ink, true);
+  text("Preview, pick, collect and act, all from the keyboard.", 64, 120, 25, C.muted);
+  more.forEach(([num, title, desc, img], i) => {
+    const x = 64 + (i % 2) * 672, y = 200 + Math.floor(i / 2) * (rowH[0] + 28), h = rowH[Math.floor(i / 2)];
+    rr(x, y, 640, h, 22, C.panel, C.border);
+    text(num, x + 28, y + 28, 19, C.amber, true); text(title, x + 75, y + 22, 30, C.ink, true);
+    text(desc, x + 28, y + 74, 20, C.muted);
+    // A tall capture is cropped at the bottom edge of its tile, never squeezed.
+    ctx.save(); ctx.beginPath(); ctx.rect(x + 24, y + head, tileW, heights[i]); ctx.clip();
+    shot(img, x + 24, y + head, tileW, false); ctx.restore();
+  });
+  text("Actual Sevak UI components · illustrative sample results", 64, canvas.height - 54, 17, C.muted);
+  await save("sevak-features-more.png");
+}
+
+// The 1200 x 627 social card (landing page link preview, launch posts).
+{
+  backdrop(1200, 627);
+  icon(64, 64, 64); text("Sevak", 144, 68, 44, C.ink, true);
+  text("Your desktop.", 64, 168, 56, C.ink, true);
+  text("At your service.", 64, 228, 56, C.amber, true);
+  text("A free, open-source, keyboard-first launcher for", 64, 312, 22, "#b9b5d6");
+  text("Windows, macOS and Linux.", 64, 345, 22, "#b9b5d6");
+  const pills = [["Apps", "Files", "Calculator", "Unit conversion"], ["Web search", "Snippets", "Clipboard", "Plugins"]];
+  pills.forEach((row, r) => {
+    let x = 64;
+    for (const label of row) {
+      ctx.font = `18px "${font}"`;
+      const w = Math.ceil(ctx.measureText(label).width) + 32;
+      rr(x, 392 + r * 45, w, 38, 19, "#1b1932", C.border); text(label, x + 16, 399 + r * 45, 18, C.ink);
+      x += w + 12;
+    }
+  });
+  text("ninad-k.github.io/Sevak", 64, 568, 22, C.amber, true);
+  ctx.font = `22px "${bold}"`; const urlW = ctx.measureText("ninad-k.github.io/Sevak").width;
+  text(" · Apache-2.0", 64 + urlW, 568, 22, C.muted);
+  const small = (value, x, y, w) => { rr(x, y, w, 34, 9, "#27243e", C.border); text(value, x + w / 2, y + 5, 19, C.ink, true, "center"); };
+  small("Win", 624, 184, 52); text("+", 692, 188, 17, C.muted); small("Space", 708, 184, 72);
+  text("type", 790, 190, 20, C.muted); small("Enter", 834, 184, 72); text("done", 916, 190, 20, C.muted);
+  shot(shots.apps, 620, 238, 524); shot(shots.calculator, 684, 382, 460);
+  const card = canvas.toBuffer("image/png");
+  await writeFile(join(root, "landing", "assets", "og-image.png"), card);
+  await writeFile(join(root, "assets", "brand", "linkedin-launch.png"), card);
+}
+
+const workflow=`<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="290" viewBox="0 0 1440 290" role="img" aria-labelledby="title desc"><title id="title">Open, search, act</title><desc id="desc">Press Win plus Space to open Sevak (Cmd plus Space on macOS, Super plus Space on Linux). Type an app, file, calculation or web keyword. Press Enter to launch, open or copy.</desc><rect width="1440" height="290" rx="24" fill="#1b1932"/>${[
+  [64,"01","OPEN","Win+Space","Bring Sevak into focus."],
   [530,"02","SEARCH","Type what you need","Apps, files, math or web."],
   [996,"03","ACT","Press Enter","Launch, open or copy."]
 ].map(([x,n,label,title,sub])=>`<g font-family="Segoe UI,Arial,sans-serif"><text x="${x}" y="62" font-size="18" font-weight="700" fill="#f5b52c">${n} / ${label}</text><text x="${x}" y="132" font-size="34" font-weight="700" fill="#f3f0ff">${title}</text><text x="${x}" y="188" font-size="23" fill="#aaa6c3">${sub}</text></g>`).join("")}<path d="M449 124h28m-9-9 10 9-10 9M915 124h28m-9-9 10 9-10 9" fill="none" stroke="#f5b52c" stroke-width="3"/></svg>`;
@@ -173,8 +305,8 @@ function frame(t) {
     text("A keyboard-first launcher.",540,1180,33,C.muted,false,"center");
   }else if(s===1){
     text("01 / OPEN",72,370,26,C.amber,true); text("One shortcut.",72,445,76,C.ink,true); text("Ready to help.",72,539,76,C.ink,true);
-    key("Alt",282,738,160,40); text("+",482,748,36,C.muted); key("Space",552,738,246,40);
-    shot(shots.ready,72,952,936); text("Press Win + Space to open Sevak.",72,1240,34,C.muted);
+    key("Win",282,738,160,40); text("+",482,748,36,C.muted); key("Space",552,738,246,40);
+    shot(shots.ready,72,952,936); text("Press Win+Space to open Sevak.",72,1240,34,C.muted); text("Cmd+Space on macOS, Super+Space on Linux.",72,1296,28,C.muted);
   }else if(s===2){
     text("02 / SEARCH",72,370,26,C.amber,true); text("Type a name.",72,445,76,C.ink,true); text("Find your app.",72,539,76,C.ink,true);
     shot(shots.apps,72,846,936); text("Use ↑ / ↓ to choose a result.",72,1240,34,C.muted); key("Enter to launch",72,1360,344,30);
@@ -184,7 +316,7 @@ function frame(t) {
   }else{
     icon(414,360,252); text("Back to your flow.",540,740,74,C.ink,true,"center");
     text("Apps  ·  Files  ·  Math  ·  Web",540,888,36,C.muted,false,"center");
-    key("Win + Space",344,1070,392,40); text("github.com/ninad-k/Sevak",540,1280,34,C.amber,false,"center");
+    key("Win+Space",344,1070,392,40); text("github.com/ninad-k/Sevak",540,1280,34,C.amber,false,"center");
   }
   ctx.restore(); text("Illustrative walkthrough · sample results",540,1700,20,C.muted,false,"center");
 }
