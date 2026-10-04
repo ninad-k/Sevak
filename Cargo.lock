@@ -3972,7 +3972,7 @@ dependencies = [
  "criterion",
  "flate2",
  "getrandom 0.4.3",
- "miniz_oxide 0.8.9",
+ "miniz_oxide 0.9.1",
  "plist",
  "regex",
  "reqwest",

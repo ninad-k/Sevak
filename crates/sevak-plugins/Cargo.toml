@@ -63,7 +63,7 @@ zip = { version = "4", default-features = false, features = ["deflate-flate2"] }
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 # Unpacks the bundled WordNet dictionary (zlib) for `define` and `spell`; pure
 # Rust, already in the dependency tree through flate2 and png.
-miniz_oxide = "0.8"
+miniz_oxide = "0.9"
 # Daily ECB exchange rates for the opt-in currency conversion (see `currency`).
 # Same crates and TLS backend (rustls + ring) the updater already links; the
 # blocking client runs on a plain background thread, never on the typing path.
