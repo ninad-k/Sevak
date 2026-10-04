@@ -77,7 +77,7 @@ test("third-party text cannot inject markup into any generated page", () => {
       assert.ok(html.includes("&lt;script&gt;alert(&quot;n&quot;)&lt;/script&gt;"), "name is shown escaped");
     }
     // The hostile homepage has its quote and tag characters refused; the repository is not https.
-    assert.ok(!pages[1].includes("example.com"), "unsafe homepage was linked");
+    assert.ok(!/example\.com/.test(pages[1]), "unsafe homepage was linked");
     assert.ok(!pages[1].includes("javascript:"), "javascript: link");
     // Tags that are not lower case a-z, 0-9 and dashes are dropped.
     const catalog = JSON.parse(readFileSync(join(out, "catalog.json"), "utf8"));
@@ -107,7 +107,7 @@ test("every absolute link in the generated site is https", () => {
       }
     }
     assert.ok(checked > 20);
-    assert.ok(!renderDetail(entries[1]).includes("http://example.com"));
+    assert.ok(!/http:\/\/example\.com/.test(renderDetail(entries[1])));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -180,9 +180,9 @@ test("the real galleries build: every entry has a page, a card, a hash and a cat
       assert.ok(page.includes("Settings"), `${e.id} has no install steps`);
     }
     const sitemap = readFileSync(join(out, "sitemap.xml"), "utf8");
-    assert.ok(sitemap.includes("https://ninad-k.github.io/Sevak/marketplace/"));
+    assert.match(sitemap, /https:\/\/ninad-k\.github\.io\/Sevak\/marketplace\//);
     assert.ok(listing.includes("template=extension_submission.yml"));
-    assert.ok(listing.includes("https://ninad-k.github.io/Sevak/docs/marketplace/publishing/"));
+    assert.match(listing, /https:\/\/ninad-k\.github\.io\/Sevak\/docs\/marketplace\/publishing\//);
   } finally {
     rmSync(out, { recursive: true, force: true });
   }
