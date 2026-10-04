@@ -68,7 +68,7 @@ query flows through plugins and how to add one is in [plugins.md](plugins.md).
 
 ## Running
 
-Use **Rust 1.90+**, **Node.js 22+**, and the native dependencies for your platform:
+Use **Rust 1.95+**, **Node.js 22+**, and the native dependencies for your platform:
 
 | Platform | Native prerequisites |
 |---|---|

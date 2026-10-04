@@ -377,7 +377,7 @@ readable right here on GitHub:
 
 ## Build from source
 
-You need **Rust 1.90+**, **Node.js 22+**, and the native libraries required by
+You need **Rust 1.95+**, **Node.js 22+**, and the native libraries required by
 [Tauri 2](https://v2.tauri.app/start/prerequisites/). See the
 [development guide](docs/development.md#running) for platform dependencies.
 
