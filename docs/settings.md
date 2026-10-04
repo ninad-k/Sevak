@@ -4,7 +4,8 @@ Configure Sevak through the Settings window.
 
 ## Open Settings
 
-- Click the tray or menu-bar icon and select **Settings**
+- Click the tray icon (Windows) or menu-bar icon (macOS), or right-click it and
+  select **Settings** (on Linux, click the icon and select **Settings**)
 - Run `sevak --settings` from the command line
 
 ## Using Settings

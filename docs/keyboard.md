@@ -163,7 +163,7 @@ The following are blocked in production to prevent accidental page reloads:
 |---|---|---|
 | Ctrl prefix | ++ctrl++ | ++cmd++ |
 | Alt prefix | ++alt++ | ++option++ |
-| Tray access | Click the icon; no key | Click the menu-bar icon; no key |
+| Tray access | Click the icon to open Settings, right-click for the menu | Click the menu-bar icon to open Settings, right-click for the menu |
 
 ## Custom shortcuts
 

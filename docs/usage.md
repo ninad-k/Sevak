@@ -20,7 +20,9 @@ Hiding does not quit Sevak. It stays in the background until you press the hotke
 
 ### Tray menu and system integration
 
-Click the tray icon (Windows, Linux) or menu-bar icon (macOS) to access:
+Click the tray icon (Windows) or menu-bar icon (macOS) to open **Settings**
+directly. Right-click it to open the menu below. Linux tray icons (AppIndicator)
+always open the menu on click.
 
 | Menu item | Action |
 |---|---|
