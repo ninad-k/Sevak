@@ -47,6 +47,15 @@ lto = true
 opt-level = 3
 strip = true
 
+# Optimized but quick to build (no LTO, parallel codegen): the latency budget
+# test in CI runs with `cargo test --profile fast-release` instead of paying for
+# the full release profile's link-time optimization.
+[profile.fast-release]
+inherits = "release"
+lto = false
+codegen-units = 16
+strip = false
+
 # Fuzzy matching runs per keystroke; keep it fast in debug builds too.
 [profile.dev.package.nucleo-matcher]
 opt-level = 3

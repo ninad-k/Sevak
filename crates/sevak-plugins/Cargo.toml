@@ -16,9 +16,20 @@ path = "tests/fixtures/script_fixture.rs"
 test = false
 doc = false
 
+# Latency benchmark of the search engine (`cargo bench -p sevak-plugins`); see
+# docs/testing.md. `harness = false`: criterion provides `main`.
+[[bench]]
+name = "engine_query"
+harness = false
+
 # The real-clipboard tests (ignored by default) write images the way another app would.
 [target.'cfg(windows)'.dev-dependencies]
 arboard.workspace = true
+
+[dev-dependencies]
+# Statistics for the latency benchmark. No plotting (the plotters tree), only the
+# text output and the JSON estimates the bench workflow summarizes.
+criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
 
 [dependencies]
 sevak-core.workspace = true

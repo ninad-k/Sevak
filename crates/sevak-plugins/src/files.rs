@@ -80,6 +80,13 @@ impl FilesPlugin {
         }
     }
 
+    /// Replaces the index with `entries` without touching the disk, for the
+    /// benchmark and the latency test, which need a large index to search.
+    #[doc(hidden)]
+    pub fn load_entries(&self, entries: Vec<FileEntry>) {
+        self.set_index(entries);
+    }
+
     /// The home directory `~` expands to.
     pub(crate) fn home(&self) -> Option<&Path> {
         self.home.as_deref()
