@@ -61,7 +61,7 @@ windows = { workspace = true, features = [
 [target.'cfg(target_os = "linux")'.dependencies]
 # Pure-Rust X11 client (already pulled in by arboard): active window and the
 # XTest extension for the paste keystroke, RECORD to watch typed keywords.
-x11rb = { version = "0.13", features = ["record", "xtest"] }
+x11rb = { version = "0.14", features = ["record", "xtest"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 plist = "1"
