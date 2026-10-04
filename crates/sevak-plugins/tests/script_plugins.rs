@@ -676,6 +676,38 @@ fn the_bundled_examples_work_where_their_interpreter_is_installed() {
         assert!(titles.contains(&"userAccountId"), "{titles:?}");
         assert!(titles.contains(&"user_account_id"), "{titles:?}");
         assert!(titles.contains(&"USER_ACCOUNT_ID"), "{titles:?}");
+
+        let items = query_until_results(&engine, &rx, "colors #fa0");
+        assert_eq!(
+            items[0].action,
+            Action::CopyText {
+                text: "#FFAA00".into()
+            }
+        );
+        let items = query_until_results(&engine, &rx, "tr fr hello");
+        let Action::OpenUrl { url } = &items[0].action else {
+            panic!("translation should open a browser result");
+        };
+        assert!(url.starts_with("https://translate.google.com/?"));
+        assert!(url.contains("tl=fr") && url.contains("text=hello"));
+        let items = query_until_results(&engine, &rx, "tauri updater");
+        assert_eq!(
+            items[0].action,
+            Action::OpenUrl {
+                url: "https://v2.tauri.app/plugin/updater/".into(),
+            }
+        );
+        let items = query_until_results(&engine, &rx, "pomo start 25");
+        let start = items
+            .iter()
+            .find(|item| item.id.ends_with(":start"))
+            .unwrap();
+        let timer = root.path().join("data/plugins/pomodoro/timer.json");
+        assert!(!timer.exists(), "typing must not start a timer");
+        engine.execute(start, "pomo start 25").unwrap();
+        let state: serde_json::Value = serde_json::from_str(&wait_for_file(&timer)).unwrap();
+        assert_eq!(state["status"], "running");
+        assert_eq!(state["remaining"], 25 * 60_000);
     } else {
         eprintln!("skipping the Node example: no interpreter");
     }

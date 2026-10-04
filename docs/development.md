@@ -122,6 +122,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 npm run check
 npm run gallery:check                                  # gallery checksums, themes and tags
+npm run test:extensions   # Extension behavior and script entry points (Node.js 22+)
 npm run build
 npm run test:scripts
 node scripts/generate-third-party-notices.mjs --check  # THIRD_PARTY_NOTICES.md is current (Linux job)

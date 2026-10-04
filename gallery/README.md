@@ -94,6 +94,12 @@ and `cargo test` enforces most of it (see [Checking your change](#checking-your-
 
 ## Adding a workflow or script plugin
 
+The [productivity pack](../docs/extensions.md) adds Pomodoro, color tools,
+browser translation, Tauri documentation links and a Catppuccin Mocha theme.
+The four script packages require Node.js 22+; they have no npm dependencies.
+Run `npm run test:extensions` before packaging a changed extension. Packages
+must be committed with their index hashes to become available from the online gallery.
+
 1. Put the folder in `examples/` (workflows in `examples/workflows/`, script
    plugins in `examples/plugins/`). The folder name is the entry's `id`: lower
    case letters, digits and dashes. Write the file with LF line endings.

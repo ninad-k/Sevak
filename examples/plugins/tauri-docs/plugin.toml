@@ -1,0 +1,8 @@
+protocol = 1
+id = "script:tauri-docs"
+name = "Tauri docs"
+description = "Search a curated local index of Tauri 2 guides. Type tauri updater; Enter opens the official page. Requires Node.js 22+."
+keyword = "tauri"
+mode = "oneshot"
+script = "main.mjs"
+files = ["docs.mjs"]

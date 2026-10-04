@@ -4,6 +4,9 @@ Extend Sevak with custom search results by writing a script in Python, Node.js, 
 
 This page covers installing and using script plugins. For writing one, see [Writing plugins](../plugins.md).
 
+For ready-made tools, see the [extensions catalog](../extensions.md): Pomodoro,
+color tools, browser translation and Tauri docs are available as separate packages.
+
 ## Install a plugin
 
 1. **Get the plugin folder.** Download or clone a script plugin (examples are in the [Sevak repository](https://github.com/ninad-k/Sevak/tree/main/examples/plugins)).

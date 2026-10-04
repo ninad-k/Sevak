@@ -141,7 +141,8 @@ Sevak also includes:
 - **Gallery** — an optional list of ready-made workflows (site searches,
   Markdown, Base64 and JSON helpers) and offline script plugins (passwords,
   IDs, colors, lorem ipsum, hashes), fetched only when you press **Load
-  gallery**, installed only when you press **Install**, checksum-verified.
+  gallery**, installed only when you press **Install**, checksum-verified. Search and filter packages, including
+  [Pomodoro, color tools, translation and Tauri docs](docs/extensions.md).
 - **Extensions** — Settings → Extensions (and `ext` in the launcher) browses
   that gallery and the theme gallery, shows who published each item and what
   it declares, and installs, updates, switches off and removes them. Developers
