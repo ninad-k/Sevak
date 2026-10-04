@@ -183,7 +183,11 @@ mod tests {
         assert_eq!((vk, scan, up, extended), (VK_BACK, 0x0E, true, false));
     }
 
+    /// Asks the real desktop, and so UI Automation, about the window in front:
+    /// not run with the unit tests, which never touch the real UI.
+    /// `cargo test -p sevak-platform the_typing_target -- --ignored`
     #[test]
+    #[ignore = "queries the real desktop and UI Automation"]
     fn the_typing_target_can_be_described() {
         // Nothing to assert about which window is in front (a headless CI
         // session may have none); it must just work.

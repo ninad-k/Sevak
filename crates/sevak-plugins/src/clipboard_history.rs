@@ -3596,7 +3596,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join(FILE_NAME);
         let store = MediaStore::new(dir.path().join(clipboard_store::DIR_NAME));
-        store.write(0xabc, b"png", b"thumb").unwrap();
+        store.write(0xabc, b"png", b"thumb", None).unwrap();
         fs::write(&file, br#"{"version":1,"items":[]}"#).unwrap();
         let mine = store.dir().join("notes.txt");
         fs::write(&mine, b"not sevak's").unwrap();
