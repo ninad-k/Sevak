@@ -40,13 +40,18 @@ pub trait PlatformProvider: Send + Sync {
     fn launch(&self, target: &LaunchTarget) -> Result<()>;
 
     /// Opens a file or folder with its default handler.
+    ///
+    /// A network path is refused unless `[files] allow_network_paths` is on
+    /// ([`crate::netpath`]).
     fn open_path(&self, path: &Path) -> Result<()> {
+        crate::netpath::guard(path)?;
         crate::open::open_path(path)
     }
 
     /// Shows `path` selected in the system file manager (its parent folder
     /// opens with the item highlighted where the file manager supports it).
     fn reveal_path(&self, path: &Path) -> Result<()> {
+        crate::netpath::guard(path)?;
         crate::open::reveal_path(path)
     }
 
@@ -90,6 +95,7 @@ pub trait PlatformProvider: Send + Sync {
     /// Opens a terminal window in `dir`, at a shell prompt (it stays open even
     /// if `[shell] keep_open` is off). `dir` must be an absolute path.
     fn open_terminal_in(&self, dir: &Path, config: &ShellConfig) -> Result<()> {
+        crate::netpath::guard(dir)?;
         crate::terminal::open_terminal_in(dir, config)
     }
 
@@ -107,6 +113,7 @@ pub trait PlatformProvider: Send + Sync {
     /// Moves a file or folder to the system trash (never deletes it for good;
     /// it fails where the item cannot be trashed). `path` must be absolute.
     fn move_to_trash(&self, path: &Path) -> Result<()> {
+        crate::netpath::guard(path)?;
         crate::trash::move_to_trash(path)
     }
 

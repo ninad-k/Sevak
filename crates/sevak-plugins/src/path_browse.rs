@@ -183,7 +183,7 @@ impl DirReader {
         match rx.recv_timeout(timeout) {
             Ok(items) => items,
             Err(_) => {
-                tracing::debug!(dir = %dir.display(), "directory listing timed out");
+                tracing::debug!("directory listing timed out");
                 None
             }
         }

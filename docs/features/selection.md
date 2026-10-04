@@ -159,10 +159,10 @@ Instead of arrow keys and Enter, use `Ctrl+1` through `Ctrl+9` to run the 1st th
 ## Special cases
 
 !!! warning "Very large selections"
-    Sevak refuses selections larger than 256 KB to avoid lag. If you have a massive block of text selected, copy a smaller part and try again.
+    Sevak refuses selections larger than 256 KB to avoid lag, and more than 1000 selected files and folders at once. On Windows an oversized text copy is recognised from the size of what the app put on the clipboard and is not read at all; elsewhere it is read and dropped at once. If you have a massive block of text selected, copy a smaller part and try again.
 
 !!! warning "Terminal windows"
-    On Windows and Linux, terminal windows (Windows Terminal, `cmd`, PowerShell, `gnome-terminal`, `konsole`, etc.) do not receive Ctrl+C from Sevak because it would interrupt the running program. Select manually or use clipboard fallback instead.
+    On Windows and Linux, terminal windows (Windows Terminal, `conhost`, `cmd`, PowerShell, ConEmu, `mintty`, WezTerm, Alacritty, kitty, Tabby, Hyper, `gnome-terminal`, `konsole`, `xterm`, `tilix`, `terminator`, `foot`, `st` and others) do not receive Ctrl+C from Sevak because it would interrupt the running program. Select manually or use clipboard fallback instead. The same list decides where [snippet expansion](snippets.md) stays quiet unless you turn on `expand_in_terminals`.
 
 !!! tip "No admin permission needed on macOS"
     Unlike pasting, selection capture on macOS needs the same Accessibility permission but does not require you to run Sevak as admin.

@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "themes": [
     {
       "id": "sevak-light",
@@ -7,7 +7,7 @@
       "author": "Sevak",
       "description": "Sevak's light theme.",
       "mode": "light",
-      "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/Sevak-Light.toml",
+      "url": "gallery/themes/Sevak-Light.toml",
       "sha256": "43c6ac42334ad4774fc8a5c67a4cfee3886410bba30ceb9d22d763aec0f1718f"
     },
     {
@@ -16,7 +16,7 @@
       "author": "Sevak",
       "description": "Sevak's dark theme.",
       "mode": "dark",
-      "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/Sevak-Dark.toml",
+      "url": "gallery/themes/Sevak-Dark.toml",
       "sha256": "d494745f82bf094737c7a76618e0dda88743e8c4ca052e461275412e93bdf31a"
     },
     {
@@ -25,7 +25,7 @@
       "author": "Sevak",
       "description": "Arctic, north-bluish dark colors after the Nord palette.",
       "mode": "dark",
-      "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/Nord.toml",
+      "url": "gallery/themes/Nord.toml",
       "sha256": "12283cb8a1499fa44202b0884b04f62a9ad2eed107ae84f52fb89309f4b0345a"
     },
     {
@@ -34,7 +34,7 @@
       "author": "Sevak",
       "description": "A dark theme with vivid purple accents after the Dracula palette.",
       "mode": "dark",
-      "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/Dracula.toml",
+      "url": "gallery/themes/Dracula.toml",
       "sha256": "48afb8ca21a5df1ab8ba19fc85d3c35dd9d9471c3d1fc73b6ae441e6e3e8ccb4"
     },
     {
@@ -43,7 +43,7 @@
       "author": "Sevak",
       "description": "Low-glare light colors after the Solarized palette.",
       "mode": "light",
-      "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/Solarized-Light.toml",
+      "url": "gallery/themes/Solarized-Light.toml",
       "sha256": "3091683b3bb0162f10bd08472cf1a502920bb4a12de3da37b2ff4abf4e2b03c3"
     },
     {
@@ -52,7 +52,7 @@
       "author": "Sevak",
       "description": "Low-glare dark colors after the Solarized palette.",
       "mode": "dark",
-      "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/Solarized-Dark.toml",
+      "url": "gallery/themes/Solarized-Dark.toml",
       "sha256": "f404fae2325db604374f803893fcc6f120bf6edf1afd53280042dc6343cf298e"
     },
     {
@@ -61,7 +61,7 @@
       "author": "Sevak",
       "description": "Warm, retro dark colors after the Gruvbox palette.",
       "mode": "dark",
-      "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/Gruvbox.toml",
+      "url": "gallery/themes/Gruvbox.toml",
       "sha256": "9e6e511e1749233526b1d44c3364ccc56e0e03356dd5e321df5c1e082c43d11c"
     },
     {
@@ -70,7 +70,7 @@
       "author": "Sevak",
       "description": "Black and white with a yellow accent; the text pairs reach AAA.",
       "mode": "dark",
-      "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/High-Contrast.toml",
+      "url": "gallery/themes/High-Contrast.toml",
       "sha256": "f3f9434f8931bc2a38bc0ae324c035bef555686cf3639458348fec70eecfde2a"
     },
     {
@@ -79,7 +79,7 @@
       "author": "Sevak",
       "description": "A calm dark blue theme after the Tokyo Night palette.",
       "mode": "dark",
-      "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/Tokyo-Night.toml",
+      "url": "gallery/themes/Tokyo-Night.toml",
       "sha256": "ac8fa74d72d7fd39644a303bd953af870ea9e3f7733109a0474b414e26577373"
     },
     {
@@ -88,7 +88,7 @@
       "author": "Sevak",
       "description": "The darkest Catppuccin flavor, with soft mauve accents.",
       "mode": "dark",
-      "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/Catppuccin-Mocha.toml",
+      "url": "gallery/themes/Catppuccin-Mocha.toml",
       "sha256": "92dd6f66e73e41789697d42d06ed967f80a64a4527662226092e87152e2c0188"
     },
     {
@@ -97,7 +97,7 @@
       "author": "Sevak",
       "description": "The light Catppuccin flavor, with a clear blue accent.",
       "mode": "light",
-      "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/Catppuccin-Latte.toml",
+      "url": "gallery/themes/Catppuccin-Latte.toml",
       "sha256": "b5e3baec22cb14ac0649b9ab5a11cfcf78138f48f8e752be23d930cb9e1b216a"
     },
     {
@@ -106,7 +106,7 @@
       "author": "Sevak",
       "description": "A muted dark theme with dusky purples and soft rose accents, after the Rosé Pine palette.",
       "mode": "dark",
-      "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/Rose-Pine.toml",
+      "url": "gallery/themes/Rose-Pine.toml",
       "sha256": "70519c64571603f9508b667def913caae0db6396713f605b7d29d0ec05dd795d"
     },
     {
@@ -115,7 +115,7 @@
       "author": "Sevak",
       "description": "The familiar slate-grey editor theme after Atom's One Dark.",
       "mode": "dark",
-      "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/One-Dark.toml",
+      "url": "gallery/themes/One-Dark.toml",
       "sha256": "d057116e51cbcd32cb10028abcf11579687e51731b170ca7f6c914ae7abc9dd4"
     },
     {
@@ -124,7 +124,7 @@
       "author": "Sevak",
       "description": "Warm, low-contrast greens for long sessions, after the Everforest palette.",
       "mode": "dark",
-      "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/Everforest-Dark.toml",
+      "url": "gallery/themes/Everforest-Dark.toml",
       "sha256": "01ea58b5f7f54cb39681b7d96baf63862fa4174bef012da04e83f0a50728d1b7"
     },
     {
@@ -133,7 +133,7 @@
       "author": "Sevak",
       "description": "A soft, desaturated dark theme with an orange accent, after Ayu Mirage.",
       "mode": "dark",
-      "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/Ayu-Mirage.toml",
+      "url": "gallery/themes/Ayu-Mirage.toml",
       "sha256": "c1d7a732a11c35e0857f68c885521623bb7b37da1b40b61bc964a10e2419fa3c"
     },
     {
@@ -142,7 +142,7 @@
       "author": "Sevak",
       "description": "A cool, blue-slate dark theme after Nightfox.",
       "mode": "dark",
-      "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/Nightfox.toml",
+      "url": "gallery/themes/Nightfox.toml",
       "sha256": "a08fe87b2e1d08c230ce46967327146033936524d918d1481b24b162c3784262"
     },
     {
@@ -151,7 +151,7 @@
       "author": "Sevak",
       "description": "GitHub's light look: clean white with a link blue.",
       "mode": "light",
-      "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/GitHub-Light.toml",
+      "url": "gallery/themes/GitHub-Light.toml",
       "sha256": "e0d12faf6e866797682891b6153f5a38d903b48309304757703e04cd3e698909"
     },
     {
@@ -160,7 +160,7 @@
       "author": "Sevak",
       "description": "GitHub's dark look: neutral grey-blue with a bright link blue.",
       "mode": "dark",
-      "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/GitHub-Dark.toml",
+      "url": "gallery/themes/GitHub-Dark.toml",
       "sha256": "2b3c7cf1a5feab7b34d6ad4cfa0f026b4eca676e5f4f1b4a08d0b683b8bcdab8"
     },
     {
@@ -169,7 +169,7 @@
       "author": "Sevak",
       "description": "A warm dark amber theme made for the frosted-glass blur, with a slightly see-through bar.",
       "mode": "dark",
-      "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/Sevak-Amber-Glass.toml",
+      "url": "gallery/themes/Sevak-Amber-Glass.toml",
       "sha256": "58136a09445d02262d68091b0bc885de7c56d26fba548c44a7e373e7fe49f32a"
     }
   ]

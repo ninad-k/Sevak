@@ -16,6 +16,8 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use sevak_core::bounded_read::{read_to_string_capped, MAX_DESCRIPTION_BYTES};
+
 use crate::desktop_entry::parse_groups;
 use crate::icon_file;
 
@@ -399,9 +401,9 @@ impl IconResolver {
             .filter(|root| root.is_dir())
             .collect();
         // The first base directory with an index.theme defines the theme.
-        let content = roots
-            .iter()
-            .find_map(|root| fs::read_to_string(root.join("index.theme")).ok())?;
+        let content = roots.iter().find_map(|root| {
+            read_to_string_capped(&root.join("index.theme"), MAX_DESCRIPTION_BYTES).ok()
+        })?;
         let index = parse_index_theme(&content);
         Some(Theme {
             inherits: index.inherits,

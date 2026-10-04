@@ -82,6 +82,7 @@
       use_os_index: true,
       index_keyword: "ff",
       content_keyword: "in",
+      allow_network_paths: false,
     },
     snippets: {
       auto_expand: false,
@@ -1136,6 +1137,17 @@
                 <span class="hint">Dot-files and dot-folders.</span>
               </div>
               <Toggle bind:checked={draft.files.include_hidden} label="Include hidden files" />
+            </div>
+
+            <div class="row">
+              <div class="label">
+                <span class="name">Allow network paths</span>
+                <span class="hint">
+                  Windows: use <code>\\server\share</code> paths and mapped network drives. Off, Sevak never
+                  contacts them, because Windows signs in to a computer just from looking at its path.
+                </span>
+              </div>
+              <Toggle bind:checked={draft.files.allow_network_paths} label="Allow network paths" />
             </div>
 
             <div class="row">

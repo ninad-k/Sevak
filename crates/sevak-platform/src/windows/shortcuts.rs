@@ -6,6 +6,7 @@ use std::fs;
 use std::os::windows::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
 
+use sevak_core::bounded_read::{read_capped, MAX_DESCRIPTION_BYTES};
 use sevak_core::{AppEntry, IconSource, LaunchTarget};
 use windows::core::{Interface, HSTRING, PWSTR};
 use windows::Win32::System::Com::{
@@ -236,7 +237,9 @@ fn entry_for(
     } else {
         // `.url` internet shortcuts: keep app protocols (steam://, com.epicgames...),
         // drop plain web links ("Website", "Documentation").
-        if fs::read(path).is_ok_and(|bytes| is_web_url_shortcut(&String::from_utf8_lossy(&bytes))) {
+        if read_capped(path, MAX_DESCRIPTION_BYTES)
+            .is_ok_and(|bytes| is_web_url_shortcut(&String::from_utf8_lossy(&bytes)))
+        {
             return None;
         }
         LinkInfo::default()

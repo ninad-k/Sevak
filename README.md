@@ -282,7 +282,8 @@ Every network request Sevak itself makes is in this list:
   are downloaded at most once a day. Unit conversion is always offline.
 - **Theme gallery.** Only when you click **Browse online themes** (Settings →
   Appearance → Theme editor): one request for
-  `https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes.json`.
+  `gallery/themes.json` from Sevak's repository, at the tag of your Sevak version
+  (`https://raw.githubusercontent.com/ninad-k/Sevak/v<version>/gallery/themes.json`).
   Clicking **Install** on a theme downloads that one theme file, saved only if
   its SHA-256 matches the one in the list.
 - **Workflow gallery.** Only when you press **Load gallery** (Settings →

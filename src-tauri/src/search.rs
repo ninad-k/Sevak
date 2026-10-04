@@ -62,6 +62,8 @@ fn all_plugins(
     scripts: &ScriptPluginHost,
     workflows: &WorkflowHost,
 ) -> Vec<Arc<dyn Plugin>> {
+    // Everything that opens a path checks this (see `sevak_platform::netpath`).
+    sevak_platform::netpath::set_allow_network_paths(config.files.allow_network_paths);
     let mut plugins = builtin_plugins(config, platform.clone());
     plugins.extend(scripts.plugins(config, platform));
     plugins.extend(workflows.plugins(config, platform));
@@ -211,7 +213,8 @@ impl UsageSaver {
         }
         let usage = snapshot();
         let started = Instant::now();
-        match usage.save(&self.path) {
+        // The file holds the last typed queries: owner-only on Unix.
+        match usage.save_with(&self.path, sevak_platform::private_file::write_atomic) {
             Ok(()) => tracing::debug!(
                 entries = usage.len(),
                 elapsed_ms = started.elapsed().as_millis() as u64,

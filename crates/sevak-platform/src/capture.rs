@@ -17,6 +17,7 @@ use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
+use sevak_core::selection::MAX_SELECTION_BYTES;
 use sevak_core::Selection;
 
 use crate::clipboard::{ClipboardSnapshot, SyntheticCopy};
@@ -29,6 +30,9 @@ pub const COPY_TIMEOUT: Duration = Duration::from_millis(300);
 /// How long to wait for the user to let go of the hotkey's modifier keys.
 pub const MODIFIER_TIMEOUT: Duration = Duration::from_millis(600);
 const POLL_INTERVAL: Duration = Duration::from_millis(15);
+/// Most selected files and folders that are acted on at once. A file manager's
+/// "select all" in a huge folder is more likely a mistake than a wish.
+pub const MAX_SELECTED_FILES: usize = 1000;
 
 /// What the caller wants from [`crate::PlatformProvider::capture_selection`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,12 +69,65 @@ pub(crate) struct CapturedContent {
     /// The app that filled the clipboard marked it secret (a password field):
     /// it is ignored and never read.
     pub sensitive: bool,
+    /// The copy is bigger than a selection may be: it was not kept.
+    pub oversized: Option<Oversize>,
+}
+
+/// Why a copied selection was not kept.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Oversize {
+    /// More text than [`MAX_SELECTION_BYTES`].
+    Text,
+    /// More files than [`MAX_SELECTED_FILES`].
+    Files,
+}
+
+impl Oversize {
+    fn message(self) -> String {
+        match self {
+            Self::Text => format!(
+                "The selection is larger than {} KiB, so Sevak does not act on it",
+                MAX_SELECTION_BYTES / 1024
+            ),
+            Self::Files => format!(
+                "More than {MAX_SELECTED_FILES} files are selected, so Sevak does not act on them"
+            ),
+        }
+    }
 }
 
 impl CapturedContent {
     fn is_empty(&self) -> bool {
         self.sensitive
-            || (self.files.is_empty() && self.text.as_deref().is_none_or(|t| t.trim().is_empty()))
+            || (self.oversized.is_none()
+                && self.files.is_empty()
+                && self.text.as_deref().is_none_or(|t| t.trim().is_empty()))
+    }
+
+    /// The content as it was read from the clipboard, with anything over the
+    /// limits dropped on the spot: an oversized copy never travels further.
+    fn limited(text: Option<String>, files: Vec<PathBuf>) -> Self {
+        let oversized = if files.len() > MAX_SELECTED_FILES {
+            Some(Oversize::Files)
+        } else if text
+            .as_deref()
+            .is_some_and(|t| t.len() > MAX_SELECTION_BYTES)
+        {
+            Some(Oversize::Text)
+        } else {
+            None
+        };
+        match oversized {
+            Some(oversized) => Self {
+                oversized: Some(oversized),
+                ..Self::default()
+            },
+            None => Self {
+                text,
+                files,
+                ..Self::default()
+            },
+        }
     }
 }
 
@@ -102,9 +159,12 @@ pub(crate) trait CaptureDriver {
     fn press_copy(&self) -> Result<()>;
 }
 
-/// Terminal programs (matched against the foreground app's names). Ctrl+C in
-/// one of them is "interrupt", whether or not something is selected.
-const TERMINALS: &[&str] = &[
+/// Terminal programs (matched against the foreground app's names and
+/// identifiers). Ctrl+C in one of them is "interrupt", whether or not something
+/// is selected, and they are where typed snippet keywords are not expanded. The
+/// one list for both.
+pub const TERMINALS: &[&str] = &[
+    // Windows
     "windowsterminal",
     "wt",
     "cmd",
@@ -113,17 +173,39 @@ const TERMINALS: &[&str] = &[
     "powershell",
     "pwsh",
     "powershell_ise",
+    "conemu",
+    "conemu64",
+    "conemuc",
+    "conemuc64",
+    "cmder",
     "mintty",
     "putty",
+    "mobaxterm",
+    // macOS (the app name and the bundle identifier)
+    "terminal",
+    "com.apple.terminal",
+    "iterm",
+    "iterm2",
+    "com.googlecode.iterm2",
+    // Cross-platform
     "alacritty",
     "kitty",
     "wezterm",
     "wezterm-gui",
+    "hyper",
+    "tabby",
+    "ghostty",
+    "rio",
+    "warp",
+    "contour",
+    "wave",
+    // Linux and other Unix desktops
     "foot",
     "footclient",
     "gnome-terminal",
     "gnome-terminal-server",
     "kgx",
+    "ptyxis",
     "konsole",
     "xterm",
     "uxterm",
@@ -140,10 +222,8 @@ const TERMINALS: &[&str] = &[
     "guake",
     "yakuake",
     "sakura",
-    "hyper",
-    "tabby",
-    "ghostty",
-    "rio",
+    "deepin-terminal",
+    "cool-retro-term",
     "x-terminal-emulator",
 ];
 
@@ -248,6 +328,10 @@ pub(crate) fn capture_by_copy(
     }
 
     match content {
+        Some(content) if content.oversized.is_some() => {
+            let why = content.oversized.map(Oversize::message).unwrap_or_default();
+            SelectionCapture::Unavailable(why)
+        }
         Some(content) => match Selection::from_parts(content.text, content.files) {
             Some(selection) => SelectionCapture::Selected(selection),
             None => SelectionCapture::Nothing,
@@ -326,6 +410,10 @@ fn still_holds_the_copy(
 pub(crate) struct SystemClipboardCapture {
     pub sequence: fn() -> Option<u64>,
     pub read: fn() -> Result<crate::paste::ClipboardRead>,
+    /// The length of the clipboard's text in UTF-16 code units, read without
+    /// copying the text, where the OS can tell (Windows); `None` otherwise.
+    /// A copy over the limit is not read at all.
+    pub text_units: fn() -> Option<usize>,
 }
 
 impl CaptureClipboard for SystemClipboardCapture {
@@ -344,6 +432,14 @@ impl CaptureClipboard for SystemClipboardCapture {
     }
 
     fn read(&self) -> CapturedContent {
+        // Every UTF-16 unit is at least one byte of UTF-8, so more units than
+        // the limit means more bytes than the limit: say so without reading.
+        if (self.text_units)().is_some_and(|units| units > MAX_SELECTION_BYTES + 1) {
+            return CapturedContent {
+                oversized: Some(Oversize::Text),
+                ..CapturedContent::default()
+            };
+        }
         // A clipboard another program is holding reads as empty; the poll
         // tries again.
         match (self.read)() {
@@ -351,11 +447,10 @@ impl CaptureClipboard for SystemClipboardCapture {
                 sensitive: true,
                 ..CapturedContent::default()
             },
-            Ok(read) => CapturedContent {
-                text: read.text,
-                files: crate::clipboard::get_files().unwrap_or_default(),
-                sensitive: false,
-            },
+            Ok(read) => CapturedContent::limited(
+                read.text,
+                crate::clipboard::get_files().unwrap_or_default(),
+            ),
             Err(_) => CapturedContent::default(),
         }
     }
@@ -450,9 +545,8 @@ mod tests {
             let read = {
                 let clipboard = self.clipboard.borrow();
                 CapturedContent {
-                    text: clipboard.text.clone(),
-                    files: clipboard.files.clone(),
                     sensitive: self.sensitive,
+                    ..CapturedContent::limited(clipboard.text.clone(), clipboard.files.clone())
                 }
             };
             if let Some(newer) = self.copied_after_read.borrow_mut().take() {
@@ -533,7 +627,7 @@ mod tests {
         let fake = Fake::new(Some(CapturedContent {
             text: Some("a.txt".into()),
             files: vec!["/tmp/a.txt".into()],
-            sensitive: false,
+            ..CapturedContent::default()
         }));
         match fake.run() {
             SelectionCapture::Selected(selection) => {
@@ -541,6 +635,105 @@ mod tests {
                 assert_eq!(selection.text(), None);
             }
             other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_selection_over_the_limits_is_dropped_where_it_is_read() {
+        // Text one byte over: not kept, and the user is told why.
+        let big = "x".repeat(MAX_SELECTION_BYTES + 1);
+        let fake = Fake::new(Some(Fake::text(&big)));
+        match fake.run() {
+            SelectionCapture::Unavailable(why) => {
+                assert!(why.contains("larger than 256 KiB"), "{why}");
+            }
+            other => panic!("{other:?}"),
+        }
+        // The clipboard is back as it was.
+        assert_eq!(fake.clipboard.borrow().text.as_deref(), Some("original"));
+        // Exactly the limit is still fine.
+        let fits = "x".repeat(MAX_SELECTION_BYTES);
+        let fake = Fake::new(Some(Fake::text(&fits)));
+        assert_eq!(
+            selected_text(&fake.run()).map(|t| t.len()),
+            Some(MAX_SELECTION_BYTES)
+        );
+
+        // Too many files.
+        let files: Vec<PathBuf> = (0..=MAX_SELECTED_FILES)
+            .map(|i| PathBuf::from(format!("/tmp/f{i}")))
+            .collect();
+        let fake = Fake::new(Some(CapturedContent {
+            files,
+            ..CapturedContent::default()
+        }));
+        match fake.run() {
+            SelectionCapture::Unavailable(why) => assert!(why.contains("1000 files"), "{why}"),
+            other => panic!("{other:?}"),
+        }
+        let files: Vec<PathBuf> = (0..MAX_SELECTED_FILES)
+            .map(|i| PathBuf::from(format!("/tmp/f{i}")))
+            .collect();
+        let fake = Fake::new(Some(CapturedContent {
+            files,
+            ..CapturedContent::default()
+        }));
+        assert!(matches!(fake.run(), SelectionCapture::Selected(_)));
+    }
+
+    #[test]
+    fn the_oversized_flag_is_never_mistaken_for_an_empty_copy() {
+        let oversized = CapturedContent {
+            oversized: Some(Oversize::Text),
+            ..CapturedContent::default()
+        };
+        assert!(!oversized.is_empty());
+        assert!(CapturedContent::default().is_empty());
+    }
+
+    #[test]
+    fn every_common_terminal_is_recognised() {
+        for name in [
+            "WindowsTerminal.exe",
+            "conhost.exe",
+            "cmd.exe",
+            "powershell.exe",
+            "pwsh.exe",
+            "wezterm-gui.exe",
+            "alacritty",
+            "kitty",
+            "mintty.exe",
+            "ConEmu64.exe",
+            "ConEmu.exe",
+            "Tabby.exe",
+            "Hyper.exe",
+            "iTerm2",
+            "Terminal",
+            "Terminal.app",
+            "gnome-terminal-server",
+            "konsole",
+            "xterm",
+            "tilix",
+            "terminator",
+            "foot",
+            "st",
+            "MobaXterm.exe",
+            "Warp",
+        ] {
+            assert!(is_terminal(&ForegroundApp::new(name)), "{name}");
+        }
+        let mut mac = ForegroundApp::new("Some Name");
+        mac.identifiers = vec!["com.googlecode.iterm2".into()];
+        assert!(is_terminal(&mac));
+        for name in [
+            "Notepad",
+            "chrome",
+            "Code",
+            "explorer.exe",
+            "sublime_text",
+            "stack",
+        ] {
+            assert!(!is_terminal(&ForegroundApp::new(name)), "{name}");
         }
     }
 

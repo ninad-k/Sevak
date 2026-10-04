@@ -25,6 +25,11 @@ The *local* data folder holds what must not leave this computer: on Windows `%LO
 
 Expand `~` to your home directory, `%APPDATA%` to your roaming app data folder and `%LOCALAPPDATA%` to your local one.
 
+### Who can read these files
+
+- **Linux and macOS.** The data folder (`~/.local/share/sevak/` on Linux, the `sevak` folder in Application Support on macOS) and its `logs` folder are created readable by your user only (mode `0700`), and a folder an earlier version created wider is tightened when Sevak starts. The files Sevak writes there (usage history, script and workflow approvals, the shortcut takeover record, clipboard history) are `0600`. The config folder follows your own umask, so `config.toml`, themes, plugins and workflows can be shared or kept in a dotfiles repository.
+- **Windows.** Nothing is changed: the folders under `%APPDATA%\sevak` inherit the access control of your profile (readable by you, administrators and the system). Anything that runs as you can read them. See the [threat model](security/threat-model.md).
+
 ## Override locations
 
 ### Config folder

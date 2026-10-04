@@ -511,3 +511,18 @@ Not changed: text copied by a password manager that does not set a secret marker
 is recorded if the manager is not on the ignore list; typing into a canvas-drawn
 or non-accessible password box is still seen by the expansion buffer; nothing here
 defends against software running as the user.
+
+### Hardening: gallery, paths and misc
+
+A later change narrowed several of the items above. Where this section and the
+text above disagree, this section is newer.
+
+- **Gallery sources.** Files are requested only from `raw.githubusercontent.com/ninad-k/Sevak/` and the repository's release downloads, at the first request and at every redirect, and an index can only name files inside the release it was read from. A build reads the lists at the tag of its own version, not `main`; a build without a tag uses the latest stable release and says so. There is still no signature (backlog item 2). Details and limits: [Gallery trust](gallery-trust.md).
+- **Gallery content.** Windows device names are refused as package entry names, gallery ids and folder names. A gallery theme never replaces a theme of the same name.
+- **Network paths (Windows).** `[files] allow_network_paths` is off by default. A UNC path (`\\server\share`, `//server/share`, `\\?\UNC\...`) or a mapped network drive is refused before any file system call by path browsing, path resolution, the configured folders, the file-buffer destination, workflow open-file and launch nodes and everything opened through the platform provider. Device paths (`\\.\pipe\...`) are refused whatever the setting is. Text selected in other apps is never checked as a network path. This is backlog item 9.
+- **Addresses.** `open_url` parses the address and refuses control characters, quotes, angle brackets, backslashes, addresses with credentials or without a host, addresses over 8192 bytes and `mailto:` options other than recipients, subject and body.
+- **Files on disk.** On Unix the data and log folders are `0700` and the files Sevak keeps there are `0600`; the config folder keeps the user's umask. On Windows the folders inherit the profile's access control, as before. Local files that are read whole (configuration, manifests, state files, caches, bookmarks, icons, description files) have a size limit that is checked before reading.
+- **Program lookup.** An empty or relative `PATH` entry is ignored, and on Unix a bare program name is started from the file `PATH` finds, so a file in the working or plugin folder cannot stand in for it. Bare names elsewhere in the platform crate that are looked up by the operating system itself are not covered.
+- **Selection and clipboard images.** A selection over 256 KiB or with more than 1000 files is dropped where it is read (on Windows an oversized text copy is not read at all), and a clipboard image over the size limit is turned away on its header on Windows. Elsewhere the clipboard library converts the image first.
+- **File-buffer moves.** A move never replaces a name that appeared after it was chosen (`renameat2`, `renamex_np`, `MoveFileExW` without the replace flag), and the destination is checked again before each item. The check narrows the window; it does not remove the need for the files to belong to the user.
+- **Not changed.** The webview CSP and the Tauri capabilities (backlog items 4 and 5) are as before; see the audit in the change's notes.

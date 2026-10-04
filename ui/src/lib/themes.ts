@@ -38,6 +38,15 @@ export interface ThemesDto {
   themes_dir: string;
 }
 
+/** The online gallery as the editor lists it. */
+export interface ThemeGallery {
+  items: GalleryItem[];
+  /** Where the list was read from (pinned to a release tag). */
+  source: string;
+  /** Set when the list is not from this build's own release, and why. */
+  note: string | null;
+}
+
 export interface GalleryItem {
   id: string;
   name: string;
@@ -400,8 +409,9 @@ export function miniVars(spec: ThemeSpec, mode: Mode, defaults: Record<Mode, Pal
   return Object.fromEntries(Object.entries(vars).filter(([name]) => keep.includes(name)));
 }
 
-/** Where the online gallery's index lives; fetched only when the user asks. */
-export const GALLERY_INDEX_URL = "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes.json";
+/** Where the online gallery's index lives; fetched only when the user asks. The tag is this build's version. */
+export const GALLERY_INDEX_URL =
+  "https://raw.githubusercontent.com/ninad-k/Sevak/<this version's release tag>/gallery/themes.json";
 
 /** Valid for `font-family` in a theme: names of letters, digits, spaces and `- _ .`. */
 export function fontFamilyError(family: string): string | null {

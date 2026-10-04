@@ -13,8 +13,10 @@
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::io::{self, Read};
+use std::io;
 use std::path::{Path, PathBuf};
+
+use sevak_core::bounded_read::{read_capped, read_to_string_capped, MAX_STATE_BYTES};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -86,7 +88,7 @@ impl ApprovalStore {
     }
 
     fn read(&self) -> Record {
-        match fs::read_to_string(&self.path) {
+        match read_to_string_capped(&self.path, MAX_STATE_BYTES) {
             Ok(text) => serde_json::from_str(&text).unwrap_or_else(|err| {
                 // Treat a damaged file as "nothing approved yet": plugins ask again.
                 tracing::warn!(path = %self.path.display(), %err, "script plugin approvals are unreadable");
@@ -121,18 +123,9 @@ impl ApprovalStore {
         let mut record = self.read();
         record.version = FORMAT;
         record.approved.insert(id.to_owned(), key.to_owned());
-        if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent)?;
-        }
         let text = serde_json::to_string_pretty(&record).map_err(io::Error::other)?;
-        let mut temp = self.path.as_os_str().to_owned();
-        temp.push(".tmp");
-        let temp = PathBuf::from(temp);
-        let written = fs::write(&temp, text).and_then(|()| fs::rename(&temp, &self.path));
-        if written.is_err() {
-            let _ = fs::remove_file(&temp);
-        }
-        written
+        // Owner-only on Unix (0600, in a 0700 folder it creates).
+        sevak_platform::private_file::write_atomic(&self.path, text.as_bytes())
     }
 }
 
@@ -170,19 +163,16 @@ impl ContentHasher {
             self.feed("missing", relative.as_bytes());
             return;
         };
+        // Read through the same size cap as every other file Sevak did not
+        // write; a bigger one is bound by its size only.
         match fs::metadata(&path) {
-            Ok(meta) if meta.is_file() && meta.len() > MAX_HASHED_FILE => {
-                self.feed("large", &meta.len().to_le_bytes());
-            }
-            Ok(meta) if meta.is_file() => {
-                let mut bytes = Vec::new();
-                match fs::File::open(&path)
-                    .and_then(|file| file.take(MAX_HASHED_FILE).read_to_end(&mut bytes))
-                {
-                    Ok(_) => self.feed("file", &bytes),
-                    Err(_) => self.feed("missing", relative.as_bytes()),
+            Ok(meta) if meta.is_file() => match read_capped(&path, MAX_HASHED_FILE) {
+                Ok(bytes) => self.feed("file", &bytes),
+                Err(err) if err.kind() == io::ErrorKind::FileTooLarge => {
+                    self.feed("large", &meta.len().to_le_bytes());
                 }
-            }
+                Err(_) => self.feed("missing", relative.as_bytes()),
+            },
             _ => self.feed("missing", relative.as_bytes()),
         }
     }
@@ -235,6 +225,8 @@ pub fn script_approval_key(dir: &Path) -> Result<(Manifest, String), String> {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use super::*;
 
     #[test]
@@ -257,6 +249,35 @@ mod tests {
         assert!(store.is_approved("script:a", "k1"), "approvals accumulate");
         assert!(store.is_approved("script:b", "k3"));
         assert!(!dir.path().join("sub").join("approvals.json.tmp").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_approvals_file_is_private_to_the_owner() {
+        use std::os::unix::fs::PermissionsExt;
+        let mode =
+            |path: &std::path::Path| fs::metadata(path).unwrap().permissions().mode() & 0o777;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state").join("approvals.json");
+        let store = ApprovalStore::new(path.clone());
+        store.approve("script:a", "python main.py").unwrap();
+        assert_eq!(mode(&path), 0o600);
+        assert_eq!(mode(path.parent().unwrap()), 0o700);
+        // Rewriting a file that was left wider by an older version tightens it.
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+        store.approve("script:b", "node b.js").unwrap();
+        assert_eq!(mode(&path), 0o600);
+    }
+
+    #[test]
+    fn an_oversized_file_means_nothing_is_approved() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("approvals.json");
+        let mut text = String::from("{\"approved\": {\"script:a\": \"x\"}}");
+        text.push_str(&" ".repeat(MAX_STATE_BYTES as usize));
+        fs::write(&path, text).unwrap();
+        let store = ApprovalStore::new(path);
+        assert!(!store.is_approved("script:a", "x"));
     }
 
     #[test]

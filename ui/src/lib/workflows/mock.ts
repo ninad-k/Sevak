@@ -332,7 +332,7 @@ export function gallery(): Result<Gallery> {
   return {
     ok: true,
     value: {
-      source: "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/index.json",
+      source: "https://raw.githubusercontent.com/ninad-k/Sevak/v0.1.0/gallery/index.json",
       name: "Sevak gallery",
       skipped: 0,
       entries: [
@@ -343,7 +343,7 @@ export function gallery(): Result<Gallery> {
           description: "Type ddg and some words to search DuckDuckGo; ddg alone opens its home page. Runs no code.",
           author: "Sevak",
           version: "1.0",
-          source: "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/duckduckgo.zip",
+          source: "https://raw.githubusercontent.com/ninad-k/Sevak/v0.1.0/gallery/packages/duckduckgo.zip",
           sha256: "dbb2901b3023ba0a876e7fd02d510f800154a79c7b496ca77bb37c0a52eb1e9c",
           homepage: "https://github.com/ninad-k/Sevak/tree/main/examples/workflows/duckduckgo",
           installed: installed.has("duckduckgo"),
@@ -355,7 +355,7 @@ export function gallery(): Result<Gallery> {
           description: "Universal Actions: select text in any app, collapse its spaces and line breaks, and paste it back. Runs no code.",
           author: "Sevak",
           version: "1.0",
-          source: "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/tidy-text.zip",
+          source: "https://raw.githubusercontent.com/ninad-k/Sevak/v0.1.0/gallery/packages/tidy-text.zip",
           sha256: "48f4c149b0a2863b33cdd79ab3094fed937b2aa6da006061b00b1de008e16501",
           homepage: "https://github.com/ninad-k/Sevak/tree/main/examples/workflows/tidy-text",
           installed: installed.has("tidy-text"),
@@ -367,7 +367,7 @@ export function gallery(): Result<Gallery> {
           description: "Type case and some words to get camelCase, snake_case, kebab-case and more. A script plugin that needs Node.js.",
           author: "Sevak",
           version: "1.0",
-          source: "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/case-converter-node.zip",
+          source: "https://raw.githubusercontent.com/ninad-k/Sevak/v0.1.0/gallery/packages/case-converter-node.zip",
           sha256: "a2b1605fdf4c817ac9558cb89e1a21aded4868bb20cf97f6c98208b5e6a0f801",
           homepage: "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/case-converter-node",
           installed: installed.has("case-converter-node"),

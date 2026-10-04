@@ -24,6 +24,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
+use sevak_core::bounded_read::{read_to_string_capped, MAX_CACHE_BYTES};
 
 use crate::calculator::{evaluate, format_number};
 use crate::units::{round_significant, split_conversion, split_quantity};
@@ -408,7 +409,7 @@ impl RateService {
     }
 
     fn load_cache(&self) -> Result<Option<Rates>, String> {
-        let text = match std::fs::read_to_string(&self.cache_path) {
+        let text = match read_to_string_capped(&self.cache_path, MAX_CACHE_BYTES) {
             Ok(text) => text,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(err) => return Err(err.to_string()),

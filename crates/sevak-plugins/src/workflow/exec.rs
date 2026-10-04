@@ -396,7 +396,7 @@ impl Runtime {
                     .map_err(|err| format!("could not open the link: {err}"))?;
             }
             NodeKind::OpenFile { path } => {
-                let path = self.resolve_path(&plain(path));
+                let path = self.resolve_path(&plain(path))?;
                 self.platform
                     .open_path(&path)
                     .map_err(|err| format!("could not open the file: {err}"))?;
@@ -523,13 +523,18 @@ impl Runtime {
 
     /// A path from a node: `~` is the home folder, a relative path is inside
     /// the workflow's folder.
-    fn resolve_path(&self, text: &str) -> PathBuf {
+    /// The absolute path `text` names (relative ones are inside the workflow's
+    /// folder). A network path is refused here, before anything asks the file
+    /// system about it, unless `[files] allow_network_paths` is on.
+    fn resolve_path(&self, text: &str) -> Result<PathBuf, String> {
         let path = expand_home(text.trim(), home_dir().as_deref());
-        if path.is_absolute() {
+        let path = if path.is_absolute() {
             path
         } else {
             self.dir.join(path)
-        }
+        };
+        sevak_platform::netpath::guard(&path).map_err(|err| err.to_string())?;
+        Ok(path)
     }
 
     fn launch_app(&self, app: &str, args: &[String]) -> Result<(), String> {
@@ -546,7 +551,7 @@ impl Runtime {
         let target = match by_name {
             Some(entry) => entry.target,
             None => {
-                let path = self.resolve_path(app);
+                let path = self.resolve_path(app)?;
                 if !path.exists() {
                     return Err("no application with that name or path was found".to_owned());
                 }
@@ -1230,6 +1235,41 @@ mod tests {
             *f.platform.opened_paths.lock().unwrap(),
             [f.runtime.dir.join("notes/x y&z.txt")]
         );
+    }
+
+    /// Windows: an open-file node whose path is a share (typed by the user or
+    /// built from a variable) is refused before the path is touched.
+    #[cfg(windows)]
+    #[test]
+    fn open_file_refuses_network_paths() {
+        let f = fixture(
+            vec![
+                keyword("k"),
+                node(
+                    "f",
+                    NodeKind::OpenFile {
+                        path: "{query}".into(),
+                    },
+                ),
+            ],
+            vec![wire("k", "f")],
+        );
+        for typed in [
+            r"\\server\share\x.txt",
+            "//server/share/x.txt",
+            r"\\.\pipe\x",
+        ] {
+            let report = f.runtime.run_blocking("k", Ctx::with_arg(typed));
+            assert_eq!(report.errors.len(), 1, "{typed}: {report:?}");
+            assert!(
+                report.errors[0]
+                    .message
+                    .contains("Network paths are turned off")
+                    || report.errors[0].message.contains("device path"),
+                "{typed}: {report:?}"
+            );
+        }
+        assert!(f.platform.opened_paths.lock().unwrap().is_empty());
     }
 
     #[test]

@@ -1,10 +1,20 @@
 # Sevak galleries
 
 This folder holds the two opt-in online galleries. Sevak reads them from
-`https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/` only when you
-ask: nothing is fetched at startup or in the background. Both use the same
-download code (HTTPS only, a size limit, a timeout, a `Sevak/<version> (gallery)`
-user agent) and install a file only if its SHA-256 matches the one in the index.
+`https://raw.githubusercontent.com/ninad-k/Sevak/v<version>/gallery/` (the tag
+of the running build, not `main`) only when you ask: nothing is fetched at
+startup or in the background. Both use the same download code (HTTPS only,
+addresses in this repository only, a size limit, a timeout, a
+`Sevak/<version> (gallery)` user agent) and install a file only if its SHA-256
+matches the one in the index. See
+[docs/security/gallery-trust.md](../docs/security/gallery-trust.md).
+
+Index entries name files by a **path relative to the repository root**
+(`gallery/packages/<id>.zip`, `gallery/themes/<Name>.toml`), never by an
+absolute address; Sevak joins the path to the tag it is reading. A change you
+merge here reaches users with the next release, not at once. `index.json` has
+`"format": 2` and `themes.json` has `"version": 2`; builds older than that show
+"update Sevak".
 
 | Gallery | Index | Files | Opened from | What the app does |
 |---|---|---|---|---|
@@ -17,8 +27,10 @@ like the rest of the repository (palettes of third-party themes: see
 
 ## What is in it
 
-**Workflows** (source in `examples/workflows/<id>/`). The first group runs no
-code at all, so Sevak does not even ask for permission:
+**Workflows** (source in `examples/workflows/<id>/`). Most run no code. Those
+that only open a link or show a result need no permission; a workflow that pastes
+into another app (`tidy-text`, `markdown-tools`, `selection-toolkit`) or runs a
+script asks for your permission once, because it types into whatever app is in front:
 
 | Id | What it does |
 |---|---|
@@ -105,18 +117,20 @@ and `cargo test` enforces most of it (see [Checking your change](#checking-your-
      "author": "you",
      "version": "1.0",
      "tags": ["search", "no-code"],
-     "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/my-workflow.zip",
+     "source": "gallery/packages/my-workflow.zip",
      "sha256": "<the SHA-256 of the zip>",
      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/workflows/my-workflow"
    }
    ```
 
    `kind` is `workflow` or `plugin`; `tags` are one to eight lower case labels
-   (`a-z`, `0-9`, `-`); `folder` is optional and defaults to the `id`. You can
-   leave `sha256` as 64 zeros and let the next step fill it in.
+   (`a-z`, `0-9`, `-`); `folder` is optional and defaults to the `id`. `source`
+   is the **path** of the zip below the repository root, never a web address:
+   Sevak joins it to the release it is reading. You can leave `sha256` as 64
+   zeros and let the next step fill it in.
 4. Run `node scripts/gallery-check.mjs --update` (also `npm run gallery:check`
    to only check). It copies the real hashes into `index.json` and `themes.json`
-   and fails on a wrong address, a missing file, a file the index does not list
+   and fails on a wrong path, a missing file, a file the index does not list
    or a stale hash.
 
 An installed package still has to be allowed before anything in it runs.
@@ -141,7 +155,7 @@ An installed package still has to be allowed before anything in it runs.
      "author": "you",
      "description": "One sentence.",
      "mode": "dark",
-     "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/My-Theme.toml",
+     "url": "gallery/themes/My-Theme.toml",
      "sha256": "<the SHA-256 of the file>"
    }
    ```
@@ -153,13 +167,14 @@ An installed package still has to be allowed before anything in it runs.
    committed (the repository stores it with LF line endings), and it must be
    changed whenever the file is.
 
-Only `https://` URLs are accepted by either gallery, and `id`s must be unique
-within an index.
+Only paths inside this release are accepted by either gallery (an absolute
+address must lie below the same tag), and `id`s must be unique within an index
+and may not be a Windows device name such as `con` or `nul`.
 
 ## Checking your change
 
 ```sh
-node scripts/gallery-check.mjs                       # hashes, addresses, orphans; no build needed
+node scripts/gallery-check.mjs                       # hashes, paths, orphans; no build needed
 cargo test -p sevak-core -p sevak-plugins            # the full checks, below
 ```
 

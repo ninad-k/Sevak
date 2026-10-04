@@ -70,8 +70,9 @@ When an update is available and you agree to install it, its package is download
 
 Only when you click **Browse online themes** (**Settings → Appearance → Theme editor**):
 
-- One request for `https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes.json`, the list of community themes
-- **Install** on a theme downloads that one theme file, saved only if its SHA-256 matches the one in the list
+- One request for `https://raw.githubusercontent.com/ninad-k/Sevak/v<your version>/gallery/themes.json`, the list of community themes, read from the release of your Sevak version (a build without a published release uses the latest release and says so)
+- **Install** on a theme downloads that one theme file, saved only if its SHA-256 matches the one in the list; a theme of the same name is never replaced silently
+- Files are requested only from Sevak's own repository on GitHub, also when a request is redirected
 - Nothing is requested in the background or on startup
 
 See [Theme gallery](themes.md#theme-gallery).
@@ -80,13 +81,13 @@ See [Theme gallery](themes.md#theme-gallery).
 
 Only when you press **Load gallery** (**Settings → Gallery**):
 
-- One request for `gallery/index.json` from `raw.githubusercontent.com`, the list of ready-made workflows and script plugins
+- One request for `gallery/index.json` from `raw.githubusercontent.com/ninad-k/Sevak`, at the tag of your Sevak version, the list of ready-made workflows and script plugins (a build without a published release uses the latest release and says so)
 - **Install** on an entry downloads that one package, checked against the checksum in the index before anything is written; the installed folder still has to be allowed before it runs
 - Nothing is requested in the background or on startup
 
 See [The gallery](workflows.md#the-gallery).
 
-Both galleries send nothing but the request itself (no cookies or identifiers beyond a `Sevak/<version> (gallery)` user agent). Sevak never downloads plugins or workflows on its own.
+Both galleries send nothing but the request itself (no cookies or identifiers beyond a `Sevak/<version> (gallery)` user agent). A build without a published release makes one more request, to GitHub's "latest release" link, to find out which release to read. Sevak never downloads plugins or workflows on its own.
 
 ## What is NOT collected
 

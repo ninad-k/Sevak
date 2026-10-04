@@ -70,6 +70,8 @@ export interface Config {
     use_os_index: boolean;
     index_keyword: string;
     content_keyword: string;
+    /** Windows: use paths on other computers (off: they are never contacted). */
+    allow_network_paths: boolean;
   };
   bookmarks: { browsers: string[]; keyword: string; global: boolean };
   /** The file buffer: files collected from the results to act on together. */

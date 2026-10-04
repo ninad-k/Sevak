@@ -63,8 +63,9 @@ windows = { workspace = true, features = [
 ] }
 
 [target.'cfg(unix)'.dependencies]
-# killpg for ending a script's whole process group (see `process_tree`); already
-# in the dependency tree.
+# killpg for ending a script's whole process group (see `process_tree`), and
+# renameat2(RENAME_NOREPLACE) / renamex_np(RENAME_EXCL): moves that never
+# replace. Already in the dependency tree.
 libc = "0.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -74,6 +75,8 @@ x11rb = { version = "0.13", features = ["record", "xtest"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 plist = "1"
+# Scratch files for `sips` icon conversions: exclusive, unpredictable names.
+tempfile.workspace = true
 # Frontmost app, pasteboard types and the Cmd+V key event (all already in the
 # dependency tree through arboard).
 objc2 = "0.6"

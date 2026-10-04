@@ -137,8 +137,10 @@ How a theme file is read:
 
 The gallery is a list of community themes kept in Sevak's repository (`gallery/themes.json`, with the files in `gallery/themes/`). It is opt-in:
 
-- Nothing is requested until you click **Browse online themes** in the theme editor. That one click makes a single `GET` of `https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes.json` (no cookies, no query, no identifying headers beyond a `Sevak/<version> (gallery)` user agent; 20-second timeout; 256 KiB limit), through the same download code as the [workflow gallery](workflows.md#the-gallery). The list is only listed, not installed.
+- Nothing is requested until you click **Browse online themes** in the theme editor. That one click makes a single `GET` of `gallery/themes.json` from Sevak's repository **at the tag of your Sevak version** (`https://raw.githubusercontent.com/ninad-k/Sevak/v<version>/gallery/themes.json`; no cookies, no query, no identifying headers beyond a `Sevak/<version> (gallery)` user agent; 20-second timeout; 256 KiB limit), through the same download code as the [workflow gallery](workflows.md#the-gallery). The list is only listed, not installed. If your build has no published release (a local or pre-release build), Sevak reads the latest release's list instead and says so above the list.
+- Files are requested only from Sevak's own repository, also when a request is redirected; see [Gallery trust](security/gallery-trust.md).
 - **Install** downloads that theme's file (https only, 64 KiB limit) and saves it to your themes folder only if its SHA-256 matches the `sha256` in the list. A mismatch, a file that is not a valid theme, or a download that is too large is refused and nothing is written. The saved file is the validated theme in canonical form.
+- **A theme of the same name is never replaced silently.** If one is already in your themes folder, the install is refused and says so; **Reinstall** on an installed theme replaces exactly that theme.
 - Nothing is sent about you, and nothing is downloaded or updated in the background. Without a network you can still use the built-in themes and **Import…**.
 
 The gallery has the eight built-in themes and eleven more, each reaching WCAG AA for body text:
@@ -159,7 +161,7 @@ The gallery has the eight built-in themes and eleven more, each reaching WCAG AA
 
 Colors taken from a third-party palette are credited, with their licences, in [gallery/README.md](https://github.com/ninad-k/Sevak/blob/main/gallery/README.md#theme-palettes-and-licences) and in the first comment of each theme file; a few notice or subtext colors are adjusted so text stays readable.
 
-To share a theme, put the file in `gallery/themes/`, add an entry to `gallery/themes.json` and open a pull request; see [gallery/README.md](https://github.com/ninad-k/Sevak/blob/main/gallery/README.md).
+To share a theme, put the file in `gallery/themes/`, add an entry to `gallery/themes.json` (its `url` is the file's path below the repository root, such as `gallery/themes/My-Theme.toml`, never a web address; `node scripts/gallery-check.mjs --update` fills in the hash) and open a pull request; see [gallery/README.md](https://github.com/ninad-k/Sevak/blob/main/gallery/README.md).
 
 ## Custom stylesheet
 

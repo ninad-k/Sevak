@@ -153,7 +153,12 @@ fn gsettings_icon_theme() -> Option<String> {
     }
 
     let mut output = String::new();
-    child.stdout.take()?.read_to_string(&mut output).ok()?;
+    child
+        .stdout
+        .take()?
+        .take(64 * 1024)
+        .read_to_string(&mut output)
+        .ok()?;
     icon_theme::parse_gsettings_string(&output)
 }
 

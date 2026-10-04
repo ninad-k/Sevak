@@ -558,6 +558,7 @@ pub fn valid_folder_name(folder: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | ' '))
         && !folder.ends_with(' ')
         && !folder.ends_with('.')
+        && !sevak_core::safe_names::is_reserved_device_name(folder)
 }
 
 #[cfg(test)]

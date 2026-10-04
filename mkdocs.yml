@@ -140,6 +140,7 @@ nav:
       - Supply chain: security/supply-chain.md
       - Threat model: security/threat-model.md
       - "Script and workflow trust": security/script-workflow-trust.md
+      - Gallery trust: security/gallery-trust.md
   - Developers:
       - How Sevak works: architecture.md
       - Writing plugins: plugins.md

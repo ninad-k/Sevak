@@ -30,6 +30,68 @@ impl std::fmt::Debug for ClipboardImage {
     }
 }
 
+/// The pixel count (width x height) of a DIB, from the first bytes of the
+/// `CF_DIB` / `CF_DIBV5` data (a `BITMAPINFOHEADER`, `BITMAPV5HEADER` or the old
+/// `BITMAPCOREHEADER`). `None` if the header is too short or malformed.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn dib_header_pixels(header: &[u8]) -> Option<u64> {
+    let word = |at: usize| -> Option<[u8; 4]> { header.get(at..at + 4)?.try_into().ok() };
+    let size = u32::from_le_bytes(word(0)?);
+    let (width, height) = if size == 12 {
+        // BITMAPCOREHEADER: 16-bit width and height.
+        let pair = |at: usize| {
+            header
+                .get(at..at + 2)
+                .map(|b| u64::from(u16::from_le_bytes([b[0], b[1]])))
+        };
+        (pair(4)?, pair(6)?)
+    } else if size >= 40 {
+        // The height is negative for a top-down bitmap.
+        let width = i32::from_le_bytes(word(4)?);
+        let height = i32::from_le_bytes(word(8)?);
+        (
+            u64::from(width.unsigned_abs()),
+            u64::from(height.unsigned_abs()),
+        )
+    } else {
+        return None;
+    };
+    Some(width * height)
+}
+
+/// The pixel count of a PNG, from the first 24 bytes (signature and the start
+/// of the `IHDR` chunk). `None` if it does not start like a PNG.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn png_header_pixels(header: &[u8]) -> Option<u64> {
+    const SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+    if header.get(..8)? != SIGNATURE || header.get(12..16)? != b"IHDR" {
+        return None;
+    }
+    let word = |at: usize| -> Option<u64> {
+        Some(u64::from(u32::from_be_bytes(
+            header.get(at..at + 4)?.try_into().ok()?,
+        )))
+    };
+    Some(word(16)? * word(20)?)
+}
+
+/// Whether the image on the system clipboard is bigger than
+/// [`MAX_IMAGE_RAW_BYTES`] once decoded, judged from its header **before** the
+/// clipboard library converts it (which allocates for every pixel). Only
+/// Windows can be asked without converting; elsewhere this is `false` and the
+/// size is checked on the converted image.
+pub fn clipboard_image_is_oversized() -> bool {
+    #[cfg(windows)]
+    {
+        crate::windows::clipboard_image_pixels()
+            .is_some_and(|pixels| pixels.saturating_mul(4) > MAX_IMAGE_RAW_BYTES as u64)
+    }
+    #[cfg(not(windows))]
+    {
+        false
+    }
+}
+
 fn os_error(operation: &'static str, err: impl std::fmt::Display) -> PlatformError {
     PlatformError::Os {
         operation,
@@ -323,6 +385,45 @@ mod tests {
         writer.finish().unwrap();
         let decoded = ClipboardImage::decode_png(&gray).unwrap();
         assert_eq!(decoded.rgba, [10, 10, 10, 255, 200, 200, 200, 255]);
+    }
+
+    #[test]
+    fn dib_headers_give_their_pixel_counts_without_the_pixels() {
+        let info = |width: i32, height: i32| {
+            let mut header = 40u32.to_le_bytes().to_vec();
+            header.extend(width.to_le_bytes());
+            header.extend(height.to_le_bytes());
+            header
+        };
+        assert_eq!(dib_header_pixels(&info(1920, 1080)), Some(1920 * 1080));
+        // A negative height means top-down.
+        assert_eq!(dib_header_pixels(&info(10, -20)), Some(200));
+        assert_eq!(
+            dib_header_pixels(&info(i32::MAX, i32::MAX)),
+            Some(u64::from(i32::MAX as u32) * u64::from(i32::MAX as u32))
+        );
+        let mut core = 12u32.to_le_bytes().to_vec();
+        core.extend(7u16.to_le_bytes());
+        core.extend(9u16.to_le_bytes());
+        assert_eq!(dib_header_pixels(&core), Some(63));
+        // Too short, or not a header at all.
+        assert_eq!(dib_header_pixels(&[]), None);
+        assert_eq!(dib_header_pixels(&info(1, 1)[..11]), None);
+        assert_eq!(dib_header_pixels(&7u32.to_le_bytes()), None);
+    }
+
+    #[test]
+    fn png_headers_give_their_pixel_counts_without_decoding() {
+        let image = image(5, 3, |_, _| [1, 2, 3, 255]);
+        let png = image.encode_png().unwrap();
+        assert_eq!(png_header_pixels(&png[..24]), Some(15));
+        assert_eq!(png_header_pixels(&png[..23]), None);
+        assert_eq!(png_header_pixels(b"not a png at all, no"), None);
+        // A header that claims an enormous image is read as one.
+        let mut huge = png[..24].to_vec();
+        huge[16..20].copy_from_slice(&u32::MAX.to_be_bytes());
+        huge[20..24].copy_from_slice(&u32::MAX.to_be_bytes());
+        assert!(png_header_pixels(&huge).unwrap().saturating_mul(4) > MAX_IMAGE_RAW_BYTES as u64);
     }
 
     #[test]

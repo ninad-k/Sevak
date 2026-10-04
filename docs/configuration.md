@@ -189,6 +189,7 @@ Indexed file search settings.
 | `use_os_index` | boolean | `true` | Whole-disk (`ff`) and content (`in`) search through the operating system's own file index (Windows Search, Spotlight, `locate`, Tracker or Baloo). Queries go only to that local index, never over the network. `false` turns both off. See [what each OS needs](features/files.md#whole-disk-and-content-search). |
 | `index_keyword` | string | `"ff"` | Keyword for file names anywhere on the disk: `ff report`. `""` turns off just this search. |
 | `content_keyword` | string | `"in"` | Keyword for words inside files: `in invoice 2026`. `""` turns off just this search. |
+| `allow_network_paths` | boolean | `false` | Windows only. Use paths on other computers (`\\server\share`, `//server/share`) and mapped network drives. While `false`, such a path is refused before anything touches it (Windows signs in to a computer as soon as it looks at its path), a typed one shows "Network paths are turned off", and `directories` on a share are skipped. Device paths (`\\.\pipe\...`) are refused either way. Turn on only for servers you trust. |
 
 ```toml
 [files]
@@ -200,6 +201,7 @@ global = true
 use_os_index = true
 index_keyword = "ff"
 content_keyword = "in"
+allow_network_paths = false
 ```
 
 ### [bookmarks]
@@ -680,6 +682,12 @@ global = true
 use_os_index = true
 index_keyword = "ff"
 content_keyword = "in"
+# Windows only. Use paths on other computers (\\server\share, or a mapped
+# network drive). Off by default: merely looking at such a path makes Windows
+# connect to that computer and sign in to it, which can hand your Windows
+# credentials to whoever runs it. Turn on if you keep files on a file server
+# you trust; folders listed in "directories" on a share are skipped while off.
+allow_network_paths = false
 
 [bookmarks]
 # Browsers whose bookmarks are searchable; [] means every browser found.

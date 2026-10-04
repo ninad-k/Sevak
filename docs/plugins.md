@@ -296,6 +296,20 @@ most four such listings may be outstanding at once, and the last listing is
 reused for 1.5 s while the user types the filter). A UNC path needs both a
 server and a share before anything is read.
 
+On Windows a typed network path (`\\server\share`, `//server/share`,
+`\\?\UNC\...`, `\\.\UNC\...`, or a mapped network drive) is never read
+unless `[files] allow_network_paths` is on: `FilesPlugin::search` asks
+`sevak_platform::netpath::refusal` *before* the directory is listed and returns
+one status row instead, `resolve` and the configured `directories` ask the same
+question before `metadata` or `is_dir`, and the file buffer's
+`resolve_destination` takes the setting as an argument. Everything that opens a
+path through `PlatformProvider` (`open_path`, `reveal_path`, `move_to_trash`,
+`open_terminal_in`, Windows `launch` of an executable) and the workflow
+open-file and launch nodes also check the process-wide setting
+(`netpath::set_allow_network_paths`, applied from the configuration whenever the
+plugins are built). `sevak_core::netpath` holds the text rules; device paths
+(`\\.\pipe\...`, `\\?\GLOBALROOT\...`) are refused whatever the setting is.
+
 ### The shell plugin
 
 `> some command` (`crates/sevak-plugins/src/shell.rs`) shows "Run `some command`
@@ -858,7 +872,13 @@ the title (a contact's phone number).
 
 ### The `DeepLink` allow-list
 
-`open_url` accepts only `http(s):` and `mailto:` and must stay that way. Three
+`open_url` accepts only `http(s):` and `mailto:` and must stay that way. The
+address is parsed by `sevak_core::url_check::check_open_url` before it is handed
+to the system: `http(s)` needs a host and no user name or password;
+control characters, `"`, `<`, `>`, `\` and addresses over 8192 bytes are refused;
+spaces are percent-encoded; and `mailto:` takes a plain address list with only
+`subject`, `body`, `to`, `cc` and `bcc` options (no `attach`). The normalised
+form is what reaches ShellExecute, `open` or `xdg-open`. Three
 plugin features need one more scheme each, so instead of loosening `open_url`
 there is a closed type, `DeepLink`, that can only be built by constructors that
 validate every piece and build the whole URL themselves:
@@ -1479,14 +1499,17 @@ Design notes:
   name nodes by id, and a program's stderr is only logged when its node sets
   `log_stderr`.
 - **Gallery** (`gallery.rs`): the download is `sevak_plugins::net::fetch_https`
-  (HTTPS only, size limit, timeout, redirects must stay on HTTPS) and the hash
+  (HTTPS only, only the addresses of `sevak_core::gallery_source` at the first
+  request and at every redirect, size limit, timeout) and the hash
   check `sevak_core::checksum`, both shared with the theme gallery
   (`src-tauri/src/themes.rs`, `sevak_core::theme_store`);
   `install_bytes` verifies the SHA-256 first, then unpacks with strict path
   rules (no `..`, drive letters, links, trailing dots or spaces, more than 200
   files, 2 MiB per file, 10 MiB in all), validates the manifest and renames a
   staging folder into place. The shell's `gallery_install` looks the entry up in
-  the last loaded index by id, so the page cannot name a URL.
+  the last loaded index by id, so the page cannot name a URL. The index is read
+  from the tag of the running build and entries name files relative to it (see
+  [Gallery trust](security/gallery-trust.md)).
 - **Adding a node kind**: a variant of `NodeKind` (and `type_name`, `category`,
   `needs_approval`), a case in `validate.rs::check_node`, one in
   `exec.rs::execute`, an entry in `ui/src/lib/workflows/model.ts` (`KINDS`), and

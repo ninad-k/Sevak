@@ -120,7 +120,7 @@ workflow, enabled, and valid; otherwise the launcher opens and says why.
 | Node | Does | Notes |
 |---|---|---|
 | **Run script** | runs a program; what it prints becomes the argument | [details below](#run-script) |
-| **Open URL** | opens a web or mail link | only `http`, `https` and `mailto`; placeholders are URL-encoded |
+| **Open URL** | opens a web or mail link | only `http`, `https` and `mailto`; placeholders are URL-encoded; the address must be well formed (a host, no user name or password in it, no control characters or quotes, at most 8192 bytes; a `mailto:` link only recipients, `subject` and `body`) |
 | **Open file** | opens a file or folder with its default program | `~` is your home folder; a relative path is inside the workflow's folder; a program or script opens by running, so needs permission |
 | **Launch app** | starts an application by name (as in the launcher) or by path | runs code, so needs permission |
 | **System command** | `lock`, `sleep`, `hibernate`, `restart`, `shutdown`, `logout`, `empty_trash` | needs permission; the destructive ones ask each time |
@@ -315,7 +315,12 @@ recorded like any result).
 
 1. Opening the page requests nothing. **Load gallery** downloads one small file,
    `gallery/index.json` from the Sevak repository on GitHub
-   (`raw.githubusercontent.com`), and shows what it lists.
+   (`raw.githubusercontent.com`) **at the tag of your Sevak version**, and shows
+   what it lists. A change made to the repository later does not change what
+   your version offers. A build without a published release (a local or
+   pre-release build) reads the latest release's list and says so on the page.
+   Files are requested only from Sevak's own repository, also when a request is
+   redirected; see [Gallery trust](security/gallery-trust.md).
 2. **Install** on an entry downloads that one package, a zip, over HTTPS, checks
    it against the SHA-256 in the index and **discards it if it does not match**,
    refuses any path that would leave the folder (and links, oversized or
@@ -343,6 +348,10 @@ project and described in [gallery/README.md](https://github.com/ninad-k/Sevak/bl
 | Decode and encode | Universal Actions: Base64 and URL decoding in a text view, encoding to the clipboard | no |
 | Selection toolkit | Universal Actions: word count (Large Type), JSON pretty-print and minify, timestamp and date | a short Python 3 script, after you allow it |
 
+Tidy up whitespace and Markdown helpers run no code but paste into the app you
+came from, so (like any workflow with a Paste node) they ask for your permission
+once after you install them.
+
 The plugins are the case converter (Node.js) and Python 3 plugins for passwords
 (`pw`), IDs (`id`: UUID v4/v7, ULID, NanoID), colors (`color`), placeholder text
 (`lorem`) and checksums (`hash`). The search workflows only open your browser at
@@ -357,9 +366,10 @@ keeps no account or identifier. The bundled examples are in
 
 To offer your own package: pack the folder (`cargo run -p sevak-plugins --example
 gallery_pack -- <folder> <out.zip>` prints the SHA-256), add an entry to
-`gallery/index.json` (`node scripts/gallery-check.mjs --update` fills in the
-hashes and checks the rest) and open a pull request. The rules a package has
-to meet and a pre-merge checklist are in
+`gallery/index.json` (its `source` is the path of the zip relative to the
+repository root, `gallery/packages/<id>.zip`; `node scripts/gallery-check.mjs
+--update` fills in the hashes and checks the rest) and open a pull request. The
+rules a package has to meet and a pre-merge checklist are in
 [gallery/README.md](https://github.com/ninad-k/Sevak/blob/main/gallery/README.md); see also
 [plugins.md](plugins.md#workflows-for-contributors).
 

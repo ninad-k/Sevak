@@ -1,5 +1,5 @@
 {
-  "format": 1,
+  "format": 2,
   "name": "Sevak gallery",
   "entries": [
     {
@@ -14,7 +14,7 @@
         "web",
         "no-code"
       ],
-      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/duckduckgo.zip",
+      "source": "gallery/packages/duckduckgo.zip",
       "sha256": "15b9f3726c402ec97fe731952a651ad5054af2977636c36884b2186e5413e09f",
       "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/workflows/duckduckgo"
     },
@@ -30,7 +30,7 @@
         "developer",
         "no-code"
       ],
-      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/dev-search.zip",
+      "source": "gallery/packages/dev-search.zip",
       "sha256": "d5f868e5138418ececb587ebd5f88ff1becdf4596f5c33f45f664bec9a30c43c",
       "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/workflows/dev-search"
     },
@@ -47,7 +47,7 @@
         "github",
         "no-code"
       ],
-      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/github-search.zip",
+      "source": "gallery/packages/github-search.zip",
       "sha256": "d4e11447218bf1c7309a3876fc35bc807837c9e11fe83ece22e404205cade43b",
       "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/workflows/github-search"
     },
@@ -63,7 +63,7 @@
         "reference",
         "no-code"
       ],
-      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/wikipedia-search.zip",
+      "source": "gallery/packages/wikipedia-search.zip",
       "sha256": "c1a00920d27afefbb958ac0d853800c8f7eedfd0948fbaf42a9df0510b3f7799",
       "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/workflows/wikipedia-search"
     },
@@ -79,7 +79,7 @@
         "maps",
         "no-code"
       ],
-      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/maps-search.zip",
+      "source": "gallery/packages/maps-search.zip",
       "sha256": "7fef1252156bff10c816ffcadd84293a69ef2ba5207aaf7a7f7b75d90f3cbcab",
       "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/workflows/maps-search"
     },
@@ -95,7 +95,7 @@
         "links",
         "no-code"
       ],
-      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/open-selected-link.zip",
+      "source": "gallery/packages/open-selected-link.zip",
       "sha256": "2de3337d38504a9eadf6e28cd3610a4db6df437223547f92b86823722fe2ec1c",
       "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/workflows/open-selected-link"
     },
@@ -111,7 +111,7 @@
         "text",
         "no-code"
       ],
-      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/tidy-text.zip",
+      "source": "gallery/packages/tidy-text.zip",
       "sha256": "d6fe5291f8afde7ff59cdc244a414444068ad1a8d5ae642435543a0580732940",
       "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/workflows/tidy-text"
     },
@@ -128,7 +128,7 @@
         "markdown",
         "no-code"
       ],
-      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/markdown-tools.zip",
+      "source": "gallery/packages/markdown-tools.zip",
       "sha256": "809613191f7bee9f500964bdb84a63bfb266b8bd5719be7813d3cf717b616c28",
       "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/workflows/markdown-tools"
     },
@@ -145,7 +145,7 @@
         "encoding",
         "no-code"
       ],
-      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/decode-tools.zip",
+      "source": "gallery/packages/decode-tools.zip",
       "sha256": "bfc6d6920608da85bcc4ff9011ac8be4df38957de93ccf18aaa52966b49ffaf6",
       "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/workflows/decode-tools"
     },
@@ -162,7 +162,7 @@
         "json",
         "needs-python"
       ],
-      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/selection-toolkit.zip",
+      "source": "gallery/packages/selection-toolkit.zip",
       "sha256": "53f8d9e92505310143db5a3a689920f6a2d70754efce9e8b2dc0166a40acf693",
       "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/workflows/selection-toolkit"
     },
@@ -177,7 +177,7 @@
         "text",
         "needs-node"
       ],
-      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/case-converter-node.zip",
+      "source": "gallery/packages/case-converter-node.zip",
       "sha256": "92cb978a846d0e9c7f28fc8049ae3fe8a159c447259a0278cdab9302ae3d6ee5",
       "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/case-converter-node"
     },
@@ -193,7 +193,7 @@
         "generator",
         "needs-python"
       ],
-      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/password-generator.zip",
+      "source": "gallery/packages/password-generator.zip",
       "sha256": "51e2c75efea114a9a529e05fe4ed61d792c7ba6a65dfdd38b5e6d93b44ebaf0a",
       "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/password-generator"
     },
@@ -209,7 +209,7 @@
         "generator",
         "needs-python"
       ],
-      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/id-generator.zip",
+      "source": "gallery/packages/id-generator.zip",
       "sha256": "0494d7cbf72271868cb8be476b23b27809842028fc20660771f715d4ea5a5518",
       "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/id-generator"
     },
@@ -225,7 +225,7 @@
         "converter",
         "needs-python"
       ],
-      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/color-converter.zip",
+      "source": "gallery/packages/color-converter.zip",
       "sha256": "e06674b14d047372e786871959500aaf9122e66bb823f9ab540938b163325e66",
       "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/color-converter"
     },
@@ -241,7 +241,7 @@
         "generator",
         "needs-python"
       ],
-      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/lorem-ipsum.zip",
+      "source": "gallery/packages/lorem-ipsum.zip",
       "sha256": "ba047e1756104ebea235cd9f9e542607cdbd0186d84296f7fb80d91aeb40765d",
       "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/lorem-ipsum"
     },
@@ -257,7 +257,7 @@
         "security",
         "needs-python"
       ],
-      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/hash-calculator.zip",
+      "source": "gallery/packages/hash-calculator.zip",
       "sha256": "2a3913114ab33667633d0320b793aabbc7b5cc24fa8e0f1585cb576c583e96ec",
       "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/hash-calculator"
     }

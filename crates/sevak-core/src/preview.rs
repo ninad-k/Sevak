@@ -351,28 +351,16 @@ fn refuse(path: &Path) -> Option<&'static str> {
     if is_network_path(&path.to_string_lossy()) {
         return Some("Network locations are not previewed");
     }
+    if crate::netpath::is_device_path(&path.to_string_lossy()) {
+        return Some("Device paths are not previewed");
+    }
     if !path.is_absolute() {
         return Some("Only absolute paths are previewed");
     }
     None
 }
 
-/// A UNC path (`\\server\share`, `//server/share`, `\\?\UNC\server\share`):
-/// opening it makes the system contact another machine. Local device paths
-/// (`\\?\C:\`, `\\.\`) are not network paths.
-pub fn is_network_path(path: &str) -> bool {
-    let unified = path.replace('/', "\\");
-    if let Some(rest) = unified.strip_prefix("\\\\") {
-        let device = rest.starts_with("?\\") || rest.starts_with(".\\");
-        if device {
-            return rest
-                .get(2..6)
-                .is_some_and(|prefix| prefix.eq_ignore_ascii_case("UNC\\"));
-        }
-        return true;
-    }
-    false
-}
+pub use crate::netpath::is_network_path;
 
 fn folder_content(content: &mut PreviewContent, path: &Path) {
     content.meta.insert(0, MetaRow::new("Kind", "Folder"));

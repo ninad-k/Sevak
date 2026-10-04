@@ -55,7 +55,8 @@ fn log_panics() {
 }
 
 fn file_appender(paths: &AppPaths) -> Result<RollingFileAppender, String> {
-    std::fs::create_dir_all(&paths.log_dir).map_err(|err| err.to_string())?;
+    // The data and log folders are owner-only on Unix (0700).
+    paths.ensure_private_dirs().map_err(|err| err.to_string())?;
     Builder::new()
         .rotation(Rotation::DAILY)
         .filename_prefix(LOG_FILE_PREFIX)

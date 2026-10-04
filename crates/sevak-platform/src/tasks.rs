@@ -1063,6 +1063,9 @@ pub fn list_drives() -> Result<Vec<Drive>> {
 /// How long a read-only helper may take.
 #[cfg(not(windows))]
 const CAPTURE_TIMEOUT: Duration = Duration::from_secs(5);
+/// The most output of a captured program that is kept.
+#[cfg(not(windows))]
+const MAX_CAPTURE_BYTES: u64 = 4 * 1024 * 1024;
 
 /// Runs `program` and returns its standard output. Fails when it cannot start,
 /// exits non-zero or takes longer than [`CAPTURE_TIMEOUT`]. Never through a
@@ -1090,7 +1093,8 @@ pub(crate) fn capture<S: AsRef<std::ffi::OsStr>>(program: &str, args: &[S]) -> R
     let reader = std::thread::spawn(move || {
         let mut text = String::new();
         if let Some(pipe) = stdout.as_mut() {
-            let _ = pipe.read_to_string(&mut text);
+            // Bounded: a program that never stops writing cannot grow this.
+            let _ = pipe.take(MAX_CAPTURE_BYTES).read_to_string(&mut text);
         }
         text
     });

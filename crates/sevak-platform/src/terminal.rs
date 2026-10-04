@@ -627,7 +627,8 @@ pub fn plan_macos(command: &str, config: &ShellConfig) -> Result<Invocation> {
         .into_iter()
         .flat_map(|line| ["-e".to_owned(), line])
         .collect();
-    Ok(Invocation::new("osascript", args))
+    // By absolute path: a bare name would be looked up on PATH.
+    Ok(Invocation::new("/usr/bin/osascript", args))
 }
 
 // ---------------------------------------------------------------------------
@@ -1062,7 +1063,7 @@ mod tests {
     #[test]
     fn macos_terminal_app_escapes_the_command() {
         let inv = plan_macos(r#"echo "hi\there" \ x"#, &config("", "", true)).unwrap();
-        assert_eq!(inv.program, "osascript");
+        assert_eq!(inv.program, "/usr/bin/osascript");
         assert_eq!(
             inv.args,
             vec![

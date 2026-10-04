@@ -16,6 +16,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
+use sevak_core::bounded_read::{read_to_string_capped, MAX_WORKFLOW_BYTES};
 use sevak_core::{Config, HotkeyBinding, Plugin};
 use sevak_platform::PlatformProvider;
 
@@ -191,7 +192,7 @@ impl WorkflowHost {
                 "the folder name may only use letters, digits, spaces, - _ .".to_owned(),
             );
         }
-        let text = match fs::read_to_string(dir.join(FILE)) {
+        let text = match read_to_string_capped(&dir.join(FILE), MAX_WORKFLOW_BYTES) {
             Ok(text) => text,
             Err(err) => return broken(format!("cannot read {FILE}: {err}")),
         };
@@ -460,7 +461,7 @@ impl WorkflowHost {
     /// them so they can be fixed.
     pub fn load(&self, folder: &str) -> Result<Loaded, String> {
         let dir = self.folder_dir(folder)?;
-        let text = fs::read_to_string(dir.join(FILE))
+        let text = read_to_string_capped(&dir.join(FILE), MAX_WORKFLOW_BYTES)
             .map_err(|err| format!("cannot read the workflow: {err}"))?;
         let workflow = Workflow::from_toml(&text)?;
         let problems = workflow.validate();
@@ -1163,6 +1164,23 @@ mod tests {
         assert!(rows[1].error.is_some() && !rows[1].enabled);
         assert_eq!(rows[0].keywords, ["harm"]);
         assert_eq!(rows[0].name, "Harmless");
+    }
+
+    #[test]
+    fn an_oversized_workflow_file_is_reported_not_read() {
+        let f = fixture();
+        write(&f, "a-good", HARMLESS);
+        let huge = format!("{HARMLESS}\n# {}", "x".repeat(MAX_WORKFLOW_BYTES as usize));
+        write(&f, "b-huge", &huge);
+        let scanned = f.host.scan();
+        assert_eq!(scanned.len(), 2);
+        assert!(matches!(&scanned[0], Scanned::Workflow(c) if c.folder == "a-good"));
+        assert!(
+            matches!(&scanned[1], Scanned::Broken { error, .. } if error.contains("limit of 2 MiB")),
+            "{:?}",
+            scanned[1]
+        );
+        assert!(f.host.load("b-huge").is_err());
     }
 
     #[test]
