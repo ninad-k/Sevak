@@ -9,6 +9,7 @@
 //! |---|---|---|---|
 //! | Chromium family | `%LOCALAPPDATA%\<vendor>\User Data` (Opera: `%APPDATA%`) | `~/Library/Application Support/<vendor>` | `~/.config/<vendor>`, Flatpak and Snap copies |
 //! | Firefox family | `%APPDATA%\Mozilla\Firefox` | `~/Library/Application Support/Firefox` | `~/.mozilla/firefox`, Flatpak and Snap copies |
+//! | Safari | - | `~/Library/Safari` | - |
 
 use std::path::{Path, PathBuf};
 
@@ -19,6 +20,9 @@ pub enum BrowserFamily {
     Chromium,
     /// `places.sqlite` in every profile listed in `profiles.ini`.
     Firefox,
+    /// `Bookmarks.plist` (a binary property list) in `~/Library/Safari`. macOS
+    /// only; reading it needs Full Disk Access.
+    Safari,
 }
 
 /// A browser's user-data folder: it holds one folder per profile.
@@ -26,7 +30,7 @@ pub enum BrowserFamily {
 pub struct BrowserRoot {
     /// Lowercase, stable id used by `[bookmarks] browsers` (`chrome`, `edge`,
     /// `brave`, `vivaldi`, `chromium`, `opera`, `opera-gx`, `firefox`,
-    /// `librewolf`, `zen`).
+    /// `librewolf`, `zen`, `safari`).
     pub id: &'static str,
     /// Display name.
     pub name: &'static str,
@@ -108,6 +112,7 @@ const OPERA_GX: Browser = ("opera-gx", "Opera GX", BrowserFamily::Chromium);
 const FIREFOX: Browser = ("firefox", "Firefox", BrowserFamily::Firefox);
 const LIBREWOLF: Browser = ("librewolf", "LibreWolf", BrowserFamily::Firefox);
 const ZEN: Browser = ("zen", "Zen", BrowserFamily::Firefox);
+const SAFARI: Browser = ("safari", "Safari", BrowserFamily::Safari);
 
 fn push(roots: &mut Vec<BrowserRoot>, browser: Browser, base: &Option<PathBuf>, relative: &str) {
     if let Some(base) = base {
@@ -154,6 +159,9 @@ fn macos_roots(env: &BrowserEnv, roots: &mut Vec<BrowserRoot>) {
     push(roots, FIREFOX, support, "Firefox");
     push(roots, LIBREWOLF, support, "LibreWolf");
     push(roots, ZEN, support, "zen");
+    // Not under Application Support. The folder itself can be seen without
+    // Full Disk Access; the file inside it cannot be read (see the plugin).
+    push(roots, SAFARI, &env.home, "Library/Safari");
 }
 
 /// Native installs first, then the Flatpak and Snap copies of the same browser.
@@ -287,6 +295,28 @@ mod tests {
             dir_of(TargetOs::MacOs, "firefox", 0),
             path(&["config", "Firefox"])
         );
+        assert_eq!(
+            dir_of(TargetOs::MacOs, "safari", 0),
+            path(&["home", "Library", "Safari"])
+        );
+    }
+
+    #[test]
+    fn safari_exists_on_macos_only() {
+        let has_safari = |os| {
+            candidate_roots(os, &env())
+                .iter()
+                .any(|root| root.id == "safari")
+        };
+        assert!(has_safari(TargetOs::MacOs));
+        assert!(!has_safari(TargetOs::Windows));
+        assert!(!has_safari(TargetOs::Linux));
+        let safari = candidate_roots(TargetOs::MacOs, &env())
+            .into_iter()
+            .find(|root| root.id == "safari")
+            .unwrap();
+        assert_eq!(safari.family, BrowserFamily::Safari);
+        assert_eq!(safari.name, "Safari");
     }
 
     #[test]
@@ -336,6 +366,8 @@ mod tests {
             for root in &roots {
                 let expected = if ["firefox", "librewolf", "zen"].contains(&root.id) {
                     BrowserFamily::Firefox
+                } else if root.id == "safari" {
+                    BrowserFamily::Safari
                 } else {
                     BrowserFamily::Chromium
                 };
