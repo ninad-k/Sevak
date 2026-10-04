@@ -61,6 +61,7 @@ Main hotkeys and startup behaviour.
 |---|---|---|---|
 | `hotkey` | string | `"Super+Space"` | Global keyboard shortcut to show/hide Sevak. `Super` is the Windows key (Cmd on macOS; `Win`, `Windows` and `Meta` are accepted spellings). Examples: `"Alt+Space"`, `"Ctrl+Space"`, `"Ctrl+Shift+K"`. On macOS, `Alt` is the Option key. Super+Space is used by the system too; Sevak takes it over (a keyboard hook on Windows; a question on macOS and GNOME) - see [Troubleshooting](troubleshooting.md#super-space). Existing config files keep the key they have. On Linux Wayland, run `sevak --setup-hotkey` to bind this in GNOME instead. |
 | `actions_hotkey` | string | `"Ctrl+Alt+Space"` | Hotkey for Universal Actions: capture the selection in the foreground app and offer actions on it. Empty string `""` turns Universal Actions off. On Wayland, run `sevak --setup-hotkey` to bind this in GNOME. |
+| `accept_injected_hotkeys` | boolean | `false` | Windows keyboard hook only. By default the hook ignores key events that another program sends (`SendInput`), so no program on your desktop can open Sevak or make Universal Actions copy the foreground app's selection by pressing the shortcut for you. Turn it on if **AutoHotkey, PowerToys Keyboard Manager** or another remapper is meant to type Sevak's shortcut. Shortcuts that Windows itself registers (not Win-key combinations or keys another app owns) are still delivered by the system whoever sends them. |
 | `hide_on_blur` | boolean | `true` | Hide the launcher when it loses focus to another window. Press Esc or click elsewhere to close; this setting hides it automatically. |
 | `launch_at_login` | boolean | `false` | Start Sevak when you log in to your desktop. |
 | `check_for_updates` | boolean | `true` | Check GitHub for a new version shortly after startup, every six hours, and whenever you open Sevak (if the last check is over an hour old). Updates are only installed after you confirm. Apart from optional currency rates, this is the only automatic network request. |
@@ -69,6 +70,7 @@ Main hotkeys and startup behaviour.
 [general]
 hotkey = "Super+Space"
 actions_hotkey = "Ctrl+Alt+Space"
+accept_injected_hotkeys = false
 hide_on_blur = true
 launch_at_login = false
 check_for_updates = true
@@ -571,6 +573,12 @@ hotkey = "Super+Space"
 # you are using (text, a URL, files) and offers actions for it. "" turns it off.
 # On Wayland run `sevak --setup-hotkey` to bind it to `sevak --actions`. See [actions].
 actions_hotkey = "Ctrl+Alt+Space"
+
+# Windows: also react to shortcuts that another program types for you (AutoHotkey,
+# PowerToys Keyboard Manager and other remappers send "injected" keys). Off by
+# default so that a program on your desktop cannot open Sevak or trigger Universal
+# Actions by sending the shortcut itself; turn it on if a remapper is meant to.
+accept_injected_hotkeys = false
 
 # Hide the window when it loses focus.
 hide_on_blur = true

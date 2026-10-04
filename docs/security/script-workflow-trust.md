@@ -101,6 +101,21 @@ again).
   Copy nodes do not need approval (they only fill the clipboard, like the
   copy action in the launcher).
 
+## The Windows hotkey hook ignores keys other programs send
+
+The low-level keyboard hook that takes Win-key shortcuts used to react to key
+events whoever produced them, so any program on the desktop (including one at a
+lower integrity level) could press Sevak's shortcut with `SendInput`: open the
+launcher, or make Universal Actions copy the foreground app's selection. The
+hook now ignores injected events, except that Sevak's own are passed on
+unseen as before.
+
+**What you will notice:** if AutoHotkey, PowerToys Keyboard Manager or another
+remapper types your Sevak shortcut, it stops working until you turn on
+`[general] accept_injected_hotkeys` (Settings > General). Shortcuts that
+Windows registers itself (the ones that do not need the hook) are delivered by
+the system whoever sends the keys, and are not affected either way.
+
 ## A script's error output is read with limits
 
 A persistent script's standard error is written to Sevak's log. A line without
