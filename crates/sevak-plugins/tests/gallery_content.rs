@@ -63,6 +63,7 @@ fn examples(kind: Kind) -> PathBuf {
     repo().join("examples").join(match kind {
         Kind::Workflow => "workflows",
         Kind::Plugin => "plugins",
+        Kind::Native => "extensions",
     })
 }
 
@@ -70,11 +71,20 @@ fn pin() -> Pin {
     Pin::new("v1.2.3").unwrap()
 }
 
-fn index() -> Vec<Entry> {
+fn all_entries() -> Vec<Entry> {
     let text = std::fs::read_to_string(repo().join("gallery/index.json")).unwrap();
     let parsed = parse_index(&text, &pin()).unwrap();
     assert!(parsed.skipped.is_empty(), "{:?}", parsed.skipped);
     parsed.entries
+}
+
+/// The workflows and script plugins (one zip each). Native extensions have one
+/// package per platform and are checked by `native_extensions_are_real_packages`.
+fn index() -> Vec<Entry> {
+    all_entries()
+        .into_iter()
+        .filter(|e| e.kind != Kind::Native)
+        .collect()
 }
 
 fn entries_of(kind: Kind) -> Vec<Entry> {
@@ -83,12 +93,201 @@ fn entries_of(kind: Kind) -> Vec<Entry> {
 
 // ---- the index and the packages ---------------------------------------------
 
+/// A small gallery with one native extension, built here: the packages, the
+/// index entry and the folder layout the real gallery uses.
+fn small_native_gallery(
+    tamper: impl FnOnce(&mut serde_json::Value, &Path),
+) -> (tempfile::TempDir, Vec<Entry>) {
+    use sevak_plugins::extensions::Builder;
+
+    let tmp = tempfile::tempdir().unwrap();
+    let manifest = "protocol = 1\nid = \"script:tool\"\nkeyword = \"tool\"\nname = \"Tool\"\n\
+        description = \"A tool.\"\n[extension]\nversion = \"1.2.3\"\nauthor = \"Ada\"\n\
+        license = \"MIT\"\nmin_sevak = \"0.1.0\"\npermissions = [\"network\"]\n\
+        repository = \"https://github.com/example/tool\"\n[extension.binaries]\n\
+        linux-x86_64 = \"bin/tool-linux\"\nmacos-aarch64 = \"bin/tool-macos\"\n";
+    let mut builder = Builder::new(manifest, "tool").unwrap();
+    builder.add_binary("linux-x86_64", b"elf".to_vec()).unwrap();
+    builder
+        .add_binary("macos-aarch64", b"macho".to_vec())
+        .unwrap();
+    let dir = tmp.path().join("extensions/tool");
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut platforms = serde_json::Map::new();
+    for platform in ["linux-x86_64", "macos-aarch64"] {
+        let bytes = builder.build(Some(platform)).unwrap();
+        let file = format!("tool-1.2.3-{platform}.sevakext");
+        std::fs::write(dir.join(&file), &bytes).unwrap();
+        platforms.insert(
+            platform.to_owned(),
+            serde_json::json!({
+                "source": format!("gallery/extensions/tool/{file}"),
+                "sha256": sha256_hex(&bytes)
+            }),
+        );
+    }
+    let mut entry = serde_json::json!({
+        "id": "tool", "kind": "native", "name": "Tool", "description": "A tool.",
+        "author": "Ada", "version": "1.2.3", "license": "MIT", "min_sevak": "0.1.0",
+        "permissions": ["network"], "repository": "https://github.com/example/tool",
+        "platforms": platforms
+    });
+    tamper(&mut entry, &dir);
+    let index = serde_json::json!({"format": 2, "entries": [entry]}).to_string();
+    let parsed = parse_index(&index, &pin()).unwrap();
+    assert!(parsed.skipped.is_empty(), "{:?}", parsed.skipped);
+    (tmp, parsed.entries)
+}
+
+#[test]
+fn the_native_package_checks_pass_for_a_consistent_gallery() {
+    let (tmp, entries) = small_native_gallery(|_, _| {});
+    check_native_entries(&entries, tmp.path());
+}
+
+/// What a test does to the entry (and the files) before the checks run.
+type Tamper = Box<dyn FnOnce(&mut serde_json::Value, &Path)>;
+
+#[test]
+fn the_native_package_checks_catch_each_kind_of_mismatch() {
+    let cases: Vec<(&str, Tamper)> = vec![
+        (
+            "hash",
+            Box::new(|entry, _| {
+                entry["platforms"]["linux-x86_64"]["sha256"] = serde_json::json!("0".repeat(64));
+            }),
+        ),
+        (
+            "version",
+            Box::new(|entry, _| entry["version"] = "1.2.4".into()),
+        ),
+        (
+            "author",
+            Box::new(|entry, _| entry["author"] = "Mallory".into()),
+        ),
+        (
+            "permissions",
+            Box::new(|entry, _| {
+                entry["permissions"] = serde_json::json!(["network", "filesystem"])
+            }),
+        ),
+        (
+            "unlisted package",
+            Box::new(|_, dir| {
+                std::fs::write(dir.join("tool-0.0.1-linux-x86_64.sevakext"), b"x").unwrap()
+            }),
+        ),
+    ];
+    for (what, tamper) in cases {
+        // A version change renames the files the entry expects, so build the
+        // gallery first and let the tamper step run on the entry only.
+        let (tmp, entries) = small_native_gallery(tamper);
+        let result = std::panic::catch_unwind(|| check_native_entries(&entries, tmp.path()));
+        assert!(result.is_err(), "{what} should be reported");
+    }
+}
+
+/// Native extensions (`kind: "native"`): every platform's package is committed,
+/// matches its hash, is a package this Sevak accepts, carries a program for that
+/// platform and says in its own manifest what the index entry says (the page
+/// shows the entry, the Allow dialog shows the manifest). Passes when the index
+/// has none yet.
+#[test]
+fn native_extensions_are_real_packages() {
+    check_native_entries(&all_entries(), &repo().join("gallery"));
+}
+
+/// The checks behind [`native_extensions_are_real_packages`], over `gallery`
+/// (a folder laid out like the repository's `gallery/`), so they can be tried
+/// on a small gallery built in a test.
+fn check_native_entries(entries: &[Entry], gallery: &Path) {
+    use sevak_plugins::extensions::ExtensionPackage;
+
+    const MAX_NATIVE_PACKAGE_BYTES: usize = 10 * 1024 * 1024;
+    let mut listed: BTreeMap<String, HashSet<String>> = BTreeMap::new();
+    for entry in entries.iter().filter(|e| e.kind == Kind::Native) {
+        let id = &entry.id;
+        assert_eq!(entry.folder_name(), id, "{id}: folder");
+        assert!(!entry.platforms.is_empty(), "{id}: no platforms");
+        for (platform, artifact) in &entry.platforms {
+            let file = artifact.source.rsplit('/').next().unwrap().to_owned();
+            assert_eq!(
+                artifact.source,
+                format!("{RAW}gallery/extensions/{id}/{file}"),
+                "{id} {platform}: source"
+            );
+            assert_eq!(
+                file,
+                format!("{id}-{}-{platform}.sevakext", entry.version),
+                "{id} {platform}: file name is <id>-<version>-<platform>.sevakext"
+            );
+            listed.entry(id.clone()).or_default().insert(file.clone());
+            let path = gallery.join("extensions").join(id).join(&file);
+            let bytes = std::fs::read(&path).unwrap_or_else(|err| panic!("{id} {platform}: {err}"));
+            assert!(
+                bytes.len() <= MAX_NATIVE_PACKAGE_BYTES,
+                "{id} {platform}: package too large"
+            );
+            assert_eq!(artifact.sha256, sha256_hex(&bytes), "{id} {platform}: hash");
+
+            let package = ExtensionPackage::read(&bytes, id)
+                .unwrap_or_else(|err| panic!("{id} {platform}: {err}"));
+            assert_eq!(
+                package.platforms(),
+                std::slice::from_ref(platform),
+                "{id} {platform}: a gallery package carries exactly its own platform's program"
+            );
+            let native = &package.native;
+            assert_eq!(native.version, entry.version, "{id}: version");
+            assert_eq!(native.author, entry.author, "{id}: author");
+            assert_eq!(
+                Some(&native.license),
+                entry.license.as_ref(),
+                "{id}: license"
+            );
+            assert_eq!(native.min_sevak, entry.min_sevak, "{id}: min_sevak");
+            assert_eq!(native.repository, entry.repository, "{id}: repository");
+            let (mut a, mut b) = (native.permissions.clone(), entry.permissions.clone());
+            a.sort();
+            b.sort();
+            assert_eq!(a, b, "{id}: permissions");
+            let manifest = Manifest::parse_for(&package.manifest_text, id, platform)
+                .unwrap_or_else(|err| panic!("{id} {platform}: {err}"));
+            assert_eq!(manifest.id, format!("script:{id}"), "{id}: manifest id");
+            assert_eq!(manifest.name, entry.name, "{id}: name");
+        }
+    }
+    // No package in the folder without an entry.
+    let root = gallery.join("extensions");
+    if root.is_dir() {
+        for dir in std::fs::read_dir(&root).unwrap() {
+            let dir = dir.unwrap();
+            let id = dir.file_name().to_string_lossy().into_owned();
+            let files = listed
+                .get(&id)
+                .unwrap_or_else(|| panic!("extensions/{id} has no native entry in index.json"));
+            for file in std::fs::read_dir(dir.path()).unwrap() {
+                let name = file.unwrap().file_name().to_string_lossy().into_owned();
+                assert!(
+                    files.contains(&name),
+                    "extensions/{id}/{name} is not listed"
+                );
+            }
+        }
+    }
+}
+
 #[test]
 fn the_index_describes_the_committed_packages() {
     let text = std::fs::read_to_string(repo().join("gallery/index.json")).unwrap();
     let raw: Value = serde_json::from_str(&text).unwrap();
     assert_eq!(raw["format"], 2, "the committed index is format 2");
-    let raw_entries = raw["entries"].as_array().unwrap();
+    let raw_entries: Vec<&Value> = raw["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|entry| entry["kind"] != "native")
+        .collect();
     let entries = index();
     assert_eq!(entries.len(), raw_entries.len(), "an entry was skipped");
     assert!(entries.iter().filter(|e| e.kind == Kind::Workflow).count() >= 10);

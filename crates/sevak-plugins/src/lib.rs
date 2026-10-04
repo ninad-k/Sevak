@@ -50,6 +50,7 @@ pub mod currency;
 pub mod dictionary;
 pub mod emoji;
 pub mod example_uuid;
+pub mod extensions;
 pub mod file_buffer;
 pub mod files;
 pub mod keywords;

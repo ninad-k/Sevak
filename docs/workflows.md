@@ -364,6 +364,10 @@ agent `Sevak/<version> (gallery)`). Nothing else leaves your computer, and Sevak
 keeps no account or identifier. The bundled examples are in
 [`examples/`](https://github.com/ninad-k/Sevak/tree/main/examples) and their zips in [`gallery/packages/`](https://github.com/ninad-k/Sevak/tree/main/gallery/packages).
 
+The newer **Settings → Extensions** page and the `ext` keyword use the same
+lists and the same checks, and add updates, removal and **native extensions**
+(programs written in Rust); see [Extensions](features/extensions.md).
+
 To offer your own package: pack the folder (`cargo run -p sevak-plugins --example
 gallery_pack -- <folder> <out.zip>` prints the SHA-256), add an entry to
 `gallery/index.json` (its `source` is the path of the zip relative to the

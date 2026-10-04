@@ -10,7 +10,7 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent};
 use crate::cli::{self, Launch};
 use crate::state::AppState;
 use crate::{
-    ai, autostart, backdrop, backup, commands, diagnostics, direct, expansion, file_buffer, hotkey, icons,
+    ai, autostart, backdrop, backup, commands, diagnostics, direct, expansion, extensions, file_buffer, hotkey, icons,
     search, selection, settings, takeover, themes, tray, updater, window, workflows,
 };
 
@@ -128,7 +128,16 @@ pub fn run(
             backup::restore_pick,
             backup::restore_preview,
             backup::restore_apply,
-            backup::restore_undo
+            backup::restore_undo,
+            extensions::extensions_overview,
+            extensions::extensions_refresh,
+            extensions::extensions_install,
+            extensions::extensions_update,
+            extensions::extensions_uninstall,
+            extensions::extensions_set_enabled,
+            extensions::extensions_review,
+            extensions::extensions_open_folder,
+            extensions::extensions_take_page
         ])
         .on_window_event(window::on_window_event)
         .setup(move |app| {

@@ -90,6 +90,7 @@ plugins:
       exclude:
         - architecture.md
         - plugins.md
+        - writing-extensions-in-rust.md
         - development.md
         - releasing.md
         - testing.md
@@ -130,6 +131,7 @@ nav:
       - AI assistant: ai.md
       - Script plugins: features/script-plugins.md
       - Workflows: workflows.md
+      - "Extensions: browse and install": features/extensions.md
   - Reference:
       - Configuration file: configuration.md
       - Command line: cli.md
@@ -148,6 +150,7 @@ nav:
   - Developers:
       - How Sevak works: architecture.md
       - Writing plugins: plugins.md
+      - Writing extensions in Rust: writing-extensions-in-rust.md
       - Development: development.md
       - Releasing: releasing.md
       - Testing: testing.md
@@ -165,3 +168,4 @@ nav:
       - "0009 Hotkey takeover": decisions/0009-hotkey-takeover-per-os.md
       - "0010 Opt-in network": decisions/0010-opt-in-network-features.md
       - "0011 Snippet expansion hooks": decisions/0011-snippet-expansion-hooks-no-wayland.md
+      - "0012 Native extensions": decisions/0012-native-extensions-reuse-the-script-trust-model.md

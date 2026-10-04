@@ -985,6 +985,7 @@ existing scripts run unchanged.
 - [Speed: queries never wait for scripts](#speed-queries-never-wait-for-scripts)
 - [Lifecycle, crashes and restarts](#lifecycle-crashes-and-restarts)
 - [Security](#security)
+- [Native extensions in Rust](#native-extensions-in-rust)
 - [Tips for plugin authors](#tips-for-plugin-authors)
 - [Design decisions](#design-decisions)
 - [For contributors](#for-contributors)
@@ -1435,6 +1436,17 @@ built-in plugins only the OS-index file searches use it.
 - The settings window lists script plugins (waiting ones marked as such) so you
   can see what is installed and switch each off.
 
+### Native extensions in Rust
+
+A script plugin can also be a compiled program. A manifest with an
+`[extension]` table (version, publisher, licence, `[extension.binaries]` with one
+program per platform, declared permissions) instead of `command` / `script` is a
+**native extension**: same protocol, same approval (bound to the program's
+bytes), same scrubbed environment, the dialog labelled "native extension". The
+`sevak-extension-sdk` crate speaks the protocol for you and `sevak-ext` packs and
+validates the result. The whole guide, including what is and is not protected, is
+[Writing extensions in Rust](writing-extensions-in-rust.md).
+
 ### Tips for plugin authors
 
 - **Print protocol messages with a flush** (`print(..., flush=True)` in Python,
@@ -1487,6 +1499,12 @@ scripts may ignore). Unknown fields must be ignored by both sides.
 | Process lifecycle | `.../script/runner.rs` (persistent), `.../script/oneshot.rs` |
 | `ScriptPlugin` | `.../script/plugin.rs` |
 | Discovery, disabled list, approvals | `.../script/host.rs`, `.../script/approvals.rs` |
+| Native extensions: the `[extension]` table, platforms, permissions | `.../script/native.rs` (and `.../script/dialog.rs` for the Allow text) |
+| The `.sevakext` package: build, read, verify | `crates/sevak-plugins/src/extensions/package.rs` |
+| Browse, install, update, uninstall, the catalog cache, receipts | `.../extensions/store.rs` (tests in `.../extensions/store/tests.rs`) |
+| `ext` / `store` in the launcher | `.../extensions/plugin.rs` |
+| The shell side of Settings > Extensions | `src-tauri/src/extensions.rs`, `ui/src/lib/extensions/` |
+| The SDK, the `sevak-ext` tool, the template, the example | `crates/sevak-extension-sdk`, `crates/sevak-ext`, `templates/rust-extension`, `examples/rust-hello` |
 | Approval dialog, wiring into the engine | `src-tauri/src/script_plugins.rs`, `src-tauri/src/search.rs` |
 | Interpreter choice, console-less spawn | `crates/sevak-platform/src/process.rs` |
 | End-to-end tests | `crates/sevak-plugins/tests/script_plugins.rs` with the helper `tests/fixtures/script_fixture.rs` |

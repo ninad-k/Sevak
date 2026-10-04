@@ -70,6 +70,18 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
 
+      # The project template really builds: generate one with `sevak-ext init`
+      # and compile it against this checkout's SDK (the template itself names the
+      # SDK by a git address, which cannot contain this change yet).
+      - name: The Rust extension template builds
+        shell: bash
+        run: |
+          cargo run -q -p sevak-ext -- init "$RUNNER_TEMP/template-check" --name template-check
+          # Forward slashes: a Windows path in a TOML string would be read as escapes.
+          workspace="${GITHUB_WORKSPACE//\\//}"
+          sed -i.bak "s|^sevak-extension-sdk = .*|sevak-extension-sdk = { path = \"$workspace/crates/sevak-extension-sdk\" }|" "$RUNNER_TEMP/template-check/Cargo.toml"
+          cargo build --release --manifest-path "$RUNNER_TEMP/template-check/Cargo.toml"
+
   # Unit tests of the frontend's pure TypeScript logic (Vitest; no browser, no Rust).
   ui-tests:
     name: UI unit tests

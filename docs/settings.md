@@ -291,6 +291,10 @@ Workflows are saved as files in the `workflows` folder next to `config.toml`, no
 
 Lists ready-made workflows and script plugins. Opening the page requests nothing: **Load gallery** downloads the list, **Install** downloads one package and checks its checksum, and the installed folder asks for permission before anything in it runs. See [The gallery](workflows.md#the-gallery).
 
+## Extensions
+
+Browse the gallery (workflows, script plugins, native extensions written in Rust, and themes), install, update, switch off and remove, with an indicator on **Installed** when an update is available. Opening the page requests nothing: **Load the list** downloads the two lists once, **Install** downloads one package and checks its checksum, and a new workflow, plugin or native extension asks for permission before anything in it runs. Works from the launcher too: `ext <name>` or `store <name>`. See [Extensions](features/extensions.md).
+
 ## Web search
 
 Define keywords and URL templates for web search.

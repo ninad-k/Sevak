@@ -1,6 +1,8 @@
 [workspace]
 resolver = "2"
-members = ["crates/*", "src-tauri"]
+members = ["crates/*", "src-tauri", "examples/rust-hello"]
+# The extension template is a project to copy, not a member of this workspace.
+exclude = ["templates/rust-extension"]
 
 [workspace.package]
 version = "0.1.0"

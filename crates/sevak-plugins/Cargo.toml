@@ -37,6 +37,8 @@ sevak-core = { workspace = true, features = ["test-util"] }
 sevak-core.workspace = true
 sevak-platform.workspace = true
 serde.workspace = true
+# Versions of native extensions and the minimum Sevak they need.
+semver.workspace = true
 # serde_json: script plugins' JSON protocol, bookmarks (Chromium) and clipboard
 # history files; toml: script plugin manifests; tempfile: bookmarks' private copy
 # of Firefox's database.

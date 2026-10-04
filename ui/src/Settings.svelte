@@ -16,6 +16,8 @@
   import HotkeyList from "./lib/HotkeyList.svelte";
   import ThemeEditor from "./lib/ThemeEditor.svelte";
   import Toggle from "./lib/Toggle.svelte";
+  import ExtensionsPage from "./lib/extensions/ExtensionsPage.svelte";
+  import { onSettingsPage } from "./lib/extensions/extensions-ipc";
   import GalleryPage from "./lib/workflows/GalleryPage.svelte";
   import WorkflowsPage from "./lib/workflows/WorkflowsPage.svelte";
   import { getStatus, onStatus, type Status } from "./lib/ipc";
@@ -145,7 +147,7 @@
   let hotkeyParseProblems = $state(0);
 
   /** The workflow pages keep their own files and are not part of the config form. */
-  type PageId = SectionId | "workflows" | "gallery" | "backup" | "help";
+  type PageId = SectionId | "workflows" | "gallery" | "extensions" | "backup" | "help";
   let active = $state<PageId>("general");
   let hotkeyError = $state<string | null>(null);
   let actionsHotkeyError = $state<string | null>(null);
@@ -184,6 +186,7 @@
         { id: "plugins", label: "Plugins" },
         { id: "workflows", label: "Workflows" },
         { id: "gallery", label: "Gallery" },
+        { id: "extensions", label: "Extensions" },
         { id: "web", label: "Web search" },
         { id: "files", label: "Files & bookmarks" },
         { id: "clipboard", label: "Clipboard & paste" },
@@ -519,7 +522,12 @@
     void load();
     void getStatus().then((s) => (status = s));
     const unlisten = onStatus((s) => (status = s));
+    // The launcher's `ext` rows open this window on the Extensions page.
+    const stopPage = onSettingsPage((page) => {
+      if (page === "extensions") active = "extensions";
+    });
     return () => {
+      stopPage();
       void unlisten.then((fn) => fn());
       clearTimeout(toastTimer);
     };
@@ -1024,6 +1032,8 @@
           <GalleryPage />
         {:else if active === "backup"}
           <BackupPage onrestored={load} />
+        {:else if active === "extensions"}
+          <ExtensionsPage />
         {:else if active === "help"}
           <HelpPage />
         {:else if active === "web"}

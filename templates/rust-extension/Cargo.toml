@@ -1,0 +1,19 @@
+[package]
+name = "{{project-name}}"
+version = "0.1.0"
+edition = "2021"
+description = "{{description}}"
+license = "Apache-2.0"
+publish = false
+
+[dependencies]
+# Until sevak-extension-sdk is on crates.io, take it from the Sevak repository.
+# Pin `rev = "<commit>"` (or `tag`) for a build you can reproduce.
+sevak-extension-sdk = { git = "https://github.com/ninad-k/Sevak", branch = "main" }
+# After it is published: sevak-extension-sdk = "0.1"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
