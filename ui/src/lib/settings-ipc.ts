@@ -73,6 +73,7 @@ export interface Config {
     case_sensitive: boolean;
     ignore_apps: string[];
     expand_in_terminals: boolean;
+    expand_in_browsers: boolean;
   };
   /** Edited in the config file; kept here so saving the form round-trips it. */
   shell: { terminal: string; shell: string; keep_open: boolean };

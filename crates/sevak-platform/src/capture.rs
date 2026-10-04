@@ -147,6 +147,51 @@ const TERMINALS: &[&str] = &[
     "x-terminal-emulator",
 ];
 
+/// Web browsers (matched like [`TERMINALS`]): the program name on Windows, the
+/// app name or bundle id on macOS, the window class or program on Linux. Typing
+/// into a web page cannot be checked for a password field reliably, so
+/// snippet expansion skips these unless the user allows it.
+const BROWSERS: &[&str] = &[
+    "chrome",
+    "google chrome",
+    "google-chrome",
+    "google-chrome-stable",
+    "com.google.chrome",
+    "chromium",
+    "chromium-browser",
+    "org.chromium.chromium",
+    "msedge",
+    "microsoft edge",
+    "microsoft-edge",
+    "com.microsoft.edgemac",
+    "firefox",
+    "firefox-esr",
+    "org.mozilla.firefox",
+    "brave",
+    "brave browser",
+    "brave-browser",
+    "com.brave.browser",
+    "vivaldi",
+    "vivaldi-stable",
+    "com.vivaldi.vivaldi",
+    "opera",
+    "com.operasoftware.opera",
+    "safari",
+    "com.apple.safari",
+    "arc",
+    "company.thebrowser.browser",
+    "zen",
+    "zen-browser",
+    "app.zen-browser.zen",
+    "librewolf",
+    "io.gitlab.librewolf-community",
+];
+
+/// True if `app` is a web browser.
+pub fn is_browser(app: &ForegroundApp) -> bool {
+    BROWSERS.iter().any(|browser| app.matches(browser))
+}
+
 /// True if `app` is a terminal emulator or console window.
 pub fn is_terminal(app: &ForegroundApp) -> bool {
     TERMINALS.iter().any(|terminal| app.matches(terminal))
@@ -541,6 +586,41 @@ mod tests {
         fake.app = Some(ForegroundApp::new("Terminal"));
         fake.interrupts_terminals = false;
         assert!(selected_text(&fake.run()).is_some());
+    }
+
+    #[test]
+    fn browsers_are_recognised_by_any_of_their_names() {
+        // Program names (Windows), app names and bundle ids (macOS), window
+        // classes (Linux).
+        for names in [
+            ("chrome", "chrome.exe"),
+            ("msedge", "msedge.exe"),
+            ("firefox", "firefox.exe"),
+            ("brave", "brave.exe"),
+            ("vivaldi", "vivaldi.exe"),
+            ("opera", "opera.exe"),
+            ("Safari", "com.apple.Safari"),
+            ("Arc", "company.thebrowser.Browser"),
+            ("Zen", "zen.exe"),
+            ("LibreWolf", "librewolf.exe"),
+            ("Chromium", "org.chromium.Chromium"),
+            ("Google Chrome", "com.google.Chrome"),
+            ("Microsoft Edge", "com.microsoft.edgemac"),
+            ("Brave Browser", "com.brave.Browser"),
+            ("Google-chrome", "google-chrome"),
+        ] {
+            let app = ForegroundApp::new(names.0).with_identifier(names.1);
+            assert!(is_browser(&app), "{names:?}");
+        }
+        for other in [
+            "Code",
+            "Notepad",
+            "WindowsTerminal",
+            "Archive Utility",
+            "Zenity",
+        ] {
+            assert!(!is_browser(&ForegroundApp::new(other)), "{other}");
+        }
     }
 
     #[test]

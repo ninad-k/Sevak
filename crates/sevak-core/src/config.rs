@@ -304,6 +304,11 @@ case_sensitive = true
 ignore_apps = []
 # Terminal windows are skipped unless this is on.
 expand_in_terminals = false
+# Web browsers are skipped unless this is on: a password field in a web page
+# cannot be reliably told from other text boxes, so a keyword typed inside a
+# password would expand there. Chrome, Edge, Firefox, Brave, Vivaldi, Opera,
+# Safari, Arc, Zen, LibreWolf and Chromium count as browsers.
+expand_in_browsers = false
 
 # Web search engines: type "<keyword> <terms>". "{query}" is replaced by the
 # URL-encoded terms. Defining any [[web_search]] entry replaces this list.
@@ -987,6 +992,10 @@ pub struct SnippetsConfig {
     pub ignore_apps: Vec<String>,
     /// Expand in terminal windows too.
     pub expand_in_terminals: bool,
+    /// Expand in web browsers too. Off by default: a password field in a web
+    /// page cannot be reliably told from any other text box, so a keyword typed
+    /// inside a password would expand there.
+    pub expand_in_browsers: bool,
 }
 
 impl Default for SnippetsConfig {
@@ -998,6 +1007,7 @@ impl Default for SnippetsConfig {
             case_sensitive: true,
             ignore_apps: Vec::new(),
             expand_in_terminals: false,
+            expand_in_browsers: false,
         }
     }
 }

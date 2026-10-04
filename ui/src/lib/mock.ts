@@ -386,6 +386,7 @@ export function mockSettings(): SettingsDto {
         case_sensitive: true,
         ignore_apps: [],
         expand_in_terminals: false,
+        expand_in_browsers: false,
       },
       files: {
         directories: ["~/Desktop", "~/Documents", "~/Downloads"],

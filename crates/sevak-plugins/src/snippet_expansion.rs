@@ -23,8 +23,10 @@
 //! - Nothing is observed while `[snippets] auto_expand` is off: the key listener
 //!   is not even started.
 //! - Characters typed in Sevak's own windows, in a terminal (unless
-//!   `expand_in_terminals`), in an app listed in `ignore_apps`, or in a password
-//!   box the platform can recognise never reach the buffer.
+//!   `expand_in_terminals`), in a web browser (unless `expand_in_browsers`: a
+//!   password field in a page cannot be told from other text boxes), in an app
+//!   listed in `ignore_apps`, in an app that cannot be identified, or in a
+//!   password box the platform can recognise never reach the buffer.
 //!
 //! # Matching
 //!
@@ -47,7 +49,7 @@ use std::time::{Duration, Instant};
 use chrono::Local;
 use sevak_core::config::{ExpandOn, Snippet, SnippetsConfig};
 use sevak_core::Config;
-use sevak_platform::capture::is_terminal;
+use sevak_platform::capture::{is_browser, is_terminal};
 use sevak_platform::{KeyEvent, KeyListener, KeyListenerSupport, PlatformProvider, TypingTarget};
 
 use crate::example_uuid::random_uuid_v4;
@@ -578,6 +580,11 @@ fn allowed(target: &TypingTarget, settings: &SnippetsConfig) -> bool {
     if app.matches_any(&settings.ignore_apps) {
         return false;
     }
+    // A password field in a web page cannot be told from any other text box,
+    // so browsers are skipped unless the user has said otherwise.
+    if is_browser(app) && !settings.expand_in_browsers {
+        return false;
+    }
     settings.expand_in_terminals || !is_terminal(app)
 }
 
@@ -888,6 +895,16 @@ mod tests {
         assert!(!allowed(&target(Some("keepassxc")), &config));
         assert!(!allowed(&target(Some("WindowsTerminal")), &config));
         assert!(!allowed(&target(Some("gnome-terminal-server")), &config));
+        // Browsers are skipped unless allowed, whatever they call themselves.
+        for browser in [
+            "chrome", "msedge", "Firefox", "Safari", "brave", "Arc", "zen",
+        ] {
+            assert!(!allowed(&target(Some(browser)), &config), "{browser}");
+        }
+        config.expand_in_browsers = true;
+        assert!(allowed(&target(Some("chrome")), &config));
+        assert!(!allowed(&target(Some("keepassxc")), &config));
+        config.expand_in_browsers = false;
         config.expand_in_terminals = true;
         assert!(allowed(&target(Some("WindowsTerminal")), &config));
         assert!(!allowed(&target(Some("KeePassXC")), &config));
