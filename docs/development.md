@@ -14,6 +14,9 @@ crates/sevak-platform   OS access: launching, icons, app scanning, clipboard, pa
                         shortcut setup, the Windows keyboard hook that takes Win+Space
                         (hotkey_hook), the macOS Spotlight shortcut (spotlight)
                         (Windows, macOS and Linux backends)
+crates/sevak-extension-sdk
+                        the SDK for writing extensions in Rust (publishable; only serde and serde_json)
+crates/sevak-ext        the `sevak-ext` tool: init, validate, pack, entry for extension authors
 crates/sevak-plugins    built-in plugins: apps, calculator (+ units, currency), files, bookmarks,
                         web search, system commands, automation tasks, media controls, shell,
                         clipboard history, snippets, emoji picker (data/emoji.tsv), uuid example;
@@ -29,8 +32,12 @@ scripts                 icon generator, emoji list generator, gallery-check.mjs 
 docs                    plugins, install, development
 examples/plugins        example script plugins (Python, PowerShell, Node)
 examples/workflows      example workflows (also packaged for the gallery)
+examples/rust-hello     example native extension in Rust (a workspace member: built and tested in CI)
+templates/rust-extension
+                        the project template for `sevak-ext init` / `cargo generate`
 gallery                 the opt-in online galleries: index.json and packages/*.zip (workflows and
-                        script plugins), themes.json and themes/*.toml (themes)
+                        script plugins), extensions/<id>/*.sevakext (native extensions),
+                        themes.json and themes/*.toml (themes)
 .github/workflows       ci.yml, release.yml, promote.yml, rollback.yml, sbom.yml, attest.yml, security.yml,
                         codeql.yml, toolchain-canary.yml, coverage.yml, bench.yml, docs.yml, release-checks.yml,
                         pr-labels.yml (.github/actions/setup-rust installs the toolchain pinned in rust-toolchain.toml)

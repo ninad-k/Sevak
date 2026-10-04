@@ -140,6 +140,14 @@ Sevak also includes:
   Markdown, Base64 and JSON helpers) and offline script plugins (passwords,
   IDs, colors, lorem ipsum, hashes), fetched only when you press **Load
   gallery**, installed only when you press **Install**, checksum-verified.
+- **Extensions** — Settings → Extensions (and `ext` in the launcher) browses
+  that gallery and the theme gallery, shows who published each item and what
+  it declares, and installs, updates, switches off and removes them. Developers
+  can write **native extensions in Rust** with a small SDK, pack them with
+  `sevak-ext` and submit them to the gallery. A native extension is a compiled
+  program: it never runs before you allow it, and Sevak cannot sandbox it.
+  [Browse and install →](docs/features/extensions.md) ·
+  [Write one →](docs/writing-extensions-in-rust.md)
 - **Custom hotkeys** — extra global keys that open Sevak with text typed in
   (`> `, `g `) or run a result directly.
 - **Themes** — light, dark or system, plus accent color, font, radius, opacity
@@ -292,7 +300,15 @@ Every network request Sevak itself makes is in this list:
   package, checked against the checksum in the index before anything is
   written, and an installed folder still has to be allowed before it runs.
 
-Both galleries send nothing but the request itself (no cookies or identifiers
+- **Extensions page and `ext`.** Only when you press **Load the list**
+  (Settings → Extensions) or choose **Load the extension list** after typing
+  `ext`: two requests, `gallery/index.json` and `gallery/themes.json`, from
+  Sevak's repository at the tag of your Sevak version. **Install** downloads
+  that one package, checked against its checksum, and anything that can run
+  code still has to be allowed first. The list is saved locally so the page
+  works offline.
+
+All the galleries send nothing but the request itself (no cookies or identifiers
 beyond a `Sevak/<version> (gallery)` user agent). Script plugins and workflows
 you install and allow run with your permissions; what they do on the network
 is up to them. Workflows send nothing themselves and keep what you type or

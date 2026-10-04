@@ -87,7 +87,17 @@ Only when you press **Load gallery** (**Settings → Gallery**):
 
 See [The gallery](workflows.md#the-gallery).
 
-Both galleries send nothing but the request itself (no cookies or identifiers beyond a `Sevak/<version> (gallery)` user agent). A build without a published release makes one more request, to GitHub's "latest release" link, to find out which release to read. Sevak never downloads plugins or workflows on its own.
+### Extensions page and `ext`
+
+Only when you press **Load the list** on **Settings → Extensions**, or press Enter on **Load the extension list** after typing `ext` or `store`:
+
+- Two requests from `raw.githubusercontent.com/ninad-k/Sevak`, at the tag of your Sevak version: `gallery/index.json` (workflows, script plugins, native extensions) and `gallery/themes.json`. The lists are saved in the data folder (`extensions-catalog.json`) so the page works offline; opening the page reads that file and requests nothing
+- **Install** and **Update** download that one package (for a native extension, the one build for your computer), checked against its checksum before anything is written; nothing runs until you allow it
+- Nothing is requested in the background or on startup
+
+See [Extensions](features/extensions.md).
+
+All these galleries send nothing but the request itself (no cookies or identifiers beyond a `Sevak/<version> (gallery)` user agent). A build without a published release makes one more request, to GitHub's "latest release" link, to find out which release to read. Sevak never downloads plugins or workflows on its own.
 
 ## What is NOT collected
 

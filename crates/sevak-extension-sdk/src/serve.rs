@@ -164,6 +164,18 @@ impl Extension {
     /// Lines are read on a helper thread so that, when several queries are
     /// waiting, the stale ones can be skipped: only the newest is answered.
     /// Other messages are handled in the order they arrived.
+    ///
+    /// ```
+    /// use std::io::Cursor;
+    /// use sevak_extension_sdk::{Extension, Item};
+    ///
+    /// let mut out = Vec::new();
+    /// let input = "{\"type\":\"query\",\"request_id\":1,\"input\":\"hi\"}\n".to_owned();
+    /// Extension::new(|query| Ok(vec![Item::new(query.text())]))
+    ///     .serve(Cursor::new(input), &mut out)
+    ///     .unwrap();
+    /// assert!(String::from_utf8(out).unwrap().contains("\"title\":\"hi\""));
+    /// ```
     pub fn serve<R, W>(mut self, input: R, mut output: W) -> io::Result<()>
     where
         R: BufRead + Send + 'static,

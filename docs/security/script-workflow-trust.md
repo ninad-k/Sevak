@@ -124,3 +124,20 @@ was not valid UTF-8 stopped the reading. Now each line is cut at 1 KiB, at most
 200 lines and 32 KiB are logged per process, and everything else is read and
 dropped (so the script never blocks on a full pipe). One-shot and workflow
 scripts already had a 64 KiB cap.
+
+## Native extensions use the same rules
+
+A native extension (a compiled Rust program, see
+[Writing extensions in Rust](../writing-extensions-in-rust.md)) is a script plugin
+folder whose manifest has an `[extension]` table, so it takes every rule above
+unchanged: the approval is bound to the bytes of the program and of `plugin.toml`
+(and so to the declared publisher, version and permissions) and to the folder's
+location; the program is started with the scrubbed environment; stopping it stops
+its whole process tree; its results use the closed set of actions; it is checked
+again before every start.
+
+What differs is only what the user is shown. The dialog is titled **Sevak: new
+native extension**, says it is a compiled program, and lists the publisher, the
+version and licence, the source address, the permissions the author declared
+(marked as the author's statement, not enforced), the program's full SHA-256, and
+that it is not sandboxed. Settings lists it as a native extension.

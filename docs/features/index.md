@@ -26,6 +26,7 @@ Sevak includes built-in result sources (plugins) for applications, calculations,
 | Universal Actions | Press hotkey on selection | (hotkey) | Open action menu | [Selection →](selection.md) |
 | Script plugins | Your plugin's keyword | (yours) | What the script says | [Script plugins →](script-plugins.md) |
 | Workflows | Your workflow's keyword, hotkey or trigger | (yours) | Run the workflow | [Workflows →](../workflows.md) |
+| Extensions store | `ext <name>`, `store <name>` | ext, store | Install or update it | [Extensions →](extensions.md) |
 | UUID generator | `uuid ` | uuid | Copy a generated UUID | — |
 
 ## How query routing works

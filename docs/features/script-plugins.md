@@ -128,6 +128,7 @@ The gallery (Settings → Gallery) also offers offline Python 3 plugins, none of
 - A script can ask for its rows to be shown as a **grid of tiles** (pictures, icons) or mark a row whose long text opens in the **Text View**; see [Views: text and grid](../plugins.md#views-text-and-grid). The [preview pane](../usage.md#preview-text-view-and-grid-view) works for script results too.
 - Alfred's `mods` (secondary actions on ++ctrl+enter++, ++alt+enter++, ++shift+enter++) are supported; see [Modifiers](../plugins.md#modifiers-mods).
 - **Settings → Gallery** can install ready-made script plugins, but only after you press **Load gallery** and **Install**; see [The gallery](../workflows.md#the-gallery). An installed plugin still asks for permission before it runs.
+- **Settings → Extensions** (and `ext` in the launcher) is the newer place to browse, install, update and remove gallery items, including [native extensions](../writing-extensions-in-rust.md) written in Rust; see [Extensions](extensions.md).
 - To chain a script with other steps (open a link, paste, show a notification), use a [workflow](../workflows.md) with a script filter.
 
 ## Enable and disable plugins
