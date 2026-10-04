@@ -841,7 +841,15 @@ fn a_script_node_that_times_out_takes_the_processes_it_started_with_it() {
     // counter stops. Poll with a deadline.
     let beat = dir.join("beat");
     let deadline = Instant::now() + WAIT;
-    let mut last = std::fs::read_to_string(&beat).unwrap_or_default();
+    // The child rewrites the file every few milliseconds, so a read can land
+    // between its truncate and its write and see nothing: look again.
+    let mut last = String::new();
+    while last.is_empty() && Instant::now() < deadline {
+        last = std::fs::read_to_string(&beat).unwrap_or_default();
+        if last.is_empty() {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
     assert!(!last.is_empty(), "the child never started");
     let mut changed = Instant::now();
     while changed.elapsed() < Duration::from_millis(500) {
