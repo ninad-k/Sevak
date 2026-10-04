@@ -138,6 +138,7 @@ nav:
       - Privacy: privacy.md
   - Security:
       - Supply chain: security/supply-chain.md
+      - Threat model: security/threat-model.md
   - Developers:
       - How Sevak works: architecture.md
       - Writing plugins: plugins.md
@@ -145,8 +146,6 @@ nav:
       - Releasing: releasing.md
       - Testing: testing.md
       - Name and brand: brand.md
-  - Security:
-      - Threat model: security/threat-model.md
   - Design decisions:
       - decisions/index.md
       - "0001 Local-first, no telemetry": decisions/0001-local-first-no-telemetry.md
