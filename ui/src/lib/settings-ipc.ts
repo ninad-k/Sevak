@@ -5,6 +5,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { hasTauri, type Status, type ThemeSetting } from "./ipc";
 
+import type { AiConfig } from "./ai";
+
 export interface WebSearchEngine {
   keyword: string;
   name: string;
@@ -91,6 +93,8 @@ export interface Config {
     cache_minutes: number;
   };
   dictionary: { define_keyword: string; spell_keyword: string; use_system: boolean };
+  /** The optional AI assistant (`ai <question>`). Never holds an API key. */
+  ai: AiConfig;
   /** System commands (lock, restart, ...) and settings pages. */
   system: { confirm: boolean; disabled: string[] };
   /** Automation tasks (dark mode, volume, kill, ...). */

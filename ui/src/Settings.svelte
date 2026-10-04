@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import AppearanceExtras from "./lib/AppearanceExtras.svelte";
+  import AiPage from "./lib/settings-pages/AiPage.svelte";
   import ClipboardPage from "./lib/settings-pages/ClipboardPage.svelte";
   import FilesExtras from "./lib/settings-pages/FilesExtras.svelte";
   import IntegrationsPage from "./lib/settings-pages/IntegrationsPage.svelte";
@@ -104,6 +105,16 @@
     contacts: { enabled: false, keyword: "c", use_system: true, vcard_files: [] },
     onepassword: { enabled: false, keyword: "1p", op_path: "", account: "", cache_minutes: 10 },
     dictionary: { define_keyword: "define", spell_keyword: "spell", use_system: true },
+    ai: {
+      enabled: false,
+      keyword: "ai",
+      provider: "ollama",
+      model: "",
+      base_url: "",
+      system_prompt: "",
+      max_tokens: 512,
+      timeout_secs: 60,
+    },
     system: { confirm: true, disabled: [] },
     tasks: { confirm: true, disabled: [], keyword: "t", global: true },
     media: { keyword: "play", global: true, now_playing: true },
@@ -170,6 +181,7 @@
         { id: "clipboard", label: "Clipboard & paste" },
         { id: "tasks", label: "Tasks & media" },
         { id: "integrations", label: "Integrations" },
+        { id: "ai", label: "AI assistant" },
         { id: "system", label: "System & terminal" },
         ...(showLinux ? [{ id: "linux", label: "Linux" }] : []),
         { id: "help", label: "Help" },
@@ -1199,6 +1211,8 @@
           <TasksMediaPage bind:config={draft} {problems} {platform} {pluginOff} />
         {:else if active === "integrations"}
           <IntegrationsPage bind:config={draft} {problems} {platform} {pluginOff} />
+        {:else if active === "ai"}
+          <AiPage bind:config={draft} {problems} {pluginOff} />
         {:else if active === "system"}
           <SystemPage bind:config={draft} {platform} {pluginOff} />
         {:else if active === "linux"}
