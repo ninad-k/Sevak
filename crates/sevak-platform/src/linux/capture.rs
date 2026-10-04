@@ -65,6 +65,7 @@ pub(crate) fn capture_selection(options: &CaptureOptions) -> SelectionCapture {
         return SelectionCapture::Unavailable(reason);
     }
     let clipboard = SystemClipboardCapture {
+        text_units: || None,
         sequence: || None,
         read: || {
             Ok(ClipboardRead {

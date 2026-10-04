@@ -288,6 +288,37 @@ pub(crate) fn clipboard_sequence() -> Option<u64> {
     (sequence != 0).then_some(u64::from(sequence))
 }
 
+/// The length of the clipboard's text in UTF-16 code units, taken from the size
+/// of its memory block, so a huge copy can be refused without being read.
+/// `None` when the clipboard holds no text or is busy.
+pub(crate) fn clipboard_text_units() -> Option<usize> {
+    const CF_UNICODETEXT: u32 = 13;
+    if !format_available(CF_UNICODETEXT) {
+        return None;
+    }
+    // SAFETY: the clipboard is closed on every path below; the handle returned
+    // by GetClipboardData is owned by the clipboard and only its size is asked
+    // while it is open.
+    unsafe {
+        let mut opened = false;
+        for _ in 0..3 {
+            if OpenClipboard(None).is_ok() {
+                opened = true;
+                break;
+            }
+            sleep(Duration::from_millis(5));
+        }
+        if !opened {
+            return None;
+        }
+        let units = GetClipboardData(CF_UNICODETEXT)
+            .ok()
+            .map(|handle| GlobalSize(HGLOBAL(handle.0)) / std::mem::size_of::<u16>());
+        let _ = CloseClipboard();
+        units
+    }
+}
+
 pub(crate) fn read_clipboard() -> Result<ClipboardRead> {
     if clipboard_marked_secret()? {
         return Ok(ClipboardRead {

@@ -30,6 +30,7 @@ const MODIFIERS: [VIRTUAL_KEY; 8] = [
 
 pub(crate) fn capture_selection(_options: &CaptureOptions) -> SelectionCapture {
     let clipboard = SystemClipboardCapture {
+        text_units: paste::clipboard_text_units,
         sequence: paste::clipboard_sequence,
         read: paste::read_clipboard,
     };
