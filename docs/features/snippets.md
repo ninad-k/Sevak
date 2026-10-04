@@ -117,6 +117,7 @@ text = "## {date:%A, %B %-d, %Y}"           # ## Thursday, October 3, 2026
 | Case-sensitive | `true` | `false`: `SIG` and `sig` both expand | [`[snippets] case_sensitive`](../configuration.md#snippets) |
 | Ignore apps | *(empty)* | Never watch or expand in these apps | [`[snippets] ignore_apps`](../configuration.md#snippets) |
 | Expand in terminals | `false` | Also expand in terminal windows | [`[snippets] expand_in_terminals`](../configuration.md#snippets) |
+| Expand in web browsers | `false` | Also expand in web browsers (also in **Settings → Plugins**) | [`[snippets] expand_in_browsers`](../configuration.md#snippets) |
 
 ## Expand snippets as you type
 
@@ -140,7 +141,7 @@ Rules worth knowing:
 - A keyword starting with a letter or digit only counts at the start of a word, so `sig` does not fire inside `assign`. A keyword starting with punctuation (`;sig`, or any `prefix` that is punctuation) fires anywhere. A `prefix` is recommended: short keywords are easy to type by accident.
 - The longest matching keyword wins. In `immediate` mode a keyword that is the start of another (`;a` and `;ab`) fires first, so `;ab` is unreachable; use `delimiter` mode or different keywords.
 - Matching is case-sensitive unless `case_sensitive = false`. The expanded text is never changed to fit the case you typed.
-- Expanding takes a moment (a few hundred milliseconds, mostly waiting for the app to read the pasted text). If you type another character right after the keyword, Sevak leaves the keyword alone rather than delete the wrong text.
+- Expanding takes a moment (a few hundred milliseconds, mostly waiting for the app to read the pasted text). If you type another character right after the keyword, or switch to another window, Sevak leaves the keyword alone rather than delete the wrong text or paste into the wrong app. Your clipboard is put back afterwards unless you copied something else in the meantime.
 - ++enter++ and ++tab++ do not expand: the app has already sent the line or moved the focus by the time Sevak could act. End the keyword with a space or punctuation in `delimiter` mode instead.
 - Typing with ++ctrl++, ++alt++ or ++cmd++ held, arrow keys, ++home++ / ++end++, clicking, switching windows, ++escape++ and ++enter++ all make Sevak forget what you had typed, so a keyword has to be typed in one go. ++backspace++ is followed.
 - Input methods (Chinese, Japanese, Korean) and emoji pickers do not type through keys Sevak can follow; keywords containing such characters cannot expand. Letters typed with a dead key (`´` then `e`) are followed for the common accents on Windows only; on macOS, anything typed with ++option++ held resets.
@@ -150,12 +151,22 @@ Rules worth knowing:
 
     - Only the last 64 characters you typed, in memory, to compare with your keywords. They are never written to disk, never logged and never sent anywhere, and Sevak has no telemetry. They are overwritten whenever the text could have changed under them (see above) and after every expansion.
     - Nothing is observed while the setting is off: expansion does not listen to the keyboard. (On Windows the launcher shortcut can use the same keyboard hook when it needs to, for Win+Space; it only compares key presses with your shortcuts and reads nothing. See [Privacy](../privacy.md#the-launcher-shortcut).)
-    - Typing in Sevak's own windows, in terminals (unless `expand_in_terminals = true`) and in apps listed in `ignore_apps` (`["KeePassXC", "1Password"]`, matched like [clipboard history](clipboard.md)) is not recorded. Where the system can say so, a focused password box is skipped too: Windows edit controls in password mode, and macOS when "secure input" is on. A password field inside a web page is not detectable on Windows or Linux, so add your browser to `ignore_apps` if you type secrets next to your keywords, or use a `prefix` you never type in a password.
+    - Typing in Sevak's own windows, in terminals (unless `expand_in_terminals = true`), in web browsers (unless `expand_in_browsers = true`) and in apps listed in `ignore_apps` (`["KeePassXC", "1Password"]`, matched like [clipboard history](clipboard.md)) is not recorded. Neither is typing in an app Sevak cannot identify (a protected or elevated process on Windows, a window without a class on X11, an app without a bundle id on macOS): the rules above cannot be applied to it, so nothing is watched or expanded there. Where the system can say so, a focused password box is skipped too, see below.
     - Security software may flag any program that installs a keyboard hook. Sevak installs it only when you turn this on, or on Windows when a shortcut such as Win+Space needs it.
+
+### Password fields and web browsers
+
+Sevak skips a password field when the system tells it that is what has focus:
+
+- **Windows**: edit controls in password mode, and anything UI Automation reports as a password field (the focused element's `IsPassword`): WPF, WinUI/UWP, Qt and Electron apps, and web pages in browsers whose accessibility support is on. Whether a browser exposes its password fields depends on its version and settings (Chromium-based browsers can turn their accessibility support on when a UI Automation client asks; others may need it enabled in the browser). The question is asked on a helper thread with a 50 ms limit and the answer is reused for 300 ms per window; if it is not answered in time, or the app does not expose its controls (canvas-drawn password boxes, some games and remote-desktop windows, a process running as administrator when Sevak is not), Sevak cannot tell and treats the field as an ordinary one.
+- **macOS**: while "secure event input" is on, which password fields in most apps turn on.
+- **Linux (X11)**: the X server offers no way to ask. Nothing is detected.
+
+Because this is not reliable for web pages, **web browsers are skipped altogether** unless you set `[snippets] expand_in_browsers = true` (Chrome, Edge, Firefox, Brave, Vivaldi, Opera, Safari, Arc, Zen, LibreWolf and Chromium count). If you turn it on, remember that a keyword typed inside a password field in a page can still expand, so use a `prefix` you never type in a password, such as `;`.
 
 | System | What happens |
 |---|---|
-| Windows | A low-level keyboard hook (`WH_KEYBOARD_LL`). It sees typing into every app at Sevak's own privilege level; it cannot see windows running as administrator unless Sevak does too. |
+| Windows | A low-level keyboard hook (`WH_KEYBOARD_LL`). It sees typing into every app at Sevak's own privilege level; it cannot see windows running as administrator unless Sevak does too. Windows can silently remove a hook that was too slow, and a lock, a remote-desktop switch or a display change can leave one dead, so Sevak puts the hook in again every minute and shortly after a session unlock, display change or wake from sleep. |
 | macOS | A listen-only event tap. Needs *System Settings → Privacy & Security → Input Monitoring → Sevak* (macOS shows a prompt the first time; restart Sevak afterwards) and *Accessibility*, which pasting needs anyway. |
 | Linux, X11 | The X server's RECORD extension. Works without any permission. Dead keys and compose sequences reset instead of being followed. |
 | Linux, Wayland | Not possible: Wayland does not let an app watch typing in other apps or press keys for them. Settings says so. |

@@ -444,3 +444,46 @@ vulnerabilities; the review's individual findings are handled separately
   network request, a new `Action`, a new place that stores user text) should
   update the page in the same pull request. The [development guide](../development.md)
   and [Privacy](../privacy.md) list the same network requests.
+
+## Hardening: clipboard and keystroke privacy
+
+Changes made after the review above. They narrow, but do not remove, the residual
+risks 2, 6 and 7 (clipboard history in plaintext, partial password-field
+detection, no secret detection on Linux).
+
+- **Where the history lives.** The clipboard history and its image files are kept
+  in the local, non-roaming data folder (`%LOCALAPPDATA%\sevak` on Windows) rather
+  than the roaming profile. The first start moves an existing history, file by
+  file, and deletes the old copies only after the new ones are written. Files over
+  a fixed size cap are not read.
+- **Encryption at rest (Windows).** With `[clipboard] encrypt = true` (default) the
+  history file and the images are encrypted for the current user with DPAPI. A copy
+  of the files taken to another account or computer is unreadable; software
+  running as the same user can still ask Windows to decrypt them, as it can read
+  the clipboard itself. A history that cannot be decrypted is replaced by an
+  empty one, nothing of it is kept in plain form, and the `cb` list says so. macOS
+  and Linux have no equivalent in Sevak: the files are plain and owner-only.
+- **Ignore lists.** Common password managers, system credential prompts and
+  ssh/gpg passphrase prompts are skipped by default (`default_ignore_apps`), in
+  addition to `ignore_apps`. When the foreground app cannot be identified on a
+  system that normally can, both snippet expansion and clipboard recording treat it
+  as excluded rather than allowed.
+- **Secret marker on Linux.** The `x-kde-passwordManagerHint` marker is read on X11
+  and, where `wl-clipboard` is installed, on Wayland. It depends on the source app
+  setting it.
+- **Password fields.** Windows also asks UI Automation whether the focused element
+  is a password field (50 ms budget, off the hook callback, cached for 300 ms).
+  Web browsers are skipped for snippet expansion unless `expand_in_browsers` is
+  set, because a password field in a web page cannot be reliably detected.
+- **Clipboard restore and paste target.** The previous clipboard is not put back
+  over a newer copy (change counter, or the text where there is none), and the
+  window in front is checked again immediately before the paste keystroke.
+- **In-memory text.** The typed-character buffer and the text of a captured
+  selection are overwritten when dropped (best effort).
+- **Hook recovery (Windows).** The keyboard hooks are put in again every minute and
+  after a session unlock, display change or wake from sleep.
+
+Not changed: text copied by a password manager that does not set a secret marker
+is recorded if the manager is not on the ignore list; typing into a canvas-drawn
+or non-accessible password box is still seen by the expansion buffer; nothing here
+defends against software running as the user.

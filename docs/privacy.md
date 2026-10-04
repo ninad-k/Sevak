@@ -8,7 +8,7 @@ Sevak is local-first. Your data stays on your machine except when you explicitly
 - Whole-disk and content file search (`ff`, `in`): queries go only to your computer's own file index (Windows Search, Spotlight, `locate`, Tracker or Baloo)
 - The preview pane: it reads the selected file or folder from your disk, only while it is open; links are shown as addresses and never fetched
 - Search history (if enabled)
-- Clipboard history (if enabled), including copied images (PNG files) and the paths of copied files, unencrypted
+- Clipboard history (if enabled), including copied images (PNG files) and the paths of copied files, in the local (non-roaming) data folder, encrypted for your account on Windows
 - Snippet library, and snippet expansion as you type (if enabled): the last 64 typed characters are kept in memory only, never stored, logged or sent
 - Contacts (if enabled) and the 1Password list of logins (if enabled): in memory only, and kept out of the search history and usage statistics
 - The dictionary and spelling checker (bundled WordNet data or the system's own), the emoji picker, automation tasks and media controls
@@ -133,7 +133,7 @@ Off by default (`[snippets] auto_expand`). While it is on, Sevak watches your ke
 
 - Only the last 64 characters you typed are kept, in memory, and they are wiped whenever the text could have changed and after every expansion. They are never written to disk, logged or sent anywhere.
 - Nothing is observed while the setting is off: expansion does not listen to the keyboard. (The Windows hook for the launcher shortcut, above, only compares key presses with your shortcuts.)
-- Sevak's own windows, terminals, apps listed in `[snippets] ignore_apps` and password boxes the system can detect are skipped.
+- Sevak's own windows, terminals, web browsers (unless `[snippets] expand_in_browsers = true`: a password field in a web page cannot be told from other text), apps listed in `[snippets] ignore_apps`, apps Sevak cannot identify, and password boxes the system can detect are skipped. On Windows that includes password fields reported by UI Automation (with browsers, only when their accessibility support is on).
 
 See [Expand snippets as you type](features/snippets.md#expand-snippets-as-you-type).
 
