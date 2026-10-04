@@ -3942,6 +3942,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "sevak-extension-sdk"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "sevak-platform"
 version = "0.1.0"
 dependencies = [
