@@ -113,58 +113,180 @@ pub fn script_prompt(
     key: &str,
     reviewed_before: bool,
 ) -> String {
-    let mut text = String::new();
-    if reviewed_before {
-        text.push_str(
-            "Sevak found a script plugin to review again.\n\n\
-             The plugin's contents changed or this is the first review under the new rules: an \
-             allowance now covers the plugin's files and folder, not just its name.\n\n",
-        );
-    } else {
-        text.push_str("Sevak found a script plugin it has not run before.\n\n");
-    }
+    script_prompt_with_binary(manifest, folder, location, key, reviewed_before, None)
+}
+
+/// [`script_prompt`] with the SHA-256 of the program file, which a native
+/// extension's dialog shows in full (`None` when it could not be read).
+pub fn script_prompt_with_binary(
+    manifest: &Manifest,
+    folder: &str,
+    location: &str,
+    key: &str,
+    reviewed_before: bool,
+    binary_sha256: Option<&str>,
+) -> String {
     let value = |text: &str| sanitize(text, MAX_VALUE_CHARS);
-    text.push_str(&format!("Name: {}\n", value(&manifest.name)));
-    text.push_str(&format!("Keyword: {}\n", value(&manifest.keyword)));
+    let native = manifest.native.as_ref();
+    let mut text = String::new();
+    if let Some(native) = native {
+        if reviewed_before {
+            text.push_str(
+                "Sevak found a NATIVE EXTENSION to review again.
+
+                 Its contents changed (a new version, a changed program) or this is the first                  review under the new rules.
+
+",
+            );
+        } else {
+            text.push_str(
+                "Sevak found a NATIVE EXTENSION it has not run before.
+
+",
+            );
+        }
+        text.push_str(
+            "A native extension is a compiled program, not a script you can read. Sevak cannot              inspect what it does.
+
+",
+        );
+        text.push_str(&format!(
+            "Name: {}
+",
+            value(&manifest.name)
+        ));
+        text.push_str(&format!(
+            "Keyword: {}
+",
+            value(&manifest.keyword)
+        ));
+        text.push_str(&format!(
+            "Publisher: {} (as the author wrote it; not verified)
+",
+            value(&native.author)
+        ));
+        text.push_str(&format!(
+            "Version: {}    Licence: {}
+",
+            value(&native.version),
+            value(&native.license)
+        ));
+        if let Some(repository) = &native.repository {
+            text.push_str(&format!(
+                "Source code: {}
+",
+                value(repository)
+            ));
+        }
+        if native.permissions.is_empty() {
+            text.push_str(
+                "Declared permissions: none (the author's statement; not enforced)
+",
+            );
+        } else {
+            text.push_str(
+                "Declared permissions (the author's statement; Sevak does not enforce them):
+",
+            );
+            for line in native.permission_lines() {
+                text.push_str(&format!(
+                    "  - {}
+",
+                    value(&line)
+                ));
+            }
+        }
+        text.push_str(&format!(
+            "Program SHA-256: {}
+",
+            binary_sha256
+                .filter(|hash| hash.len() == 64 && hash.chars().all(|c| c.is_ascii_hexdigit()))
+                .unwrap_or("(could not be read)")
+        ));
+    } else {
+        if reviewed_before {
+            text.push_str(
+                "Sevak found a script plugin to review again.
+
+                 The plugin's contents changed or this is the first review under the new rules: an                  allowance now covers the plugin's files and folder, not just its name.
+
+",
+            );
+        } else {
+            text.push_str(
+                "Sevak found a script plugin it has not run before.
+
+",
+            );
+        }
+        text.push_str(&format!(
+            "Name: {}
+",
+            value(&manifest.name)
+        ));
+        text.push_str(&format!(
+            "Keyword: {}
+",
+            value(&manifest.keyword)
+        ));
+    }
     text.push_str(&format!(
-        "Folder: {} (contents id {})\n",
+        "Folder: {} (contents id {})
+",
         value(folder),
         short_id(key)
     ));
     text.push_str(&format!(
-        "Location: {}\n",
+        "Location: {}
+",
         sanitize(location, MAX_COMMAND_CHARS)
     ));
     text.push_str(&format!(
-        "Runs: {}\n",
+        "Runs: {}
+",
         sanitize_command(&manifest.command_line())
     ));
     let files = manifest.support_files();
     if !files.is_empty() {
         let files: Vec<String> = files.iter().map(|file| value(file)).collect();
-        text.push_str(&format!("Files covered: {}\n", files.join(", ")));
+        text.push_str(&format!(
+            "Files covered: {}
+",
+            files.join(", ")
+        ));
     }
     if manifest.inherit_env.is_empty() {
-        text.push_str("Environment: only the standard set; none of your other variables\n");
+        text.push_str(
+            "Environment: only the standard set; none of your other variables
+",
+        );
     } else {
         let names: Vec<String> = manifest.inherit_env.iter().map(|n| value(n)).collect();
         text.push_str(&format!(
-            "Environment: also receives your variables {}\n",
+            "Environment: also receives your variables {}
+",
             names.join(", ")
         ));
     }
     let capabilities = manifest.capabilities.names();
     if !capabilities.is_empty() {
         text.push_str(&format!(
-            "Also can: start applications from its results ({})\n",
+            "Also can: start applications from its results ({})
+",
             capabilities.join(", ")
         ));
     }
-    text.push_str(
-        "\nA script plugin runs with your account's permissions, like any program you start. \
-         Allow it only if you trust where it came from. You can switch it off any time in \
-         Settings.",
-    );
+    if native.is_some() {
+        text.push_str(
+            "
+A native extension is NOT sandboxed. Once allowed it runs with your account's              permissions, like any program you install, and can do anything you can do, whatever              permissions it declares above. Allow it only if you trust its publisher and where              it came from. You can switch it off any time in Settings.",
+        );
+    } else {
+        text.push_str(
+            "
+A script plugin runs with your account's permissions, like any program you start.              Allow it only if you trust where it came from. You can switch it off any time in              Settings.",
+        );
+    }
     text
 }
 
@@ -339,5 +461,39 @@ mod tests {
         let text = script_prompt(&m, "f", "/p/f", KEY, false);
         assert!(text.len() < 2_500, "{}", text.len());
         assert!(text.contains('…'));
+    }
+
+    #[test]
+    fn the_native_prompt_shows_what_the_author_declared_without_letting_it_fake_lines() {
+        // Control characters are refused when the manifest is read; direction
+        // overrides are not, so the dialog strips them.
+        let text = r#"
+            protocol = 1
+            name = "Tool"
+            keyword = "t"
+            [extension]
+            version = "1.0.0"
+            author = "Eve\u202e Sevak project"
+            license = "MIT"
+            permissions = ["network", "gpu"]
+            [extension.binaries]
+            linux-x86_64 = "bin/tool"
+        "#;
+        let m = Manifest::parse_for(text, "tool", "linux-x86_64").unwrap();
+        let hash = "ab".repeat(32);
+        let prompt = script_prompt_with_binary(&m, "tool", "/p/tool", KEY, false, Some(&hash));
+        let lines: Vec<&str> = prompt.lines().collect();
+        let count = |prefix: &str| lines.iter().filter(|l| l.starts_with(prefix)).count();
+        assert_eq!(count("Publisher:"), 1, "{prompt}");
+        assert!(prompt.contains("Publisher: Eve Sevak project (as the author wrote it"));
+        assert!(!prompt.contains('\u{202e}'));
+        assert!(prompt.contains(&format!("Program SHA-256: {hash}")));
+        assert!(prompt.contains("gpu: (no description; the author's own label)"));
+        assert!(prompt.contains("Runs: bin/tool"));
+        // A hash that is not 64 hex digits is never shown as if it were one.
+        let odd = script_prompt_with_binary(&m, "tool", "/p/tool", KEY, false, Some("not a hash"));
+        assert!(odd.contains("Program SHA-256: (could not be read)"));
+        // A script's prompt does not talk about native extensions.
+        assert!(!script_prompt(&manifest(""), "n", "/p", KEY, false).contains("NATIVE"));
     }
 }

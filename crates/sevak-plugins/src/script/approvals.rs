@@ -36,7 +36,7 @@ const KEY_PREFIX: &str = "v2:";
 
 /// The largest file whose bytes are hashed. A bigger one is bound by its size
 /// only (nobody ships a multi-hundred-megabyte script).
-const MAX_HASHED_FILE: u64 = 256 * 1024 * 1024;
+pub(super) const MAX_HASHED_FILE: u64 = 256 * 1024 * 1024;
 
 fn format_one() -> u32 {
     1

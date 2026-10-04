@@ -276,6 +276,7 @@ impl FilterPlugin {
             files: Vec::new(),
             inherit_env: Vec::new(),
             capabilities: Default::default(),
+            native: None,
             mode: Mode::Oneshot,
             format: Format::AlfredWorkflow,
             timeout: std::time::Duration::from_millis(timeout_ms.unwrap_or(50).clamp(10, 1_000)),

@@ -13,6 +13,8 @@ use serde::Deserialize;
 use sevak_core::bounded_read::{read_capped, MAX_PLUGIN_MANIFEST_BYTES};
 use sevak_platform::process::{is_interpreter_variable, pin_program, script_runner, ScriptRunner};
 
+use super::native::{current_platform, Native, RawNative};
+
 /// The protocol version this Sevak speaks (`protocol` in the manifest and in
 /// the `initialize` message).
 pub const PROTOCOL: u32 = 1;
@@ -75,6 +77,8 @@ struct Raw {
     /// Extra things the script's results may do; see [`Capabilities`].
     #[serde(default)]
     capabilities: Vec<String>,
+    /// A native extension: a compiled program per platform (see `native.rs`).
+    extension: Option<RawNative>,
     #[serde(default)]
     mode: Mode,
     #[serde(default)]
@@ -131,6 +135,9 @@ pub struct Manifest {
     /// What the script's results may do beyond the basic actions (shown in
     /// the Allow dialog).
     pub capabilities: Capabilities,
+    /// Set for a native extension: a compiled program instead of a script. The
+    /// Allow dialog says so and shows what it declares.
+    pub native: Option<Native>,
     pub mode: Mode,
     pub format: Format,
     /// How long a query waits for the script before the list is shown without
@@ -168,6 +175,13 @@ impl Manifest {
 
     /// Validates manifest `text`; `folder` is the plugin folder's name.
     pub fn parse(text: &str, folder: &str) -> Result<Self, String> {
+        Self::parse_for(text, folder, &current_platform())
+    }
+
+    /// [`Manifest::parse`] as it reads on `platform` (`windows-x86_64`, ...):
+    /// only a native extension's program depends on it. Packaging uses this to
+    /// check every platform an extension offers.
+    pub fn parse_for(text: &str, folder: &str, platform: &str) -> Result<Self, String> {
         let raw: Raw = toml::from_str(text).map_err(|err| err.to_string())?;
         let mut warnings = Vec::new();
 
@@ -204,9 +218,22 @@ impl Manifest {
             return Err(format!("the id \"{id}\" cannot contain spaces"));
         }
 
+        let native = raw.extension.map(Native::from_raw).transpose()?;
         let launch = match (raw.command, raw.script) {
             (Some(_), Some(_)) => return Err("set `command` or `script`, not both".to_owned()),
-            (None, None) => return Err("missing `command` (or `script`)".to_owned()),
+            (Some(_), None) | (None, Some(_)) if native.is_some() => {
+                return Err(
+                    "a native extension names its program under [extension.binaries],                      not with `command` or `script`"
+                        .to_owned(),
+                )
+            }
+            (None, None) => match &native {
+                Some(native) => {
+                    native.check_sevak_version(env!("CARGO_PKG_VERSION"))?;
+                    Launch::Command(vec![native.binary_for(platform)?.to_owned()])
+                }
+                None => return Err("missing `command` (or `script`)".to_owned()),
+            },
             (Some(command), None) => {
                 if command
                     .first()
@@ -266,6 +293,7 @@ impl Manifest {
             files,
             inherit_env,
             capabilities,
+            native,
             mode: raw.mode,
             format: raw.format,
             timeout: Duration::from_millis(
@@ -508,6 +536,66 @@ mod tests {
         assert_eq!(m.timeout, Duration::from_millis(120));
         assert_eq!(m.hard_timeout, Duration::from_secs(8));
         assert_eq!(m.idle_timeout, None);
+    }
+
+    const NATIVE: &str = r#"
+        protocol = 1
+        keyword = "rh"
+        [extension]
+        version = "0.2.0"
+        author = "Ada"
+        license = "MIT"
+        [extension.binaries]
+        windows-x86_64 = "bin/rh.exe"
+        linux-x86_64 = "bin/rh-linux"
+    "#;
+
+    #[test]
+    fn a_native_extension_runs_the_binary_of_its_platform() {
+        let m = Manifest::parse_for(NATIVE, "rust-hello", "linux-x86_64").unwrap();
+        assert_eq!(m.launch, Launch::Command(vec!["bin/rh-linux".into()]));
+        assert_eq!(m.native.as_ref().unwrap().version, "0.2.0");
+        assert_eq!(m.id, "script:rust-hello");
+        assert_eq!(m.support_files(), ["bin/rh-linux"]);
+        let w = Manifest::parse_for(NATIVE, "rust-hello", "windows-x86_64").unwrap();
+        assert_eq!(w.launch, Launch::Command(vec!["bin/rh.exe".into()]));
+        assert_eq!(w.command_line(), "bin/rh.exe");
+    }
+
+    #[test]
+    fn a_platform_without_a_build_is_not_loaded() {
+        let err = Manifest::parse_for(NATIVE, "x", "macos-aarch64").unwrap_err();
+        assert!(err.contains("no build for macos-aarch64"), "{err}");
+    }
+
+    #[test]
+    fn a_native_extension_does_not_also_name_a_command_or_script() {
+        for extra in [
+            "command = [\"python\", \"x.py\"]
+",
+            "script = \"x.py\"
+",
+        ] {
+            let text = format!("{extra}{NATIVE}");
+            let err = Manifest::parse_for(&text, "x", "linux-x86_64").unwrap_err();
+            assert!(err.contains("[extension.binaries]"), "{err}");
+        }
+    }
+
+    #[test]
+    fn a_native_extension_needing_a_newer_sevak_is_not_loaded() {
+        let text = NATIVE.replace(
+            "[extension]",
+            "[extension]
+min_sevak = \"99.0.0\"",
+        );
+        let err = Manifest::parse_for(&text, "x", "linux-x86_64").unwrap_err();
+        assert!(err.contains("99.0.0"), "{err}");
+    }
+
+    #[test]
+    fn a_script_has_no_native_info() {
+        assert!(Manifest::parse(MINIMAL, "x").unwrap().native.is_none());
     }
 
     #[test]
