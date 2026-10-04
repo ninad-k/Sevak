@@ -1006,7 +1006,8 @@ capabilities = ["launch"]        # optional: let results start applications
   reads) that belong to the plugin. Sevak already covers `script` and every
   argument of `command` that is a path inside the folder; `files` adds the rest
   to what [an approval is bound to](#security). Paths must stay inside the
-  plugin folder.
+  plugin folder: relative, written with `/`, with no `..`, no drive prefix and
+  no backslash (the same on every system).
 - Keywords are matched case-insensitively. A keyword that another plugin (built-in
   or script) also uses queries both and merges their results, so pick one
   that is not taken (`g`, `yt`, `gh`, `f`, `b`, `>`, `cb`, `s`, `c`, `@`, `1p`, `define`, `spell` and `uuid` are by
