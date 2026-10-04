@@ -743,7 +743,7 @@ full licence text is under "Licence texts" below.
 | zerotrie | 0.2.5 | Unicode-3.0 | all |
 | zerovec | 0.11.8 | Unicode-3.0 | all |
 | zerovec-derive | 0.11.6 | Unicode-3.0 | all |
-| zip | 4.6.1 | MIT | all |
+| zip | 4.6.1 | MIT | Windows |
 | zip | 8.6.0 | MIT | all |
 | zlib-rs | 0.6.8 | Zlib | all |
 | zmij | 1.0.23 | MIT | all |
