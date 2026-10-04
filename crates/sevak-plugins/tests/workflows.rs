@@ -812,6 +812,50 @@ fn a_sink_can_be_ignored() {
 }
 
 #[test]
+fn a_script_node_that_times_out_takes_the_processes_it_started_with_it() {
+    let w = World::new();
+    let dir = w.data("tree");
+    std::fs::create_dir_all(&dir).unwrap();
+    let toml = format!(
+        r#"
+        name = "Tree"
+        [[node]]
+        id = "go"
+        type = "external"
+        [[node]]
+        id = "run"
+        type = "run_script"
+        command = {tree}
+        timeout_ms = 4000
+        [[connection]]
+        from = "go"
+        to = "run"
+        "#,
+        tree = program("wf-tree", &[&dir.display().to_string()]),
+    );
+    let runtime = w.runtime("tree", &toml);
+    let report = run(&runtime, "go", "");
+    assert_eq!(report.errors.len(), 1, "{report:?}");
+
+    // The fixture's child writes a counter every 20 ms; once it is gone the
+    // counter stops. Poll with a deadline.
+    let beat = dir.join("beat");
+    let deadline = Instant::now() + WAIT;
+    let mut last = std::fs::read_to_string(&beat).unwrap_or_default();
+    assert!(!last.is_empty(), "the child never started");
+    let mut changed = Instant::now();
+    while changed.elapsed() < Duration::from_millis(500) {
+        assert!(Instant::now() < deadline, "the script's child still runs");
+        std::thread::sleep(Duration::from_millis(50));
+        let now = std::fs::read_to_string(&beat).unwrap_or_default();
+        if now != last {
+            last = now;
+            changed = Instant::now();
+        }
+    }
+}
+
+#[test]
 fn scripts_start_with_a_scrubbed_environment() {
     let w = World::new();
     // A name nothing else uses, so setting it cannot disturb other tests.

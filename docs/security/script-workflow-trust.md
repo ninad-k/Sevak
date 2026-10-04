@@ -52,3 +52,20 @@ variable names. Now:
 **What you will notice:** a script that relied on a variable from Sevak's
 environment (a proxy, `JAVA_HOME`, `PYENV_ROOT`, a token) stops seeing it
 until its manifest lists it in `inherit_env`.
+
+## Stopping a script stops everything it started
+
+A timeout used to end only the process Sevak started; helpers it had started
+kept running and kept the output pipes open. Now:
+
+- Windows: each script process (and each workflow script node) runs in a job
+  object. A kill ends the whole job, and the operating system ends it when
+  Sevak exits or crashes.
+- Linux and macOS: the script starts in its own process group and a kill
+  signals the group.
+- A script that ends by itself is left alone, and so is what it started.
+
+Limits: a helper that starts its own session or process group escapes on Linux
+and macOS; a crash of Sevak does not end the group there. The process is
+assigned to its job a moment after it starts, so something it starts in that
+instant escapes on Windows.

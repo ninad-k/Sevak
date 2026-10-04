@@ -29,6 +29,7 @@ use std::time::{Duration, Instant};
 
 use sevak_core::{Config, LaunchTarget, ShellConfig};
 use sevak_platform::process::{configure_helper_command, is_reserved_variable, scrub_environment};
+use sevak_platform::process_tree::ProcessTree;
 use sevak_platform::{PasteOutcome, PlatformProvider, SystemCommand};
 
 use super::model::{
@@ -661,9 +662,11 @@ impl Runtime {
             .stderr(Stdio::piped())
             .envs(env);
         configure_helper_command(&mut command);
+        ProcessTree::prepare(&mut command);
         let mut child = command
             .spawn()
             .map_err(|err| format!("could not start the program: {err}"))?;
+        let tree = ProcessTree::adopt(&child);
 
         if let (Some(text), Some(mut pipe)) = (stdin, child.stdin.take()) {
             // On a thread: a program that never reads must not block us.
@@ -682,16 +685,16 @@ impl Runtime {
                 Ok(Some(status)) => break status,
                 Ok(None) => {}
                 Err(err) => {
-                    reap(&mut child);
+                    reap(&mut child, &tree);
                     return Err(format!("waiting for the program failed: {err}"));
                 }
             }
             if self.cancelled() {
-                reap(&mut child);
+                reap(&mut child, &tree);
                 return Err("stopped: Sevak is closing or reloading".to_owned());
             }
             if started.elapsed() > limits.timeout {
-                reap(&mut child);
+                reap(&mut child, &tree);
                 return Err(format!(
                     "the program did not finish within {} s and was stopped",
                     limits.timeout.as_secs_f64().ceil() as u64
@@ -700,6 +703,8 @@ impl Runtime {
             thread::sleep(POLL);
         };
 
+        // It ended by itself: leave anything it started running.
+        tree.release();
         let output = join(stdout);
         if limits.log_stderr {
             let errors = String::from_utf8_lossy(&join(stderr)).into_owned();
@@ -913,7 +918,10 @@ pub fn evaluate(test: Test, left: &str, right: &str, ignore_case: bool) -> Resul
     })
 }
 
-fn reap(child: &mut Child) {
+/// Ends the program and everything it started. The child must not have been
+/// reaped yet (see `ProcessTree::kill`).
+fn reap(child: &mut Child, tree: &ProcessTree) {
+    tree.kill();
     let _ = child.kill();
     let _ = child.wait();
 }

@@ -1280,6 +1280,15 @@ built-in plugins only the OS-index file searches use it.
 - **Hung scripts.** If a query stays unanswered for `hard_timeout_ms` (default
   3 s) the process is killed and counts as a failure. A slow but alive script
   that answers other queries in time is not affected.
+- **Killing means the whole process tree.** When Sevak stops a script (a hung
+  or superseded query, a one-shot timeout, a workflow node's timeout, the idle
+  stop after its grace period) it ends the script **and the processes it
+  started**. On Windows the script runs in a job object, which also ends
+  everything when Sevak itself exits or crashes. On Linux and macOS it runs in
+  its own process group, which is signalled; a helper that starts its own
+  session (a daemon) is not reached, and a crash of Sevak itself does not end
+  the group. A script that ends on its own is not followed up: what it started
+  (an editor, say) keeps running.
 - **Quitting and reloading.** Sevak sends `shutdown` to every script when it
   quits, and when a reload replaces the plugin instances.
 - Everything is in Sevak's log (`Open log folder` in Settings), tagged with the

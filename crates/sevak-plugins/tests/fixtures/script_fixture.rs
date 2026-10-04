@@ -52,6 +52,36 @@ fn sevak_items(input: &str) -> Value {
     ])
 }
 
+/// Starts a grandchild (`beat <dir>`) that shares this process's standard
+/// streams and waits until it is running, so a test can tell whether killing
+/// this process also ended the grandchild.
+fn spawn_tree(dir: &str) {
+    if let Ok(exe) = std::env::current_exe() {
+        let _ = std::process::Command::new(exe).args(["beat", dir]).spawn();
+    }
+    let beat = std::path::Path::new(dir).join("beat");
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    while !beat.exists() && std::time::Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+/// Writes a growing counter to `<dir>/beat` every 20 ms for half a minute (so
+/// a failed test does not leave it running).
+fn beat(dir: &str) {
+    let path = std::path::Path::new(dir).join("beat");
+    for n in 0..1500 {
+        let _ = std::fs::write(&path, n.to_string());
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+fn sleep_forever() -> ! {
+    loop {
+        std::thread::sleep(Duration::from_secs(60));
+    }
+}
+
 fn pause_for(input: &str) {
     if input == "slow" || input.starts_with("slow") {
         std::thread::sleep(Duration::from_millis(800));
@@ -80,6 +110,12 @@ fn persistent() {
                     },
                     "garbage" => {
                         println!("this is not a protocol message");
+                    }
+                    // Starts a grandchild beating in the folder after `tree:`,
+                    // then never answers.
+                    tree if tree.starts_with("tree:") => {
+                        spawn_tree(&tree["tree:".len()..]);
+                        sleep_forever();
                     }
                     _ => pause_for(input),
                 }
@@ -122,6 +158,12 @@ fn workflow_mode(mode: &str, rest: &[String]) -> bool {
             let mut text = String::new();
             let _ = std::io::Read::read_to_string(&mut std::io::stdin(), &mut text);
             print!("{}", text.to_uppercase());
+        }
+        // Starts a beating grandchild in the folder named by the first
+        // argument, then never finishes.
+        "wf-tree" => {
+            spawn_tree(&rest[0]);
+            sleep_forever();
         }
         // Exits with the code in the first argument, complaining on stderr.
         "wf-exit" => {
@@ -188,6 +230,13 @@ fn main() {
         Some("oneshot-sevak") => {
             pause_for(&query);
             println!("{}", json!({"items": sevak_items(&query)}));
+        }
+        // The grandchild of `spawn_tree`.
+        Some("beat") => beat(&query),
+        // The query is a folder: start a beating grandchild, then never answer.
+        Some("oneshot-tree") => {
+            spawn_tree(&query);
+            sleep_forever();
         }
         // The query names an environment variable; the one row says what it is.
         Some("oneshot-env") => {
