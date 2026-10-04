@@ -99,6 +99,7 @@ pub fn run(
             ai::ai_test_connection,
             settings::open_config_file,
             settings::open_log_dir,
+            settings::open_marketplace,
             settings::close_settings,
             themes::list_themes,
             themes::save_theme,

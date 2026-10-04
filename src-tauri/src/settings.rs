@@ -533,6 +533,26 @@ pub async fn open_log_dir(state: State<'_, AppState>) -> Result<(), String> {
     open::open_path(&dir).map_err(|err| err.to_string())
 }
 
+/// The marketplace pages the Settings window links to. The webview names a page
+/// by one of these words and never supplies an address, so this command cannot
+/// be used to open an arbitrary link.
+fn marketplace_url(target: &str) -> Option<&'static str> {
+    match target {
+        "browse" => Some("https://ninad-k.github.io/Sevak/marketplace/"),
+        "submit" => Some("https://github.com/ninad-k/Sevak/issues/new?template=extension_submission.yml"),
+        "guide" => Some("https://ninad-k.github.io/Sevak/docs/marketplace/publishing/"),
+        _ => None,
+    }
+}
+
+/// Opens the marketplace, the extension submission form or the publishing
+/// guide (`"browse"`, `"submit"`, `"guide"`) in the default browser.
+#[tauri::command]
+pub async fn open_marketplace(target: String) -> Result<(), String> {
+    let url = marketplace_url(&target).ok_or_else(|| format!("unknown marketplace page {target:?}"))?;
+    open::open_url(url).map_err(|err| err.to_string())
+}
+
 #[tauri::command]
 pub fn close_settings(app: AppHandle) {
     if let Some(window) = app.get_webview_window(window::SETTINGS_LABEL) {
@@ -566,6 +586,18 @@ mod tests {
 
     fn check(config: &Config) -> Result<(), String> {
         validate(config, HotkeyStrategy::InApp)
+    }
+
+    #[test]
+    fn marketplace_links_are_a_closed_list_of_https_pages() {
+        for target in ["browse", "submit", "guide"] {
+            let url = marketplace_url(target).expect(target);
+            assert!(url.starts_with("https://"), "{url}");
+            assert!(sevak_core::url_check::check_open_url(url).is_ok(), "{url}");
+        }
+        for target in ["", "Browse", "https://example.com", "file:///etc/passwd", "browse "] {
+            assert_eq!(marketplace_url(target), None, "{target:?}");
+        }
     }
 
     #[test]

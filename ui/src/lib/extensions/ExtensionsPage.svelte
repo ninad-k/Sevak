@@ -7,6 +7,7 @@
   // update or removal downloads one package and only when its button is pressed.
   // Whatever is installed still waits for Sevak's Allow dialog before it runs.
   import { onMount } from "svelte";
+  import MarketplaceLinks from "../MarketplaceLinks.svelte";
   import Toggle from "../Toggle.svelte";
   import "../workflows/workflows.css";
   import {
@@ -194,6 +195,7 @@
     the checksum in the list and puts it in your folder. Whatever you install is <em>new and not
     allowed</em>: Sevak asks for your permission before anything in it runs. No other data is sent.
   </p>
+  <MarketplaceLinks />
 
   <div class="tabs" role="tablist" aria-label="Extensions" tabindex="-1" onkeydown={onTabKey}>
     <button
