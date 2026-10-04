@@ -51,6 +51,7 @@ use sevak_core::config::{ExpandOn, Snippet, SnippetsConfig};
 use sevak_core::Config;
 use sevak_platform::capture::{is_browser, is_terminal};
 use sevak_platform::{KeyEvent, KeyListener, KeyListenerSupport, PlatformProvider, TypingTarget};
+use zeroize::Zeroize;
 
 use crate::example_uuid::random_uuid_v4;
 use crate::snippets::{expand, Env};
@@ -65,8 +66,10 @@ const TARGET_CACHE: Duration = Duration::from_millis(250);
 /// How often the worker looks at its stop flag when nothing is typed.
 const IDLE_POLL: Duration = Duration::from_millis(250);
 
-/// The last few typed characters. Wiped, not just emptied, when cleared or
-/// dropped.
+/// The last few typed characters. Overwritten (not just emptied) when cleared or
+/// dropped, with the `zeroize` crate, which the compiler may not optimise away.
+/// Best effort: copies the OS made on the way here (key events, a channel slot)
+/// are not in its reach.
 struct Buffer {
     chars: Vec<char>,
 }
@@ -74,25 +77,35 @@ struct Buffer {
 impl Buffer {
     fn new() -> Self {
         Self {
+            // The full size up front: it never grows, so no old copy is left
+            // behind in a freed allocation.
             chars: Vec::with_capacity(BUFFER_CHARS),
         }
     }
 
     fn push(&mut self, c: char) {
         if self.chars.len() == BUFFER_CHARS {
-            self.chars.remove(0);
+            // The oldest character is overwritten in place; nothing is left
+            // behind in the slot after the last one.
+            self.chars.rotate_left(1);
+            if let Some(last) = self.chars.last_mut() {
+                *last = c;
+            }
+        } else {
+            self.chars.push(c);
         }
-        self.chars.push(c);
     }
 
     fn pop(&mut self) {
-        self.chars.pop();
+        if let Some(last) = self.chars.last_mut() {
+            last.zeroize();
+            self.chars.pop();
+        }
     }
 
     /// Overwrites every remembered character before forgetting it.
     fn wipe(&mut self) {
-        self.chars.fill('\0');
-        self.chars.clear();
+        self.chars.zeroize();
     }
 }
 
@@ -648,6 +661,45 @@ mod tests {
         assert_eq!(found.snippet, 0);
         assert_eq!(found.delete, 3);
         assert_eq!(found.delimiter, None);
+    }
+
+    #[test]
+    fn wiping_and_popping_leave_no_copy_of_what_was_typed() {
+        let mut buffer = Buffer::new();
+        for c in "hunter2".chars() {
+            buffer.push(c);
+        }
+        let pointer = buffer.chars.as_ptr();
+        let capacity = buffer.chars.capacity();
+        assert!(capacity >= 7);
+
+        // SAFETY (both reads): the allocation lives as long as `buffer`, is
+        // never reallocated (the capacity is reserved up front) and the slots
+        // read were written by `push`.
+        buffer.pop();
+        let slots = unsafe { std::slice::from_raw_parts(pointer, 7) };
+        assert_eq!(slots[6], '\0', "the popped character is gone");
+        assert_eq!(slots[5], 'r');
+
+        buffer.wipe();
+        assert!(buffer.chars.is_empty());
+        let slots = unsafe { std::slice::from_raw_parts(pointer, 7) };
+        assert!(slots.iter().all(|c| *c == '\0'), "{slots:?}");
+    }
+
+    #[test]
+    fn a_full_buffer_forgets_its_oldest_character_in_place() {
+        let mut buffer = Buffer::new();
+        buffer.push('a');
+        let pointer = buffer.chars.as_ptr();
+        for c in std::iter::repeat_n('a', BUFFER_CHARS) {
+            buffer.push(c);
+        }
+        buffer.push('z');
+        assert_eq!(buffer.chars.len(), BUFFER_CHARS);
+        assert_eq!(buffer.chars.last(), Some(&'z'));
+        // Never reallocated, so no old copy is left in a freed allocation.
+        assert_eq!(buffer.chars.as_ptr(), pointer);
     }
 
     #[test]
