@@ -58,7 +58,7 @@ The page also shows when and where the last backup was made.
     | **Merge** (default) | Adds what the backup has and overwrites what has the same name or setting. Keeps everything else. Snippets match by name, web searches and hotkeys by keyword or key, theme files by file name, plugins and workflows by folder; a setting the backup contains overrides yours, one it does not contain stays. |
     | **Replace** | Makes the ticked categories exactly like the backup. What the backup does not have is removed (snippets, engines, theme files, plugin and workflow folders) or goes back to its default (settings). |
 
-4. Read **What would change**: for each category how many things are new, changed or already the same (and, in Replace mode, removed), with the list of names and files. Nothing is written yet.
+4. Read **What would change**: for each category how many things are new, changed or already the same (and, in Replace mode, removed), with the list of names and files. Nothing is written yet. Settings that would make Sevak run a command on its own (a hotkey bound to a terminal command, a different terminal or shell program) are called out in a warning, because a backup from someone else could carry them.
 5. Click **Restore**. Replace asks once more when it would remove something.
 
 The restore is **all or nothing**. Sevak first saves a **safety copy** of what will be replaced, then prepares every file, then swaps them in; if any step fails it puts everything back and says so, and your configuration is as it was. A restore is refused before anything is touched if the result would not be valid (for example a shortcut that cannot work, or a web search the settings refer to that is missing).

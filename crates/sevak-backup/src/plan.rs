@@ -373,6 +373,52 @@ fn preview_settings(
     }
 }
 
+/// Settings that make Sevak run a program or a command on its own, which a
+/// backup from somewhere else should not slip in unnoticed: a hotkey that runs
+/// a terminal command, and the program that opens the terminal or runs the
+/// shell. They are restored like any setting, but the preview says so.
+fn command_warnings(state: &ConfigState, fragment: &toml::Table) -> Vec<String> {
+    let mut out = Vec::new();
+    if let Some(toml::Value::Array(list)) = fragment.get(HOTKEY_KEY) {
+        for entry in list {
+            let run = entry.get("run").and_then(toml::Value::as_str).unwrap_or("");
+            let key = entry
+                .get("key")
+                .and_then(toml::Value::as_str)
+                .unwrap_or("?");
+            let known = state
+                .config
+                .hotkeys
+                .iter()
+                .any(|existing| existing.run.as_deref() == Some(run));
+            if run.trim_start().starts_with("shell:") && !known {
+                out.push(format!(
+                    "The backup adds the hotkey {key}, which runs a terminal command ({}).                      Restore it only if you trust this backup.",
+                    run.trim()
+                ));
+            }
+        }
+    }
+    if let Some(shell) = fragment.get("shell") {
+        for (field, current) in [
+            ("terminal", &state.config.shell.terminal),
+            ("shell", &state.config.shell.shell),
+        ] {
+            let incoming = shell
+                .get(field)
+                .and_then(toml::Value::as_str)
+                .unwrap_or("")
+                .trim();
+            if !incoming.is_empty() && incoming != current.trim() {
+                out.push(format!(
+                    "The backup sets the program that runs your terminal commands ({field} =                      \"{incoming}\"). Restore it only if you trust this backup."
+                ));
+            }
+        }
+    }
+    out
+}
+
 fn snippets_of(fragment: &toml::Table) -> Vec<Snippet> {
     fragment
         .get(SNIPPET_KEY)
@@ -732,6 +778,12 @@ pub(crate) fn build(
     if let Some(state) = &config_state {
         match state {
             Ok(state) => {
+                if selected_config.contains(&Category::Settings) {
+                    // Commands that would run on their own once restored.
+                    if let Some(fragment) = backup.fragments.get(&Category::Settings) {
+                        plan.warnings.extend(command_warnings(state, fragment));
+                    }
+                }
                 if !selected_config.is_empty() {
                     match typed(&merged_table(&state.table, backup, &selected_config, mode)) {
                         Ok(after) => {

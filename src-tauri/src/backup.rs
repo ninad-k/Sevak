@@ -682,8 +682,13 @@ fn restore_flow(app: &AppHandle) {
         );
         return;
     }
+    let notes = if shown.warnings.is_empty() {
+        String::new()
+    } else {
+        format!("\n\nNote:\n{}", shown.warnings.join("\n"))
+    };
     let question = format!(
-        "Restore this backup (made {})?\n\n{}\n\nNothing you have is removed: this adds what is \
+        "Restore this backup (made {})?\n\n{}{notes}\n\nNothing you have is removed: this adds what is \
          missing and overwrites what has the same name. A safety copy of what changes is saved \
          first; Settings, Backup & restore, Undo restore puts it back.",
         shown.archive.created,

