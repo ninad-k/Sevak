@@ -1,0 +1,32 @@
+name: Label gallery pull requests
+
+# Labels a pull request that touches gallery/, examples/ or templates/ from
+# .github/labeler.yml, so reviewers can find it (see docs/marketplace/maintainers.md).
+#
+# pull_request_target gives the token write access on pull requests from forks.
+# That is safe here for the same reason as pr-labels.yml: nothing from the pull
+# request is checked out or executed. actions/labeler reads the configuration
+# from the base branch and the list of changed files from the API.
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+    paths:
+      - "gallery/**"
+      - "examples/**"
+      - "templates/**"
+
+permissions: {}
+
+jobs:
+  label:
+    name: Label from the changed paths
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/labeler@bf12e9b00b37c5c0ca2b87b79b2daf7891dbda13 # v7.0.0
+        with:
+          configuration-path: .github/labeler.yml
+          sync-labels: false
