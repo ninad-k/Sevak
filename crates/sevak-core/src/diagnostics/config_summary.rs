@@ -38,7 +38,7 @@ const GROUPS: &[(&str, &[Field])] = &[
             ("general.hide_on_blur", Show::Value),
             ("general.launch_at_login", Show::Value),
             ("general.check_for_updates", Show::Value),
-            // Added with the release channel; absent before it.
+            // The beta update channel (stable or beta).
             ("general.update_channel", Show::Value),
             ("window.width", Show::Value),
             ("linux.wayland_use_xwayland", Show::Value),
@@ -336,10 +336,6 @@ mod tests {
         let root = serde_json::to_value(Config::default()).unwrap();
         for (_, fields) in GROUPS {
             for (path, _) in *fields {
-                // Added with the release channel.
-                if *path == "general.update_channel" {
-                    continue;
-                }
                 assert!(
                     lookup(&root, path).is_some(),
                     "{path} is not a config setting"
@@ -390,8 +386,10 @@ mod tests {
             value_of(&config, "hotkey (extra shortcuts)").as_deref(),
             Some("(none)")
         );
-        // The release channel is not in the config yet: no line for it.
-        assert_eq!(value_of(&config, "general.update_channel"), None);
+        assert_eq!(
+            value_of(&config, "general.update_channel").as_deref(),
+            Some("stable")
+        );
     }
 
     #[test]
@@ -494,8 +492,7 @@ hotkey = 1",
     }
 
     #[test]
-    fn a_new_general_setting_shows_up_once_listed() {
-        // `update_channel` is read from the serialized config when it exists.
+    fn the_update_channel_is_shown_as_it_is_set() {
         let mut root = serde_json::to_value(Config::default()).unwrap();
         root["general"]["update_channel"] = Value::String("beta".into());
         let (path, how) = ("general.update_channel", Show::Value);
