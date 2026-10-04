@@ -12,6 +12,7 @@
     "installer-images": "node scripts/generate-installer-images.mjs",
     "tauri": "tauri",
     "docs:pdf": "node scripts/docs-pdf.mjs",
+    "docs:media-check": "node scripts/docs-media/check-media.mjs",
     "test": "vitest run --config ui/vitest.config.ts",
     "test:watch": "vitest --config ui/vitest.config.ts",
     "test:coverage": "vitest run --coverage --config ui/vitest.config.ts",

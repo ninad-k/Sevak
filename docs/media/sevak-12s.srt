@@ -5,7 +5,8 @@ Sevak: your desktop, at your service.
 
 2
 00:00:01,800 --> 00:00:04,000
-Press Win + Space to open Sevak.
+Press Win+Space to open Sevak.
+Cmd+Space on macOS, Super+Space on Linux.
 
 3
 00:00:04,000 --> 00:00:06,800

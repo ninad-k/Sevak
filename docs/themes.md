@@ -59,6 +59,8 @@ Sevak does not offer background blur (Acrylic, Mica, vibrancy) because it would 
 
 ## Theme files and the editor
 
+![Settings, Appearance, Theme editor: eight built-in themes to pick from and a live preview of the search bar with contrast checks.](media/settings-theme-editor.png)
+
 A theme is a small TOML file in the `themes` folder of your config folder (**Settings → Appearance → Open themes folder**). **Settings → Appearance → Theme editor** creates and edits them without touching the file:
 
 - Eight themes ship with Sevak: Sevak Light, Sevak Dark, Nord, Dracula, Solarized Light, Solarized Dark, Gruvbox and High Contrast. Click one to preview it. Changing anything in a built-in makes a copy, because the built-in names stay as shipped.
