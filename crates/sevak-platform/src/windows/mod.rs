@@ -20,6 +20,7 @@ pub(crate) mod tasks;
 pub(crate) mod trash;
 
 pub(crate) use keyhook_hotkey::{clock_ms as hook_clock_ms, service as hotkey_hook_service};
+pub(crate) use paste::clipboard_image_pixels;
 pub(crate) use provider::WindowsProvider;
 
 use std::ffi::OsStr;

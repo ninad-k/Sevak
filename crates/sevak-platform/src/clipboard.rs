@@ -213,6 +213,11 @@ fn image_data(image: &ClipboardImage) -> arboard::ImageData<'_> {
 /// The image on the clipboard; `None` if it holds something else, or an image
 /// too large to hold (see [`crate::clip_media::MAX_IMAGE_RAW_BYTES`]).
 pub fn get_image() -> Result<Option<ClipboardImage>> {
+    // The clipboard library converts the whole picture before Sevak sees it;
+    // an enormous one is turned away on its header (Windows) first.
+    if crate::clip_media::clipboard_image_is_oversized() {
+        return Ok(None);
+    }
     let data = read_with(|clipboard| clipboard.get_image())?;
     Ok(data.and_then(|data| {
         ClipboardImage::new(
@@ -297,7 +302,10 @@ fn load_png_file(path: &Path) -> Result<ClipboardImage> {
             message: format!("{} is too large to copy", path.display()),
         });
     }
-    ClipboardImage::decode_png(&std::fs::read(path)?)
+    ClipboardImage::decode_png(&sevak_core::bounded_read::read_capped(
+        path,
+        MAX_PNG_FILE_BYTES,
+    )?)
 }
 
 /// A setter that asks the OS to keep what it writes out of its own history.

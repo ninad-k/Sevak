@@ -319,6 +319,70 @@ pub(crate) fn clipboard_text_units() -> Option<usize> {
     }
 }
 
+/// The pixel count of the largest image on the clipboard, from the headers of
+/// its `PNG`, `CF_DIBV5` and `CF_DIB` data (a few dozen bytes each): the image
+/// is not converted. `None` when there is no image or the clipboard is busy.
+pub(crate) fn clipboard_image_pixels() -> Option<u64> {
+    const CF_DIB: u32 = 8;
+    const CF_DIBV5: u32 = 17;
+    // SAFETY: the wide string literal is NUL-terminated and static.
+    let png = unsafe { RegisterClipboardFormatW(w!("PNG")) };
+    let formats = [(png, true), (CF_DIBV5, false), (CF_DIB, false)];
+    if !formats.iter().any(|(format, _)| format_available(*format)) {
+        return None;
+    }
+    // SAFETY: the clipboard is closed on every path below; each memory handle
+    // is owned by the clipboard and only read, locked, while it is open.
+    unsafe {
+        let mut opened = false;
+        for _ in 0..3 {
+            if OpenClipboard(None).is_ok() {
+                opened = true;
+                break;
+            }
+            sleep(Duration::from_millis(5));
+        }
+        if !opened {
+            return None;
+        }
+        let mut largest = None;
+        for (format, is_png) in formats {
+            if !format_available(format) {
+                continue;
+            }
+            let Some(header) = peek_header(format) else {
+                continue;
+            };
+            let pixels = if is_png {
+                crate::clip_media::png_header_pixels(&header)
+            } else {
+                crate::clip_media::dib_header_pixels(&header)
+            };
+            largest = largest.max(pixels);
+        }
+        let _ = CloseClipboard();
+        largest
+    }
+}
+
+/// The first bytes (at most 32) of clipboard format `format`. The clipboard
+/// must be open.
+unsafe fn peek_header(format: u32) -> Option<Vec<u8>> {
+    let handle = GetClipboardData(format).ok()?;
+    let memory = HGLOBAL(handle.0);
+    let available = GlobalSize(memory).min(32);
+    if available == 0 {
+        return None;
+    }
+    let pointer = GlobalLock(memory) as *const u8;
+    if pointer.is_null() {
+        return None;
+    }
+    let bytes = std::slice::from_raw_parts(pointer, available).to_vec();
+    let _ = GlobalUnlock(memory);
+    Some(bytes)
+}
+
 pub(crate) fn read_clipboard() -> Result<ClipboardRead> {
     if clipboard_marked_secret()? {
         return Ok(ClipboardRead {
