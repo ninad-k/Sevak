@@ -15,7 +15,8 @@ Sevak can be controlled from the command line or automated with scripts. When Se
 | `--background` | Start Sevak without showing the window |
 | `--settings` | Open the Settings window |
 | `--quit` | Quit the running instance |
-| `--setup-hotkey [KEY]` | Bind hotkeys to GNOME (Wayland desktop on Linux) |
+| `--setup-hotkey [KEY]` | Bind hotkeys to GNOME (Wayland desktop on Linux); offers to free Super+Space |
+| `--restore-hotkey` | Put back system shortcuts Sevak changed with your permission (GNOME input sources, macOS Spotlight) |
 | `--config PATH` | Use a custom config folder or file; overrides `SEVAK_CONFIG_DIR` |
 | `-h`, `--help` | Print help |
 | `-V`, `--version` | Print version |
@@ -165,6 +166,16 @@ On other desktops (KDE, Sway, etc.), bind hotkeys through your desktop's keyboar
 
 After editing `config.toml`, run `--setup-hotkey` again to update GNOME shortcuts. Delete old shortcuts in GNOME's keyboard settings if you remove entries from the config.
 
+GNOME uses ++super+space++ to switch input sources, so it would keep that key from Sevak. When your hotkey is `Super+Space` (the default) and GNOME's switcher uses it, `--setup-hotkey` explains what it would change, shows the old value and asks you to confirm (type `y`). It then moves the input-source shortcuts (`switch-input-source` and `-backward` under `org.gnome.desktop.wm.keybindings`) to the same keys with Ctrl added, saves the previous values in `hotkey-takeover.json` in the data folder and prints what changed. Without a terminal it asks nothing and changes nothing. Undo it with `sevak --restore-hotkey`.
+
+#### `--restore-hotkey`
+
+```bash
+sevak --restore-hotkey
+```
+
+Puts back the system shortcuts Sevak changed with your permission: GNOME's input-source shortcuts (Linux) or Spotlight's "Show Spotlight search" shortcut (macOS). It prints what it restored, or says there was nothing to restore. On Windows Sevak never changes a system setting, so there is nothing to restore. After restoring, Sevak's own shortcut may clash with the system's again; choose another key in Settings (for example ++alt+space++) or run `sevak --setup-hotkey KEY`.
+
 ### Information
 
 #### `-h`, `--help`
@@ -219,7 +230,7 @@ Exit codes:
 
 ## Examples
 
-**Bind Alt+Space to show/hide Sevak on macOS:**
+**Bind a key to show/hide Sevak with the macOS system shortcuts:**
 
 Add to your keyboard shortcuts under System Settings:
 

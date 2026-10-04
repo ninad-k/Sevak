@@ -12,11 +12,12 @@
 [Quick start](docs/quickstart.md) · [Help](docs/troubleshooting.md) ·
 [Contribute](CONTRIBUTING.md)
 
-![Sevak: a keyboard-first desktop launcher with app search and the Alt+Space shortcut.](docs/media/sevak-overview.png)
+![Sevak: a keyboard-first desktop launcher with app search and a global shortcut.](docs/media/sevak-overview.png)
 
 Sevak brings everyday desktop actions into one search bar. Launch an app,
 find a file, calculate an answer, or open a web search without navigating
-through menus. Press **Alt+Space**, type what you need, then press **Enter**.
+through menus. Press **Win+Space** (**Cmd+Space** on macOS), type what you need,
+then press **Enter**.
 
 Built for **Windows, macOS and Linux** with Rust, Tauri 2 and Svelte 5.
 App and file searches, calculations, and usage ranking run locally. Web
@@ -34,20 +35,26 @@ clarity. [The story behind the name and logo →](docs/brand.md)
 
 ## How it works
 
-![Three steps: open with Alt+Space, type a query, then press Enter to launch, open or copy.](docs/media/sevak-workflow.svg)
+![Three steps: open with the shortcut, type a query, then press Enter to launch, open or copy.](docs/media/sevak-workflow.svg)
 
-1. **Open** — press `Alt+Space` (`Option+Space` on macOS).
+1. **Open** — press `Win+Space` (`Cmd+Space` on macOS, `Super+Space` on Linux).
 2. **Search** — type an app name, calculation, or keyword such as `f` or `g`.
 3. **Act** — choose a result with `↑` / `↓`, then press `Enter`.
 
-The shortcut is configurable. On Linux Wayland, bind it through your desktop;
-see [Linux shortcut setup](docs/install.md#setting-up-the-hotkey-on-linux).
+The shortcut is configurable. Every system already uses `Super+Space` (Windows
+switches the input language, macOS opens Spotlight, GNOME switches input
+sources), so Sevak takes the key over: with a keyboard hook on Windows, and on
+macOS and GNOME only after asking you once. Prefer a key the system leaves
+alone? Choose `Alt+Space` in Settings.
+[How the takeover works →](docs/troubleshooting.md#super-space) On Linux
+Wayland, bind it through your desktop; see
+[Linux shortcut setup](docs/install.md#setting-up-the-hotkey-on-linux).
 
 ### A 12-second introduction
 
 <p align="center">
   <a href="docs/media/sevak-12s.mp4">
-    <img src="docs/media/sevak-demo.gif" width="280" alt="Animated Sevak walkthrough: open with Alt+Space, find an app, and calculate 12 times 7." />
+    <img src="docs/media/sevak-demo.gif" width="280" alt="Animated Sevak walkthrough: open with the shortcut, find an app, and calculate 12 times 7." />
   </a>
 </p>
 
@@ -176,7 +183,7 @@ After installing, follow [Your first five minutes with Sevak](docs/quickstart.md
 
 | Key | Action |
 |---|---|
-| `Alt+Space` / `Option+Space` | Show or hide Sevak; configurable |
+| `Win+Space` / `Cmd+Space` / `Super+Space` | Show or hide Sevak; configurable |
 | `↑` / `↓` | Select the previous / next result |
 | `Ctrl+P` / `Ctrl+N` | Alternative selection keys |
 | `PageUp` / `PageDown` | Move through results by a page |
@@ -218,6 +225,13 @@ These features stay on your computer and make no network request:
 - Universal Actions reads your selection only when you press its shortcut, by
   briefly borrowing the clipboard and restoring it. The selection is never
   written to disk, logged or sent anywhere.
+- The shortcut itself. On Windows, `Win+Space` (and any shortcut another app
+  has registered) is taken with a keyboard hook that only compares each key
+  press with your shortcuts, to swallow those; it does not read, keep, log or
+  send what you type, and no Windows setting changes. On macOS and GNOME,
+  Sevak changes Spotlight's or the input-source shortcut only after you say yes,
+  remembers the answer in `hotkey-takeover.json` in the data folder, and can put
+  it back. [Details →](docs/troubleshooting.md#super-space)
 - Expanding snippets as you type (`[snippets] auto_expand`, off by default)
   watches your keystrokes while it is on, to notice a snippet keyword. Only the
   last 64 characters are kept, in memory, and are wiped constantly; they are

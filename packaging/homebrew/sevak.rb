@@ -28,6 +28,6 @@ cask "sevak" do
   caveats <<~EOS
     Sevak is not notarized by Apple yet. If macOS blocks the first launch, run:
       xattr -dr com.apple.quarantine "#{appdir}/Sevak.app"
-    Sevak lives in the menu bar; press Option+Space to open it.
+    Sevak lives in the menu bar; press Cmd+Space to open it (Sevak asks before taking it from Spotlight, and uses Option+Space if you say no).
   EOS
 end

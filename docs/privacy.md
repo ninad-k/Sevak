@@ -105,6 +105,7 @@ Inside your config folder (see [Files and data locations](files-and-data.md)):
 | `clipboard-history.json`, `clipboard/` | Clipboard history: text, paths of copied files, images (if enabled) | No |
 | `currency-rates.json` | Cached ECB rates (if currency enabled) | No |
 | `script-plugin-approvals.json` | Script plugins and workflows you allowed | No |
+| `hotkey-takeover.json` | Whether you allowed Sevak to take Spotlight's or GNOME's shortcut, and the old GNOME values (so they can be restored) | No |
 | `plugins/` folder | Script plugins and their data | No, unless the plugin makes network requests |
 | `workflows/` folder | Workflows and their data | No, unless a workflow's script makes network requests |
 | `themes/` folder | Theme files | No |
@@ -116,12 +117,22 @@ Inside your config folder (see [Files and data locations](files-and-data.md)):
 - **Copying**: ++ctrl+c++ in the launcher copies the selected result's value or path to your clipboard. Your OS clipboard history (Windows Win+V, macOS, or a clipboard manager) may record it.
 - **Accessibility**: on macOS, pasting and Universal Actions need the **Accessibility** permission. You grant this once in System Settings.
 
+## The launcher shortcut
+
+The default shortcut, Super+Space, is also used by the system. How Sevak takes it over:
+
+- **Windows:** a keyboard hook, only while a shortcut needs it (Win+Space, or a key another app has registered). It compares each key press with your configured shortcuts and swallows those; it does not read, keep, log or send what you type, and no Windows setting changes. The hook is removed when you quit Sevak.
+- **macOS and GNOME:** Sevak changes Spotlight's shortcut or GNOME's input-source shortcut only after you say yes in a dialog, and not at all if you say no. What you answered and the previous GNOME values are kept in `hotkey-takeover.json` in the data folder, so Sevak never asks twice and can restore the old settings. Nothing is sent anywhere.
+- Settings in other apps are never changed.
+
+See [Win+Space, Cmd+Space and Super+Space](troubleshooting.md#super-space).
+
 ## Snippet expansion as you type
 
 Off by default (`[snippets] auto_expand`). While it is on, Sevak watches your keystrokes to notice a snippet keyword:
 
 - Only the last 64 characters you typed are kept, in memory, and they are wiped whenever the text could have changed and after every expansion. They are never written to disk, logged or sent anywhere.
-- Nothing is observed while the setting is off; the keyboard hook is not even installed.
+- Nothing is observed while the setting is off: expansion does not listen to the keyboard. (The Windows hook for the launcher shortcut, above, only compares key presses with your shortcuts.)
 - Sevak's own windows, terminals, apps listed in `[snippets] ignore_apps` and password boxes the system can detect are skipped.
 
 See [Expand snippets as you type](features/snippets.md#expand-snippets-as-you-type).

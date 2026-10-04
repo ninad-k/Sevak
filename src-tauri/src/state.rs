@@ -22,11 +22,40 @@ pub enum HotkeyMode {
     External,
 }
 
+/// How a shortcut is delivered to Sevak.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Mechanism {
+    /// Registered with the OS in the normal way.
+    Registered,
+    /// Taken over with the Windows keyboard hook (the OS or another app owns it).
+    WindowsHook,
+    /// macOS: Spotlight's shortcut is off, with the user's permission.
+    SpotlightDisabled,
+    /// GNOME: the input-source shortcut was moved, with the user's permission.
+    GnomeInputSourceMoved,
+    /// macOS: Cmd+Space stays with Spotlight, so Option+Space is used.
+    FallbackKey,
+    /// The desktop owns the key and runs `sevak --toggle` (Wayland).
+    Desktop,
+    /// Not active; see the error.
+    Inactive,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct HotkeyStatus {
     pub accelerator: String,
     pub mode: HotkeyMode,
     pub error: Option<String>,
+    /// How the key reaches Sevak.
+    pub mechanism: Mechanism,
+    /// One sentence on the mechanism for the Settings window.
+    pub note: Option<String>,
+    /// An OS shortcut stands in the way and the user may let Sevak take it
+    /// (macOS Spotlight, GNOME input sources).
+    pub can_take_over: bool,
+    /// Sevak changed an OS shortcut (with permission) and can put it back.
+    pub can_restore: bool,
 }
 
 /// How one `[[hotkey]]` entry fared, in the order of the config.
@@ -37,6 +66,8 @@ pub struct CustomHotkeyStatus {
     pub description: String,
     /// Why it is not active (bad key, taken by another app, duplicate).
     pub error: Option<String>,
+    /// How the key reaches Sevak.
+    pub mechanism: Mechanism,
 }
 
 /// Snapshot sent to the frontend (`get_status` and `sevak:status`).
@@ -81,6 +112,10 @@ impl AppState {
             accelerator: config.general.hotkey.clone(),
             mode: HotkeyMode::Global,
             error: None,
+            mechanism: Mechanism::Registered,
+            note: None,
+            can_take_over: false,
+            can_restore: false,
         };
         let search = Search::new(&paths, &config);
         let appearance = theme::resolve(&config.appearance, &paths.config_dir);

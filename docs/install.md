@@ -61,7 +61,7 @@ installs keep Sevak's own updater, which those package managers recognise.
 ### Usage
 
 - **Menu bar:** Sevak lives in your menu bar (top-right), not the Dock.
-- **Hotkey:** The default is ++alt+space++ (Option+Space). Change it in Settings or the config file.
+- **Hotkey:** The default is ++cmd+space++, which Spotlight uses. If Spotlight's shortcut is on, Sevak asks once whether it may turn that shortcut off; say No and Sevak uses ++option+space++ instead. Change it any time in Settings or the config file, and restore Spotlight's shortcut from Settings. See [Cmd+Space and Spotlight](troubleshooting.md#super-space).
 - **File search permissions:** Sevak asks for permission to index Desktop, Documents and Downloads. Decline if you don't use file search; remove those folders in Settings.
 - **Pasting:** Clipboard history and snippets require Accessibility permission to paste with Cmd+V. Without it, they copy to the clipboard instead.
   - Go to System Settings → Privacy & Security → Accessibility and add Sevak.
@@ -133,7 +133,7 @@ chmod +x Sevak_<version>_amd64.AppImage
 
 ### X11 sessions
 
-Sevak registers hotkeys directly. Your configured hotkey (default ++alt+space++) works out of the box.
+Sevak registers hotkeys directly. Your configured hotkey works out of the box, except the default ++super+space++ on GNOME, which switches input sources: Sevak then asks once whether it may move that GNOME shortcut (see below).
 
 ### Wayland sessions
 
@@ -158,17 +158,19 @@ After editing `config.toml`, run `--setup-hotkey` again to update shortcuts. Del
 
 Bind a key to `sevak --toggle` in your desktop's keyboard settings. The `--setup-hotkey` command only works on GNOME.
 
+!!! warning "GNOME and Super+Space"
+
+    GNOME binds ++super+space++ to switching input sources, which blocks Sevak's default hotkey. `sevak --setup-hotkey` (and the **Set up GNOME shortcut** button in Settings) offers to move that shortcut to ++ctrl+super+space++, and only does it after you confirm. It saves the old value; `sevak --restore-hotkey` or the **Restore** button puts it back. On X11, Sevak asks the same question the first time it cannot register ++super+space++.
+
+    Prefer to leave GNOME alone? Choose ++ctrl+space++ or ++ctrl+alt+space++ in Settings.
+
 !!! warning "GNOME Alt+Space conflict"
 
-    GNOME binds ++alt+space++ to the window menu by default, which blocks Sevak's hotkey.
-    
-    Choose a different key (e.g. ++ctrl+space++, ++super+space++, ++ctrl+alt+space++) or free ++alt+space++:
-    
+    GNOME binds ++alt+space++ to the window menu by default, which blocks Sevak's hotkey if you choose it. Pick a different key or free ++alt+space++:
+
     ```bash
     gsettings set org.gnome.desktop.wm.keybindings activate-window-menu "[]"
     ```
-    
-    Note: ++super+space++ switches input sources if you have multiple keyboard layouts configured.
 
 ### Wayland rendering
 

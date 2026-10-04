@@ -59,7 +59,7 @@ Main hotkeys and startup behaviour.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `hotkey` | string | `"Alt+Space"` | Global keyboard shortcut to show/hide Sevak. Examples: `"Ctrl+Space"`, `"Super+Space"`, `"Ctrl+Shift+K"`. On macOS, `Alt` is the Option key. On Linux Wayland, run `sevak --setup-hotkey` to bind this in GNOME instead. |
+| `hotkey` | string | `"Super+Space"` | Global keyboard shortcut to show/hide Sevak. `Super` is the Windows key (Cmd on macOS; `Win`, `Windows` and `Meta` are accepted spellings). Examples: `"Alt+Space"`, `"Ctrl+Space"`, `"Ctrl+Shift+K"`. On macOS, `Alt` is the Option key. Super+Space is used by the system too; Sevak takes it over (a keyboard hook on Windows; a question on macOS and GNOME) - see [Troubleshooting](troubleshooting.md#super-space). Existing config files keep the key they have. On Linux Wayland, run `sevak --setup-hotkey` to bind this in GNOME instead. |
 | `actions_hotkey` | string | `"Ctrl+Alt+Space"` | Hotkey for Universal Actions: capture the selection in the foreground app and offer actions on it. Empty string `""` turns Universal Actions off. On Wayland, run `sevak --setup-hotkey` to bind this in GNOME. |
 | `hide_on_blur` | boolean | `true` | Hide the launcher when it loses focus to another window. Press Esc or click elsewhere to close; this setting hides it automatically. |
 | `launch_at_login` | boolean | `false` | Start Sevak when you log in to your desktop. |
@@ -67,7 +67,7 @@ Main hotkeys and startup behaviour.
 
 ```toml
 [general]
-hotkey = "Alt+Space"
+hotkey = "Super+Space"
 actions_hotkey = "Ctrl+Alt+Space"
 hide_on_blur = true
 launch_at_login = false
@@ -413,7 +413,7 @@ use_system = true
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `auto_expand` | boolean | `false` | Expand snippet keywords as you type. Reloading applies changes; the keyboard hook is removed when this is turned off. |
+| `auto_expand` | boolean | `false` | Expand snippet keywords as you type. Reloading applies changes; Sevak stops watching typing when this is turned off. |
 | `prefix` | string | `""` | Typed before every keyword, e.g. `";"` so that `;sig` expands and `sig` does not. No spaces. |
 | `expand_on` | string | `"immediate"` | `"immediate"` expands the moment the keyword is typed; `"delimiter"` waits for a space or punctuation mark, which is kept after the text. An unknown value is treated as `"delimiter"`. |
 | `case_sensitive` | boolean | `true` | `false`: `SIG` and `sig` both expand. |
@@ -556,11 +556,15 @@ This is the full default configuration written on first run:
 # from the tray menu (or restart Sevak) to apply changes.
 
 [general]
-# Shortcut that shows and hides Sevak. Examples: "Alt+Space", "Ctrl+Space",
-# "Super+Space", "Ctrl+Shift+K".
+# Shortcut that shows and hides Sevak. Super is the Windows key (Cmd on macOS).
+# Examples: "Super+Space", "Alt+Space", "Ctrl+Space", "Ctrl+Shift+K".
+# Super+Space is normally taken by the system (Windows' input-language switcher,
+# macOS Spotlight, GNOME's input sources). Sevak takes the key over on Windows
+# with a keyboard hook, and on macOS and GNOME after asking you once. To go back
+# to a key the system leaves alone, use "Alt+Space" (Option+Space on macOS).
 # On Linux Wayland sessions applications cannot grab global keys. Run
 # `sevak --setup-hotkey` to bind this key to `sevak --toggle` in GNOME instead.
-hotkey = "Alt+Space"
+hotkey = "Super+Space"
 
 # Shortcut for Universal Actions: it copies what you have selected in the app
 # you are using (text, a URL, files) and offers actions for it. "" turns it off.

@@ -16,6 +16,7 @@ Sevak stores configuration, themes, script plugins, workflows, logs, usage histo
 | **Theme files** | `%APPDATA%\sevak\themes\` | `~/Library/Application Support/sevak/themes/` | `~/.config/sevak/themes/` |
 | **Script plugins** | `%APPDATA%\sevak\plugins\` | `~/Library/Application Support/sevak/plugins/` | `~/.config/sevak/plugins/` |
 | **Workflows** | `%APPDATA%\sevak\workflows\` | `~/Library/Application Support/sevak/workflows/` | `~/.config/sevak/workflows/` |
+| **Shortcut takeover record** | `%APPDATA%\sevak\hotkey-takeover.json` | `~/Library/Application Support/sevak/hotkey-takeover.json` | `~/.local/share/sevak/hotkey-takeover.json` |
 
 Theme files, script plugins and workflows sit next to `config.toml` in the config folder; clipboard images, approvals and the data folders of plugins and workflows are in the data folder. On Windows and macOS the two folders are the same.
 

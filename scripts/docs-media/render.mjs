@@ -150,7 +150,7 @@ text("Actual Settings UI · sample configuration",80,1061,18,C.muted);
 await save("sevak-settings.png");
 
 const workflow=`<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="290" viewBox="0 0 1440 290" role="img" aria-labelledby="title desc"><title id="title">Open, search, act</title><desc id="desc">Press Alt plus Space to open Sevak. Type an app, file, calculation or web keyword. Press Enter to launch, open or copy.</desc><rect width="1440" height="290" rx="24" fill="#1b1932"/>${[
-  [64,"01","OPEN","Alt + Space","Bring Sevak into focus."],
+  [64,"01","OPEN","Win + Space","Bring Sevak into focus."],
   [530,"02","SEARCH","Type what you need","Apps, files, math or web."],
   [996,"03","ACT","Press Enter","Launch, open or copy."]
 ].map(([x,n,label,title,sub])=>`<g font-family="Segoe UI,Arial,sans-serif"><text x="${x}" y="62" font-size="18" font-weight="700" fill="#f5b52c">${n} / ${label}</text><text x="${x}" y="132" font-size="34" font-weight="700" fill="#f3f0ff">${title}</text><text x="${x}" y="188" font-size="23" fill="#aaa6c3">${sub}</text></g>`).join("")}<path d="M449 124h28m-9-9 10 9-10 9M915 124h28m-9-9 10 9-10 9" fill="none" stroke="#f5b52c" stroke-width="3"/></svg>`;
@@ -174,7 +174,7 @@ function frame(t) {
   }else if(s===1){
     text("01 / OPEN",72,370,26,C.amber,true); text("One shortcut.",72,445,76,C.ink,true); text("Ready to help.",72,539,76,C.ink,true);
     key("Alt",282,738,160,40); text("+",482,748,36,C.muted); key("Space",552,738,246,40);
-    shot(shots.ready,72,952,936); text("Press Alt + Space to open Sevak.",72,1240,34,C.muted);
+    shot(shots.ready,72,952,936); text("Press Win + Space to open Sevak.",72,1240,34,C.muted);
   }else if(s===2){
     text("02 / SEARCH",72,370,26,C.amber,true); text("Type a name.",72,445,76,C.ink,true); text("Find your app.",72,539,76,C.ink,true);
     shot(shots.apps,72,846,936); text("Use ↑ / ↓ to choose a result.",72,1240,34,C.muted); key("Enter to launch",72,1360,344,30);
@@ -184,7 +184,7 @@ function frame(t) {
   }else{
     icon(414,360,252); text("Back to your flow.",540,740,74,C.ink,true,"center");
     text("Apps  ·  Files  ·  Math  ·  Web",540,888,36,C.muted,false,"center");
-    key("Alt + Space",344,1070,392,40); text("github.com/ninad-k/Sevak",540,1280,34,C.amber,false,"center");
+    key("Win + Space",344,1070,392,40); text("github.com/ninad-k/Sevak",540,1280,34,C.amber,false,"center");
   }
   ctx.restore(); text("Illustrative walkthrough · sample results",540,1700,20,C.muted,false,"center");
 }
