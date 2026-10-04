@@ -41,6 +41,10 @@ pub(crate) trait ExpandClipboard {
     /// Replaces the text, asking the OS to keep it out of its own history.
     fn set_private(&self, text: &str) -> Result<()>;
     fn restore(&self, snapshot: &ClipboardSnapshot);
+    /// The clipboard's change counter, where the system has one.
+    fn sequence(&self) -> Option<u64>;
+    /// The clipboard's text.
+    fn text(&self) -> Option<String>;
 }
 
 pub(crate) struct SystemExpandClipboard;
@@ -58,6 +62,14 @@ impl ExpandClipboard for SystemExpandClipboard {
         if let Err(err) = clipboard::restore(snapshot) {
             tracing::warn!("could not put the clipboard back: {err}");
         }
+    }
+
+    fn sequence(&self) -> Option<u64> {
+        clipboard::sequence()
+    }
+
+    fn text(&self) -> Option<String> {
+        clipboard::get_text().ok().flatten()
     }
 }
 
@@ -84,11 +96,28 @@ pub(crate) fn replace_typed_text(
 
     let saved = clipboard.snapshot();
     clipboard.set_private(text)?;
+    let written = clipboard.sequence();
+    // Whether the clipboard still holds `text`, and not something copied since.
+    let still_ours = || {
+        clipboard::still_ours(
+            written,
+            clipboard.sequence(),
+            || clipboard.text(),
+            Some(text),
+        )
+    };
+    let put_back = || {
+        if still_ours() {
+            clipboard.restore(&saved);
+        } else {
+            tracing::debug!("the clipboard changed during the expansion; it was not restored");
+        }
+    };
 
     // The last look before pressing keys: waiting for the modifiers and the
     // clipboard took a moment, in which typing may have gone on.
     if !still_current() {
-        clipboard.restore(&saved);
+        put_back();
         return Ok(false);
     }
 
@@ -103,13 +132,13 @@ pub(crate) fn replace_typed_text(
     if delays {
         sleep(RESTORE_DELAY);
     }
-    clipboard.restore(&saved);
+    put_back();
     Ok(true)
 }
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
+    use std::cell::{Cell, RefCell};
 
     use super::*;
     use crate::PlatformError;
@@ -121,13 +150,24 @@ mod tests {
         clipboard_error: bool,
         backspace_error: bool,
         paste_error: bool,
+        sequence: Cell<u64>,
+        no_counter: bool,
+        /// Somebody copies this while the paste is being handled.
+        copied_meanwhile: Option<String>,
     }
 
     impl ExpandClipboard for Fake {
         fn snapshot(&self) -> ClipboardSnapshot {
             self.clipboard.borrow().clone()
         }
+        fn sequence(&self) -> Option<u64> {
+            (!self.no_counter).then(|| self.sequence.get())
+        }
+        fn text(&self) -> Option<String> {
+            self.clipboard.borrow().text.clone()
+        }
         fn set_private(&self, text: &str) -> Result<()> {
+            self.sequence.set(self.sequence.get() + 1);
             self.log.borrow_mut().push(format!("set {text}"));
             if self.clipboard_error {
                 return Err(PlatformError::Unsupported("clipboard"));
@@ -155,6 +195,10 @@ mod tests {
         }
         fn press_paste(&self) -> Result<()> {
             self.log.borrow_mut().push("paste".into());
+            if let Some(newer) = &self.copied_meanwhile {
+                self.clipboard.borrow_mut().text = Some(newer.clone());
+                self.sequence.set(self.sequence.get() + 1);
+            }
             if self.paste_error {
                 Err(PlatformError::Unsupported("keys"))
             } else {
@@ -202,6 +246,24 @@ mod tests {
             ["release", "set expanded", "backspace 4", "paste", "restore"]
         );
         assert_eq!(fake.clipboard.borrow().text.as_deref(), Some("old"));
+    }
+
+    #[test]
+    fn a_copy_made_during_the_expansion_is_not_overwritten_by_the_restore() {
+        for no_counter in [false, true] {
+            let fake = Fake {
+                copied_meanwhile: Some("newer".into()),
+                no_counter,
+                ..with_clipboard("old")
+            };
+            assert!(run(&fake, 4).unwrap());
+            assert_eq!(
+                fake.clipboard.borrow().text.as_deref(),
+                Some("newer"),
+                "no_counter: {no_counter}"
+            );
+            assert!(!fake.log.borrow().contains(&"restore".to_owned()));
+        }
     }
 
     #[test]

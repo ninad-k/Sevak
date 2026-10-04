@@ -33,6 +33,8 @@ pub(crate) const OPEN: &str = "/usr/bin/open";
 /// JPEG 2000 variants) to PNG.
 const SIPS: &str = "/usr/bin/sips";
 
+pub(crate) use paste::clipboard_sequence;
+
 pub(crate) struct MacProvider;
 
 impl MacProvider {

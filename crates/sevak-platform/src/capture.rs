@@ -229,16 +229,23 @@ pub(crate) fn capture_by_copy(
     }
 
     let pressed = driver.press_copy();
-    let content = match pressed {
+    let copied = match pressed {
         Ok(()) => wait_for_copy(clipboard, before, delays),
         Err(err) => {
             clipboard.restore(&saved);
             return SelectionCapture::Unavailable(format!("Could not press copy ({err})"));
         }
     };
+    let content = copied.content;
 
-    // Put the clipboard back before anything else, whatever was found.
-    clipboard.restore(&saved);
+    // Put the clipboard back before anything else, whatever was found, unless
+    // something else was copied since: that is newer than what is being
+    // restored.
+    if still_holds_the_copy(clipboard, copied.sequence, content.as_ref()) {
+        clipboard.restore(&saved);
+    } else {
+        tracing::debug!("the clipboard changed during the capture; it was not restored");
+    }
 
     match content {
         Some(content) => match Selection::from_parts(content.text, content.files) {
@@ -249,17 +256,23 @@ pub(crate) fn capture_by_copy(
     }
 }
 
+/// What waiting for the copy found.
+struct Copied {
+    /// The new, non-empty, non-secret copy, if there was one.
+    content: Option<CapturedContent>,
+    /// The clipboard's change counter when the app's copy was seen (or before
+    /// the keystroke if nothing was copied); `None` where there is no counter.
+    sequence: Option<u64>,
+}
+
 /// Polls until the clipboard holds a new, non-empty, non-secret copy, or
 /// [`COPY_TIMEOUT`] passes.
-fn wait_for_copy(
-    clipboard: &dyn CaptureClipboard,
-    before: Option<u64>,
-    delays: bool,
-) -> Option<CapturedContent> {
+fn wait_for_copy(clipboard: &dyn CaptureClipboard, before: Option<u64>, delays: bool) -> Copied {
     let deadline = Instant::now() + COPY_TIMEOUT;
     loop {
+        let now = clipboard.sequence();
         let changed = match before {
-            Some(before) => clipboard.sequence() != Some(before),
+            Some(before) => now != Some(before),
             // The clipboard was emptied: anything on it is the copy.
             None => true,
         };
@@ -267,16 +280,44 @@ fn wait_for_copy(
             let content = clipboard.read();
             if content.sensitive {
                 // A password field: not a selection, and never to be read.
-                return None;
+                return Copied {
+                    content: None,
+                    sequence: now,
+                };
             }
             if !content.is_empty() {
-                return Some(content);
+                return Copied {
+                    content: Some(content),
+                    sequence: now,
+                };
             }
         }
         if !delays || Instant::now() >= deadline {
-            return None;
+            return Copied {
+                content: None,
+                sequence: now,
+            };
         }
         sleep(POLL_INTERVAL);
+    }
+}
+
+/// Whether the clipboard still holds what the capture left on it, and not a
+/// newer copy. With a change counter any change since `sequence` is a newer
+/// copy. Without one the contents are compared: the app's copy (`content`), or
+/// nothing at all (or a secret, which is to be wiped) when nothing was copied.
+fn still_holds_the_copy(
+    clipboard: &dyn CaptureClipboard,
+    sequence: Option<u64>,
+    content: Option<&CapturedContent>,
+) -> bool {
+    if let (Some(then), Some(now)) = (sequence, clipboard.sequence()) {
+        return then == now;
+    }
+    let now = clipboard.read();
+    match content {
+        Some(copy) => !now.sensitive && now.text == copy.text && now.files == copy.files,
+        None => now.sensitive || now.is_empty(),
     }
 }
 
@@ -356,6 +397,8 @@ mod tests {
         interrupts_terminals: bool,
         log: RefCell<Vec<&'static str>>,
         polls_before_copy: Cell<u32>,
+        /// Somebody copies this right after the capture read the clipboard.
+        copied_after_read: RefCell<Option<String>>,
     }
 
     impl Fake {
@@ -374,6 +417,7 @@ mod tests {
                 interrupts_terminals: true,
                 log: RefCell::default(),
                 polls_before_copy: Cell::new(0),
+                copied_after_read: RefCell::new(None),
             }
         }
 
@@ -403,12 +447,19 @@ mod tests {
         }
         fn read(&self) -> CapturedContent {
             self.log.borrow_mut().push("read");
-            let clipboard = self.clipboard.borrow();
-            CapturedContent {
-                text: clipboard.text.clone(),
-                files: clipboard.files.clone(),
-                sensitive: self.sensitive,
+            let read = {
+                let clipboard = self.clipboard.borrow();
+                CapturedContent {
+                    text: clipboard.text.clone(),
+                    files: clipboard.files.clone(),
+                    sensitive: self.sensitive,
+                }
+            };
+            if let Some(newer) = self.copied_after_read.borrow_mut().take() {
+                self.clipboard.borrow_mut().text = Some(newer);
+                self.sequence.set(self.sequence.get() + 1);
             }
+            read
         }
         fn restore(&self, snapshot: &ClipboardSnapshot) {
             self.log.borrow_mut().push("restore");
@@ -498,6 +549,34 @@ mod tests {
         let fake = Fake::new(None);
         assert_eq!(fake.run(), SelectionCapture::Nothing);
         assert_eq!(fake.clipboard.borrow().text.as_deref(), Some("original"));
+    }
+
+    #[test]
+    fn a_copy_made_after_the_capture_is_not_overwritten_by_the_restore() {
+        for has_sequence in [true, false] {
+            let mut fake = Fake::new(Some(Fake::text("picked")));
+            fake.has_sequence = has_sequence;
+            *fake.copied_after_read.borrow_mut() = Some("newer".into());
+            assert_eq!(selected_text(&fake.run()).as_deref(), Some("picked"));
+            assert_eq!(
+                fake.clipboard.borrow().text.as_deref(),
+                Some("newer"),
+                "has_sequence: {has_sequence}"
+            );
+            assert!(!fake.log.borrow().contains(&"restore"));
+        }
+    }
+
+    #[test]
+    fn a_secret_copy_is_still_wiped_by_the_restore() {
+        // The clipboard then holds the secret, not something newer.
+        for has_sequence in [true, false] {
+            let mut fake = Fake::new(Some(Fake::text("hunter2")));
+            fake.sensitive = true;
+            fake.has_sequence = has_sequence;
+            assert_eq!(fake.run(), SelectionCapture::Nothing);
+            assert_eq!(fake.clipboard.borrow().text.as_deref(), Some("original"));
+        }
     }
 
     #[test]
