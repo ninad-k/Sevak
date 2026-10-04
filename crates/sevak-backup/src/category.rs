@@ -145,6 +145,7 @@ pub const SETTINGS_TABLES: &[&str] = &[
     "file_buffer",
     "contacts",
     "dictionary",
+    "window_management",
 ];
 
 /// The `[[hotkey]]` entries: part of [`Category::Settings`].
@@ -158,8 +159,11 @@ pub const WEB_SEARCH_KEY: &str = "web_search";
 
 /// Sections of `config.toml` that are left out of every backup on purpose.
 /// `onepassword` names the user's 1Password account and the path of its tool;
-/// nothing from 1Password travels in a backup. (Restore ignores these too.)
-pub const LEFT_OUT_TABLES: &[&str] = &["onepassword"];
+/// nothing from 1Password travels in a backup. `ai` names the user's AI
+/// provider account and endpoint (the API key is stored elsewhere and is never
+/// in a backup either); set it up again after a restore.
+/// (Restore ignores these too.)
+pub const LEFT_OUT_TABLES: &[&str] = &["onepassword", "ai"];
 
 /// The category a top-level `config.toml` key belongs to, or `None` when it is
 /// not in the allowlist.
