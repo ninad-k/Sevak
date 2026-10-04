@@ -51,7 +51,7 @@ Setting `accent` derives related CSS variables:
 
 `opacity` fades only the search bar's background; text stays fully opaque. It requires a window that supports transparency, which Sevak uses for rounded corners and shadow anyway.
 
-Sevak does not offer background blur (Acrylic, Mica, vibrancy) because it would blur the transparent margin around the bar, creating a square frame effect.
+`blur = true` (**Settings → Appearance → Frosted-glass blur**) blurs the desktop behind the search bar: Windows Acrylic, macOS vibrancy; it is ignored on Linux. The blur is drawn by the operating system, so it only shows where the bar is see-through: lower `opacity` below 100 to see it. On Windows 11 the system rounds the corners, so `radius` is fixed at 8 px while blur is on. See [Configuration](configuration.md) and [Settings](settings.md#frosted-glass-blur).
 
 `font_size` scales the whole search bar (input, subtitles, row height), not only the result titles. It does not affect the Settings window.
 
