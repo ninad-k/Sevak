@@ -3925,6 +3925,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "sevak-backup"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "dirs 7.0.0",
+ "flate2",
+ "serde",
+ "serde_json",
+ "sevak-core",
+ "sevak-platform",
+ "sevak-plugins",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.21",
+ "toml 1.1.6+spec-1.1.0",
+ "toml_edit 0.25.15+spec-1.1.0",
+ "tracing",
+ "zip",
+]
+
+[[package]]
 name = "sevak-core"
 version = "0.1.0"
 dependencies = [
