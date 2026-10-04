@@ -8,6 +8,8 @@
     "build": "vite build --config ui/vite.config.ts",
     "check": "svelte-check --tsconfig ui/tsconfig.json",
     "icons": "node scripts/generate-icons.mjs",
+    "installer-images": "node scripts/generate-installer-images.mjs",
+    "test:scripts": "node --test \"scripts/*.test.mjs\"",
     "tauri": "tauri",
     "docs:pdf": "node scripts/docs-pdf.mjs"
   },

@@ -201,7 +201,7 @@ Sevak will create a fresh file on next use.
 ### Windows
 
 1. Open Settings → Apps → Installed apps, find Sevak, and click Uninstall.
-   - The installer removes Sevak itself but keeps config and data.
+   - The uninstaller removes Sevak itself but keeps config and data. Its "Also delete the web cache" option only clears the web view's cache.
 2. To also remove config and data:
 
    ```powershell

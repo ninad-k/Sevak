@@ -48,6 +48,8 @@ documentation and larger placements.
   as GitHub has no API for it)
 - [Documentation images and reel](media/README.md)
 - [Original design notes](https://github.com/ninad-k/Sevak/blob/main/assets/brand/design-notes.txt)
+- Windows installer artwork (`src-tauri/installer/*.bmp`), drawn from the icon by
+  `npm run installer-images`; see [The Windows installer](development.md#the-windows-installer)
 
 Run `npm run icons` after updating the canonical icon. Documentation images
 have a separate [regeneration workflow](media/README.md#regenerate-the-media).

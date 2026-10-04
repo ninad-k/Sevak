@@ -63,11 +63,23 @@
     "windows": {
       "webviewInstallMode": { "type": "downloadBootstrapper" },
       "nsis": {
-        "installMode": "currentUser",
+        "installMode": "both",
+        "template": "installer/installer.nsi",
+        "installerHooks": "installer/hooks.nsh",
+        "languages": ["English"],
+        "customLanguageFiles": { "English": "installer/English.nsh" },
+        "displayLanguageSelector": false,
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
+        "sidebarImage": "installer/sidebar.bmp",
+        "headerImage": "installer/header.bmp",
+        "uninstallerHeaderImage": "installer/header.bmp",
         "startMenuFolder": "Sevak"
       },
       "wix": {
-        "upgradeCode": "16b13fde-6fa0-4bf2-836a-9af38755bfec"
+        "upgradeCode": "16b13fde-6fa0-4bf2-836a-9af38755bfec",
+        "bannerPath": "installer/wix-banner.bmp",
+        "dialogImagePath": "installer/wix-dialog.bmp"
       }
     },
     "macOS": {

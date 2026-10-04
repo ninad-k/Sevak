@@ -280,6 +280,22 @@ Windows or notarized by Apple. Read the
 [platform installation notes](install.md) for the current status and make
 sure the package came from the project's release page.
 
+## The Windows installer asks for administrator permission
+
+Only the **Install for all users on this PC** choice needs it: that installs to
+Program Files for every account. Choose **Install for me only** (the default) and
+Sevak installs to `%LOCALAPPDATA%\Sevak` without any prompt. Updating a copy that
+is installed for all users prompts too, since Sevak is in Program Files; a copy
+installed for you only never does. See [Windows](install.md#windows-10-11).
+
+## Sevak is installed twice on Windows
+
+An installation for you only and one for all users can exist side by side, for
+example after choosing different options in two runs. They compete for the same
+hotkey. Run the installer again and choose to **replace** the other copy (your
+settings in `%APPDATA%\sevak` are kept), or uninstall one in Settings → Apps.
+Both appear there as "Sevak".
+
 ## Does Sevak work offline?
 
 App search, indexed file search, calculations, contacts, the dictionary and

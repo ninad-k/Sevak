@@ -167,7 +167,7 @@ Choose a package from [GitHub Releases](https://github.com/ninad-k/Sevak/release
 
 | Platform | Package | Instructions |
 |---|---|---|
-| Windows 10 / 11 | Per-user `.exe` installer or `.msi` | [Windows](docs/install.md#windows-10--11) |
+| Windows 10 / 11 | `.exe` installer (for you or all users) or `.msi` | [Windows](docs/install.md#windows-10--11) |
 | macOS 11+ | Universal `.dmg` for Apple silicon and Intel | [macOS](docs/install.md#macos-11) |
 | Ubuntu 22.04+ / Debian | `.deb` | [Ubuntu / Debian](docs/install.md#ubuntu-2204--debian) |
 | Fedora 39+ | `.rpm` | [Fedora](docs/install.md#fedora-39) |
