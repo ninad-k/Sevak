@@ -37,6 +37,7 @@ pub mod tasks;
 pub mod terminal;
 pub mod thumbnail;
 pub mod trash;
+pub mod window_manager;
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -66,6 +67,7 @@ pub use session::{DisplayServer, HotkeyStrategy};
 pub use system::{SettingsPage, SystemCommand};
 pub use tasks::{Drive, ProcessInfo, RunningApp, Task, TaskKind};
 pub use terminal::ShellQuoting;
+pub use window_manager::{RestoreMemory, WindowId, WindowInfo, WindowState, WindowSupport};
 
 /// The [`PlatformProvider`] for the operating system Sevak was built for.
 pub fn native_provider() -> Box<dyn PlatformProvider> {

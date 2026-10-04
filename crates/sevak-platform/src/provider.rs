@@ -3,6 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use sevak_core::preview::{RenderKind, Rendered};
+use sevak_core::window_layout::{Monitor, Rect};
 use sevak_core::{AppEntry, ClipContent, IconData, IconSource, LaunchTarget, ShellConfig};
 
 use crate::browsers::BrowserRoot;
@@ -18,6 +19,7 @@ use crate::os_search::{OsHit, OsSearchError, OsSearchRequest};
 use crate::paste::{ClipboardRead, ForegroundApp, PasteOutcome, PasteSupport, UNSUPPORTED_REASON};
 use crate::system::{SettingsPage, SystemCommand};
 use crate::tasks::{Drive, ProcessInfo, RunningApp, Task, TaskKind};
+use crate::window_manager::{WindowId, WindowInfo, WindowState, WindowSupport};
 
 /// Everything Sevak needs from the operating system to find and start things.
 ///
@@ -390,5 +392,60 @@ pub trait PlatformProvider: Send + Sync {
     /// dictionary plugin then uses its own word list.
     fn system_spelling(&self, _word: &str) -> Option<Spelling> {
         None
+    }
+
+    /// Whether window management (snapping the previous window, the window
+    /// switcher) can work on this system right now, and if not, why in words
+    /// for the user: a Wayland session, a macOS permission the user has yet to
+    /// give. Cheap.
+    fn window_support(&self) -> WindowSupport {
+        WindowSupport::Unavailable(crate::window_manager::UNSUPPORTED_REASON.to_owned())
+    }
+
+    /// The open top-level windows, most recently used first (as far as the OS
+    /// tells), without Sevak's own and without tool windows, panels and
+    /// hidden helper windows. Can take a moment; call it from a background
+    /// thread.
+    fn list_windows(&self) -> Result<Vec<WindowInfo>> {
+        Err(crate::error::PlatformError::Unsupported("listing windows"))
+    }
+
+    /// Brings a window of [`PlatformProvider::list_windows`] to the front
+    /// (restoring it first if it is minimized).
+    fn focus_window(&self, _window: &WindowId) -> Result<()> {
+        Err(crate::error::PlatformError::Unsupported(
+            "switching windows",
+        ))
+    }
+
+    /// The window that had focus when the launcher was shown, remembered by
+    /// [`PlatformProvider::remember_foreground_app`]: the one the layouts act
+    /// on. Fails with an explanation when there is none (or it is the desktop).
+    fn target_window(&self) -> Result<WindowState> {
+        Err(crate::error::PlatformError::Unsupported(
+            "finding the previous window",
+        ))
+    }
+
+    /// Where a window is now (visible rectangle, state). Fails when it has
+    /// closed.
+    fn window_state(&self, _window: &WindowId) -> Result<WindowState> {
+        Err(crate::error::PlatformError::Unsupported(
+            "reading a window's position",
+        ))
+    }
+
+    /// Moves and resizes a window so that its *visible* rectangle is `rect`
+    /// (the OS code compensates invisible borders, restores a maximized or
+    /// minimized window first, and fails with an explanation when the window
+    /// belongs to a more privileged process).
+    fn set_window_rect(&self, _window: &WindowId, _rect: Rect) -> Result<()> {
+        Err(crate::error::PlatformError::Unsupported("moving windows"))
+    }
+
+    /// The displays with their work areas (bounds minus taskbar, dock and menu
+    /// bar) and scale factors.
+    fn list_monitors(&self) -> Result<Vec<Monitor>> {
+        Err(crate::error::PlatformError::Unsupported("listing displays"))
     }
 }
