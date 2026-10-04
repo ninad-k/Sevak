@@ -1,6 +1,6 @@
 site_name: Sevak Documentation
 site_description: User guide and reference for Sevak, a keyboard-first desktop launcher for Windows, macOS and Linux.
-site_url: https://ninad-k.github.io/Sevak/
+site_url: https://ninad-k.github.io/Sevak/docs/
 repo_url: https://github.com/ninad-k/Sevak
 repo_name: ninad-k/Sevak
 edit_uri: edit/main/docs/

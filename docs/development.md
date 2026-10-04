@@ -308,7 +308,7 @@ The PDF script requires Chrome or Chromium; set `CHROME_PATH` if it's not in the
 
 **Publishing:**
 
-The site is built and deployed to [GitHub Pages](https://ninad-k.github.io/Sevak/) by `.github/workflows/docs.yml` on every push to `main`.
+The site is built and deployed to [GitHub Pages](https://ninad-k.github.io/Sevak/docs/) by `.github/workflows/docs.yml` on every push to `main`. The same workflow publishes the product page from `landing/` at the site root, [ninad-k.github.io/Sevak](https://ninad-k.github.io/Sevak/), with the documentation under `/docs/`.
 
 **Linux testing in WSL:**
 
