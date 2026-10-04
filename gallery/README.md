@@ -58,6 +58,20 @@ standard-library only, and wait for your permission before anything runs:
 | `lorem-ipsum` | `lorem` | placeholder text (`lorem 3 paragraphs`) | Python 3 |
 | `hash-calculator` | `hash` | MD5, SHA-1, SHA-256, SHA-512, SHA3, BLAKE2b, CRC-32 of text or a file | Python 3 |
 
+**Native extensions** (source in `examples/native/<id>/`; compiled Rust programs,
+one `.sevakext` package per platform in `extensions/<id>/`). All are offline,
+declare no permissions, and wait for your permission before the first run:
+
+| Id | Keyword | What it does |
+|---|---|---|
+| `jwt` | `jwt` | decode a JSON Web Token: expiry, algorithm, header, claims (signature not verified) |
+| `cron` | `cron` | explain a cron expression and list the next five runs (`cron */15 9-17 * * 1-5`) |
+| `regex` | `regex` | test a regex against sample text, with positions and capture groups (`regex (\d+) => a1 b22`) |
+
+They are built for every platform by `.github/workflows/native-extensions.yml`.
+A package for a platform appears here only once it was built by that workflow;
+Sevak shows "no build for your platform" for the rest.
+
 **Themes** (`themes/<Name>.toml`): the eight built-in ones (Sevak Light and
 Dark, Nord, Dracula, Solarized Light and Dark, Gruvbox, High Contrast) and
 Tokyo Night, Catppuccin Mocha, Catppuccin Latte, Rosé Pine, One Dark, Everforest

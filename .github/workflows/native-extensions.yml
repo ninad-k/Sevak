@@ -1,0 +1,410 @@
+name: Native extensions
+
+# Builds, tests and packages the native (Rust) extensions in examples/native/
+# for every platform Sevak supports. See "Building and publishing native
+# extensions with CI" in docs/writing-extensions-in-rust.md.
+#
+#   pull request touching examples/native/**   fmt, clippy, tests, and a build and
+#                                              package of every platform. Nothing is
+#                                              committed or published.
+#   workflow_dispatch                          the same for one extension (or all);
+#                                              with `publish` ticked, from main only,
+#                                              it also opens a pull request that adds
+#                                              the packages to gallery/extensions/<id>/
+#                                              and the entry to gallery/index.json.
+#
+# Why a build here and not on a maintainer's computer: every program in the
+# gallery should come from public source by a public command (the gallery's
+# review rule), and a package is only as trustworthy as that link. The builds
+# are made reproducible on purpose (below), so anyone can rebuild a tag and
+# compare SHA-256s.
+#
+# Honest status: this workflow could not be run before it was merged (GitHub
+# Actions cannot be run locally). The pieces were exercised by hand on Windows
+# (the build flags, the packaging commands, the smoke test, the gallery checks);
+# the cross-compilation for windows-aarch64, macos-x86_64 and linux-aarch64 and
+# the publish job are the parts that have only been reviewed, not run.
+
+on:
+  pull_request:
+    paths:
+      - "examples/native/**"
+      - "crates/sevak-extension-sdk/**"
+      - "crates/sevak-ext/**"
+      - "scripts/gallery-add-native.mjs"
+      - ".github/workflows/native-extensions.yml"
+  workflow_dispatch:
+    inputs:
+      extension:
+        description: "Extension id (a folder in examples/native), or all"
+        type: string
+        default: all
+      publish:
+        description: "Maintainers: open a pull request adding the packages to gallery/ (only from main)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: native-extensions-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Read-only by default; only the publish job below can write, and only there.
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  RUST_BACKTRACE: "1"
+
+jobs:
+  # Which extensions to run: every folder in examples/native with a plugin.toml
+  # (a new extension needs no change here), or the one that was asked for.
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    outputs:
+      ids: ${{ steps.ids.outputs.ids }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: ids
+        env:
+          # An input is data: it goes through the environment, never into the script text.
+          REQUESTED: ${{ github.event.inputs.extension }}
+        run: |
+          set -euo pipefail
+          all=$(for dir in examples/native/*/; do
+            if [ -f "${dir}plugin.toml" ]; then basename "$dir"; fi
+          done)
+          requested="${REQUESTED:-all}"
+          if [ "$requested" = all ]; then
+            ids="$all"
+          else
+            printf '%s\n' "$all" | grep -Fxq -- "$requested" ||
+              { echo "::error::there is no extension '$requested' in examples/native"; exit 1; }
+            ids="$requested"
+          fi
+          json=$(printf '%s\n' $ids | jq -R . | jq -sc .)
+          echo "ids=$json" >> "$GITHUB_OUTPUT"
+          echo "Extensions: $json"
+
+  test:
+    name: Test ${{ matrix.id }}
+    needs: plan
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        id: ${{ fromJSON(needs.plan.outputs.ids) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-rust
+      # Test builds may be cached; the release builds below deliberately are not.
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: examples/native/${{ matrix.id }}
+      # --locked: the committed Cargo.lock is what ships. A change to a
+      # dependency has to be a change to that file in the pull request.
+      - name: Format
+        working-directory: examples/native/${{ matrix.id }}
+        run: cargo fmt --check
+      - name: Clippy
+        working-directory: examples/native/${{ matrix.id }}
+        run: cargo clippy --locked --all-targets -- -D warnings
+      # Unit tests, and tests/host.rs: the built program through Sevak's real
+      # script-plugin host (approval, pipes, closed actions).
+      - name: Test
+        working-directory: examples/native/${{ matrix.id }}
+        run: cargo test --locked
+
+  build:
+    name: Build ${{ matrix.id }} ${{ matrix.platform.key }}
+    needs: plan
+    runs-on: ${{ matrix.platform.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        id: ${{ fromJSON(needs.plan.outputs.ids) }}
+        platform:
+          # `smoke` is true where the runner can run the program it builds.
+          - { key: windows-x86_64,  os: windows-latest, target: x86_64-pc-windows-msvc,    exe: ".exe", smoke: true }
+          # Cross builds on the x64 / arm64 runners: the MSVC ARM64 tools ship with
+          # the Windows runner image's Visual Studio. Cannot be run on the runner.
+          - { key: windows-aarch64, os: windows-latest, target: aarch64-pc-windows-msvc,   exe: ".exe", smoke: false }
+          # macos-latest is Apple silicon; the x86_64 build is a cross build.
+          - { key: macos-x86_64,    os: macos-latest,   target: x86_64-apple-darwin,       exe: "",     smoke: false }
+          - { key: macos-aarch64,   os: macos-latest,   target: aarch64-apple-darwin,      exe: "",     smoke: true }
+          # 22.04 on purpose: the program needs glibc 2.35 or newer, not whatever
+          # the newest runner has.
+          - { key: linux-x86_64,    os: ubuntu-22.04,   target: x86_64-unknown-linux-gnu,  exe: "",     smoke: true }
+          - { key: linux-aarch64,   os: ubuntu-22.04,   target: aarch64-unknown-linux-gnu, exe: "",     smoke: false }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-rust
+        with:
+          targets: ${{ matrix.platform.target }}
+
+      - name: Install the arm64 Linux cross linker
+        if: matrix.platform.key == 'linux-aarch64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu
+
+      # No build cache here on purpose: a release build starts from the locked
+      # sources and the pinned toolchain, nothing else.
+      #
+      # Reproducibility, as far as it goes:
+      #   --locked                  exactly the committed Cargo.lock
+      #   the toolchain             pinned by rust-toolchain.toml
+      #   --remap-path-prefix       the checkout, ~/.cargo and ~/.rustup paths do not
+      #                             end up in panic messages, so the runner's folder
+      #                             names are not in the program
+      #   /Brepro (MSVC)            no link timestamp in the .exe
+      #   opt-level, lto, codegen-units = 1, strip = true, panic = "unwind"
+      #                             in each Cargo.toml's [profile.release]
+      #   SOURCE_DATE_EPOCH         the commit time, for any tool that honours it
+      #                             (rustc itself does not embed a time)
+      # Two builds of the same commit on the same runner image give identical bytes
+      # (checked on Windows by hand). Different runner images or toolchains may
+      # not: compare against a build made by this workflow, not your own.
+      - name: Build
+        id: build
+        shell: bash
+        env:
+          ID: ${{ matrix.id }}
+          TARGET: ${{ matrix.platform.target }}
+          KEY: ${{ matrix.platform.key }}
+          EXE: ${{ matrix.platform.exe }}
+        run: |
+          set -euo pipefail
+          SOURCE_DATE_EPOCH="$(git log -1 --pretty=%ct)"
+          export SOURCE_DATE_EPOCH
+          if [ "$RUNNER_OS" = Windows ]; then
+            cargo_home="${CARGO_HOME:-$USERPROFILE\\.cargo}"
+            rustup_home="${RUSTUP_HOME:-$USERPROFILE\\.rustup}"
+            extra="-C link-arg=/Brepro"
+          else
+            cargo_home="${CARGO_HOME:-$HOME/.cargo}"
+            rustup_home="${RUSTUP_HOME:-$HOME/.rustup}"
+            extra=""
+          fi
+          export RUSTFLAGS="--remap-path-prefix=$GITHUB_WORKSPACE=/build --remap-path-prefix=$cargo_home=/cargo --remap-path-prefix=$rustup_home=/rustup $extra"
+          if [ "$KEY" = linux-aarch64 ]; then
+            export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
+          fi
+          cd "examples/native/$ID"
+          cargo build --release --locked --target "$TARGET"
+          # The program's name is the [[bin]] name in Cargo.toml, which is the id.
+          built="target/$TARGET/release/$ID$EXE"
+          test -f "$built"
+          mkdir -p "$GITHUB_WORKSPACE/stage"
+          cp "$built" "$GITHUB_WORKSPACE/stage/$ID-$KEY$EXE"
+          echo "program=$GITHUB_WORKSPACE/stage/$ID-$KEY$EXE" >> "$GITHUB_OUTPUT"
+
+      # Where the runner can run the program: start it, ask one question, ask
+      # it to stop, and check it answered in the protocol. (Where it cannot,
+      # tests/host.rs on Linux has already exercised the same source.)
+      - name: Smoke test
+        if: matrix.platform.smoke
+        shell: bash
+        env:
+          PROGRAM: ${{ steps.build.outputs.program }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' '{"type":"query","request_id":1,"input":""}' '{"type":"shutdown"}' |
+            "$PROGRAM" > smoke.out
+          cat smoke.out
+          grep -q '"type":"results"' smoke.out
+
+      - name: Record the program's SHA-256
+        shell: bash
+        env:
+          PROGRAM: ${{ steps.build.outputs.program }}
+          LABEL: ${{ matrix.id }} ${{ matrix.platform.key }}
+        run: |
+          # node is on every runner; sha256sum is not on macOS.
+          hash=$(node -e "console.log(require('crypto').createHash('sha256').update(require('fs').readFileSync(process.argv[1])).digest('hex'))" "$PROGRAM")
+          size=$(node -e "console.log(require('fs').statSync(process.argv[1]).size)" "$PROGRAM")
+          {
+            echo "| Program | Bytes | SHA-256 |"
+            echo "|---|---|---|"
+            echo "| $LABEL | $size | \`$hash\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bin-${{ matrix.id }}-${{ matrix.platform.key }}
+          path: stage/*
+          if-no-files-found: error
+          retention-days: 14
+
+  # One .sevakext per platform, from the programs built above, with Sevak's own
+  # packer and validator (the same code as the app). Same checks as an install.
+  package:
+    name: Package ${{ matrix.id }}
+    needs: [plan, build]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        id: ${{ fromJSON(needs.plan.outputs.ids) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-rust
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      # The packer is a tool, not part of any package; a cache is fine here.
+      - name: Build sevak-ext
+        run: cargo build --release --locked -p sevak-ext
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: bin-${{ matrix.id }}-*
+          path: bins
+
+      - name: Pack
+        env:
+          ID: ${{ matrix.id }}
+        run: |
+          set -euo pipefail
+          args=()
+          for key in windows-x86_64 windows-aarch64 macos-x86_64 macos-aarch64 linux-x86_64 linux-aarch64; do
+            exe=""
+            case "$key" in windows-*) exe=".exe" ;; esac
+            program="bins/bin-$ID-$key/$ID-$key$exe"
+            [ -f "$program" ] || { echo "::error::no build of $ID for $key"; exit 1; }
+            args+=(--binary "$key=$program")
+          done
+          mkdir dist
+          target/release/sevak-ext pack "examples/native/$ID" --split --out dist "${args[@]}"
+          # Every package, opened and checked the way the app does on install.
+          for package in dist/*.sevakext; do
+            target/release/sevak-ext validate "$package"
+          done
+          # The gallery entry for these packages, kept for the publish job.
+          target/release/sevak-ext entry dist/*.sevakext > "dist/entry-$ID.json"
+          cat "dist/entry-$ID.json"
+
+      - name: Summary
+        env:
+          ID: ${{ matrix.id }}
+        run: |
+          {
+            echo "### $ID packages"
+            echo
+            echo "| Package | Bytes | SHA-256 |"
+            echo "|---|---|---|"
+            for package in dist/*.sevakext; do
+              echo "| \`$(basename "$package")\` | $(wc -c < "$package" | tr -d ' ') | \`$(sha256sum "$package" | cut -d' ' -f1)\` |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: packages-${{ matrix.id }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
+
+  # Maintainers only (a workflow_dispatch needs write access), and only from
+  # main: commits the packages and the index entries to a new branch and opens
+  # a pull request. It never pushes to main and never merges.
+  publish-pr:
+    name: Open gallery pull request
+    needs: [plan, package]
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    # The only job with write access.
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The token is not left in .git/config while the tests run; the push
+          # below passes it explicitly.
+          persist-credentials: false
+      - uses: ./.github/actions/setup-rust
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: packages-*
+          path: packages
+
+      - name: Add the packages and entries
+        id: add
+        env:
+          IDS: ${{ needs.plan.outputs.ids }}
+        run: |
+          set -euo pipefail
+          branch="gallery/native-extensions-${GITHUB_RUN_ID}"
+          git switch -c "$branch"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          for id in $(echo "$IDS" | jq -r '.[]'); do
+            dir="gallery/extensions/$id"
+            # Old versions are replaced, not kept: the folder holds only what the entry lists.
+            rm -rf "$dir"
+            mkdir -p "$dir"
+            cp "packages/packages-$id"/*.sevakext "$dir/"
+            node scripts/gallery-add-native.mjs "packages/packages-$id/entry-$id.json"
+          done
+          # --update refreshes the hashes of the committed packages in the index;
+          # the plain run after it is the real check. The diff shows any change
+          # outside the entries that were asked for.
+          node scripts/gallery-check.mjs --update
+          node scripts/gallery-check.mjs
+          git status --short
+          git diff --stat
+
+      # Opens every package and compares it with its entry; checks that the
+      # keyword is free.
+      - name: Gallery tests
+        run: cargo test --locked -p sevak-plugins --test gallery_content
+
+      - name: Commit, push and open the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.add.outputs.branch }}
+          IDS: ${{ needs.plan.outputs.ids }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          names=$(echo "$IDS" | jq -r 'join(", ")')
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add gallery
+          git commit -m "feat(gallery): add native extension packages for $names"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "$BRANCH"
+          {
+            echo "Adds the built packages of: $names."
+            echo
+            echo "- Built by $RUN_URL from commit \`$SHA\`, with the pinned toolchain and \`--locked\`."
+            echo "- Source: \`examples/native/<id>\` at that commit. Every package was validated with \`sevak-ext validate\`."
+            echo "- \`gallery-check\` and \`cargo test -p sevak-plugins --test gallery_content\` passed in that run."
+            echo
+            echo "SHA-256 of every package is in the run's job summaries and in \`gallery/index.json\`."
+            echo "Reviewers: rebuild the commit and compare (see docs/writing-extensions-in-rust.md)."
+            echo
+            echo "Pull requests opened with the workflow token do not start other workflows."
+            echo "Close and reopen this pull request to run CI before merging."
+          } > "$RUNNER_TEMP/body.md"
+          gh pr create --repo "$REPO" --base main --head "$BRANCH" \
+            --title "feat(gallery): add native extension packages for $names" \
+            --body-file "$RUNNER_TEMP/body.md"

@@ -88,6 +88,30 @@ The palette is from [Catppuccin](https://github.com/catppuccin/palette), under
 its MIT license; the Sevak adaptation and license are included in this repo.
 It needs no script runtime or plugin approval.
 
+## Native tools (compiled Rust)
+
+Three tools are native extensions: compiled programs, so they need no Node.js,
+Python or other runtime. They appear in **Settings → Extensions** (and `ext` in
+the launcher), and Sevak asks before the first run, showing the program's
+SHA-256. All three work offline and declare **no permissions**; their source is
+in [`examples/native`](https://github.com/ninad-k/Sevak/tree/main/examples/native).
+A native extension is not sandboxed (see the
+[security model](writing-extensions-in-rust.md#security-model)); reading the
+short source is the way to check these.
+
+| Extension | Try | What it does |
+|---|---|---|
+| **JWT decoder** | `jwt eyJhbGciOi...` | Shows whether a token is expired, its algorithm, header, claims (times as dates) and signature. Enter copies a value. The signature is **not** verified |
+| **Cron explainer** | `cron */15 9-17 * * 1-5` | Says what a cron expression means and lists the next five run times (UTC, or add an offset such as `+05:30`) |
+| **Regex tester** | `regex (\d+)-(\d+) => call 555-1234` | Lists every match with its position and capture groups. Rust `regex` syntax: no lookaround or backreferences, but no pattern can hang |
+
+Each package is built per platform by
+[CI](writing-extensions-in-rust.md#building-and-publishing-native-extensions-with-ci).
+A computer with no build for its platform sees "no build for your platform".
+The online catalog of a released Sevak lists what was committed at that
+release's tag; the current list is in the
+[gallery README](https://github.com/ninad-k/Sevak/tree/main/gallery).
+
 ## Tools already built into Sevak
 
 Several common extension categories are already available:
@@ -110,7 +134,8 @@ this pack.
 ## Disable or develop an extension
 
 Switch it off under **Settings → Plugins**. IDs for this pack are
-`script:color-tools`, `script:pomodoro`, `script:translate` and `script:tauri-docs`.
+`script:color-tools`, `script:pomodoro`, `script:translate` and `script:tauri-docs`
+(and `script:jwt`, `script:cron` and `script:regex` for the native tools).
 The `script` family disables all script plugins. Removing the plugin folder
 and reloading uninstalls it; saved Pomodoro state stays in the data directory.
 
