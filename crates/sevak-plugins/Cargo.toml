@@ -6,6 +6,7 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 rust-version.workspace = true
+publish = false
 
 # A tiny script plugin for tests/script_plugins.rs. A binary target is the one
 # kind of helper cargo builds before an integration test and locates for it
