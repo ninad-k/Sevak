@@ -8,9 +8,10 @@
 //! separate from the hand-edited config.
 
 use std::collections::BTreeMap;
-use std::fs;
 use std::io;
 use std::path::PathBuf;
+
+use sevak_core::bounded_read::{read_to_string_capped, MAX_STATE_BYTES};
 
 use serde::{Deserialize, Serialize};
 
@@ -32,7 +33,7 @@ impl ApprovalStore {
     }
 
     fn read(&self) -> Record {
-        match fs::read_to_string(&self.path) {
+        match read_to_string_capped(&self.path, MAX_STATE_BYTES) {
             Ok(text) => serde_json::from_str(&text).unwrap_or_else(|err| {
                 // Treat a damaged file as "nothing approved yet": plugins ask again.
                 tracing::warn!(path = %self.path.display(), %err, "script plugin approvals are unreadable");
@@ -65,6 +66,8 @@ impl ApprovalStore {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use super::*;
 
     #[test]
@@ -106,6 +109,17 @@ mod tests {
         fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
         store.approve("script:b", "node b.js").unwrap();
         assert_eq!(mode(&path), 0o600);
+    }
+
+    #[test]
+    fn an_oversized_file_means_nothing_is_approved() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("approvals.json");
+        let mut text = String::from("{\"approved\": {\"script:a\": \"x\"}}");
+        text.push_str(&" ".repeat(MAX_STATE_BYTES as usize));
+        fs::write(&path, text).unwrap();
+        let store = ApprovalStore::new(path);
+        assert!(!store.is_approved("script:a", "x"));
     }
 
     #[test]

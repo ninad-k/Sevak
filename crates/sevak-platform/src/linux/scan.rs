@@ -5,6 +5,7 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
+use sevak_core::bounded_read::{read_capped, MAX_DESCRIPTION_BYTES};
 use sevak_core::{AppEntry, IconSource, LaunchTarget};
 
 use crate::desktop_entry::{self, DesktopEntry, Locale};
@@ -97,7 +98,7 @@ fn collect_desktop_files(dir: &Path, out: &mut Vec<PathBuf>, depth: usize) {
 }
 
 fn read_entry(path: &Path, locale: &Locale) -> Result<DesktopEntry, String> {
-    let bytes = fs::read(path).map_err(|err| err.to_string())?;
+    let bytes = read_capped(path, MAX_DESCRIPTION_BYTES).map_err(|err| err.to_string())?;
     // Desktop files must be UTF-8, but one stray byte should not lose the app.
     let content = String::from_utf8_lossy(&bytes);
     desktop_entry::parse(&content, locale).map_err(|err| err.to_string())

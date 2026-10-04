@@ -10,6 +10,7 @@ use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
 
 use serde::Deserialize;
+use sevak_core::bounded_read::{read_to_string_capped, MAX_PLUGIN_MANIFEST_BYTES};
 use sevak_platform::process::{pin_program, script_runner, ScriptRunner};
 
 /// The protocol version this Sevak speaks (`protocol` in the manifest and in
@@ -110,7 +111,7 @@ impl Manifest {
     /// when the manifest gives no `id` or `name`.
     pub fn load(dir: &Path) -> Result<Self, String> {
         let path = dir.join(MANIFEST_FILE);
-        let text = std::fs::read_to_string(&path)
+        let text = read_to_string_capped(&path, MAX_PLUGIN_MANIFEST_BYTES)
             .map_err(|err| format!("cannot read {}: {err}", path.display()))?;
         let folder = dir
             .file_name()
@@ -510,6 +511,19 @@ mod tests {
         let argv = parse("[\"./run\"]").resolve_argv(dir.path()).unwrap();
         assert_eq!(Path::new(&argv[0]), dir.path().join("./run"));
         assert!(parse("[\"../run\"]").resolve_argv(dir.path()).is_err());
+    }
+
+    #[test]
+    fn an_oversized_manifest_is_not_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let filler = "#".repeat(MAX_PLUGIN_MANIFEST_BYTES as usize);
+        std::fs::write(
+            dir.path().join(MANIFEST_FILE),
+            format!("protocol = 1\nkeyword = \"a\"\ncommand = [\"x\"]\n{filler}"),
+        )
+        .unwrap();
+        let err = Manifest::load(dir.path()).unwrap_err();
+        assert!(err.contains("limit of 256 KiB"), "{err}");
     }
 
     #[test]

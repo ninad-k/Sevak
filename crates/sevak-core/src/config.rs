@@ -8,6 +8,8 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use crate::bounded_read::{read_to_string_capped, MAX_CONFIG_BYTES};
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -1117,7 +1119,7 @@ impl Config {
             source,
         };
 
-        match fs::read_to_string(path) {
+        match read_to_string_capped(path, MAX_CONFIG_BYTES) {
             Ok(text) => {
                 let config = Self::from_toml_str(&text).map_err(|source| ConfigError::Parse {
                     path: path.to_path_buf(),
@@ -1152,7 +1154,7 @@ impl Config {
             source,
         };
 
-        let existing = match fs::read_to_string(path) {
+        let existing = match read_to_string_capped(path, MAX_CONFIG_BYTES) {
             Ok(text) => text,
             Err(err) if err.kind() == io::ErrorKind::NotFound => DEFAULT_CONFIG_TOML.to_owned(),
             Err(err) => return Err(io_err(err)),
@@ -1475,6 +1477,24 @@ mod tests {
         assert_eq!(config.onepassword.keyword, "1p");
         assert_eq!(config.onepassword.cache_minutes, 1);
         assert_eq!(config.onepassword.op_path, "/bin/op");
+    }
+
+    #[test]
+    fn a_config_file_over_the_size_limit_is_an_error_and_left_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        let huge = format!("# {}\n", "x".repeat(MAX_CONFIG_BYTES as usize));
+        fs::write(&path, &huge).unwrap();
+        let err = Config::load_or_create(&path).unwrap_err();
+        assert!(matches!(err, ConfigError::Io { .. }), "{err}");
+        assert!(err.to_string().contains("limit of 4 MiB"), "{err}");
+        // Saving the settings does not read it whole either, nor overwrite it.
+        let err = Config::default().save_to(&path).unwrap_err();
+        assert!(err.to_string().contains("limit"), "{err}");
+        assert_eq!(fs::metadata(&path).unwrap().len(), huge.len() as u64);
+        // Just under the limit still loads.
+        fs::write(&path, format!("# {}\n", "x".repeat(1000))).unwrap();
+        assert!(Config::load_or_create(&path).is_ok());
     }
 
     #[test]

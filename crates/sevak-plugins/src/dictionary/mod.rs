@@ -32,6 +32,7 @@ pub mod lexicon;
 use std::path::Path;
 use std::sync::{Arc, OnceLock};
 
+use sevak_core::bounded_read::read_capped;
 use sevak_core::config::{DictionaryConfig, PasteConfig};
 use sevak_core::model::score;
 use sevak_core::{Action, IconSource, Modifier, Plugin, PluginResult, ResultItem};
@@ -109,10 +110,13 @@ pub fn parse_hunspell_dic(text: &str) -> Vec<String> {
         .collect()
 }
 
+/// The largest system word list that is read (the biggest are a few MiB).
+const MAX_WORD_LIST_BYTES: u64 = 64 * 1024 * 1024;
+
 fn load_system_word_lists(files: &[&str]) -> Vec<String> {
     files
         .iter()
-        .filter_map(|file| std::fs::read(Path::new(file)).ok())
+        .filter_map(|file| read_capped(Path::new(file), MAX_WORD_LIST_BYTES).ok())
         .flat_map(|bytes| parse_hunspell_dic(&String::from_utf8_lossy(&bytes)))
         .collect()
 }

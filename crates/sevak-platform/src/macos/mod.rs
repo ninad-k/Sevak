@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Instant;
 
+use sevak_core::bounded_read::{read_capped, MAX_DESCRIPTION_BYTES};
 use sevak_core::{AppEntry, ClipContent, IconData, IconSource, LaunchTarget};
 
 use crate::capture::{CaptureOptions, SelectionCapture};
@@ -229,7 +230,11 @@ fn is_icns(path: &Path) -> bool {
 /// no window to bring up.
 fn read_bundle(bundle: &Path) -> Option<AppEntry> {
     let info = bundle.join("Contents").join("Info.plist");
-    let plist = match plist::Value::from_file(&info) {
+    let plist = match read_capped(&info, MAX_DESCRIPTION_BYTES)
+        .map_err(|err| err.to_string())
+        .and_then(|bytes| {
+            plist::Value::from_reader(std::io::Cursor::new(bytes)).map_err(|err| err.to_string())
+        }) {
         Ok(plist) => Some(plist),
         Err(err) => {
             tracing::debug!(path = %info.display(), %err, "unreadable Info.plist");

@@ -19,6 +19,8 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use crate::bounded_read::{read_to_string_capped, MAX_USAGE_BYTES};
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -119,7 +121,7 @@ pub(crate) fn normalize_query(query: &str) -> String {
 impl UsageStore {
     /// Reads the store from `path`; a missing file yields an empty store.
     pub fn load(path: &Path) -> Result<Self, UsageError> {
-        let text = match fs::read_to_string(path) {
+        let text = match read_to_string_capped(path, MAX_USAGE_BYTES) {
             Ok(text) => text,
             Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(Self::default()),
             Err(source) => {
@@ -482,6 +484,16 @@ mod tests {
             .save_with(&path, |_, _| Err(io::Error::other("disk full")))
             .unwrap_err();
         assert!(err.to_string().contains("usage.json"), "{err}");
+    }
+
+    #[test]
+    fn a_usage_file_over_the_size_limit_is_an_io_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("usage.json");
+        fs::write(&path, vec![b' '; MAX_USAGE_BYTES as usize + 1]).unwrap();
+        let err = UsageStore::load(&path).unwrap_err();
+        assert!(matches!(err, UsageError::Io { .. }), "{err}");
+        assert!(err.to_string().contains("limit of 8 MiB"), "{err}");
     }
 
     #[test]

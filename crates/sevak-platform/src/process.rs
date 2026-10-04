@@ -9,6 +9,9 @@ use std::time::Duration;
 
 use crate::error::{PlatformError, Result};
 
+/// The most of a child's stderr that is read to report a failure.
+const MAX_STDERR_BYTES: u64 = 64 * 1024;
+
 /// Returns the first executable named `program` on `PATH`.
 ///
 /// On Windows a bare name without an extension also matches `<name>.exe`, since
@@ -270,8 +273,8 @@ pub fn run_checked<S: AsRef<OsStr>>(program: &str, args: &[S], grace: Duration) 
         .name("sevak-run".into())
         .spawn(move || {
             let mut stderr = String::new();
-            if let Some(mut pipe) = child.stderr.take() {
-                let _ = pipe.read_to_string(&mut stderr);
+            if let Some(pipe) = child.stderr.take() {
+                let _ = pipe.take(MAX_STDERR_BYTES).read_to_string(&mut stderr);
             }
             let status = child.wait();
             if let Err(err) = &status {
