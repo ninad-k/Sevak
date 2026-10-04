@@ -13,6 +13,8 @@ export function tidyPluginSettings(config: Config): void {
   config.tasks.keyword = config.tasks.keyword.trim();
   config.tasks.disabled = trimmed(config.tasks.disabled);
   config.media.keyword = config.media.keyword.trim();
+  config.window_management.keyword = config.window_management.keyword.trim();
+  config.window_management.switcher_keyword = config.window_management.switcher_keyword.trim();
   config.system.disabled = trimmed(config.system.disabled);
   config.contacts.keyword = config.contacts.keyword.trim();
   config.contacts.vcard_files = trimmed(config.contacts.vcard_files);

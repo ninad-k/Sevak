@@ -21,6 +21,7 @@ export type SectionId =
   | "files"
   | "clipboard"
   | "tasks"
+  | "windows"
   | "integrations"
   | "system"
   | "linux";
@@ -51,6 +52,8 @@ export type KeywordField =
   | "bookmarks.keyword"
   | "tasks.keyword"
   | "media.keyword"
+  | "window_management.keyword"
+  | "window_management.switcher_keyword"
   | "contacts.keyword"
   | "onepassword.keyword"
   | "dictionary.define_keyword"
@@ -70,6 +73,7 @@ export interface Problems {
   keywords: Partial<Record<KeywordField, string>>;
   clipboard: ClipboardErrors;
   cacheMinutes?: string;
+  windowGap?: string;
   fallback?: string;
   filesDepth?: string;
   /** Number of problems per section (hotkey problems are added by the form). */
@@ -88,6 +92,8 @@ export const MAX_CLIPBOARD_ITEMS = 5_000;
 export const MAX_CLIPBOARD_ITEM_BYTES = 4 * 1024 * 1024;
 export const MAX_CLIPBOARD_IMAGE_BYTES = 64 * 1024 * 1024;
 export const MAX_CACHE_MINUTES = 24 * 60;
+/** Largest gap between snapped windows, in pixels (as in Rust's `window_layout::MAX_GAP`). */
+export const MAX_WINDOW_GAP = 200;
 
 /** Keywords of built-in searches that cannot be changed, and what they open (as in Rust). */
 const FIXED_KEYWORDS: [string, string][] = [
@@ -117,6 +123,8 @@ const KEYWORDS: KeywordSpec[] = [
   { field: "bookmarks.keyword", owner: "bookmarks", required: false, section: "files", read: (c) => c.bookmarks.keyword },
   { field: "tasks.keyword", owner: "automation tasks", required: false, section: "tasks", read: (c) => c.tasks.keyword },
   { field: "media.keyword", owner: "media controls", required: false, section: "tasks", read: (c) => c.media.keyword },
+  { field: "window_management.keyword", owner: "window layouts", required: false, section: "windows", read: (c) => c.window_management.keyword },
+  { field: "window_management.switcher_keyword", owner: "the window switcher", required: false, section: "windows", read: (c) => c.window_management.switcher_keyword },
   { field: "contacts.keyword", owner: "contacts", required: true, section: "integrations", read: (c) => c.contacts.keyword },
   { field: "onepassword.keyword", owner: "1Password", required: true, section: "integrations", read: (c) => c.onepassword.keyword },
   { field: "dictionary.define_keyword", owner: "the dictionary", required: true, section: "integrations", read: (c) => c.dictionary.define_keyword },
@@ -263,6 +271,7 @@ export function validate(config: Config): Problems {
     files: 0,
     clipboard: 0,
     tasks: 0,
+    windows: 0,
     integrations: 0,
     system: 0,
     linux: 0,
@@ -302,6 +311,12 @@ export function validate(config: Config): Problems {
   if (!Number.isInteger(minutes) || minutes < 1 || minutes > MAX_CACHE_MINUTES) {
     problems.cacheMinutes = `Enter a whole number from 1 to ${MAX_CACHE_MINUTES}`;
     count.integrations++;
+  }
+
+  const gap = config.window_management.gap;
+  if (!Number.isInteger(gap) || gap < 0 || gap > MAX_WINDOW_GAP) {
+    problems.windowGap = `Enter a whole number from 0 to ${MAX_WINDOW_GAP}`;
+    count.windows++;
   }
 
   const missing = fallbackList(config.search.fallback_web_search).find(

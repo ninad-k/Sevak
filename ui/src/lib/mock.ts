@@ -416,6 +416,13 @@ export function mockSettings(): SettingsDto {
       system: { confirm: true, disabled: [] },
       tasks: { confirm: true, disabled: [], keyword: "t", global: true },
       media: { keyword: "play", global: true, now_playing: true },
+      window_management: {
+        enabled: true,
+        keyword: "win",
+        switcher_keyword: "w",
+        gap: 0,
+        global: false,
+      },
       shell: { terminal: "", shell: "", keep_open: true },
       web_search: [
         { keyword: "g", name: "Google", url: "https://www.google.com/search?q={query}" },
@@ -432,6 +439,8 @@ export function mockSettings(): SettingsDto {
       { id: "calculator", name: "Calculator", description: "Evaluates math expressions and converts units (and currencies, if enabled) as you type; Enter copies the result.", keyword: null, enabled: true },
       { id: "files", name: "Files", description: "Finds files and folders in your configured directories.", keyword: "f", enabled: true },
       { id: "bookmarks", name: "Bookmarks", description: "Finds bookmarks in your browsers (read from disk; nothing is sent anywhere).", keyword: "b", enabled: true },
+      { id: "windows", name: "Window layouts", description: "Snap, resize and move the window you were using: `win left`, `win max`, `win next display`, `win restore`.", keyword: "win", enabled: true },
+      { id: "windows:switch", name: "Window switcher", description: "Type `w` and part of a window's title or app to bring that window to the front.", keyword: "w", enabled: true },
       { id: "shell", name: "Terminal commands", description: "Type `> command` to run it in a terminal; recent commands are offered again.", keyword: ">", enabled: true },
       { id: "uuid", name: "UUID generator", description: "Type `uuid ` to generate random UUIDs; Enter copies one.", keyword: "uuid", enabled: false },
     ],
