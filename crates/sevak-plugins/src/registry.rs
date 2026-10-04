@@ -30,9 +30,9 @@ use sevak_platform::PlatformProvider;
 use crate::clipboard_history::default_history_path;
 use crate::emoji::Trigger;
 use crate::{
-    files_family, AppsPlugin, BookmarksPlugin, CalculatorPlugin, ClipboardPlugin, ContactsPlugin,
-    DictionaryPlugin, EmojiPlugin, MediaPlugin, OnePasswordPlugin, SelectionPlugin, ShellPlugin,
-    SnippetsPlugin, SystemPlugin, TasksPlugin, UuidPlugin, WebSearchPlugin,
+    files_family, AiPlugin, AppsPlugin, BookmarksPlugin, CalculatorPlugin, ClipboardPlugin,
+    ContactsPlugin, DictionaryPlugin, EmojiPlugin, MediaPlugin, OnePasswordPlugin, SelectionPlugin,
+    ShellPlugin, SnippetsPlugin, SystemPlugin, TasksPlugin, UuidPlugin, WebSearchPlugin,
 };
 
 /// Builds the instances of one plugin family.
@@ -111,8 +111,8 @@ impl PluginRegistry {
 
     /// Apps, calculator, web search, files, bookmarks, system commands,
     /// automation tasks, media controls, shell, clipboard history, snippets,
-    /// emoji, Universal Actions, contacts, 1Password, the dictionary and the
-    /// example UUID plugin, in that order.
+    /// emoji, Universal Actions, contacts, 1Password, the dictionary, the
+    /// example UUID plugin and the AI assistant, in that order.
     /// Order matters only for tie-breaking and logging.
     pub fn builtin() -> Self {
         let mut registry = Self::new();
@@ -284,6 +284,18 @@ impl PluginRegistry {
             "Type `uuid ` to generate random UUIDs; Enter copies one.",
             |_, platform| vec![Arc::new(UuidPlugin::new(platform.clone()))],
         ));
+        registry.register(PluginDescriptor::new(
+            "ai",
+            "AI assistant",
+            "Type `ai ` and a question; Enter sends it to the AI service you chose (OpenAI-compatible, Anthropic or Ollama). Off until [ai] enabled = true; nothing is sent before you press Enter.",
+            |config, platform| {
+                vec![Arc::new(AiPlugin::new(
+                    &config.ai,
+                    &config.paste,
+                    platform.clone(),
+                ))]
+            },
+        ));
         registry
     }
 
@@ -402,7 +414,8 @@ mod tests {
                 "contacts",
                 "1password",
                 "dict",
-                "uuid"
+                "uuid",
+                "ai"
             ]
         );
     }
@@ -435,7 +448,8 @@ mod tests {
                 "1password",
                 "dict",
                 "dict:spell",
-                "uuid"
+                "uuid",
+                "ai"
             ]
         );
     }
@@ -466,7 +480,8 @@ mod tests {
                 "1password",
                 "dict",
                 "dict:spell",
-                "uuid"
+                "uuid",
+                "ai"
             ]
         );
     }
@@ -497,7 +512,8 @@ mod tests {
                 "contacts:at",
                 "1password",
                 "dict",
-                "dict:spell"
+                "dict:spell",
+                "ai"
             ]
         );
     }
@@ -544,6 +560,7 @@ mod tests {
                 ("dict", true),
                 ("dict:spell", true),
                 ("uuid", true),
+                ("ai", true),
             ]
         );
     }
