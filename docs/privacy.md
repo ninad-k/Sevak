@@ -6,7 +6,8 @@ Sevak is local-first. Your data stays on your machine except when you explicitly
 
 - Application index, files and bookmarks (bookmarks are read from your browsers' files, read-only)
 - Whole-disk and content file search (`ff`, `in`): queries go only to your computer's own file index (Windows Search, Spotlight, `locate`, Tracker or Baloo)
-- The preview pane: it reads the selected file or folder from your disk, only while it is open; links are shown as addresses and never fetched
+- The preview pane: it reads the selected file or folder from your disk, only while it is open; links are shown as addresses and never fetched. For a PDF, an Office file or a video it asks your operating system to draw a picture (Windows' PDF engine and thumbnails, macOS Quick Look, or `pdftoppm` on Linux), which may start a short-lived helper process with a time limit; the picture goes to the window in memory, and any temporary file the helper makes is deleted straight away
+- Safari bookmarks (macOS): the bookmarks file is read only after you give Sevak Full Disk Access, only to search it, and nothing from it is stored or sent anywhere
 - Search history (if enabled)
 - Clipboard history (if enabled), including copied images (PNG files) and the paths of copied files, unencrypted
 - Snippet library, and snippet expansion as you type (if enabled): the last 64 typed characters are kept in memory only, never stored, logged or sent

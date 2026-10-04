@@ -136,7 +136,7 @@ More: [Web search keywords](configuration.md#web_search).
 
 ### Can I preview a file without opening it?
 
-Yes. Tap ++shift++ or press ++ctrl+y++ to open the preview pane under the results: text files, images, folders, links, snippets and clipboard entries. ++ctrl+t++ opens a long text in a scrollable view. See [Preview, Text View and Grid View](usage.md#preview-text-view-and-grid-view).
+Yes. Tap ++shift++ or press ++ctrl+y++ to open the preview pane under the results: text files, images, the first page of a PDF, folders, links, snippets and clipboard entries. ++ctrl+t++ opens a long text in a scrollable view. See [Preview, Text View and Grid View](usage.md#preview-text-view-and-grid-view).
 
 ### Can Sevak expand text as I type, like a text expander?
 

@@ -111,7 +111,7 @@ Sevak also includes:
   Base64, URL encoding, JSON) and paste back, calculate, open, show in folder,
   open in a terminal. [How it works →](docs/usage.md#universal-actions)
 - **Preview, Text View and Grid View** — tap `Shift` or press `Ctrl+Y` to
-  see what a result is (file contents, images, folders, links, snippets)
+  see what a result is (file contents, images, a PDF's first page, folders, links, snippets)
   without opening it; `Ctrl+T` reads a long text in full; picture-like results
   such as emoji are shown as a grid of tiles.
   [How it works →](docs/usage.md#preview-text-view-and-grid-view)
@@ -216,7 +216,7 @@ a cloud search service. Usage history includes your recent searches and the
 `>` commands you ran; clipboard history (off by default) is stored unencrypted
 in the data folder, including copied text, the paths of copied files and copied
 images (as PNG files; `[clipboard] images` and `files` turn those off).
-Bookmarks are read from your browsers' files, read-only.
+Bookmarks are read from your browsers' files, read-only (Safari's, on macOS, only after you allow Full Disk Access).
 
 These features stay on your computer and make no network request:
 
@@ -224,7 +224,9 @@ These features stay on your computer and make no network request:
   file index (Windows Search, Spotlight, locate, Tracker or Baloo); the words
   you type go to that local service and nowhere else.
 - The preview pane reads the selected file or folder from your disk, only while
-  it is open; links are shown as addresses and never fetched.
+  it is open; links are shown as addresses and never fetched. A PDF's first
+  page is drawn by your operating system (a short-lived helper process, no
+  network, temporary files deleted at once).
 - Universal Actions reads your selection only when you press its shortcut, by
   briefly borrowing the clipboard and restoring it. The selection is never
   written to disk, logged or sent anywhere.

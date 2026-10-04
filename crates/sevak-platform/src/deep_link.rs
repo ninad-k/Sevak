@@ -13,6 +13,7 @@
 //! | [`DeepLink::tel`] | `tel:` | contacts: call a number |
 //! | [`DeepLink::address_book_card`] | `addressbook://` | contacts: open a card in macOS Contacts |
 //! | [`DeepLink::onepassword_item`] | `onepassword://view-item/` | 1Password: show an item in the app |
+//! | [`DeepLink::full_disk_access`] | `x-apple.systempreferences:` | bookmarks: open the macOS Full Disk Access pane |
 //!
 //! Anything else (a different scheme, extra path or query pieces, characters
 //! that could end the value early) is refused with `None`.
@@ -80,6 +81,16 @@ impl DeepLink {
             })
     }
 
+    /// The Full Disk Access list in macOS System Settings (Privacy & Security),
+    /// where the user lets Sevak read Safari's bookmarks. A fixed link: nothing
+    /// in it comes from outside.
+    pub fn full_disk_access() -> Self {
+        Self {
+            url: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
+                .to_owned(),
+        }
+    }
+
     /// The URL to hand to the operating system.
     pub fn as_str(&self) -> &str {
         &self.url
@@ -121,6 +132,14 @@ mod tests {
         ] {
             assert!(DeepLink::tel(bad).is_none(), "{bad:?}");
         }
+    }
+
+    #[test]
+    fn full_disk_access_is_one_fixed_link() {
+        assert_eq!(
+            DeepLink::full_disk_access().as_str(),
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
+        );
     }
 
     #[test]

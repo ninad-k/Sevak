@@ -206,7 +206,7 @@ Browser bookmark search settings.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `browsers` | array of strings | `[]` | Browser profiles to index. Empty `[]` means every browser found on your system. Supported ids: `"chrome"`, `"edge"`, `"brave"`, `"vivaldi"`, `"chromium"`, `"opera"`, `"opera-gx"`, `"firefox"`, `"librewolf"`, `"zen"`. All profiles of each browser are searched. Unknown ids are ignored. |
+| `browsers` | array of strings | `[]` | Browser profiles to index. Empty `[]` means every browser found on your system. Supported ids: `"chrome"`, `"edge"`, `"brave"`, `"vivaldi"`, `"chromium"`, `"opera"`, `"opera-gx"`, `"firefox"`, `"librewolf"`, `"zen"`, and on macOS `"safari"` (needs [Full Disk Access](features/bookmarks.md#safari-needs-full-disk-access)). All profiles of each browser are searched. Unknown ids are ignored. |
 | `keyword` | string | `"b"` | Prefix to search only bookmarks: type `b term`. Leave empty `""` to disable keyword search. |
 | `global` | boolean | `true` | Show bookmark results in ordinary queries without the keyword. `false` requires `b <term>` to search bookmarks. |
 
@@ -670,7 +670,8 @@ content_keyword = "in"
 [bookmarks]
 # Browsers whose bookmarks are searchable; [] means every browser found.
 # Names: "chrome", "edge", "brave", "vivaldi", "chromium", "opera", "opera-gx",
-# "firefox", "librewolf", "zen". All profiles of each browser are read.
+# "firefox", "librewolf", "zen", and "safari" (macOS; needs Full Disk Access).
+# All profiles of each browser are read.
 browsers = []
 # Type "<keyword> <text>" to search only bookmarks.
 keyword = "b"

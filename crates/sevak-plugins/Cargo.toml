@@ -51,6 +51,10 @@ getrandom = "0.4"
 rusqlite = { version = "0.40", features = ["bundled"] }
 # Local date and time for snippet placeholders (no timezone database needed).
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+# Safari's `Bookmarks.plist` for the bookmarks plugin (a binary property list;
+# parsed on every OS so the reader is tested everywhere, used on macOS). Already
+# in the build through the platform crate and the Tauri stack.
+plist = "1"
 walkdir = "2"
 # Compress to .zip in the file buffer, and unpack the workflow gallery's packages
 # (pure Rust; the version the updater already links, with only deflate).

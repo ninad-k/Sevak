@@ -10,8 +10,8 @@ use windows::Win32::Graphics::Gdi::{
     BI_RGB, DIB_RGB_COLORS, HBITMAP, HDC, HGDIOBJ,
 };
 use windows::Win32::UI::Shell::{
-    IShellItem, IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF_BIGGERSIZEOK,
-    SIIGBF_ICONONLY,
+    IShellItem, IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF, SIIGBF_BIGGERSIZEOK,
+    SIIGBF_ICONONLY, SIIGBF_THUMBNAILONLY,
 };
 
 use crate::error::{PlatformError, Result};
@@ -35,8 +35,28 @@ fn os_error(message: impl std::fmt::Display) -> PlatformError {
 /// Renders the shell icon for `parsing_name` (a file path or a
 /// `shell:AppsFolder\<aumid>` name) as a PNG of roughly `size` pixels.
 pub(crate) fn load_shell_icon(parsing_name: &str, size: u32) -> Result<IconData> {
-    let _com = ComGuard::new();
     let size = size.clamp(MIN_SIZE, MAX_SIZE);
+    let bytes = shell_image_png(parsing_name, size, SIIGBF_BIGGERSIZEOK | SIIGBF_ICONONLY)?;
+    Ok(IconData {
+        mime: "image/png",
+        bytes,
+    })
+}
+
+/// Largest thumbnail asked of the shell.
+pub(crate) const MAX_THUMBNAIL: u32 = 1024;
+
+/// The shell's thumbnail of a file (an Office document, a video) as a PNG of
+/// roughly `size` pixels, as Explorer would show it. An error when the file has
+/// no thumbnail: unlike [`load_shell_icon`], the file type's generic icon is
+/// never substituted.
+pub(crate) fn load_shell_thumbnail(path: &str, size: u32) -> Result<Vec<u8>> {
+    let size = size.clamp(MIN_SIZE, MAX_THUMBNAIL);
+    shell_image_png(path, size, SIIGBF_BIGGERSIZEOK | SIIGBF_THUMBNAILONLY)
+}
+
+fn shell_image_png(parsing_name: &str, size: u32, flags: SIIGBF) -> Result<Vec<u8>> {
+    let _com = ComGuard::new();
 
     // SAFETY: the parsing name is a NUL-terminated HSTRING and no bind context
     // is passed.
@@ -56,7 +76,7 @@ pub(crate) fn load_shell_icon(parsing_name: &str, size: u32) -> Result<IconData>
                     cx: size as i32,
                     cy: size as i32,
                 },
-                SIIGBF_BIGGERSIZEOK | SIIGBF_ICONONLY,
+                flags,
             )
         };
         match result {
@@ -72,11 +92,7 @@ pub(crate) fn load_shell_icon(parsing_name: &str, size: u32) -> Result<IconData>
 
     let (width, height, mut pixels) = bitmap.read_bgra()?;
     bgra_premultiplied_to_rgba(&mut pixels);
-    let bytes = encode_png(width, height, &pixels)?;
-    Ok(IconData {
-        mime: "image/png",
-        bytes,
-    })
+    encode_png(width, height, &pixels)
 }
 
 /// An `HBITMAP` that is deleted when dropped.
