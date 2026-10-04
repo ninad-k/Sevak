@@ -88,6 +88,60 @@ The palette is from [Catppuccin](https://github.com/catppuccin/palette), under
 its MIT license; the Sevak adaptation and license are included in this repo.
 It needs no script runtime or plugin approval.
 
+## The developer and everyday utilities pack
+
+Ten more offline script plugins, each a single Python 3 file using only the
+standard library. They never touch the network, run no program and write no
+file. Install **Python 3.8+** on your command path first; every keyword below
+needs a space after it, and each shows example rows when you type it alone.
+
+| Extension | Try | What it does |
+|---|---|---|
+| **JWT decoder** | `jwt eyJhbGci...` | Header, payload and `exp`/`iat`/`nbf` in plain words. Decodes only: the signature is **not** verified |
+| **Number base converter** | `base 0xff`, `base ff 16` | Binary, octal, decimal, hex, base 32 and base 36 |
+| **Cron explainer** | `cron 30 9 * * mon-fri` | Explains the expression and lists the next five runs |
+| **Regex tester** | `rx (\d+)-(\d+) :: call 555-1234` | Every match and capture group (Python `re` syntax) |
+| **Unicode lookup** | `uni U+1F600`, `uni right arrow` | Name, UTF-8 bytes, HTML entity and escapes; searches names |
+| **HTTP status codes** | `http 404`, `http redirect` | What a status code or a group of codes means |
+| **Port reference** | `port 5432`, `port ssh` | What a TCP/UDP port is used for; common dev-server ports |
+| **chmod calculator** | `chmod 755`, `chmod rwxr-xr-x` | Octal and symbolic permissions, setuid/setgid/sticky |
+| **Date calculator** | `days 2026-12-25`, `days +90` | Days until or between dates, and date plus or minus days |
+| **Slugify and text stats** | `slug Hello World!` | URL slug, safe file name, word and reading-time counts |
+
+Notes on behavior: the cron explainer uses this computer's clock and cron's
+rule that day-of-month and weekday match when *either* does; the regex tester
+caps the text at 2,000 characters so a pathological pattern cannot hang the
+launcher; the date calculator counts weekdays without knowing any holidays.
+Enter copies the row you picked.
+
+### Research basis
+
+These were chosen by looking at what people install and recommend in other
+launchers' stores and picking developer and everyday utilities that Sevak does
+not already have (it already covers apps, calculator, units and currency,
+clipboard, snippets, emoji, windows, passwords, ids, colors, hashes, lorem
+ipsum, case conversion and the like), that work fully offline and that fit the
+[gallery rules](https://github.com/ninad-k/Sevak/tree/main/gallery#what-the-gallery-accepts):
+
+- **Raycast Store**: JWT Decoder, Regex Tester, Cron Description, Unicode
+  Symbols Search and the many Base64, JSON and number-base developer utilities
+  are among its popular developer extensions.
+- **PowerToys Run third-party plugins**: UnicodeInput and PowerHexInspector
+  (character lookup, number bases) are on Microsoft's list of community plugins.
+- **Flow Launcher plugin store**: its popular plugins include Colors, a
+  unit-aware calculator and currency conversion, which shows demand for small
+  offline converters; Sevak already has those, so this pack adds the developer
+  references around them.
+- **Alfred Gallery and workflows**: has community equivalents of the same
+  categories (encoders, lookups, date math); not individually checked.
+
+Time-zone conversion was considered and left out: Python's `zoneinfo` needs a
+time-zone database that Windows does not ship, so it would not be cross-platform
+without a bundled data file. Two modules were added to the allow list in
+`crates/sevak-plugins/tests/gallery_content.rs` for this pack: `base64` (decoding
+a JWT's segments) and `unicodedata` (character names, accent folding). Both are
+pure in-memory data transforms.
+
 ## Tools already built into Sevak
 
 Several common extension categories are already available:

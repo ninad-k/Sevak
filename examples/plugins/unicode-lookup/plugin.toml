@@ -1,0 +1,15 @@
+# Type "uni" and a character, code point or name: "uni U+1F600", "uni é", "uni right arrow".
+#
+# A one-shot Python plugin (Python 3.8 or newer, standard library only) that
+# looks characters up in the Unicode data shipped with Python: name, category,
+# UTF-8 bytes, HTML entity and escapes. Offline; writes no files. Enter copies.
+protocol    = 1
+id          = "script:unicode-lookup"
+name        = "Unicode lookup (Python)"
+description = "uni U+1F600, uni é or uni right arrow: code point, name, UTF-8 bytes, HTML entity and escapes. Offline."
+keyword     = "uni"
+mode        = "oneshot"
+script      = "unicode_lookup.py"
+
+# Python starts a little slower than the default 50 ms wait; the name search scans 128k characters.
+timeout_ms  = 500

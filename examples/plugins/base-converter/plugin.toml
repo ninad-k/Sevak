@@ -1,0 +1,15 @@
+# Type "base" and a number: "base 255", "base 0xff", "base 0b1010" or "base ff 16".
+#
+# A one-shot Python plugin (Python 3.8 or newer, standard library only) that
+# converts integers between binary, octal, decimal, hexadecimal, base 32 and
+# base 36. Runs offline and writes no files. Enter copies the row you picked.
+protocol    = 1
+id          = "script:base-converter"
+name        = "Number base converter (Python)"
+description = "base 255, base 0xff, base ff 16: binary, octal, decimal and hex side by side. Offline."
+keyword     = "base"
+mode        = "oneshot"
+script      = "base.py"
+
+# Python starts a little slower than the default 50 ms wait.
+timeout_ms  = 200

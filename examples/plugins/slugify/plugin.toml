@@ -1,0 +1,16 @@
+# Type "slug" and some text: "slug Hello, World! Café".
+#
+# A one-shot Python plugin (Python 3.8 or newer, standard library only) that
+# turns text into a URL slug (accents folded, punctuation dropped), a snake_case
+# slug and a safe file name, and counts characters, words, bytes and reading
+# time. Offline; writes no files. Enter copies the row you picked.
+protocol    = 1
+id          = "script:slugify"
+name        = "Slugify and text stats (Python)"
+description = "slug Hello World! gives hello-world, a safe file name, and character, word and reading-time counts. Offline."
+keyword     = "slug"
+mode        = "oneshot"
+script      = "slug.py"
+
+# Python starts a little slower than the default 50 ms wait.
+timeout_ms  = 200
