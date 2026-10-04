@@ -2,6 +2,26 @@ name: Feature request
 description: Suggest a new feature, plugin or improvement.
 labels: [enhancement]
 body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: What part of Sevak would this improve?
+      options:
+        - Launcher/search
+        - Settings
+        - Hotkey
+        - Clipboard/paste
+        - Snippets
+        - Files/OS search
+        - Plugins/Workflows
+        - Themes
+        - Installer/updater
+        - Docs
+        - Other
+    validations:
+      required: false
+
   - type: textarea
     id: problem
     attributes:

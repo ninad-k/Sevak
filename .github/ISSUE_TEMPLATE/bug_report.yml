@@ -8,6 +8,26 @@ body:
         Thanks for reporting! Please check the [open issues](https://github.com/ninad-k/Sevak/issues) first.
         Security problems go to a [private report](https://github.com/ninad-k/Sevak/security/advisories/new) instead.
 
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: What part of Sevak is affected?
+      options:
+        - Launcher/search
+        - Settings
+        - Hotkey
+        - Clipboard/paste
+        - Snippets
+        - Files/OS search
+        - Plugins/Workflows
+        - Themes
+        - Installer/updater
+        - Docs
+        - Other
+    validations:
+      required: false
+
   - type: textarea
     id: what-happened
     attributes:
