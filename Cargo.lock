@@ -3803,6 +3803,7 @@ dependencies = [
  "arboard",
  "block2",
  "dirs 7.0.0",
+ "libc",
  "objc2",
  "objc2-app-kit",
  "objc2-contacts",

@@ -10,6 +10,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufWriter, ErrorKind, Write};
 use std::path::{Component, Path, PathBuf};
 
+use sevak_platform::fs_safe::rename_no_replace;
 use sevak_platform::PlatformProvider;
 use walkdir::WalkDir;
 use zip::write::SimpleFileOptions;
@@ -201,7 +202,10 @@ fn copy_symlink(from: &Path, to: &Path) -> io::Result<()> {
         // Windows links need privileges to create; a link to a file is copied
         // as the file, a link to a folder is not followed (it could loop).
         if fs::metadata(from)?.is_file() {
-            fs::copy(from, to).map(drop)
+            // `create_new`: a name that has been taken meanwhile is an error,
+            // never overwritten (`fs::copy` would).
+            let mut out = OpenOptions::new().write(true).create_new(true).open(to)?;
+            io::copy(&mut File::open(from)?, &mut out).map(drop)
         } else {
             Err(io::Error::new(
                 ErrorKind::Unsupported,
@@ -306,10 +310,67 @@ fn remove_item(path: &Path) -> io::Result<()> {
     }
 }
 
-/// Moves `source` into `dest_dir` under a free name. Across drives it copies,
+/// The folder a batch puts its items in, as it was when the batch started.
+///
+/// The folder the user typed is resolved once (links followed, as they meant)
+/// and every item first checks that the path still leads to that same folder,
+/// so a link swapped in meanwhile cannot redirect the rest of the batch.
+struct Destination {
+    path: PathBuf,
+    real: PathBuf,
+}
+
+impl Destination {
+    /// Fails unless `path` is a folder, and remembers where it really is.
+    fn open(path: &Path) -> Result<Self, String> {
+        match fs::metadata(path) {
+            Ok(meta) if meta.is_dir() => {}
+            Ok(_) => return Err(format!("{} is not a folder", path.display())),
+            Err(err) => return Err(format!("{}: {err}", path.display())),
+        }
+        let real = fs::canonicalize(path).map_err(|err| format!("{}: {err}", path.display()))?;
+        Ok(Self {
+            path: path.to_path_buf(),
+            real,
+        })
+    }
+
+    /// Fails unless the destination still leads to the folder it did at the
+    /// start. Called right before each item is placed.
+    fn verify(&self) -> io::Result<()> {
+        let changed = || {
+            io::Error::other(format!(
+                "{} is not the folder it was when the operation started",
+                self.path.display()
+            ))
+        };
+        let now = fs::canonicalize(&self.path).map_err(|_| changed())?;
+        if now != self.real || !fs::symlink_metadata(&now).is_ok_and(|meta| meta.is_dir()) {
+            return Err(changed());
+        }
+        Ok(())
+    }
+}
+
+/// Moves `source` into `dest` under a free name. Across drives it copies,
 /// then removes the original; if that removal fails the copy stays and the
 /// error says so. Moving an item to the folder it is in does nothing.
-fn move_item(source: &Path, dest_dir: &Path) -> io::Result<PathBuf> {
+///
+/// The move never replaces anything: the name is chosen, and the move itself
+/// is refused by the operating system if something took that name since (the
+/// next free name is then tried).
+fn move_item(source: &Path, dest: &Destination) -> io::Result<PathBuf> {
+    move_item_hooked(source, dest, &mut |_| {})
+}
+
+/// [`move_item`], calling `before_move(target)` after a name was chosen and
+/// before the move: tests change the file system there.
+fn move_item_hooked(
+    source: &Path,
+    dest: &Destination,
+    before_move: &mut dyn FnMut(&Path),
+) -> io::Result<PathBuf> {
+    let dest_dir = dest.path.as_path();
     let name = file_name_of(source)?;
     if source
         .parent()
@@ -324,29 +385,34 @@ fn move_item(source: &Path, dest_dir: &Path) -> io::Result<PathBuf> {
             "a folder cannot be moved into itself",
         ));
     }
-    let target = unique_path(dest_dir, name, meta.is_dir())?;
-    match fs::rename(source, &target) {
-        Ok(()) => Ok(target),
-        Err(err) if err.kind() == ErrorKind::CrossesDevices => {
-            let copied = copy_item(source, dest_dir)?;
-            remove_item(source).map_err(|err| {
-                io::Error::other(format!(
-                    "copied to {} but could not remove the original: {err}",
-                    copied.display()
-                ))
-            })?;
-            Ok(copied)
+    for n in 1..=MAX_NAME_ATTEMPTS {
+        let target = dest_dir.join(numbered(name, meta.is_dir(), n));
+        // `symlink_metadata`: a dangling link occupies its name too.
+        if fs::symlink_metadata(&target).is_ok() {
+            continue;
         }
-        Err(err) => Err(err),
+        before_move(&target);
+        // Right before the move: still the folder the user meant?
+        dest.verify()?;
+        match rename_no_replace(source, &target) {
+            Ok(()) => return Ok(target),
+            // Taken since it was looked at: try the next name.
+            Err(err) if err.kind() == ErrorKind::AlreadyExists => {}
+            Err(err) if err.kind() == ErrorKind::CrossesDevices => {
+                dest.verify()?;
+                let copied = copy_item(source, dest_dir)?;
+                remove_item(source).map_err(|err| {
+                    io::Error::other(format!(
+                        "copied to {} but could not remove the original: {err}",
+                        copied.display()
+                    ))
+                })?;
+                return Ok(copied);
+            }
+            Err(err) => return Err(err),
+        }
     }
-}
-
-fn check_destination(dest: &Path) -> Result<(), String> {
-    match fs::metadata(dest) {
-        Ok(meta) if meta.is_dir() => Ok(()),
-        Ok(_) => Err(format!("{} is not a folder", dest.display())),
-        Err(err) => Err(format!("{}: {err}", dest.display())),
-    }
+    Err(no_free_name(name))
 }
 
 /// Runs `step` on every item, in order, and collects how it went. Progress is
@@ -394,11 +460,13 @@ fn all_failed(items: &[PathBuf], reason: &str) -> Report {
 
 /// Copies every item into the folder `dest`.
 pub fn copy_items(items: &[PathBuf], dest: &Path, progress: Progress<'_>) -> Report {
-    if let Err(reason) = check_destination(dest) {
-        return all_failed(items, &reason);
-    }
+    let dest = match Destination::open(dest) {
+        Ok(dest) => dest,
+        Err(reason) => return all_failed(items, &reason),
+    };
     run_each(&prune_nested(items), progress, |item| {
-        copy_item(item, dest)
+        dest.verify()
+            .and_then(|()| copy_item(item, &dest.path))
             .map(drop)
             .map_err(|err| err.to_string())
     })
@@ -406,11 +474,12 @@ pub fn copy_items(items: &[PathBuf], dest: &Path, progress: Progress<'_>) -> Rep
 
 /// Moves every item into the folder `dest`.
 pub fn move_items(items: &[PathBuf], dest: &Path, progress: Progress<'_>) -> Report {
-    if let Err(reason) = check_destination(dest) {
-        return all_failed(items, &reason);
-    }
+    let dest = match Destination::open(dest) {
+        Ok(dest) => dest,
+        Err(reason) => return all_failed(items, &reason),
+    };
     run_each(&prune_nested(items), progress, |item| {
-        move_item(item, dest)
+        move_item(item, &dest)
             .map(drop)
             .map_err(|err| err.to_string())
     })
@@ -989,6 +1058,139 @@ mod tests {
             .map(|(name, _)| name)
             .collect();
         assert_eq!(listed, ["one/a.txt", "two/b.txt"]);
+    }
+
+    /// A name that is free when it is chosen but taken before the move: the
+    /// newcomer is left alone and the item takes the next name.
+    #[test]
+    fn a_move_never_replaces_a_name_that_appears_after_it_was_chosen() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("from/report.txt");
+        write(&src, "mine");
+        let dest_dir = dir.path().join("to");
+        fs::create_dir_all(&dest_dir).unwrap();
+        let dest = Destination::open(&dest_dir).unwrap();
+        let mut raced = false;
+        let moved = move_item_hooked(&src, &dest, &mut |target| {
+            if !raced {
+                raced = true;
+                write(target, "theirs, created in the gap");
+            }
+        })
+        .unwrap();
+        assert_eq!(
+            read(&dest_dir.join("report.txt")),
+            "theirs, created in the gap"
+        );
+        assert_eq!(moved, dest_dir.join("report (2).txt"));
+        assert_eq!(read(&moved), "mine");
+        assert!(!src.exists());
+    }
+
+    /// `rename(2)` would replace an empty folder that took the name meanwhile.
+    #[test]
+    fn a_moved_folder_does_not_replace_a_folder_that_appeared_in_the_gap() {
+        let dir = tempfile::tempdir().unwrap();
+        write(&dir.path().join("from/photos/a.jpg"), "a");
+        let dest_dir = dir.path().join("to");
+        fs::create_dir_all(&dest_dir).unwrap();
+        let dest = Destination::open(&dest_dir).unwrap();
+        let mut raced = false;
+        let moved = move_item_hooked(&dir.path().join("from/photos"), &dest, &mut |target| {
+            if !raced {
+                raced = true;
+                fs::create_dir(target).unwrap();
+            }
+        })
+        .unwrap();
+        assert_eq!(moved, dest_dir.join("photos (2)"));
+        assert_eq!(read(&moved.join("a.jpg")), "a");
+        assert!(fs::read_dir(dest_dir.join("photos"))
+            .unwrap()
+            .next()
+            .is_none());
+    }
+
+    /// The destination is replaced by a link to somewhere else after the batch
+    /// started: the item that has not been placed yet is not.
+    #[cfg(unix)]
+    #[test]
+    fn a_destination_swapped_for_a_link_is_not_followed() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("from/a.txt");
+        write(&src, "a");
+        let dest_dir = dir.path().join("to");
+        let elsewhere = dir.path().join("elsewhere");
+        fs::create_dir_all(&dest_dir).unwrap();
+        fs::create_dir_all(&elsewhere).unwrap();
+        let dest = Destination::open(&dest_dir).unwrap();
+        let err = move_item_hooked(&src, &dest, &mut |_| {
+            fs::remove_dir(&dest_dir).unwrap();
+            std::os::unix::fs::symlink(&elsewhere, &dest_dir).unwrap();
+        })
+        .unwrap_err();
+        assert!(err.to_string().contains("not the folder it was"), "{err}");
+        assert_eq!(read(&src), "a");
+        assert!(names(&elsewhere).is_empty());
+    }
+
+    /// The same in a whole batch: the first item is placed, then the folder
+    /// becomes a link, and the rest are refused.
+    #[cfg(unix)]
+    #[test]
+    fn a_batch_stops_following_a_destination_that_became_a_link() {
+        let dir = tempfile::tempdir().unwrap();
+        let first = dir.path().join("from/one.txt");
+        let second = dir.path().join("from/two.txt");
+        write(&first, "1");
+        write(&second, "2");
+        let dest_dir = dir.path().join("to");
+        let elsewhere = dir.path().join("elsewhere");
+        fs::create_dir_all(&dest_dir).unwrap();
+        fs::create_dir_all(&elsewhere).unwrap();
+        let swap_dir = dest_dir.clone();
+        let swap_to = elsewhere.clone();
+        let mut progress = move |done: usize, _total: usize, _name: &str| {
+            // Before the second item starts.
+            if done == 1 {
+                fs::rename(&swap_dir, swap_dir.with_extension("moved")).unwrap();
+                std::os::unix::fs::symlink(&swap_to, &swap_dir).unwrap();
+            }
+        };
+        let report = move_items(&[first.clone(), second.clone()], &dest_dir, &mut progress);
+        assert_eq!(report.done, [first]);
+        assert_eq!(report.failed.len(), 1);
+        assert!(report.failed[0].reason.contains("not the folder it was"));
+        assert_eq!(read(&second), "2", "the refused item stays where it was");
+        assert!(names(&elsewhere).is_empty());
+        assert_eq!(read(&dest_dir.with_extension("moved").join("one.txt")), "1");
+    }
+
+    /// A link already sitting at the name a copy would use is never written
+    /// through: the copy takes the next name.
+    #[cfg(unix)]
+    #[test]
+    fn a_planted_link_at_the_destination_name_is_not_written_through() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("from/a.txt");
+        write(&src, "new");
+        let victim = dir.path().join("victim.txt");
+        write(&victim, "precious");
+        let dest_dir = dir.path().join("to");
+        fs::create_dir_all(&dest_dir).unwrap();
+        std::os::unix::fs::symlink(&victim, dest_dir.join("a.txt")).unwrap();
+        let report = copy_items(&[src], &dest_dir, &mut quiet());
+        assert!(report.failed.is_empty(), "{report:?}");
+        assert_eq!(read(&victim), "precious");
+        assert_eq!(read(&dest_dir.join("a (2).txt")), "new");
+        // Dangling links count as taken names too.
+        let src2 = dir.path().join("from/b.txt");
+        write(&src2, "b");
+        std::os::unix::fs::symlink(dir.path().join("nowhere"), dest_dir.join("b.txt")).unwrap();
+        let report = move_items(&[src2], &dest_dir, &mut quiet());
+        assert!(report.failed.is_empty(), "{report:?}");
+        assert!(!dir.path().join("nowhere").exists());
+        assert_eq!(read(&dest_dir.join("b (2).txt")), "b");
     }
 
     #[test]

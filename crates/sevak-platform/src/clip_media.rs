@@ -33,6 +33,7 @@ impl std::fmt::Debug for ClipboardImage {
 /// The pixel count (width x height) of a DIB, from the first bytes of the
 /// `CF_DIB` / `CF_DIBV5` data (a `BITMAPINFOHEADER`, `BITMAPV5HEADER` or the old
 /// `BITMAPCOREHEADER`). `None` if the header is too short or malformed.
+#[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) fn dib_header_pixels(header: &[u8]) -> Option<u64> {
     let word = |at: usize| -> Option<[u8; 4]> { header.get(at..at + 4)?.try_into().ok() };
     let size = u32::from_le_bytes(word(0)?);
@@ -60,6 +61,7 @@ pub(crate) fn dib_header_pixels(header: &[u8]) -> Option<u64> {
 
 /// The pixel count of a PNG, from the first 24 bytes (signature and the start
 /// of the `IHDR` chunk). `None` if it does not start like a PNG.
+#[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) fn png_header_pixels(header: &[u8]) -> Option<u64> {
     const SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
     if header.get(..8)? != SIGNATURE || header.get(12..16)? != b"IHDR" {

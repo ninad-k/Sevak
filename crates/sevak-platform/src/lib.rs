@@ -16,6 +16,7 @@ pub mod desktop_entry;
 pub mod dictionary;
 pub mod error;
 mod expand;
+pub mod fs_safe;
 pub mod gnome;
 pub mod hotkey_hook;
 pub mod icon_file;
