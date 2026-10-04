@@ -679,6 +679,13 @@ impl Plugin for WindowManagerPlugin {
         self.run_layout(command)
     }
 
+    /// Layouts are remembered like any other result (the ones you use often
+    /// rank first); window rows are not: their ids are handles that mean
+    /// nothing next time, and the titles are private.
+    fn tracks_usage(&self) -> bool {
+        self.mode == Mode::Layouts
+    }
+
     fn attach_notifier(&self, notifier: ResultsNotifier) {
         let _ = self.notifier.set(notifier);
     }
@@ -1175,6 +1182,14 @@ mod tests {
         let rows = plugin.query("left");
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].title, text::UNAVAILABLE_TITLE);
+    }
+
+    #[test]
+    fn only_layouts_are_remembered_in_the_usage_statistics() {
+        let desktop = Desktop::new();
+        let config = WindowManagementConfig::default();
+        assert!(WindowManagerPlugin::layouts(&config, desktop.clone()).tracks_usage());
+        assert!(!WindowManagerPlugin::switcher(&config, desktop).tracks_usage());
     }
 
     #[test]

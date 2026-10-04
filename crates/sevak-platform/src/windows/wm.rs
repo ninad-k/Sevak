@@ -208,7 +208,9 @@ fn window_of(id: &WindowId) -> Result<HWND> {
 
 pub(crate) fn focus_window(id: &WindowId) -> Result<()> {
     let hwnd = window_of(id)?;
-    paste::focus(hwnd).map_err(PlatformError::Message)
+    paste::focus(hwnd).map_err(|_| {
+        PlatformError::Message("Windows would not bring that window to the front".to_owned())
+    })
 }
 
 /// The rectangle the OS positions (frame including invisible borders).
