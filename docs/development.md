@@ -31,7 +31,9 @@ examples/plugins        example script plugins (Python, PowerShell, Node)
 examples/workflows      example workflows (also packaged for the gallery)
 gallery                 the opt-in online galleries: index.json and packages/*.zip (workflows and
                         script plugins), themes.json and themes/*.toml (themes)
-.github/workflows       ci.yml, release.yml, coverage.yml, bench.yml, docs.yml
+.github/workflows       ci.yml, release.yml, promote.yml, rollback.yml, sbom.yml, attest.yml, security.yml,
+                        codeql.yml, toolchain-canary.yml, coverage.yml, bench.yml, docs.yml, release-checks.yml,
+                        pr-labels.yml (.github/actions/setup-rust installs the toolchain pinned in rust-toolchain.toml)
 ```
 
 ## Architecture
@@ -109,8 +111,10 @@ cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 npm run check
+npm run gallery:check                                  # gallery checksums, themes and tags
 npm run build
 npm run test:scripts
+node scripts/generate-third-party-notices.mjs --check  # THIRD_PARTY_NOTICES.md is current (Linux job)
 ```
 
 Further commands (what each layer covers, and the manual release checklist, are in

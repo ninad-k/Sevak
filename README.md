@@ -273,8 +273,8 @@ Every network request Sevak itself makes is in this list:
   (including a Universal Actions web search) opens it in your browser, where
   the site receives your search terms.
 - **Update checks.** Release information is fetched from GitHub after startup
-  and once a day. Disable them in **Settings → General** or set
-  `general.check_for_updates = false`.
+  and once a day (one more small file if you choose the beta channel). Disable
+  them in **Settings → General** or set `general.check_for_updates = false`.
 - **Installing an update.** Its package is downloaded after you agree. Windows
   installation may also download WebView2 if it is missing.
 - **Currency rates.** If you turn currency conversion on (`[calculator]
@@ -325,10 +325,11 @@ readable right here on GitHub:
 | Restyle the launcher: theme editor, theme gallery or your own CSS | [Themes](docs/themes.md) |
 | Fix a shortcut, search or update problem | [Troubleshooting](docs/troubleshooting.md) and [FAQ](docs/faq.md) |
 | Know what touches the network | [Privacy](docs/privacy.md) |
+| Check a download, or see how Sevak is built and defended | [Supply chain](docs/security/supply-chain.md), [Threat model](docs/security/threat-model.md) and [Security policy](SECURITY.md) |
 | Install on another platform | [Installation](docs/install.md) |
-| Understand how Sevak works inside | [How Sevak works](docs/architecture.md) |
+| Understand how Sevak works inside | [How Sevak works](docs/architecture.md) and the [design decisions](docs/decisions/index.md) |
 | Write a plugin (Rust or a script) | [Plugin guide](docs/plugins.md) |
-| Build, test or package Sevak | [Development](docs/development.md) |
+| Build, test or package Sevak | [Development](docs/development.md), [Testing](docs/testing.md) and [Releasing](docs/releasing.md) |
 | Understand the name and visual identity | [Brand story](docs/brand.md) |
 
 ## Build from source
@@ -341,6 +342,7 @@ You need **Rust 1.90+**, **Node.js 22+**, and the native libraries required by
 npm ci
 npm run tauri dev        # Desktop app with frontend hot reload
 npm run check            # Svelte and TypeScript checks
+npm test                 # UI unit tests
 npm run build            # Production frontend
 npx tauri build          # Packages for the current platform
 ```
