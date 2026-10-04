@@ -8,6 +8,8 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use crate::bounded_read::{read_to_string_capped, MAX_CONFIG_BYTES};
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -35,6 +37,12 @@ hotkey = "Super+Space"
 # you are using (text, a URL, files) and offers actions for it. "" turns it off.
 # On Wayland run `sevak --setup-hotkey` to bind it to `sevak --actions`. See [actions].
 actions_hotkey = "Ctrl+Alt+Space"
+
+# Windows: also react to shortcuts that another program types for you (AutoHotkey,
+# PowerToys Keyboard Manager and other remappers send "injected" keys). Off by
+# default so that a program on your desktop cannot open Sevak or trigger Universal
+# Actions by sending the shortcut itself; turn it on if a remapper is meant to.
+accept_injected_hotkeys = false
 
 # Hide the window when it loses focus.
 hide_on_blur = true
@@ -128,6 +136,12 @@ global = true
 use_os_index = true
 index_keyword = "ff"
 content_keyword = "in"
+# Windows only. Use paths on other computers (\\server\share, or a mapped
+# network drive). Off by default: merely looking at such a path makes Windows
+# connect to that computer and sign in to it, which can hand your Windows
+# credentials to whoever runs it. Turn on if you keep files on a file server
+# you trust; folders listed in "directories" on a share are skipped while off.
+allow_network_paths = false
 
 [bookmarks]
 # Browsers whose bookmarks are searchable; [] means every browser found.
@@ -219,9 +233,10 @@ keep_between_shows = false
 [clipboard]
 # Clipboard history ("cb <text>"). Off by default: turning it on makes Sevak
 # watch the clipboard and keep what you copy in clipboard-history.json in its
-# data folder: text, images (as PNG files in a "clipboard" folder next to it)
-# and the paths of copied files. All of it is stored unencrypted. Content that
-# apps mark as secret (password managers) is never recorded.
+# local data folder (on Windows %LOCALAPPDATA%\sevak, which does not roam with your
+# profile): text, images (as PNG files in a "clipboard" folder next to it) and
+# the paths of copied files. Content that apps mark as secret (password
+# managers) is never recorded.
 enabled = false
 # Items kept, of all kinds together (the oldest are dropped).
 max_items = 200
@@ -232,9 +247,19 @@ images = true
 files = true
 # An image whose PNG is larger than this is not recorded.
 max_image_bytes = 10485760
-# Never record text copied from these apps, e.g. ["KeePassXC", "1Password"].
+# Encrypt the history file and the image files for your Windows account
+# (DPAPI). macOS and Linux have no such encryption here: the files are plain,
+# readable by you only. Files already stored plain are encrypted on the next
+# start.
+encrypt = true
+# Never record text copied from these apps, e.g. ["Signal", "Messages"].
 # Matched case-insensitively against the program or app name.
 ignore_apps = []
+# Also skip password managers (KeePass, KeePassXC, 1Password, Bitwarden,
+# LastPass, Dashlane, Enpass, NordPass, RoboForm, Keeper, Proton Pass), the
+# system's credential prompts and ssh/gpg passphrase prompts, in addition to
+# ignore_apps. The full list is in the clipboard documentation. false turns it off.
+default_ignore_apps = true
 
 [contacts]
 # Search your contacts ("c <name>" or "@name"): copy an email or phone number,
@@ -329,6 +354,11 @@ case_sensitive = true
 ignore_apps = []
 # Terminal windows are skipped unless this is on.
 expand_in_terminals = false
+# Web browsers are skipped unless this is on: a password field in a web page
+# cannot be reliably told from other text boxes, so a keyword typed inside a
+# password would expand there. Chrome, Edge, Firefox, Brave, Vivaldi, Opera,
+# Safari, Arc, Zen, LibreWolf and Chromium count as browsers.
+expand_in_browsers = false
 
 # Web search engines: type "<keyword> <terms>". "{query}" is replaced by the
 # URL-encoded terms. Defining any [[web_search]] entry replaces this list.
@@ -447,6 +477,10 @@ pub struct GeneralConfig {
     pub hotkey: String,
     /// Accelerator for Universal Actions; empty turns the feature off.
     pub actions_hotkey: String,
+    /// Windows keyboard hook: also honour key events another program injects
+    /// (`SendInput`: AutoHotkey, PowerToys remaps). Off by default, so a
+    /// program on the desktop cannot press Sevak's shortcut for the user.
+    pub accept_injected_hotkeys: bool,
     pub hide_on_blur: bool,
     pub launch_at_login: bool,
     /// Look for a new release at startup and daily (asks before installing).
@@ -492,6 +526,7 @@ impl Default for GeneralConfig {
         Self {
             hotkey: "Super+Space".to_owned(),
             actions_hotkey: "Ctrl+Alt+Space".to_owned(),
+            accept_injected_hotkeys: false,
             hide_on_blur: true,
             launch_at_login: false,
             check_for_updates: true,
@@ -758,6 +793,9 @@ pub struct FilesConfig {
     pub index_keyword: String,
     /// Keyword for searching inside files; empty turns it off.
     pub content_keyword: String,
+    /// Windows: use network paths (`\\server\share`, mapped network drives).
+    /// Off by default because touching one makes the system connect and sign in.
+    pub allow_network_paths: bool,
 }
 
 impl Default for FilesConfig {
@@ -775,6 +813,7 @@ impl Default for FilesConfig {
             use_os_index: true,
             index_keyword: "ff".to_owned(),
             content_keyword: "in".to_owned(),
+            allow_network_paths: false,
         }
     }
 }
@@ -840,6 +879,77 @@ pub struct FileBufferConfig {
     pub keep_between_shows: bool,
 }
 
+/// Apps whose copies the clipboard history never records, unless
+/// `[clipboard] default_ignore_apps = false`: password managers and the tools
+/// that ask for a password or passphrase (credential prompts, `ssh` askpass and
+/// `pinentry` programs, key agents).
+///
+/// Each entry is compared, ignoring case and a `.exe` / `.app` ending, with the
+/// name the system reports for the app in front: the program name on Windows
+/// (`KeePassXC.exe`), the app name or bundle id on macOS, the window class or
+/// program name on Linux. It is a best-effort list: an app that is not on it,
+/// or that reports another name, is not covered (add it to `ignore_apps`).
+pub const DEFAULT_CLIPBOARD_IGNORE_APPS: &[&str] = &[
+    // Password managers.
+    "KeePass",
+    "KeePassXC",
+    "org.keepassxc.KeePassXC",
+    "keepassx",
+    "1Password",
+    "1Password 7",
+    "com.1password.1password",
+    "com.agilebits.onepassword7",
+    "com.agilebits.onepassword-osx",
+    "Bitwarden",
+    "com.bitwarden.desktop",
+    "LastPass",
+    "com.lastpass.lastpass",
+    "Dashlane",
+    "com.dashlane.dashlanephonefinal",
+    "Enpass",
+    "in.sinew.Enpass-Desktop",
+    "NordPass",
+    "RoboForm",
+    "Keeper",
+    "KeeperPasswordManager",
+    "Proton Pass",
+    "ProtonPass",
+    "Authy Desktop",
+    "WinAuth",
+    "org.gnome.World.Secrets",
+    "seahorse",
+    "kwalletmanager",
+    "kwalletmanager5",
+    // The system's own credential prompts.
+    "CredentialUIBroker",
+    "consent",
+    "LogonUI",
+    "Keychain Access",
+    "com.apple.keychainaccess",
+    "com.apple.Passwords",
+    "SecurityAgent",
+    "com.apple.SecurityAgent",
+    "gcr-prompter",
+    // Passphrase prompts of ssh, gpg and their agents.
+    "ssh-askpass",
+    "x11-ssh-askpass",
+    "gnome-ssh-askpass",
+    "ssh-askpass-gnome",
+    "ksshaskpass",
+    "lxqt-openssh-askpass",
+    "pinentry",
+    "pinentry-gtk",
+    "pinentry-gtk-2",
+    "pinentry-gnome3",
+    "pinentry-qt",
+    "pinentry-x11",
+    "pinentry-mac",
+    "pinentry-curses",
+    "pinentry-tty",
+    "pageant",
+    "puttygen",
+];
+
 /// The clipboard history plugin (`cb`). Opt-in: nothing is watched or stored
 /// unless `enabled` is set.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -851,12 +961,19 @@ pub struct ClipboardConfig {
     pub max_item_bytes: usize,
     /// Apps whose copies are never recorded (program or app names).
     pub ignore_apps: Vec<String>,
+    /// Also never record copies from the password managers and secret-handling
+    /// tools in [`DEFAULT_CLIPBOARD_IGNORE_APPS`], in addition to `ignore_apps`.
+    pub default_ignore_apps: bool,
     /// Record copied images (as PNG files next to the history).
     pub images: bool,
     /// Record copied files and folders (their paths; the files stay where they are).
     pub files: bool,
     /// An image whose PNG is larger than this many bytes is not recorded.
     pub max_image_bytes: usize,
+    /// Encrypt the history file and the image files at rest for the current
+    /// user, where the system can (Windows: DPAPI). Elsewhere the files are
+    /// plain but readable by the owner only.
+    pub encrypt: bool,
 }
 
 impl Default for ClipboardConfig {
@@ -866,9 +983,11 @@ impl Default for ClipboardConfig {
             max_items: 200,
             max_item_bytes: 64 * 1024,
             ignore_apps: Vec::new(),
+            default_ignore_apps: true,
             images: true,
             files: true,
             max_image_bytes: 10 * 1024 * 1024,
+            encrypt: true,
         }
     }
 }
@@ -972,6 +1091,10 @@ pub struct SnippetsConfig {
     pub ignore_apps: Vec<String>,
     /// Expand in terminal windows too.
     pub expand_in_terminals: bool,
+    /// Expand in web browsers too. Off by default: a password field in a web
+    /// page cannot be reliably told from any other text box, so a keyword typed
+    /// inside a password would expand there.
+    pub expand_in_browsers: bool,
 }
 
 impl Default for SnippetsConfig {
@@ -983,6 +1106,7 @@ impl Default for SnippetsConfig {
             case_sensitive: true,
             ignore_apps: Vec::new(),
             expand_in_terminals: false,
+            expand_in_browsers: false,
         }
     }
 }
@@ -1183,7 +1307,7 @@ impl Config {
             source,
         };
 
-        match fs::read_to_string(path) {
+        match read_to_string_capped(path, MAX_CONFIG_BYTES) {
             Ok(text) => {
                 let config = Self::from_toml_str(&text).map_err(|source| ConfigError::Parse {
                     path: path.to_path_buf(),
@@ -1218,7 +1342,7 @@ impl Config {
             source,
         };
 
-        let existing = match fs::read_to_string(path) {
+        let existing = match read_to_string_capped(path, MAX_CONFIG_BYTES) {
             Ok(text) => text,
             Err(err) if err.kind() == io::ErrorKind::NotFound => DEFAULT_CONFIG_TOML.to_owned(),
             Err(err) => return Err(io_err(err)),
@@ -1563,6 +1687,41 @@ mod tests {
     }
 
     #[test]
+    fn a_config_file_over_the_size_limit_is_an_error_and_left_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        let huge = format!("# {}\n", "x".repeat(MAX_CONFIG_BYTES as usize));
+        fs::write(&path, &huge).unwrap();
+        let err = Config::load_or_create(&path).unwrap_err();
+        assert!(matches!(err, ConfigError::Io { .. }), "{err}");
+        assert!(err.to_string().contains("limit of 4 MiB"), "{err}");
+        // Saving the settings does not read it whole either, nor overwrite it.
+        let err = Config::default().save_to(&path).unwrap_err();
+        assert!(err.to_string().contains("limit"), "{err}");
+        assert_eq!(fs::metadata(&path).unwrap().len(), huge.len() as u64);
+        // Just under the limit still loads.
+        fs::write(&path, format!("# {}\n", "x".repeat(1000))).unwrap();
+        assert!(Config::load_or_create(&path).is_ok());
+    }
+
+    #[test]
+    fn network_paths_are_off_unless_the_file_says_otherwise() {
+        assert!(!Config::default().files.allow_network_paths);
+        assert!(DEFAULT_CONFIG_TOML.contains("allow_network_paths = false"));
+        // An existing file without the key keeps them off.
+        let old = Config::from_toml_str("[files]\nkeyword = \"f\"\n").unwrap();
+        assert!(!old.files.allow_network_paths);
+        let on = Config::from_toml_str("[files]\nallow_network_paths = true\n").unwrap();
+        assert!(on.files.allow_network_paths);
+        // Saving the settings keeps the key and the file's comments.
+        let mut config = Config::default();
+        config.files.allow_network_paths = true;
+        let text = saved(Some(DEFAULT_CONFIG_TOML), &config);
+        assert!(text.contains("allow_network_paths = true"), "{text}");
+        assert!(text.contains("# Windows only. Use paths on other computers"));
+    }
+
+    #[test]
     fn empty_file_yields_defaults() {
         assert_eq!(Config::from_toml_str("").unwrap(), Config::default());
     }
@@ -1878,6 +2037,17 @@ expand_in_terminals = true
     }
 
     #[test]
+    fn the_default_ignore_list_has_no_blanks_or_duplicates() {
+        let mut seen = std::collections::HashSet::new();
+        for app in DEFAULT_CLIPBOARD_IGNORE_APPS {
+            assert!(!app.trim().is_empty());
+            assert_eq!(*app, app.trim());
+            assert!(seen.insert(app.to_lowercase()), "{app} is listed twice");
+        }
+        assert!(Config::default().clipboard.default_ignore_apps);
+    }
+
+    #[test]
     fn an_unknown_expand_on_means_delimiter_not_a_broken_file() {
         let config = Config::from_toml_str("[snippets]\nexpand_on = \"whenever\"\n").unwrap();
         assert_eq!(config.snippets.expand_on, ExpandOn::Delimiter);
@@ -1935,6 +2105,28 @@ expand_in_terminals = true
     #[test]
     fn wrong_types_are_rejected() {
         assert!(Config::from_toml_str("[general]\nhide_on_blur = \"yes\"\n").is_err());
+        assert!(Config::from_toml_str("[general]\naccept_injected_hotkeys = \"yes\"\n").is_err());
+        assert!(Config::from_toml_str("[general]\naccept_injected_hotkeys = 1\n").is_err());
+    }
+
+    #[test]
+    fn injected_hotkeys_are_refused_unless_asked_for() {
+        assert!(!Config::default().general.accept_injected_hotkeys);
+        assert!(
+            !Config::from_toml_str("")
+                .unwrap()
+                .general
+                .accept_injected_hotkeys
+        );
+        let config = Config::from_toml_str("[general]\naccept_injected_hotkeys = true\n").unwrap();
+        assert!(config.general.accept_injected_hotkeys);
+        // The documented default file says the same, with its explanation.
+        assert!(DEFAULT_CONFIG_TOML.contains("accept_injected_hotkeys = false"));
+        assert!(DEFAULT_CONFIG_TOML.contains("AutoHotkey"));
+        assert_eq!(
+            Config::from_toml_str(DEFAULT_CONFIG_TOML).unwrap(),
+            Config::default()
+        );
     }
 
     #[test]

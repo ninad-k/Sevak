@@ -19,6 +19,8 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use crate::bounded_read::{read_to_string_capped, MAX_USAGE_BYTES};
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -119,7 +121,7 @@ pub(crate) fn normalize_query(query: &str) -> String {
 impl UsageStore {
     /// Reads the store from `path`; a missing file yields an empty store.
     pub fn load(path: &Path) -> Result<Self, UsageError> {
-        let text = match fs::read_to_string(path) {
+        let text = match read_to_string_capped(path, MAX_USAGE_BYTES) {
             Ok(text) => text,
             Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(Self::default()),
             Err(source) => {
@@ -137,22 +139,34 @@ impl UsageStore {
 
     /// Writes the store to `path` atomically, creating parent directories.
     pub fn save(&self, path: &Path) -> Result<(), UsageError> {
+        self.save_with(path, |path, bytes| {
+            if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+                fs::create_dir_all(parent)?;
+            }
+            let mut tmp = path.as_os_str().to_owned();
+            tmp.push(".tmp");
+            let tmp = PathBuf::from(tmp);
+            fs::write(&tmp, bytes)?;
+            fs::rename(&tmp, path).inspect_err(|_| {
+                let _ = fs::remove_file(&tmp);
+            })
+        })
+    }
+
+    /// Like [`UsageStore::save`], but `write` puts the JSON on disk (given the
+    /// path and the bytes). The shell passes a writer that makes the file
+    /// readable by its owner only: the file holds the last typed queries.
+    pub fn save_with(
+        &self,
+        path: &Path,
+        write: impl FnOnce(&Path, &[u8]) -> io::Result<()>,
+    ) -> Result<(), UsageError> {
         let io_err = |source| UsageError::Io {
             path: path.to_owned(),
             source,
         };
-        if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
-            fs::create_dir_all(parent).map_err(io_err)?;
-        }
         let json = serde_json::to_string_pretty(self).map_err(|e| io_err(io::Error::other(e)))?;
-        let mut tmp = path.as_os_str().to_owned();
-        tmp.push(".tmp");
-        let tmp = PathBuf::from(tmp);
-        fs::write(&tmp, json).map_err(io_err)?;
-        fs::rename(&tmp, path).map_err(|source| {
-            let _ = fs::remove_file(&tmp);
-            io_err(source)
-        })
+        write(path, json.as_bytes()).map_err(io_err)
     }
 
     /// Notes that result `id` was launched at unix time `now` after the user
@@ -445,6 +459,41 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let s = UsageStore::load(&dir.path().join("nope.json")).unwrap();
         assert!(s.is_empty());
+    }
+
+    #[test]
+    fn save_with_hands_the_json_to_the_writer() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("usage.json");
+        let mut store = UsageStore::default();
+        store.record("a", "query", 5);
+        let mut seen = None;
+        store
+            .save_with(&path, |given, bytes| {
+                seen = Some((given.to_owned(), bytes.to_vec()));
+                Ok(())
+            })
+            .unwrap();
+        let (given, bytes) = seen.unwrap();
+        assert_eq!(given, path);
+        assert!(!path.exists(), "the writer decides what reaches the disk");
+        let reloaded: UsageStore = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(reloaded.entries.len(), 1);
+        // A failing writer is an error that names the file.
+        let err = store
+            .save_with(&path, |_, _| Err(io::Error::other("disk full")))
+            .unwrap_err();
+        assert!(err.to_string().contains("usage.json"), "{err}");
+    }
+
+    #[test]
+    fn a_usage_file_over_the_size_limit_is_an_io_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("usage.json");
+        fs::write(&path, vec![b' '; MAX_USAGE_BYTES as usize + 1]).unwrap();
+        let err = UsageStore::load(&path).unwrap_err();
+        assert!(matches!(err, UsageError::Io { .. }), "{err}");
+        assert!(err.to_string().contains("limit of 8 MiB"), "{err}");
     }
 
     #[test]

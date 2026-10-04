@@ -3937,6 +3937,8 @@ dependencies = [
  "toml 1.1.6+spec-1.1.0",
  "toml_edit 0.25.15+spec-1.1.0",
  "tracing",
+ "url",
+ "zeroize",
 ]
 
 [[package]]
@@ -3946,6 +3948,7 @@ dependencies = [
  "arboard",
  "block2",
  "dirs 7.0.0",
+ "libc",
  "objc2",
  "objc2-app-kit",
  "objc2-contacts",
@@ -3986,7 +3989,9 @@ dependencies = [
  "tempfile",
  "toml 1.1.6+spec-1.1.0",
  "tracing",
+ "url",
  "walkdir",
+ "zeroize",
  "zip",
 ]
 

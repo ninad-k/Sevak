@@ -16,7 +16,7 @@ use crate::capture::{
     self, CaptureDriver, CaptureOptions, SelectionCapture, SystemClipboardCapture, MODIFIER_TIMEOUT,
 };
 use crate::error::{PlatformError, Result};
-use crate::paste::{ClipboardRead, ForegroundApp, PasteSupport};
+use crate::paste::{ForegroundApp, PasteSupport};
 use crate::session::DisplayServer;
 
 use super::paste::{self, X};
@@ -65,13 +65,9 @@ pub(crate) fn capture_selection(options: &CaptureOptions) -> SelectionCapture {
         return SelectionCapture::Unavailable(reason);
     }
     let clipboard = SystemClipboardCapture {
+        text_units: || None,
         sequence: || None,
-        read: || {
-            Ok(ClipboardRead {
-                text: crate::clipboard::read_text()?,
-                sensitive: false,
-            })
-        },
+        read: paste::read_clipboard,
     };
     capture::capture_by_copy(&clipboard, &X11Capture, true)
 }

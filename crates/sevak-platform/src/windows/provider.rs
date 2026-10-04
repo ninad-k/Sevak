@@ -149,6 +149,14 @@ impl PlatformProvider for WindowsProvider {
         capture::capture_selection(options)
     }
 
+    fn identifies_apps(&self) -> bool {
+        true
+    }
+
+    fn history_sealer(&self) -> Option<std::sync::Arc<dyn sevak_core::sealed::Sealer>> {
+        Some(std::sync::Arc::new(super::dpapi::Dpapi))
+    }
+
     fn clipboard_sequence(&self) -> Option<u64> {
         paste::clipboard_sequence()
     }
@@ -190,6 +198,8 @@ fn launch_with_verb(verb: &str, target: &LaunchTarget) -> Result<()> {
             args,
             working_dir,
         } => {
+            // A program on a network share is only started when allowed.
+            crate::netpath::guard(path)?;
             if let Some(bad) = unsafe_batch_arg(path, args) {
                 return Err(PlatformError::Os {
                     operation: "launch",

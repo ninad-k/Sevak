@@ -4,10 +4,17 @@
 //! |---------|---------------------------------|--------------------------------------------------|--------------------------------|
 //! | config  | `%APPDATA%\sevak\config.toml`   | `~/Library/Application Support/sevak/config.toml` | `~/.config/sevak/config.toml`  |
 //! | data    | `%APPDATA%\sevak\`              | `~/Library/Application Support/sevak/`            | `~/.local/share/sevak/`        |
+//! | local   | `%LOCALAPPDATA%\sevak\`        | same as data                                     | same as data                   |
 //! | logs    | `<data>\logs\`                  | `<data>/logs/`                                   | `<data>/logs/`                 |
 //!
 //! The config directory can be replaced with `--config <path>` or
 //! `SEVAK_CONFIG_DIR`, the data directory with `SEVAK_DATA_DIR`.
+//!
+//! The *local* directory is for data that must stay on this machine: on Windows
+//! the data directory is in the roaming profile, which domain setups, folder
+//! redirection and backup tools copy to other machines, so the clipboard
+//! history lives in the local directory instead. Everywhere else, and when
+//! `SEVAK_DATA_DIR` is set, it is the data directory.
 
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
@@ -27,6 +34,9 @@ pub struct AppPaths {
     pub config_dir: PathBuf,
     pub config_file: PathBuf,
     pub data_dir: PathBuf,
+    /// Data that must not roam between machines (the clipboard history). See
+    /// the module documentation.
+    pub local_data_dir: PathBuf,
     pub log_dir: PathBuf,
     pub usage_file: PathBuf,
 }
@@ -60,30 +70,75 @@ impl AppPaths {
                 (dir, file)
             }
         };
-        let data_dir = match data {
-            Some(path) => absolute(&path, &base, home.as_deref()),
-            None => dirs::data_dir()
-                .ok_or(PlatformError::MissingDirectory("data"))?
-                .join(APP_DIR),
+        let (data_dir, local_data_dir) = match data {
+            Some(path) => {
+                let dir = absolute(&path, &base, home.as_deref());
+                (dir.clone(), dir)
+            }
+            None => {
+                let data_dir = dirs::data_dir()
+                    .ok_or(PlatformError::MissingDirectory("data"))?
+                    .join(APP_DIR);
+                let local = dirs::data_local_dir()
+                    .map_or_else(|| data_dir.clone(), |dir| dir.join(APP_DIR));
+                (data_dir, local)
+            }
         };
-        Ok(Self::from_parts(config_dir, config_file, data_dir))
+        Ok(Self::from_parts(
+            config_dir,
+            config_file,
+            data_dir,
+            local_data_dir,
+        ))
     }
 
     /// Builds the layout below explicit roots (used by tests and portable setups).
     pub fn with_roots(config_root: PathBuf, data_root: PathBuf) -> Self {
         let config_dir = config_root.join(APP_DIR);
         let config_file = config_dir.join(CONFIG_FILE);
-        Self::from_parts(config_dir, config_file, data_root.join(APP_DIR))
+        let data_dir = data_root.join(APP_DIR);
+        Self::from_parts(config_dir, config_file, data_dir.clone(), data_dir)
     }
 
-    fn from_parts(config_dir: PathBuf, config_file: PathBuf, data_dir: PathBuf) -> Self {
+    fn from_parts(
+        config_dir: PathBuf,
+        config_file: PathBuf,
+        data_dir: PathBuf,
+        local_data_dir: PathBuf,
+    ) -> Self {
         Self {
             config_file,
             config_dir,
             log_dir: data_dir.join("logs"),
             usage_file: data_dir.join("usage.json"),
             data_dir,
+            local_data_dir,
         }
+    }
+
+    /// Creates the data, local data and log folders so that only their owner can read them
+    /// (0700 on Unix; on Windows they inherit the profile's own access), and
+    /// makes the ones Sevak itself named (`sevak`, `logs`) owner-only if an
+    /// earlier version created them wider. The config folder is left to the
+    /// user's own settings. Failures are returned, not fatal: the caller logs.
+    pub fn ensure_private_dirs(&self) -> std::io::Result<()> {
+        // The local data folder (the clipboard history lives there on Windows)
+        // is the data folder itself everywhere else.
+        let mut seen: Vec<&PathBuf> = Vec::new();
+        for dir in [&self.data_dir, &self.local_data_dir, &self.log_dir] {
+            if seen.contains(&dir) {
+                continue;
+            }
+            seen.push(dir);
+            crate::private_file::create_private_dir_all(dir)?;
+            let ours = dir
+                .file_name()
+                .is_some_and(|name| name == OsStr::new(APP_DIR) || name == OsStr::new("logs"));
+            if ours {
+                crate::private_file::restrict_dir(dir)?;
+            }
+        }
+        Ok(())
     }
 
     /// Where a `--config` / `SEVAK_CONFIG_DIR` value puts the config:
@@ -152,6 +207,43 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_data_and_log_folders_are_created() {
+        let root = tempfile::tempdir().unwrap();
+        let paths = AppPaths::with_roots(root.path().join("config"), root.path().join("data"));
+        paths.ensure_private_dirs().unwrap();
+        assert!(paths.data_dir.is_dir());
+        assert!(paths.log_dir.is_dir());
+        assert!(
+            !paths.config_dir.exists(),
+            "the config folder is not ours to create"
+        );
+        // Again, with everything there.
+        paths.ensure_private_dirs().unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_data_and_log_folders_are_owner_only_even_if_an_earlier_version_made_them_wider() {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = |path: &Path| std::fs::metadata(path).unwrap().permissions().mode() & 0o777;
+        let root = tempfile::tempdir().unwrap();
+        let paths = AppPaths::with_roots(root.path().join("config"), root.path().join("data"));
+        std::fs::create_dir_all(&paths.log_dir).unwrap();
+        for dir in [&paths.data_dir, &paths.log_dir] {
+            std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        paths.ensure_private_dirs().unwrap();
+        assert_eq!(mode(&paths.data_dir), 0o700);
+        assert_eq!(mode(&paths.log_dir), 0o700);
+
+        // Fresh ones too.
+        let fresh = AppPaths::with_roots(root.path().join("c2"), root.path().join("d2"));
+        fresh.ensure_private_dirs().unwrap();
+        assert_eq!(mode(&fresh.data_dir), 0o700);
+        assert_eq!(mode(&fresh.log_dir), 0o700);
+    }
+
+    #[test]
     fn home_is_abbreviated() {
         let home = std::path::Path::new("home").join("me");
         assert_eq!(tilde_path(&home, Some(&home)), "~");
@@ -210,6 +302,20 @@ mod tests {
         assert_ne!(paths.data_dir, dir);
         assert_eq!(paths.usage_file, paths.data_dir.join("usage.json"));
         assert_eq!(paths.log_dir, paths.data_dir.join("logs"));
+    }
+
+    #[test]
+    fn the_local_directory_is_the_data_directory_except_on_windows() {
+        let paths = AppPaths::resolve().unwrap();
+        if cfg!(windows) && std::env::var_os(DATA_DIR_ENV).is_none() {
+            let local = dirs::data_local_dir().unwrap().join(APP_DIR);
+            assert_eq!(paths.local_data_dir, local);
+        } else {
+            assert_eq!(paths.local_data_dir, paths.data_dir);
+        }
+        // Explicit roots (portable setups, tests) keep everything together.
+        let rooted = AppPaths::with_roots(PathBuf::from("cfg"), PathBuf::from("data"));
+        assert_eq!(rooted.local_data_dir, rooted.data_dir);
     }
 
     #[test]

@@ -19,6 +19,7 @@ use std::process::Command;
 use std::sync::{Arc, Mutex};
 
 use serde_json::Value;
+use sevak_core::gallery_source::Pin;
 use sevak_core::{AppEntry, Config, IconData, IconSource, LaunchTarget};
 use sevak_platform::{PasteOutcome, PlatformError, PlatformProvider, Result as PlatformResult};
 use sevak_plugins::keywords::KeywordOwners;
@@ -27,7 +28,9 @@ use sevak_plugins::script::{Format, Launch, Manifest, Mode};
 use sevak_plugins::workflow::gallery::{parse_index, Entry, Kind, MAX_PACKAGE_BYTES};
 use sevak_plugins::workflow::{Ctx, NodeKind, OutputSink, RunReport, Runtime, Workflow};
 
-const RAW: &str = "https://raw.githubusercontent.com/ninad-k/Sevak/main/";
+/// Where the pinned release's files live. The index itself names files by a
+/// path relative to the repository root; the parser joins them to this tag.
+const RAW: &str = "https://raw.githubusercontent.com/ninad-k/Sevak/v1.2.3/";
 const TREE: &str = "https://github.com/ninad-k/Sevak/tree/main/examples/";
 
 /// Hosts a gallery workflow may open. Adding a host is a review decision.
@@ -63,9 +66,13 @@ fn examples(kind: Kind) -> PathBuf {
     })
 }
 
+fn pin() -> Pin {
+    Pin::new("v1.2.3").unwrap()
+}
+
 fn index() -> Vec<Entry> {
     let text = std::fs::read_to_string(repo().join("gallery/index.json")).unwrap();
-    let parsed = parse_index(&text).unwrap();
+    let parsed = parse_index(&text, &pin()).unwrap();
     assert!(parsed.skipped.is_empty(), "{:?}", parsed.skipped);
     parsed.entries
 }
@@ -80,6 +87,7 @@ fn entries_of(kind: Kind) -> Vec<Entry> {
 fn the_index_describes_the_committed_packages() {
     let text = std::fs::read_to_string(repo().join("gallery/index.json")).unwrap();
     let raw: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(raw["format"], 2, "the committed index is format 2");
     let raw_entries = raw["entries"].as_array().unwrap();
     let entries = index();
     assert_eq!(entries.len(), raw_entries.len(), "an entry was skipped");
@@ -92,6 +100,13 @@ fn the_index_describes_the_committed_packages() {
         // The package installs into the folder named like the entry, from the
         // committed zip, whose bytes are the ones the hash covers.
         assert_eq!(entry.folder_name(), id, "{id}: folder");
+        // In the file the source is a path, never an address; after parsing it
+        // is the address at the pinned release.
+        assert_eq!(
+            raw["source"],
+            format!("gallery/packages/{id}.zip"),
+            "{id}: source"
+        );
         assert_eq!(
             entry.source,
             format!("{RAW}gallery/packages/{id}.zip"),
@@ -157,7 +172,7 @@ fn the_index_describes_the_committed_packages() {
 
 /// What a user gets: every package installs through the gallery code into a
 /// fresh folder, and the hosts then load the folders. Exactly the packages that
-/// run a script wait for permission; nothing else does.
+/// run a script or paste into another app wait for permission; nothing else does.
 #[test]
 fn installed_packages_load_through_the_hosts_and_only_scripts_need_permission() {
     use sevak_plugins::script::{Scanned as ScannedPlugin, ScriptPluginHost};
@@ -190,29 +205,31 @@ fn installed_packages_load_through_the_hosts_and_only_scripts_need_permission() 
         match item {
             Scanned::Workflow(candidate) => {
                 assert!(candidate.warnings.is_empty(), "{}", candidate.folder);
-                // Approval is needed exactly where a script can run.
-                let runs_script = candidate
-                    .workflow
-                    .nodes
-                    .iter()
-                    .any(|n| matches!(n.kind, NodeKind::RunScript { .. }));
+                // Approval is needed exactly where a node can run code, open
+                // things or type into another app (`Paste`).
+                let needs_approval = candidate.workflow.needs_approval();
                 assert_eq!(
                     candidate.approval_key.is_some(),
-                    runs_script,
+                    needs_approval,
                     "{}",
                     candidate.folder
                 );
-                assert_eq!(candidate.approved, !runs_script, "{}", candidate.folder);
+                assert_eq!(candidate.approved, !needs_approval, "{}", candidate.folder);
             }
             Scanned::Broken { folder, error } => panic!("{folder}: {error}"),
         }
     }
-    let waiting: Vec<String> = host
+    let mut waiting: Vec<String> = host
         .pending(&Config::default())
         .into_iter()
         .map(|c| c.folder)
         .collect();
-    assert_eq!(waiting, ["selection-toolkit"]);
+    waiting.sort();
+    // The workflows that paste into another app wait too, besides the script.
+    assert_eq!(
+        waiting,
+        ["markdown-tools", "selection-toolkit", "tidy-text"]
+    );
 
     let script_host = ScriptPluginHost::new(
         plugins,

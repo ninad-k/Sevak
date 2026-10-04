@@ -480,10 +480,19 @@ pub async fn clear_clipboard_history() -> Result<(), String> {
     let Some(file) = clipboard_history::default_history_path() else {
         return Err("Sevak's data folder could not be found.".to_owned());
     };
-    tauri::async_runtime::spawn_blocking(move || clipboard_history::clear_history(&file))
-        .await
-        .map_err(|err| format!("clearing did not finish: {err}"))?
-        .map_err(|err| format!("could not delete the clipboard history: {err}"))
+    // A history an older version kept in the roaming folder (and that was not
+    // moved yet, because the plugin was off) goes too.
+    let legacy = clipboard_history::legacy_history_path();
+    tauri::async_runtime::spawn_blocking(move || {
+        clipboard_history::clear_history(&file)?;
+        match legacy {
+            Some(old) => clipboard_history::clear_history(&old),
+            None => Ok(()),
+        }
+    })
+    .await
+    .map_err(|err| format!("clearing did not finish: {err}"))?
+    .map_err(|err| format!("could not delete the clipboard history: {err}"))
 }
 
 /// "Set up GNOME shortcut": see [`gnome::setup_for_ui`]. The saved `[[hotkey]]`

@@ -59,10 +59,17 @@
   </div>
   <p class="sp-note privacy">
     <strong>Privacy:</strong> while this is on, Sevak watches the clipboard and keeps what you copy
-    on this computer, <strong>unencrypted</strong>, in its data folder: text and the paths of copied
-    files in <code>clipboard-history.json</code>, images as PNG files. Nothing is sent anywhere.
-    Content a password manager marks as secret is never recorded (Windows and macOS){#if platform === "linux"};
-      Linux has no such marker, so add those apps to Ignore apps{/if}.
+    on this computer, in its local data folder: text and the paths of copied files in
+    <code>clipboard-history.json</code>, images as PNG files.
+    {#if platform === "windows"}
+      {#if config.clipboard.encrypt}The files are encrypted for your Windows account.{:else}The
+        files are <strong>not encrypted</strong>.{/if}
+    {:else}
+      The files are <strong>not encrypted</strong>; they are readable only by your user.
+    {/if}
+    Nothing is sent anywhere. Password managers and credential prompts are never recorded (see
+    below){#if platform === "linux"}; on Linux a copy is skipped only when the app marks it as
+      secret, so add other apps to Ignore apps{/if}.
   </p>
   {#if pluginOff}
     <p class="sp-note warn" role="status">
@@ -108,6 +115,15 @@
       />
     </Row>
 
+    {#if platform === "windows"}
+      <Row
+        label="Encrypt the history"
+        hint="Encrypts the history file and the images for your Windows account. Another user, another computer or a backup cannot read them."
+      >
+        <Toggle bind:checked={config.clipboard.encrypt} label="Encrypt the clipboard history" />
+      </Row>
+    {/if}
+
     <Row
       label="Record images"
       hint="Copied pictures, saved as PNG files next to the history."
@@ -135,6 +151,16 @@
       hint="Copied files and folders: only their paths are kept; the files stay where they are."
     >
       <Toggle bind:checked={config.clipboard.files} label="Record files" />
+    </Row>
+
+    <Row
+      label="Skip password managers"
+      hint="Never record copies made in KeePass, 1Password, Bitwarden and similar apps, or in system credential and passphrase prompts. Add other apps below."
+    >
+      <Toggle
+        bind:checked={config.clipboard.default_ignore_apps}
+        label="Skip password managers and credential prompts"
+      />
     </Row>
 
     <ListEditor

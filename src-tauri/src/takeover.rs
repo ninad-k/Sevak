@@ -26,6 +26,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde::{Deserialize, Serialize};
+use sevak_core::bounded_read::{read_to_string_capped, MAX_STATE_BYTES};
 use sevak_platform::accelerator::{self, KeyNames};
 use sevak_platform::gnome::{self, Gsettings, InputSourceMove};
 use sevak_platform::spotlight::{self, CommandRunner, SpotlightShortcut, SystemRunner};
@@ -145,7 +146,7 @@ impl FileStore {
 
 impl Store for FileStore {
     fn load(&self) -> TakeoverRecord {
-        match std::fs::read_to_string(&self.path) {
+        match read_to_string_capped(&self.path, MAX_STATE_BYTES) {
             Ok(text) => serde_json::from_str(&text).unwrap_or_else(|err| {
                 tracing::warn!(path = %self.path.display(), "ignoring an unreadable {FILE_NAME}: {err}");
                 TakeoverRecord::default()

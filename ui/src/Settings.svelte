@@ -50,6 +50,7 @@
     general: {
       hotkey: "",
       actions_hotkey: "",
+      accept_injected_hotkeys: false,
       hide_on_blur: true,
       launch_at_login: false,
       check_for_updates: true,
@@ -82,6 +83,7 @@
       use_os_index: true,
       index_keyword: "ff",
       content_keyword: "in",
+      allow_network_paths: false,
     },
     snippets: {
       auto_expand: false,
@@ -90,6 +92,7 @@
       case_sensitive: true,
       ignore_apps: [],
       expand_in_terminals: false,
+      expand_in_browsers: false,
     },
     bookmarks: { browsers: [], keyword: "", global: true },
     file_buffer: { keep_between_shows: false },
@@ -98,9 +101,11 @@
       max_items: 200,
       max_item_bytes: 64 * 1024,
       ignore_apps: [],
+      default_ignore_apps: true,
       images: true,
       files: true,
       max_image_bytes: 10 * 1024 * 1024,
+      encrypt: true,
     },
     contacts: { enabled: false, keyword: "c", use_system: true, vcard_files: [] },
     onepassword: { enabled: false, keyword: "1p", op_path: "", account: "", cache_minutes: 10 },
@@ -656,6 +661,23 @@
               {/if}
             </div>
 
+            {#if platform === "windows"}
+              <div class="row">
+                <div class="label">
+                  <span class="name">Accept shortcuts sent by other programs</span>
+                  <span class="hint">
+                    Off: only keys you press count, so no other program can open Sevak by sending
+                    its shortcut. Turn on if AutoHotkey, PowerToys or another remapper types the
+                    shortcut for you.
+                  </span>
+                </div>
+                <Toggle
+                  bind:checked={draft.general.accept_injected_hotkeys}
+                  label="Accept shortcuts sent by other programs"
+                />
+              </div>
+            {/if}
+
             <div class="row">
               <div class="label">
                 <span class="name">Use the clipboard if the selection can't be read</span>
@@ -963,6 +985,20 @@
                 />
               </div>
 
+              <div class="row">
+                <div class="label">
+                  <span class="name">Expand in web browsers</span>
+                  <span class="hint">
+                    Off by default: a password field in a web page cannot be told from other text
+                    boxes, so a keyword typed inside a password would expand there.
+                  </span>
+                </div>
+                <Toggle
+                  bind:checked={draft.snippets.expand_in_browsers}
+                  label="Expand snippets in web browsers"
+                />
+              </div>
+
               <ListEditor
                 id="snippets-ignore-apps"
                 bind:items={draft.snippets.ignore_apps}
@@ -1113,6 +1149,17 @@
                 <span class="hint">Dot-files and dot-folders.</span>
               </div>
               <Toggle bind:checked={draft.files.include_hidden} label="Include hidden files" />
+            </div>
+
+            <div class="row">
+              <div class="label">
+                <span class="name">Allow network paths</span>
+                <span class="hint">
+                  Windows: use <code>\\server\share</code> paths and mapped network drives. Off, Sevak never
+                  contacts them, because Windows signs in to a computer just from looking at its path.
+                </span>
+              </div>
+              <Toggle bind:checked={draft.files.allow_network_paths} label="Allow network paths" />
             </div>
 
             <div class="row">

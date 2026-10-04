@@ -37,6 +37,9 @@ use crate::model::{Action, ClipContent, LaunchTarget, PreviewHint, ResultItem, V
 pub const MAX_TEXT_BYTES: usize = 64 * 1024;
 /// Most bytes of text shown in the Text View.
 pub const MAX_VIEW_BYTES: usize = 512 * 1024;
+/// What an encrypted image file may be larger than its picture.
+const SEALED_IMAGE_OVERHEAD: usize = 4096;
+
 /// Largest image (file size) sent to the page.
 pub const MAX_IMAGE_BYTES: u64 = 4 * 1024 * 1024;
 /// Most names listed for a folder.
@@ -348,28 +351,16 @@ fn refuse(path: &Path) -> Option<&'static str> {
     if is_network_path(&path.to_string_lossy()) {
         return Some("Network locations are not previewed");
     }
+    if crate::netpath::is_device_path(&path.to_string_lossy()) {
+        return Some("Device paths are not previewed");
+    }
     if !path.is_absolute() {
         return Some("Only absolute paths are previewed");
     }
     None
 }
 
-/// A UNC path (`\\server\share`, `//server/share`, `\\?\UNC\server\share`):
-/// opening it makes the system contact another machine. Local device paths
-/// (`\\?\C:\`, `\\.\`) are not network paths.
-pub fn is_network_path(path: &str) -> bool {
-    let unified = path.replace('/', "\\");
-    if let Some(rest) = unified.strip_prefix("\\\\") {
-        let device = rest.starts_with("?\\") || rest.starts_with(".\\");
-        if device {
-            return rest
-                .get(2..6)
-                .is_some_and(|prefix| prefix.eq_ignore_ascii_case("UNC\\"));
-        }
-        return true;
-    }
-    false
-}
+pub use crate::netpath::is_network_path;
 
 fn folder_content(content: &mut PreviewContent, path: &Path) {
     content.meta.insert(0, MetaRow::new("Kind", "Folder"));
@@ -431,8 +422,12 @@ fn file_content(content: &mut PreviewContent, path: &Path, size: u64, render: Re
             ));
             return;
         }
-        match read_limited(path, MAX_IMAGE_BYTES as usize) {
-            Ok(bytes) if !bytes.is_empty() => {
+        // An image of the clipboard history can be encrypted: a little more is
+        // read, for the encryption's own overhead.
+        let read = read_limited(path, MAX_IMAGE_BYTES as usize + SEALED_IMAGE_OVERHEAD)
+            .and_then(crate::sealed::open_global);
+        match read {
+            Ok(bytes) if !bytes.is_empty() && bytes.len() as u64 <= MAX_IMAGE_BYTES => {
                 content.body = PreviewBody::Image {
                     src: format!("data:{mime};base64,{}", base64(&bytes)),
                 };

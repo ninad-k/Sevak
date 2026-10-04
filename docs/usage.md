@@ -146,7 +146,7 @@ Tap ++shift++ (press and release it alone) or press ++ctrl+y++ (++cmd+y++ on mac
 
 PDF pages and thumbnails are drawn by your operating system, not by Sevak: Windows uses its built-in PDF engine and the Explorer thumbnail, macOS uses Quick Look, and Linux runs `pdftoppm` from poppler-utils (install it with your package manager, for example `sudo apt install poppler-utils`; without it a PDF shows its details and a one-line hint). Each picture is made by a short-lived helper with a ten-second limit, at most 900 pixels wide, shown only while the pane is open, and deleted at once; nothing is cached on disk. A protected, damaged or very large PDF shows its details and a note instead.
 
-The pane reads only the file or folder the selected result refers to, only when it is open, and never reads network locations (`\\server\share`). The window grows to make room and shrinks back when you close the pane; near the bottom of a small screen it moves up so the pane stays visible.
+The pane reads only the file or folder the selected result refers to, only when it is open, and never reads network locations (`\\server\share`), whatever [`allow_network_paths`](configuration.md#files) says. The window grows to make room and shrinks back when you close the pane; near the bottom of a small screen it moves up so the pane stays visible.
 
 ### Text View
 
@@ -262,7 +262,7 @@ More: [Bookmarks](features/bookmarks.md) plugin.
 
 Type **`cb `** to search what you copied recently: text, images and files. **++enter++** pastes the entry into your previous app. `cb image` shows copied images as a grid of thumbnails.
 
-Sevak never records content password managers mark as secret, copies made in apps listed in `ignore_apps`, very long text or very large images. Images are kept as PNG files in the data folder, unencrypted; turn them off with `[clipboard] images = false`.
+Sevak never records content password managers mark as secret, copies made in the common password managers or in apps listed in `ignore_apps`, very long text or very large images. The history and the images (PNG files) are kept in the local data folder, encrypted for your account on Windows and owner-only elsewhere; turn images off with `[clipboard] images = false`.
 
 More: [Clipboard history](features/clipboard.md) plugin.
 

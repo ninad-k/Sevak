@@ -7,6 +7,7 @@ use sevak_core::{Action, Plugin, PluginError, PluginResult, ResultItem, ResultsN
 use sevak_platform::PlatformProvider;
 
 use super::delivery::Begin;
+use super::items::vet_action;
 use super::runner::{Runner, Spec};
 use crate::actions::execute_action;
 
@@ -85,7 +86,13 @@ impl Plugin for ScriptPlugin {
                     .send_execute(key, payload)
                     .map_err(PluginError::Message)
             }
-            action => execute_action(self.platform.as_ref(), action),
+            action => {
+                // The conversion already filtered what scripts may ask for;
+                // check again at the point of doing it.
+                let action = vet_action(&self.runner.spec.item_context(), action.clone())
+                    .map_err(|reason| PluginError::Message(reason.to_owned()))?;
+                execute_action(self.platform.as_ref(), &action)
+            }
         }
     }
 

@@ -4,9 +4,10 @@
 //   node scripts/gallery-check.mjs --update   first copy the SHA-256 of every committed
 //                                             package and theme file into the index
 //
-// For each entry of gallery/index.json and gallery/themes.json it checks the
-// address (only this repository's raw.githubusercontent.com folder), that the
-// file exists, that its SHA-256 matches, and that no file in gallery/packages or
+// For each entry of gallery/index.json (format 2) and gallery/themes.json
+// (version 2) it checks the address (a path relative to the repository root, such
+// as gallery/packages/<id>.zip; the app resolves it against the release it was
+// built from, see docs/security/gallery-trust.md), that the file exists, that its SHA-256 matches, and that no file in gallery/packages or
 // gallery/themes is missing from the index. It reads the files exactly as they
 // are committed (they are stored with LF line endings; see .gitattributes).
 //
@@ -22,7 +23,8 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const gallery = join(root, "gallery");
-const RAW = "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/";
+/** Where an entry points: a path below the repository root, never an address. */
+const BASE = "gallery/";
 const TREE = "https://github.com/ninad-k/Sevak/tree/main/examples/";
 const MAX_PACKAGE_BYTES = 5 * 1024 * 1024; // the app refuses larger downloads
 const MAX_THEME_BYTES = 64 * 1024;
@@ -37,9 +39,9 @@ const readJson = (name) => JSON.parse(readFileSync(join(gallery, name), "utf8"))
 const writeJson = (name, value) =>
   writeFileSync(join(gallery, name), JSON.stringify(value, null, 2) + "\n");
 
-/** `https://.../gallery/<folder>/<file>` to `<file>`, or null when it points elsewhere. */
+/** `gallery/<folder>/<file>` to `<file>`, or null when it points elsewhere. */
 function fileIn(url, folder) {
-  const prefix = `${RAW}${folder}/`;
+  const prefix = `${BASE}${folder}/`;
   if (typeof url !== "string" || !url.startsWith(prefix)) return null;
   const file = url.slice(prefix.length);
   return file && !/[/?#\\\s]/.test(file) ? file : null;
@@ -54,7 +56,7 @@ function listed(where, folder, files) {
 
 // ---- gallery/index.json: workflows and script plugins ------------------------
 const index = readJson("index.json");
-if (index.format !== 1) problem("index.json", `format is ${index.format}, expected 1`);
+if (index.format !== 2) problem("index.json", `format is ${index.format}, expected 2`);
 {
   const ids = new Set();
   const zips = new Set();
@@ -84,7 +86,7 @@ if (index.format !== 1) problem("index.json", `format is ${index.format}, expect
 
     const file = fileIn(entry.source, "packages");
     if (!file || !file.endsWith(".zip")) {
-      problem(where, `source must be ${RAW}packages/<file>.zip`);
+      problem(where, `source must be ${BASE}packages/<file>.zip (a path, not an address)`);
       continue;
     }
     zips.add(file);
@@ -106,7 +108,7 @@ if (index.format !== 1) problem("index.json", `format is ${index.format}, expect
 
 // ---- gallery/themes.json: themes -----------------------------------------------
 const themes = readJson("themes.json");
-if (themes.version !== 1) problem("themes.json", `version is ${themes.version}, expected 1`);
+if (themes.version !== 2) problem("themes.json", `version is ${themes.version}, expected 2`);
 {
   const ids = new Set();
   const files = new Set();
@@ -123,7 +125,7 @@ if (themes.version !== 1) problem("themes.json", `version is ${themes.version}, 
 
     const file = fileIn(entry.url, "themes");
     if (!file || !file.endsWith(".toml")) {
-      problem(where, `url must be ${RAW}themes/<file>.toml`);
+      problem(where, `url must be ${BASE}themes/<file>.toml (a path, not an address)`);
       continue;
     }
     files.add(file);

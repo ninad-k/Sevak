@@ -299,6 +299,20 @@ most four such listings may be outstanding at once, and the last listing is
 reused for 1.5 s while the user types the filter). A UNC path needs both a
 server and a share before anything is read.
 
+On Windows a typed network path (`\\server\share`, `//server/share`,
+`\\?\UNC\...`, `\\.\UNC\...`, or a mapped network drive) is never read
+unless `[files] allow_network_paths` is on: `FilesPlugin::search` asks
+`sevak_platform::netpath::refusal` *before* the directory is listed and returns
+one status row instead, `resolve` and the configured `directories` ask the same
+question before `metadata` or `is_dir`, and the file buffer's
+`resolve_destination` takes the setting as an argument. Everything that opens a
+path through `PlatformProvider` (`open_path`, `reveal_path`, `move_to_trash`,
+`open_terminal_in`, Windows `launch` of an executable) and the workflow
+open-file and launch nodes also check the process-wide setting
+(`netpath::set_allow_network_paths`, applied from the configuration whenever the
+plugins are built). `sevak_core::netpath` holds the text rules; device paths
+(`\\.\pipe\...`, `\\?\GLOBALROOT\...`) are refused whatever the setting is.
+
 ### The shell plugin
 
 `> some command` (`crates/sevak-plugins/src/shell.rs`) shows "Run `some command`
@@ -902,7 +916,13 @@ the title (a contact's phone number).
 
 ### The `DeepLink` allow-list
 
-`open_url` accepts only `http(s):` and `mailto:` and must stay that way. Three
+`open_url` accepts only `http(s):` and `mailto:` and must stay that way. The
+address is parsed by `sevak_core::url_check::check_open_url` before it is handed
+to the system: `http(s)` needs a host and no user name or password;
+control characters, `"`, `<`, `>`, `\` and addresses over 8192 bytes are refused;
+spaces are percent-encoded; and `mailto:` takes a plain address list with only
+`subject`, `body`, `to`, `cc` and `bcc` options (no `attach`). The normalised
+form is what reaches ShellExecute, `open` or `xdg-open`. Three
 plugin features need one more scheme each, so instead of loosening `open_url`
 there is a closed type, `DeepLink`, that can only be built by constructors that
 validate every piece and build the whole URL themselves:
@@ -1016,11 +1036,22 @@ format      = "sevak"            # one-shot output: "sevak" (default) or "alfred
 timeout_ms        = 50           # how long a query waits for the script (10-1000)
 hard_timeout_ms   = 3000         # unanswered this long = hung, restart it (500-60000)
 idle_timeout_secs = 300          # persistent: stop after this much inactivity (0 = never)
+
+files       = ["lib/util.py"]    # optional: more files of this folder the approval covers
+inherit_env = ["MY_API_KEY"]     # optional: Sevak's own variables the script may see
+capabilities = ["launch"]        # optional: let results start applications
 ```
 
 - `id` is **stable forever**, like every plugin id: it is part of result ids and
   usage statistics and is what `[plugins] disabled` lists. Ids must be unique;
-  when two folders claim one id the first (by folder name) wins.
+  when two folders claim one id the one you have already allowed keeps it, and
+  otherwise the first (by folder name) wins.
+- `files` lists support files (a module the script imports, a data file it
+  reads) that belong to the plugin. Sevak already covers `script` and every
+  argument of `command` that is a path inside the folder; `files` adds the rest
+  to what [an approval is bound to](#security). Paths must stay inside the
+  plugin folder: relative, written with `/`, with no `..`, no drive prefix and
+  no backslash (the same on every system).
 - Keywords are matched case-insensitively. A keyword that another plugin (built-in
   or script) also uses queries both and merges their results, so pick one
   that is not taken (`g`, `yt`, `gh`, `f`, `b`, `>`, `cb`, `s`, `c`, `@`, `1p`, `define`, `spell`, `ai` and `uuid` are by
@@ -1067,8 +1098,24 @@ On Windows, `python` and `python3` can be Microsoft Store stubs that open the
 Store instead of running Python, which is why `.py` prefers the `py` launcher.
 Use `command = ["C:\\Path\\to\\python.exe", "main.py"]` to pin an interpreter.
 
-The script runs with the **plugin folder as its working directory** and these
-environment variables (on top of Sevak's own environment):
+The script runs with the **plugin folder as its working directory** and a
+**scrubbed environment**: not everything Sevak itself was started with, but
+only a base set (`PATH`, the home, profile and temp folders, `LANG` and the
+`LC_*` locale variables, the `XDG_*` folders, `DISPLAY`/`WAYLAND_DISPLAY`,
+`SystemRoot`/`ComSpec` and the other variables Windows programs need to start)
+plus the variables below. API keys, tokens, cloud credentials, proxy settings
+and the roots of version managers that happen to be in Sevak's environment do
+not reach the script. A plugin that needs one asks for it by name:
+
+```toml
+inherit_env = ["OPENAI_API_KEY", "HTTPS_PROXY"]   # Sevak's own values of these names
+```
+
+The names are shown in the Allow dialog and are part of what the approval
+covers. Variables that make an interpreter run something else (`BASH_ENV`,
+`ENV`, `PYTHON*`, `NODE_OPTIONS`, `NODE_PATH`, `PERL5OPT`, `RUBYOPT`,
+`JAVA_TOOL_OPTIONS`, `LD_*`, `DYLD_*`, `GIT_*`, `DOTNET_*`, `PATH`, ...) cannot be
+inherited; a manifest that lists one does not load. The script also gets:
 
 | Variable | Value |
 |---|---|
@@ -1086,7 +1133,9 @@ The default mode. Sevak starts **one long-lived process** the first time the
 keyword is used and talks to it with **newline-delimited JSON**: one object per
 line on stdin (Sevak to script) and on stdout (script to Sevak), UTF-8. stdout
 is for the protocol only; **stderr is captured into Sevak's log** tagged with
-the plugin id (the first 200 lines per process).
+the plugin id. Only the start is kept: lines are cut at 1 KiB, and at most 200
+lines and 32 KiB are logged per process; the rest is read and dropped, so a
+chatty script never blocks.
 
 ```jsonc
 // Sevak -> script
@@ -1154,12 +1203,21 @@ keyed by result id.
 | `{"type":"copy_text","text":"..."}` | copies text |
 | `{"type":"open_url","url":"https://..."}` | opens a web or `mailto:` link (other schemes are refused by Sevak) |
 | `{"type":"open_path","path":"..."}` | opens a file or folder with its default program; a relative path is relative to the plugin folder |
-| `{"type":"launch","target":{...}}` | starts an application (the `LaunchTarget` shapes in `model.rs`) |
+| `{"type":"launch","target":{...}}` | starts an application (the `LaunchTarget` shapes in `model.rs`); **only if the manifest declares `capabilities = ["launch"]`**, otherwise the item is dropped. A relative `path` is relative to the plugin folder |
 | `{"type":"custom","payload":"..."}` | sends `execute` back to the script (persistent mode only) |
 
 Sevak itself performs every standard action; a script cannot make Sevak call
-anything beyond this list. A `custom` action is the way to do work in the
-script, such as saving a note.
+anything beyond this list, and any other `action` type (pasting into other
+apps, putting images or files on the clipboard, revealing in the file manager,
+elevating) is dropped with a message in the log. `open_url` links must be
+`http://`, `https://` or `mailto:` and contain no control characters; anything
+else is dropped. The check is done when the answer arrives and again when the
+row is picked. A custom action is the way to do work in the script, such as
+saving a note.
+
+`capabilities` lists the extra things a plugin's results may do. Today there is
+one, `"launch"`. It is shown in the Allow dialog and is part of what the
+approval covers.
 
 **Scores.** Scores are optional. Without one, an item keeps the order the script
 gave it (the gap between rows is wide enough that usage statistics do not
@@ -1324,6 +1382,15 @@ built-in plugins only the OS-index file searches use it.
 - **Hung scripts.** If a query stays unanswered for `hard_timeout_ms` (default
   3 s) the process is killed and counts as a failure. A slow but alive script
   that answers other queries in time is not affected.
+- **Killing means the whole process tree.** When Sevak stops a script (a hung
+  or superseded query, a one-shot timeout, a workflow node's timeout, the idle
+  stop after its grace period) it ends the script **and the processes it
+  started**. On Windows the script runs in a job object, which also ends
+  everything when Sevak itself exits or crashes. On Linux and macOS it runs in
+  its own process group, which is signalled; a helper that starts its own
+  session (a daemon) is not reached, and a crash of Sevak itself does not end
+  the group. A script that ends on its own is not followed up: what it started
+  (an editor, say) keeps running.
 - **Quitting and reloading.** Sevak sends `shutdown` to every script when it
   quits, and when a reload replaces the plugin instances.
 - Everything is in Sevak's log (`Open log folder` in Settings), tagged with the
@@ -1335,20 +1402,34 @@ built-in plugins only the OS-index file searches use it.
   you start. Sevak does not sandbox them. Install only plugins you trust.
 - A new plugin does **not run until you allow it**. Sevak asks once per plugin,
   in a native dialog that shows the name, the folder and the exact command. The
-  answer is stored in `<data dir>/script-plugin-approvals.json`, bound to the
-  plugin id **and** its command line, mode and format: if `plugin.toml` changes
-  what runs, Sevak asks again. (Editing the script file itself is not detected;
-  the manifest is what you approve.) "Not now" asks again at the next start.
-  Disabled plugins are never asked about.
+  answer is stored in `<data dir>/script-plugin-approvals.json`, bound to a
+  SHA-256 over the plugin's **contents**: `plugin.toml`, the command line, mode
+  and format, the bytes of every file the command names inside the folder (the
+  `script`, and arguments such as `main.py` in `["python3", "main.py"]`), the
+  files listed in `files`, and the folder's location. Change any of them (a
+  `git pull` that edits the script, a gallery re-install, a moved or copied
+  folder) and Sevak asks again. A second folder that declares the same `id` and
+  command is a different plugin and is not covered by the first one's answer.
+  Sevak also checks the files again each time it starts the script, and
+  refuses to start one that changed since it was allowed (choose **Reload
+  index** to review it). What the hash does *not* cover: files the script
+  imports that you did not name (list them in `files`), the interpreter
+  itself, and anything the script downloads or reads at run time.
+  "Not now" asks again at the next start. Disabled plugins are never asked about.
+  The first time you start a Sevak with this rule, every existing script plugin
+  asks once more (the dialog says "the plugin's contents changed or this is the
+  first review under the new rules").
 - Only folders in your own config directory are loaded. Sevak never downloads,
   updates or installs plugins by itself; the only exception is the opt-in
   [gallery](workflows.md#the-gallery), which fetches a package after you press
   **Install** and still leaves it waiting for the approval above. What a
   script does on its own is outside Sevak's control and should be stated by its
   author.
-- Scripts cannot make Sevak do more than the fixed list of actions. `open_url`
-  still passes the platform allow-list (`http`, `https`, `mailto`), so a script
-  cannot open `file:` or custom schemes. Icons are restricted to the plugin folder.
+- Scripts cannot make Sevak do more than the fixed list of actions
+  (`copy_text`, `open_url`, `open_path`, `custom`, and `launch` only with the
+  `launch` capability). `open_url` is checked against the allow-list (`http`,
+  `https`, `mailto`) when the answer arrives, so a script cannot open `file:`
+  or custom schemes. Icons are restricted to the plugin folder.
 - Everything a script sends is validated: sizes are capped, scores clamped,
   malformed items skipped. A misbehaving script cannot crash Sevak or stall typing.
 - The settings window lists script plugins (waiting ones marked as such) so you
@@ -1463,14 +1544,17 @@ Design notes:
   name nodes by id, and a program's stderr is only logged when its node sets
   `log_stderr`.
 - **Gallery** (`gallery.rs`): the download is `sevak_plugins::net::fetch_https`
-  (HTTPS only, size limit, timeout, redirects must stay on HTTPS) and the hash
+  (HTTPS only, only the addresses of `sevak_core::gallery_source` at the first
+  request and at every redirect, size limit, timeout) and the hash
   check `sevak_core::checksum`, both shared with the theme gallery
   (`src-tauri/src/themes.rs`, `sevak_core::theme_store`);
   `install_bytes` verifies the SHA-256 first, then unpacks with strict path
   rules (no `..`, drive letters, links, trailing dots or spaces, more than 200
   files, 2 MiB per file, 10 MiB in all), validates the manifest and renames a
   staging folder into place. The shell's `gallery_install` looks the entry up in
-  the last loaded index by id, so the page cannot name a URL.
+  the last loaded index by id, so the page cannot name a URL. The index is read
+  from the tag of the running build and entries name files relative to it (see
+  [Gallery trust](security/gallery-trust.md)).
 - **Adding a node kind**: a variant of `NodeKind` (and `type_name`, `category`,
   `needs_approval`), a case in `validate.rs::check_node`, one in
   `exec.rs::execute`, an entry in `ui/src/lib/workflows/model.ts` (`KINDS`), and

@@ -280,6 +280,8 @@ pub fn apply_settled(app: &AppHandle) -> HotkeyStatus {
 fn apply_with(app: &AppHandle, may_change_os: bool) -> HotkeyStatus {
     let state = app.state::<AppState>();
     let config = state.config();
+    // Whether the Windows keyboard hook honours keys other programs inject.
+    hotkey_hook::set_accept_injected(config.general.accept_injected_hotkeys);
     let accelerator = config.general.hotkey.clone();
     // The key that currently works, to fall back to if the new one cannot be used.
     let previous = {

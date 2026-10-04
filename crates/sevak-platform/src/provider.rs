@@ -40,13 +40,18 @@ pub trait PlatformProvider: Send + Sync {
     fn launch(&self, target: &LaunchTarget) -> Result<()>;
 
     /// Opens a file or folder with its default handler.
+    ///
+    /// A network path is refused unless `[files] allow_network_paths` is on
+    /// ([`crate::netpath`]).
     fn open_path(&self, path: &Path) -> Result<()> {
+        crate::netpath::guard(path)?;
         crate::open::open_path(path)
     }
 
     /// Shows `path` selected in the system file manager (its parent folder
     /// opens with the item highlighted where the file manager supports it).
     fn reveal_path(&self, path: &Path) -> Result<()> {
+        crate::netpath::guard(path)?;
         crate::open::reveal_path(path)
     }
 
@@ -90,6 +95,7 @@ pub trait PlatformProvider: Send + Sync {
     /// Opens a terminal window in `dir`, at a shell prompt (it stays open even
     /// if `[shell] keep_open` is off). `dir` must be an absolute path.
     fn open_terminal_in(&self, dir: &Path, config: &ShellConfig) -> Result<()> {
+        crate::netpath::guard(dir)?;
         crate::terminal::open_terminal_in(dir, config)
     }
 
@@ -107,6 +113,7 @@ pub trait PlatformProvider: Send + Sync {
     /// Moves a file or folder to the system trash (never deletes it for good;
     /// it fails where the item cannot be trashed). `path` must be absolute.
     fn move_to_trash(&self, path: &Path) -> Result<()> {
+        crate::netpath::guard(path)?;
         crate::trash::move_to_trash(path)
     }
 
@@ -219,6 +226,16 @@ pub trait PlatformProvider: Send + Sync {
         None
     }
 
+    /// Whether [`PlatformProvider::foreground_app`] works on this system at all
+    /// (not on Wayland, which tells apps nothing about other windows). When it
+    /// does and still answers `None` for a window, the app could not be told
+    /// (Windows: a process that cannot be opened; Linux: a window without
+    /// `WM_CLASS`; macOS: an app without a bundle id), and everything that
+    /// excludes apps by name treats that as "excluded".
+    fn identifies_apps(&self) -> bool {
+        false
+    }
+
     /// Whether [`PlatformProvider::paste_text`] can paste on this system right
     /// now (it can change at runtime: macOS needs a permission the user may
     /// grant later). Cheap enough to call on every keystroke.
@@ -316,6 +333,13 @@ pub trait PlatformProvider: Send + Sync {
         request: &OsSearchRequest,
     ) -> std::result::Result<Vec<OsHit>, OsSearchError> {
         crate::os_search::search(request)
+    }
+
+    /// What encrypts files for the current user on this system (Windows:
+    /// DPAPI), used for the clipboard history. `None` where there is nothing
+    /// of the kind: the files are then plain, readable by their owner only.
+    fn history_sealer(&self) -> Option<std::sync::Arc<dyn sevak_core::sealed::Sealer>> {
+        None
     }
 
     /// A counter that changes whenever the clipboard does, where the OS has one

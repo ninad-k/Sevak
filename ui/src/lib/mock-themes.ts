@@ -5,7 +5,7 @@
 
 import builtinThemes from "./builtin-themes.json";
 import type { Result } from "./theme-ipc";
-import { clone, type GalleryItem, type StoredTheme, type ThemeSpec, type ThemesDto } from "./themes";
+import { clone, type GalleryItem, type StoredTheme, type ThemeGallery, type ThemeSpec, type ThemesDto } from "./themes";
 
 const builtin = builtinThemes as StoredTheme[];
 
@@ -71,8 +71,8 @@ export function mockUseBuiltin(name: string): Result<StoredTheme> {
 
 const fakeHash = (id: string) => (id.length.toString(16).padStart(2, "0") + "ab12cd34ef56").repeat(6).slice(0, 64);
 
-export function mockGallery(): Result<GalleryItem[]> {
-  const base = "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/";
+export function mockGallery(): Result<ThemeGallery> {
+  const base = "https://raw.githubusercontent.com/ninad-k/Sevak/v0.1.0/gallery/themes/";
   const entry = (id: string, spec: ThemeSpec): GalleryItem => ({
     id,
     name: spec.name,
@@ -85,17 +85,27 @@ export function mockGallery(): Result<GalleryItem[]> {
   });
   return {
     ok: true,
-    value: [
-      ...builtin.map((b) => entry(slug(b.spec.name), b.spec)),
-      ...Object.entries(communityThemes).map(([id, spec]) => entry(id, spec)),
-    ],
+    value: {
+      source: "https://raw.githubusercontent.com/ninad-k/Sevak/v0.1.0/gallery/themes.json",
+      note: null,
+      items: [
+        ...builtin.map((b) => entry(slug(b.spec.name), b.spec)),
+        ...Object.entries(communityThemes).map(([id, spec]) => entry(id, spec)),
+      ],
+    },
   };
 }
 
-export function mockInstallGallery(id: string): Result<StoredTheme> {
+export function mockInstallGallery(id: string, replace = false): Result<StoredTheme> {
   const found = builtin.find((b) => slug(b.spec.name) === id);
   const spec = found ? clone(found.spec) : communityThemes[id] ? clone(communityThemes[id]) : null;
   if (!spec) return { ok: false, error: "Open the gallery again; that theme is no longer in the list." };
+  if (installedGallery.has(id) && !replace) {
+    return {
+      ok: false,
+      error: `A theme named "${spec.name}" is already in your themes folder, so it was not replaced. Remove it first, or use Reinstall to replace it.`,
+    };
+  }
   installedGallery.add(id);
   const stored: StoredTheme = { file: themeFile(spec.name), spec, warnings: [] };
   remember(stored);

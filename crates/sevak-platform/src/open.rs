@@ -28,18 +28,13 @@ pub fn reveal_path(path: &Path) -> Result<()> {
 ///
 /// Only `http://`, `https://` and `mailto:` are accepted: URLs reach us from
 /// user-defined commands and search results, and other schemes (`file:`,
-/// `ms-msdt:`, ...) could run arbitrary handlers.
+/// `ms-msdt:`, ...) could run arbitrary handlers. The address is parsed and
+/// checked by [`sevak_core::url_check::check_open_url`] (control characters,
+/// quotes, a missing host, over-long or odd `mailto:` links are refused) and the
+/// normalised form is what the handler receives.
 pub fn open_url(url: &str) -> Result<()> {
-    let url = url.trim();
-    if url.is_empty() {
-        return Err(invalid_url("the URL is empty"));
-    }
-    if !has_allowed_scheme(url) {
-        return Err(invalid_url(
-            "only http://, https:// and mailto: links can be opened",
-        ));
-    }
-    open_target(OsStr::new(url))
+    let url = sevak_core::url_check::check_open_url(url).map_err(invalid_url)?;
+    open_target(OsStr::new(&url))
 }
 
 /// Opens a link from the closed [`DeepLink`] list (`tel:`, 1Password and macOS
@@ -47,6 +42,13 @@ pub fn open_url(url: &str) -> Result<()> {
 /// limited to web and mail links, and a `DeepLink` can only be built from the
 /// validated pieces its constructors accept.
 pub fn open_deep_link(link: &DeepLink) -> Result<()> {
+    // The constructors already limit the alphabet; this is the last look.
+    let unsafe_char = |c: char| c.is_control() || matches!(c, '"' | '<' | '>' | '\\' | ' ');
+    if link.as_str().chars().any(unsafe_char) {
+        return Err(invalid_url(
+            "the link contains a character that is not allowed",
+        ));
+    }
     open_target(OsStr::new(link.as_str()))
 }
 
@@ -59,12 +61,12 @@ pub fn open_in_editor(path: &Path) -> Result<()> {
 
         match shell_execute("open", path.as_os_str(), None) {
             Ok(()) => {
-                tracing::debug!(path = %path.display(), "opened in editor via ShellExecuteW");
+                tracing::debug!("opened in editor via ShellExecuteW");
                 Ok(())
             }
             Err(err) if err.is_no_association() => {
                 // Nothing is registered for e.g. `.toml`; Notepad always exists.
-                tracing::debug!(path = %path.display(), "no association, falling back to notepad");
+                tracing::debug!("no association, falling back to notepad");
                 spawn_detached("notepad.exe", &[path])
             }
             Err(err) => Err(err.into()),
@@ -84,13 +86,6 @@ pub fn open_in_editor(path: &Path) -> Result<()> {
     }
 }
 
-fn has_allowed_scheme(url: &str) -> bool {
-    let lower = url.to_ascii_lowercase();
-    ["http://", "https://", "mailto:"]
-        .iter()
-        .any(|scheme| lower.starts_with(scheme))
-}
-
 fn invalid_url(message: &str) -> PlatformError {
     PlatformError::Os {
         operation: "open_url",
@@ -101,14 +96,14 @@ fn invalid_url(message: &str) -> PlatformError {
 #[cfg(windows)]
 fn open_target(target: &OsStr) -> Result<()> {
     crate::windows::shell_execute("open", target, None)?;
-    tracing::debug!(target = %target.to_string_lossy(), "opened via ShellExecuteW");
+    tracing::debug!("opened via ShellExecuteW");
     Ok(())
 }
 
 #[cfg(target_os = "macos")]
 fn open_target(target: &OsStr) -> Result<()> {
     crate::process::spawn_detached(crate::macos::OPEN, &[target])?;
-    tracing::debug!(target = %target.to_string_lossy(), "opened via open(1)");
+    tracing::debug!("opened via open(1)");
     Ok(())
 }
 
@@ -130,7 +125,7 @@ fn open_target(target: &OsStr) -> Result<()> {
     };
 
     spawn_detached(opener, &args)?;
-    tracing::debug!(opener, target = %target.to_string_lossy(), "opened via external opener");
+    tracing::debug!(opener, "opened via external opener");
     Ok(())
 }
 
@@ -152,7 +147,7 @@ fn reveal_in_file_manager(path: &Path) -> Result<()> {
             command: "explorer.exe".to_owned(),
             message: err.to_string(),
         })?;
-    tracing::debug!(path = %path.display(), "revealed via explorer /select");
+    tracing::debug!("revealed via explorer /select");
     Ok(())
 }
 
@@ -168,20 +163,20 @@ fn explorer_select_arg(path: &Path) -> String {
 fn reveal_in_file_manager(path: &Path) -> Result<()> {
     let args: [&OsStr; 2] = [OsStr::new("-R"), path.as_os_str()];
     crate::process::spawn_detached(crate::macos::OPEN, &args)?;
-    tracing::debug!(path = %path.display(), "revealed via open -R");
+    tracing::debug!("revealed via open -R");
     Ok(())
 }
 
 #[cfg(not(any(windows, target_os = "macos")))]
 fn reveal_in_file_manager(path: &Path) -> Result<()> {
     if show_items_over_dbus(path) {
-        tracing::debug!(path = %path.display(), "revealed via FileManager1.ShowItems");
+        tracing::debug!("revealed via FileManager1.ShowItems");
         return Ok(());
     }
     // No file manager speaks the interface (or no D-Bus session): open the
     // folder instead. Nothing is highlighted, but the user lands next to it.
     let folder = path.parent().filter(|p| !p.as_os_str().is_empty());
-    tracing::debug!(path = %path.display(), "ShowItems unavailable, opening the parent folder");
+    tracing::debug!("ShowItems unavailable, opening the parent folder");
     open_path(folder.unwrap_or(path))
 }
 
@@ -286,10 +281,26 @@ mod tests {
         assert!(open_url("example.com").is_err());
     }
 
+    /// Everything here must fail before the operating system is asked to open
+    /// anything (a valid link would start the browser).
     #[test]
-    fn scheme_check_is_case_insensitive() {
-        assert!(has_allowed_scheme("HTTPS://example.com"));
-        assert!(has_allowed_scheme("mailto:a@b.c"));
-        assert!(!has_allowed_scheme("ftp://example.com"));
+    fn adversarial_urls_never_reach_the_handler() {
+        for url in [
+            "https://example.com/\" --flag",
+            "https://example.com/a\nb",
+            "https://example.com/a\0b",
+            "https://example.com/<x>",
+            "https://example.com\\evil",
+            "https://",
+            "https://user:pw@example.com/",
+            "mailto:a@example.com?attach=C:/x",
+            "ms-msdt:/id x",
+            "HTTPS:example.com",
+        ] {
+            let err = open_url(url).unwrap_err();
+            assert!(err.to_string().contains("open_url"), "{url:?}: {err}");
+        }
+        let too_long = format!("https://example.com/{}", "a".repeat(9000));
+        assert!(open_url(&too_long).is_err());
     }
 }

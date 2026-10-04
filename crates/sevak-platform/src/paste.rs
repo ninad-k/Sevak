@@ -133,6 +133,14 @@ pub(crate) trait PasteDriver {
     fn focus_previous(&self) -> std::result::Result<(), String>;
     /// Sends Ctrl+V / Cmd+V to the focused window.
     fn press_paste(&self) -> Result<()>;
+    /// Whether the window that [`PasteDriver::focus_previous`] brought back is
+    /// still the one in front, asked immediately before the paste keystroke:
+    /// focus can move in the moments after (a notification, the user switching
+    /// windows), and the keystroke goes to whoever has it. Where nothing was
+    /// remembered it means the window in front is not Sevak's own.
+    fn target_unchanged(&self) -> bool {
+        true
+    }
 }
 
 /// What a paste puts on the clipboard first.
@@ -164,6 +172,8 @@ pub(crate) trait PasteClipboard {
     /// Replaces the clipboard's content, asking the OS to keep it out of its
     /// own history.
     fn set_private(&self, content: PasteContent<'_>) -> Result<()>;
+    /// The clipboard's change counter, where the system has one.
+    fn sequence(&self) -> Option<u64>;
 }
 
 pub(crate) struct SystemClipboard;
@@ -178,6 +188,10 @@ impl PasteClipboard for SystemClipboard {
             PasteContent::Text(text) => clipboard::set_text_private(text),
             PasteContent::Clip(content) => clipboard::set_clip(content, true),
         }
+    }
+
+    fn sequence(&self) -> Option<u64> {
+        clipboard::sequence()
     }
 }
 
@@ -197,12 +211,20 @@ pub(crate) fn paste(
     let previous = restore_clipboard.then(|| clipboard.get_text()).flatten();
 
     clipboard.set_private(content)?;
+    let written = clipboard.sequence();
 
     if let Err(reason) = driver.focus_previous() {
         return Ok(PasteOutcome::CopiedOnly(reason));
     }
     if delays {
         sleep(FOCUS_SETTLE);
+    }
+    // The last look: if another window took the focus meanwhile the content is
+    // only copied, rather than pasted into the wrong app.
+    if !driver.target_unchanged() {
+        return Ok(PasteOutcome::CopiedOnly(
+            "The window in front changed before pasting; it is on the clipboard".to_owned(),
+        ));
     }
     if let Err(err) = driver.press_paste() {
         tracing::warn!("could not send the paste keystroke: {err}");
@@ -215,7 +237,20 @@ pub(crate) fn paste(
         if delays {
             sleep(RESTORE_DELAY);
         }
-        if let Err(err) = clipboard.set_private(PasteContent::Text(&previous)) {
+        // Something may have been copied in the meantime; the old contents must
+        // not overwrite it.
+        let expected = match content {
+            PasteContent::Text(text) => Some(text),
+            PasteContent::Clip(_) => None,
+        };
+        if !clipboard::still_ours(
+            written,
+            clipboard.sequence(),
+            || clipboard.get_text(),
+            expected,
+        ) {
+            tracing::debug!("the clipboard changed during the paste; it was not restored");
+        } else if let Err(err) = clipboard.set_private(PasteContent::Text(&previous)) {
             tracing::warn!("could not restore the clipboard: {err}");
         }
     }
@@ -224,7 +259,7 @@ pub(crate) fn paste(
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
+    use std::cell::{Cell, RefCell};
 
     use super::*;
 
@@ -232,15 +267,27 @@ mod tests {
     struct Fake {
         clipboard: RefCell<Option<String>>,
         log: RefCell<Vec<String>>,
+        /// Focus moves to another window after the target was brought back.
+        focus_moves_away: bool,
         focus_error: Option<String>,
         key_error: bool,
+        /// The clipboard's change counter (this fake has one).
+        sequence: Cell<u64>,
+        /// Whether `sequence` is reported at all (Linux has none).
+        no_counter: bool,
+        /// Somebody copies this while the paste keystroke is being handled.
+        copied_meanwhile: Option<String>,
     }
 
     impl PasteClipboard for Fake {
         fn get_text(&self) -> Option<String> {
             self.clipboard.borrow().clone()
         }
+        fn sequence(&self) -> Option<u64> {
+            (!self.no_counter).then(|| self.sequence.get())
+        }
         fn set_private(&self, content: PasteContent<'_>) -> Result<()> {
+            self.sequence.set(self.sequence.get() + 1);
             match content {
                 PasteContent::Text(text) => {
                     self.log.borrow_mut().push(format!("set {text}"));
@@ -261,8 +308,16 @@ mod tests {
             self.log.borrow_mut().push("focus".into());
             self.focus_error.clone().map_or(Ok(()), Err)
         }
+        fn target_unchanged(&self) -> bool {
+            self.log.borrow_mut().push("check".into());
+            !self.focus_moves_away
+        }
         fn press_paste(&self) -> Result<()> {
             self.log.borrow_mut().push("paste".into());
+            if let Some(newer) = &self.copied_meanwhile {
+                *self.clipboard.borrow_mut() = Some(newer.clone());
+                self.sequence.set(self.sequence.get() + 1);
+            }
             if self.key_error {
                 Err(crate::PlatformError::Unsupported("keys"))
             } else {
@@ -286,7 +341,27 @@ mod tests {
     fn copies_then_focuses_then_pastes() {
         let fake = Fake::default();
         assert_eq!(run(&fake, false), PasteOutcome::Pasted);
-        assert_eq!(*fake.log.borrow(), ["set new", "focus", "paste"]);
+        assert_eq!(*fake.log.borrow(), ["set new", "focus", "check", "paste"]);
+    }
+
+    #[test]
+    fn the_target_is_checked_just_before_the_keystroke() {
+        let fake = Fake::default();
+        assert_eq!(run(&fake, false), PasteOutcome::Pasted);
+        assert_eq!(*fake.log.borrow(), ["set new", "focus", "check", "paste"]);
+    }
+
+    #[test]
+    fn a_window_that_took_the_focus_gets_nothing_pasted() {
+        let fake = Fake {
+            focus_moves_away: true,
+            ..Fake::default()
+        };
+        *fake.clipboard.borrow_mut() = Some("old".into());
+        assert!(matches!(run(&fake, true), PasteOutcome::CopiedOnly(_)));
+        // No keystroke, and the text stays on the clipboard to be pasted by hand.
+        assert_eq!(*fake.log.borrow(), ["set new", "focus", "check"]);
+        assert_eq!(fake.clipboard.borrow().as_deref(), Some("new"));
     }
 
     #[test]
@@ -294,7 +369,10 @@ mod tests {
         let fake = Fake::default();
         *fake.clipboard.borrow_mut() = Some("old".into());
         assert_eq!(run(&fake, true), PasteOutcome::Pasted);
-        assert_eq!(*fake.log.borrow(), ["set new", "focus", "paste", "set old"]);
+        assert_eq!(
+            *fake.log.borrow(),
+            ["set new", "focus", "check", "paste", "set old"]
+        );
         assert_eq!(fake.clipboard.borrow().as_deref(), Some("old"));
     }
 
@@ -316,7 +394,48 @@ mod tests {
         assert_eq!(outcome, PasteOutcome::Pasted);
         let log = fake.log.borrow();
         assert!(log[0].starts_with("set Image"), "{log:?}");
-        assert_eq!(log[1..], ["focus", "paste", "set old"]);
+        assert_eq!(log[1..], ["focus", "check", "paste", "set old"]);
+    }
+
+    #[test]
+    fn a_copy_made_during_the_paste_is_not_overwritten_by_the_restore() {
+        for no_counter in [false, true] {
+            let fake = Fake {
+                copied_meanwhile: Some("newer".into()),
+                no_counter,
+                ..Fake::default()
+            };
+            *fake.clipboard.borrow_mut() = Some("old".into());
+            assert_eq!(run(&fake, true), PasteOutcome::Pasted);
+            assert_eq!(
+                fake.clipboard.borrow().as_deref(),
+                Some("newer"),
+                "no_counter: {no_counter}"
+            );
+            assert_eq!(*fake.log.borrow(), ["set new", "focus", "check", "paste"]);
+        }
+    }
+
+    #[test]
+    fn an_image_paste_does_not_restore_over_text_copied_meanwhile() {
+        let fake = Fake {
+            copied_meanwhile: Some("newer".into()),
+            no_counter: true,
+            ..Fake::default()
+        };
+        *fake.clipboard.borrow_mut() = Some("old".into());
+        let clip = ClipContent::Image {
+            path: "a.png".into(),
+        };
+        paste(
+            PasteContent::Clip(&clip),
+            true,
+            &fake as &dyn PasteClipboard,
+            &fake as &dyn PasteDriver,
+            false,
+        )
+        .unwrap();
+        assert_eq!(fake.clipboard.borrow().as_deref(), Some("newer"));
     }
 
     #[test]

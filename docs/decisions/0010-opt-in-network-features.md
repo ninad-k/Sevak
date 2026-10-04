@@ -29,7 +29,9 @@ Rules that follow from this:
 - Nothing is fetched in the background except the update check and, when
   enabled, the ECB rates. Galleries are never contacted at startup.
 - Downloads go through one function (`fetch_https`,
-  `crates/sevak-plugins/src/net.rs`): HTTPS only, redirects only to HTTPS,
+  `crates/sevak-plugins/src/net.rs`): HTTPS only, only addresses in Sevak's
+  repository (also at every redirect; the galleries are read from the tag of
+  the running build, see [Gallery trust](../security/gallery-trust.md)),
   a 20-second timeout, a size cap, no cookies, and a user agent that carries
   only the program name and version. A new caller belongs in the privacy page.
 - A downloaded gallery file is checked against the SHA-256 in the index

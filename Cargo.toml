@@ -29,6 +29,8 @@ toml_edit = { version = "0.25", features = ["serde"] }
 tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# Address parsing for open_url and the gallery trust root (already in the tree via reqwest).
+url = "2"
 windows = "0.62"
 
 tauri = "2"
@@ -39,6 +41,10 @@ tauri-plugin-global-shortcut = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-updater = "2"
+
+# Overwrites typed characters and selected text in memory when they are let go
+# (best effort; MIT or Apache-2.0, already in the dependency tree).
+zeroize = "1"
 
 tempfile = "3"
 

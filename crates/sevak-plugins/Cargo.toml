@@ -31,6 +31,7 @@ arboard.workspace = true
 # Statistics for the latency benchmark. No plotting (the plotters tree), only the
 # text output and the JSON estimates the bench workflow summarizes.
 criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
+sevak-core = { workspace = true, features = ["test-util"] }
 
 [dependencies]
 sevak-core.workspace = true
@@ -43,6 +44,7 @@ serde_json.workspace = true
 tempfile.workspace = true
 toml.workspace = true
 tracing.workspace = true
+zeroize.workspace = true
 # OS random bytes for the example UUID plugin (see `example_uuid`).
 getrandom = "0.4"
 # Reads (a private copy of) Firefox's `places.sqlite` for the bookmarks plugin.
@@ -73,4 +75,6 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 # SHA-256 behind the opt-in gallery's downloads.
 regex = "1"
 sha2 = "0.10"
+# The gallery downloads are held to an allow-list of parsed addresses.
+url.workspace = true
 

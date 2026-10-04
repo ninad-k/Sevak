@@ -501,7 +501,9 @@ static INDEX: Mutex<Option<gallery::Index>> = Mutex::new(None);
 #[derive(Serialize)]
 pub struct GalleryDto {
     /// Where the index was fetched from (shown so the request is no secret).
-    pub source: &'static str,
+    pub source: String,
+    /// Set when the index is not from this build's own release, and why.
+    pub note: Option<String>,
     pub name: String,
     pub entries: Vec<GalleryEntry>,
     /// Entries left out because they were invalid or of a kind this Sevak does
@@ -523,7 +525,8 @@ fn gallery_dto(app: &AppHandle, index: &gallery::Index) -> GalleryDto {
         plugins: state.search.scripts.plugins_dir(),
     };
     GalleryDto {
-        source: gallery::INDEX_URL,
+        source: index.source.clone(),
+        note: index.note.clone(),
         name: index.name.clone(),
         entries: index
             .entries

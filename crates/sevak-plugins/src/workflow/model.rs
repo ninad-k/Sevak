@@ -445,10 +445,13 @@ impl NodeKind {
         }
     }
 
-    /// Whether the node runs code or commands, so a workflow containing it has
-    /// to be allowed by the user first. `OpenFile` counts: it hands the file to
-    /// the system's default handler, which runs a program, script or shortcut,
-    /// and a relative path reaches files shipped inside the workflow's folder.
+    /// Whether the node runs code or commands, or acts in other apps, so a
+    /// workflow containing it has to be allowed by the user first. `OpenFile`
+    /// counts: it hands the file to the system's default handler, which runs a
+    /// program, script or shortcut, and a relative path reaches files shipped
+    /// inside the workflow's folder. `Paste` counts: it types text into
+    /// whatever app was in front (a terminal, a chat, a form), which is the
+    /// same as the user typing it.
     pub fn needs_approval(&self) -> bool {
         matches!(
             self,
@@ -458,6 +461,7 @@ impl NodeKind {
                 | Self::SystemCommand { .. }
                 | Self::TerminalCommand { .. }
                 | Self::OpenFile { .. }
+                | Self::Paste { .. }
         )
     }
 }
@@ -554,6 +558,7 @@ pub fn valid_folder_name(folder: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | ' '))
         && !folder.ends_with(' ')
         && !folder.ends_with('.')
+        && !sevak_core::safe_names::is_reserved_device_name(folder)
 }
 
 #[cfg(test)]
@@ -829,15 +834,16 @@ mod tests {
             },
             // Opening a file runs it when it is a program or script.
             NodeKind::OpenFile { path: "x".into() },
+            // Pasting types into whatever app was in front.
+            NodeKind::Paste {
+                text: "x".into(),
+                restore_clipboard: None,
+            },
         ] {
             assert!(kind.needs_approval(), "{}", kind.type_name());
         }
         for kind in [
             NodeKind::OpenUrl { url: "x".into() },
-            NodeKind::Paste {
-                text: "x".into(),
-                restore_clipboard: None,
-            },
             NodeKind::Notification {
                 heading: String::new(),
                 body: "x".into(),

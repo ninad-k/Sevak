@@ -10,7 +10,8 @@ use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
 
 use serde::Deserialize;
-use sevak_platform::process::{script_runner, ScriptRunner};
+use sevak_core::bounded_read::{read_capped, MAX_PLUGIN_MANIFEST_BYTES};
+use sevak_platform::process::{is_interpreter_variable, pin_program, script_runner, ScriptRunner};
 
 /// The protocol version this Sevak speaks (`protocol` in the manifest and in
 /// the `initialize` message).
@@ -65,6 +66,15 @@ struct Raw {
     global: Option<bool>,
     command: Option<Vec<String>>,
     script: Option<String>,
+    /// Extra files in the plugin folder that are part of the approval.
+    #[serde(default)]
+    files: Vec<String>,
+    /// Names of Sevak's own environment variables the script wants.
+    #[serde(default)]
+    inherit_env: Vec<String>,
+    /// Extra things the script's results may do; see [`Capabilities`].
+    #[serde(default)]
+    capabilities: Vec<String>,
     #[serde(default)]
     mode: Mode,
     #[serde(default)]
@@ -72,6 +82,26 @@ struct Raw {
     timeout_ms: Option<u64>,
     hard_timeout_ms: Option<u64>,
     idle_timeout_secs: Option<u64>,
+}
+
+/// Things a script's results may do only when the manifest asks for them with
+/// `capabilities = [...]`. The Allow dialog lists them, and they are part of
+/// what the approval covers (they are in `plugin.toml`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Capabilities {
+    /// Results may start applications (`{"type":"launch"}`).
+    pub launch: bool,
+}
+
+impl Capabilities {
+    /// The capability names, for the Allow dialog.
+    pub fn names(&self) -> Vec<&'static str> {
+        let mut names = Vec::new();
+        if self.launch {
+            names.push("launch");
+        }
+        names
+    }
 }
 
 /// How the manifest says to start the script.
@@ -92,6 +122,15 @@ pub struct Manifest {
     pub description: String,
     pub keyword: String,
     pub launch: Launch,
+    /// Support files (modules the script imports, data it reads) that the
+    /// approval also covers; plain paths inside the plugin folder.
+    pub files: Vec<String>,
+    /// Environment variables of Sevak's own that the script is given in
+    /// addition to the small base set (shown in the Allow dialog).
+    pub inherit_env: Vec<String>,
+    /// What the script's results may do beyond the basic actions (shown in
+    /// the Allow dialog).
+    pub capabilities: Capabilities,
     pub mode: Mode,
     pub format: Format,
     /// How long a query waits for the script before the list is shown without
@@ -109,14 +148,22 @@ impl Manifest {
     /// Reads and validates `<dir>/plugin.toml`. `dir` also names the plugin
     /// when the manifest gives no `id` or `name`.
     pub fn load(dir: &Path) -> Result<Self, String> {
+        Self::read(dir).map(|(manifest, _)| manifest)
+    }
+
+    /// [`Manifest::load`] together with the exact bytes of the file, which an
+    /// approval is bound to.
+    pub fn read(dir: &Path) -> Result<(Self, Vec<u8>), String> {
         let path = dir.join(MANIFEST_FILE);
-        let text = std::fs::read_to_string(&path)
+        let bytes = read_capped(&path, MAX_PLUGIN_MANIFEST_BYTES)
             .map_err(|err| format!("cannot read {}: {err}", path.display()))?;
+        let text = String::from_utf8(bytes.clone())
+            .map_err(|_| format!("{} is not valid UTF-8 text", path.display()))?;
         let folder = dir
             .file_name()
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_default();
-        Self::parse(&text, &folder)
+        Self::parse(&text, &folder).map(|manifest| (manifest, bytes))
     }
 
     /// Validates manifest `text`; `folder` is the plugin folder's name.
@@ -177,6 +224,28 @@ impl Manifest {
             }
         };
 
+        let mut files = Vec::new();
+        for file in raw.files {
+            let file = file.trim().to_owned();
+            if relative_inside(Path::new(""), &file).is_none() {
+                return Err(format!(
+                    "`files` may only name files inside the plugin folder, not \"{file}\""
+                ));
+            }
+            files.push(file);
+        }
+
+        let inherit_env = check_inherit_env(raw.inherit_env)?;
+        let mut capabilities = Capabilities::default();
+        for name in &raw.capabilities {
+            match name.trim() {
+                "launch" => capabilities.launch = true,
+                other => warnings.push(format!(
+                    "the capability \"{other}\" is not known to this Sevak and is ignored"
+                )),
+            }
+        }
+
         if raw.mode == Mode::Persistent && raw.format == Format::Alfred {
             return Err("`format = \"alfred\"` needs `mode = \"oneshot\"`".to_owned());
         }
@@ -194,6 +263,9 @@ impl Manifest {
             description: raw.description.unwrap_or_default().trim().to_owned(),
             keyword,
             launch,
+            files,
+            inherit_env,
+            capabilities,
             mode: raw.mode,
             format: raw.format,
             timeout: Duration::from_millis(
@@ -224,16 +296,24 @@ impl Manifest {
         }
     }
 
-    /// What an approval is bound to: the command and how it is run. A manifest
-    /// that changes either needs approving again.
-    pub fn approval_key(&self) -> String {
-        format!("{:?}/{:?}: {}", self.mode, self.format, self.command_line())
-    }
-
-    /// [`Manifest::approval_key`] together with the plugin id, for "not now"
-    /// bookkeeping that spans plugins.
-    pub fn approval_key_with_id(&self) -> String {
-        format!("{} {}", self.id, self.approval_key())
+    /// The files inside the plugin folder that the approval covers: the script
+    /// the manifest names, every argument of the command that is a plain
+    /// relative path (`["python", "main.py"]` names `main.py`), and the
+    /// manifest's `files`. A name that is not a file (a program on `PATH`) is
+    /// harmless: it counts as "missing" in the hash.
+    pub fn support_files(&self) -> Vec<String> {
+        let mut files: Vec<String> = match &self.launch {
+            Launch::Script(script) => vec![script.clone()],
+            Launch::Command(argv) => argv
+                .iter()
+                .filter(|arg| relative_inside(Path::new(""), arg).is_some())
+                .cloned()
+                .collect(),
+        };
+        files.extend(self.files.iter().cloned());
+        files.sort();
+        files.dedup();
+        files
     }
 
     /// The program and arguments to start, with relative paths resolved against
@@ -249,7 +329,12 @@ impl Manifest {
 /// against `dir` (a plugin or workflow folder). Shared by script plugins and
 /// the script nodes of workflows.
 ///
-/// Programs without a path separator are looked up on `PATH` by the OS.
+/// Programs without a path separator are looked up on `PATH`. On Unix that
+/// lookup is done here (`sevak_platform::process::pin_program`) and the file
+/// found is what runs: left to `exec`, an empty `PATH` entry would mean "the
+/// plugin folder", where a package could place a file named like the
+/// interpreter. A program `PATH` does not have is an error. On Windows the OS
+/// lookup is kept (it never searches the working directory).
 pub fn resolve_launch(launch: &Launch, dir: &Path) -> Result<Vec<String>, String> {
     match launch {
         Launch::Command(argv) => {
@@ -262,6 +347,9 @@ pub fn resolve_launch(launch: &Launch, dir: &Path) -> Result<Vec<String>, String
                 let resolved = relative_inside(dir, program)
                     .ok_or_else(|| format!("`{program}` points outside the plugin folder"))?;
                 argv[0] = resolved.to_string_lossy().into_owned();
+            } else if !has_path {
+                argv[0] = pin_program(&argv[0])
+                    .map_err(|err| format!("could not start `{}`: {err}", argv[0]))?;
             }
             Ok(argv)
         }
@@ -276,7 +364,13 @@ pub fn resolve_launch(launch: &Launch, dir: &Path) -> Result<Vec<String>, String
                 .map(|ext| ext.to_string_lossy().into_owned())
                 .unwrap_or_default();
             let mut argv = match script_runner(&extension) {
-                ScriptRunner::Interpreter(prefix) => prefix,
+                ScriptRunner::Interpreter(mut prefix) => {
+                    if let Some(first) = prefix.first_mut() {
+                        *first = pin_program(first)
+                            .map_err(|err| format!("could not start `{first}`: {err}"))?;
+                    }
+                    prefix
+                }
                 ScriptRunner::Direct => Vec::new(),
                 ScriptRunner::Missing(names) => {
                     return Err(format!(
@@ -289,6 +383,44 @@ pub fn resolve_launch(launch: &Launch, dir: &Path) -> Result<Vec<String>, String
             Ok(argv)
         }
     }
+}
+
+/// Most `inherit_env` names a manifest may list.
+const MAX_INHERITED: usize = 32;
+
+/// Validates `inherit_env`: plain variable names, no interpreter hooks.
+fn check_inherit_env(names: Vec<String>) -> Result<Vec<String>, String> {
+    if names.len() > MAX_INHERITED {
+        return Err(format!(
+            "`inherit_env` lists {} names; at most {MAX_INHERITED} are allowed",
+            names.len()
+        ));
+    }
+    let mut out = Vec::new();
+    for name in names {
+        let name = name.trim().to_owned();
+        let mut chars = name.chars();
+        let plain = chars
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+            && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+            && name.len() <= 64;
+        if !plain {
+            return Err(format!(
+                "`inherit_env` may only list plain variable names, not \"{name}\""
+            ));
+        }
+        if is_interpreter_variable(&name) {
+            return Err(format!(
+                "`inherit_env` cannot include {name}: it changes how programs start"
+            ));
+        }
+        if !out.contains(&name) {
+            out.push(name);
+        }
+    }
+    out.sort();
+    Ok(out)
 }
 
 fn quote(arg: &str) -> String {
@@ -308,10 +440,18 @@ fn quote(arg: &str) -> String {
 }
 
 /// `dir` joined with `relative`, provided `relative` is a plain relative path:
-/// not absolute, no drive or root, and no `..` anywhere.
+/// not absolute, no drive or root, no backslash and no `..` anywhere (the same
+/// answer on every system).
 pub fn relative_inside(dir: &Path, relative: &str) -> Option<PathBuf> {
     let path = Path::new(relative);
+    // Backslashes and drive prefixes are separators and roots on Windows only,
+    // but a manifest is portable text: it means the same on every system.
+    let windows_style = relative.contains('\\')
+        || relative.split_once(':').is_some_and(|(drive, _)| {
+            drive.len() == 1 && drive.as_bytes()[0].is_ascii_alphabetic()
+        });
     let plain = !relative.is_empty()
+        && !windows_style
         && path
             .components()
             .all(|part| matches!(part, Component::Normal(_) | Component::CurDir));
@@ -368,6 +508,91 @@ mod tests {
         assert_eq!(m.timeout, Duration::from_millis(120));
         assert_eq!(m.hard_timeout, Duration::from_secs(8));
         assert_eq!(m.idle_timeout, None);
+    }
+
+    #[test]
+    fn the_files_an_approval_covers() {
+        let m = Manifest::parse(MINIMAL, "x").unwrap();
+        assert_eq!(m.support_files(), ["main.py", "python"]);
+        let text = format!("{MINIMAL}files = [\"lib/util.py\", \"main.py\"]\n");
+        let m = Manifest::parse(&text, "x").unwrap();
+        assert_eq!(m.support_files(), ["lib/util.py", "main.py", "python"]);
+        let m =
+            Manifest::parse("protocol = 1\nkeyword = \"a\"\nscript = \"run.py\"\n", "x").unwrap();
+        assert_eq!(m.support_files(), ["run.py"]);
+        // An absolute interpreter is not a file of the plugin.
+        let m = Manifest::parse(
+            "protocol = 1\nkeyword = \"a\"\ncommand = [\"/usr/bin/python3\", \"-u\", \"m.py\"]\n",
+            "x",
+        )
+        .unwrap();
+        assert_eq!(m.support_files(), ["-u", "m.py"]);
+    }
+
+    #[test]
+    fn inherit_env_lists_plain_names_and_refuses_interpreter_hooks() {
+        let text = format!(
+            "{MINIMAL}inherit_env = [\"OPENAI_API_KEY\", \"HTTPS_PROXY\", \"OPENAI_API_KEY\"]\n"
+        );
+        let m = Manifest::parse(&text, "x").unwrap();
+        assert_eq!(m.inherit_env, ["HTTPS_PROXY", "OPENAI_API_KEY"]);
+        assert!(Manifest::parse(MINIMAL, "x")
+            .unwrap()
+            .inherit_env
+            .is_empty());
+
+        for bad in [
+            "BASH_ENV",
+            "node_options",
+            "PYTHONPATH",
+            "LD_PRELOAD",
+            "PATH",
+            "A=B",
+            "a b",
+            "1X",
+        ] {
+            let text = format!("{MINIMAL}inherit_env = [{bad:?}]\n");
+            let err = Manifest::parse(&text, "x").expect_err(bad);
+            assert!(err.contains("inherit_env"), "{err}");
+        }
+        let many: Vec<String> = (0..40).map(|n| format!("\"V{n}\"")).collect();
+        let text = format!("{MINIMAL}inherit_env = [{}]\n", many.join(","));
+        assert!(Manifest::parse(&text, "x").unwrap_err().contains("at most"));
+    }
+
+    #[test]
+    fn capabilities_are_opt_in_and_unknown_ones_are_ignored_with_a_warning() {
+        let m = Manifest::parse(MINIMAL, "x").unwrap();
+        assert!(!m.capabilities.launch);
+        assert!(m.capabilities.names().is_empty());
+
+        let text = format!("{MINIMAL}capabilities = [\"launch\"]\n");
+        let m = Manifest::parse(&text, "x").unwrap();
+        assert!(m.capabilities.launch);
+        assert_eq!(m.capabilities.names(), ["launch"]);
+
+        let text = format!("{MINIMAL}capabilities = [\"teleport\"]\n");
+        let m = Manifest::parse(&text, "x").unwrap();
+        assert!(!m.capabilities.launch);
+        assert!(m.warnings.iter().any(|w| w.contains("teleport")));
+    }
+
+    #[test]
+    fn support_files_cannot_leave_the_plugin_folder() {
+        for bad in [
+            "../x.py",
+            "/etc/passwd",
+            "a/../../b",
+            "C:\\\\x.py",
+            "C:x.py",
+            "a\\b.py",
+            "..\\x.py",
+            "",
+        ] {
+            let text = format!("{MINIMAL}files = [{bad:?}]\n");
+            let err = Manifest::parse(&text, "x").expect_err(bad);
+            assert!(err.contains("files"), "{err}");
+        }
     }
 
     #[test]
@@ -473,17 +698,42 @@ mod tests {
             )
             .unwrap()
         };
-        // A bare program name is left for the OS to find on PATH.
-        assert_eq!(
-            parse("[\"python\", \"main.py\"]")
+        // A bare program name is looked up on PATH: Unix runs the file found
+        // (an empty PATH entry can never stand for the plugin folder), Windows
+        // leaves the lookup to the OS.
+        let argv = parse("[\"sh\", \"main.sh\"]")
+            .resolve_argv(dir.path())
+            .unwrap();
+        if cfg!(unix) {
+            assert!(Path::new(&argv[0]).is_absolute(), "{argv:?}");
+            assert!(argv[0].ends_with("/sh"), "{argv:?}");
+        } else {
+            assert_eq!(argv, ["sh", "main.sh"]);
+        }
+        assert_eq!(argv[1], "main.sh");
+        if cfg!(unix) {
+            let err = parse("[\"sevak-definitely-not-installed\"]")
                 .resolve_argv(dir.path())
-                .unwrap(),
-            ["python", "main.py"]
-        );
+                .unwrap_err();
+            assert!(err.contains("not found on PATH"), "{err}");
+        }
         // A relative path is anchored in the plugin folder.
         let argv = parse("[\"./run\"]").resolve_argv(dir.path()).unwrap();
         assert_eq!(Path::new(&argv[0]), dir.path().join("./run"));
         assert!(parse("[\"../run\"]").resolve_argv(dir.path()).is_err());
+    }
+
+    #[test]
+    fn an_oversized_manifest_is_not_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let filler = "#".repeat(MAX_PLUGIN_MANIFEST_BYTES as usize);
+        std::fs::write(
+            dir.path().join(MANIFEST_FILE),
+            format!("protocol = 1\nkeyword = \"a\"\ncommand = [\"x\"]\n{filler}"),
+        )
+        .unwrap();
+        let err = Manifest::load(dir.path()).unwrap_err();
+        assert!(err.contains("limit of 256 KiB"), "{err}");
     }
 
     #[test]

@@ -18,6 +18,12 @@
 //!
 //! Events Sevak injects itself carry [`OWN_EXTRA_INFO`] and are passed straight
 //! on, unseen by both features.
+//!
+//! Windows can remove a low-level hook without a word (a callback that was too
+//! slow too often), and a lock, a remote-desktop switch or a display change can
+//! leave one dead. So the hook thread puts the hooks in again every minute, and
+//! soon after such an event, with the schedule of [`crate::hook_watchdog`]: see
+//! [`Hooks`].
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -32,14 +38,20 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     VK_RWIN,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, DispatchMessageW, GetMessageW, PeekMessageW, PostThreadMessageW,
-    SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx, HC_ACTION, HHOOK, KBDLLHOOKSTRUCT,
-    MSG, PM_NOREMOVE, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_APP, WM_QUIT, WM_USER,
+    CallNextHookEx, DispatchMessageW, GetMessageW, KillTimer, PeekMessageW, PostThreadMessageW,
+    SetTimer, SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx, HC_ACTION, HHOOK,
+    KBDLLHOOKSTRUCT, MSG, PM_NOREMOVE, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_APP, WM_QUIT, WM_TIMER,
+    WM_USER,
 };
 
+use crate::hook_watchdog::{HookInstaller, HookWatchdog, Tick};
 use crate::hotkey_hook::Mods;
 
+use super::keyhook_watch::{self, Watch};
 use super::{keyhook_expand, keyhook_hotkey};
+
+/// How often the hook thread looks at the watchdog's schedule.
+const WATCHDOG_TICK_MS: u32 = 1_000;
 
 /// Stamped on every key event Sevak injects (`dwExtraInfo`), so its own
 /// Backspaces, paste and mask keys are never mistaken for the user's.
@@ -258,6 +270,41 @@ unsafe fn apply_mouse(mouse: &mut Option<HHOOK>, module: Option<HINSTANCE>) {
     }
 }
 
+/// The hooks of the hook thread, and how to put them in again.
+struct Hooks {
+    keyboard: HHOOK,
+    mouse: Option<HHOOK>,
+    module: Option<HINSTANCE>,
+}
+
+impl HookInstaller for Hooks {
+    /// Installs fresh hooks first and removes the old ones after, so there is
+    /// never a moment without one, and a failure leaves the old ones working.
+    /// Both calls happen on the hook thread with no message pumped in between,
+    /// so no key event is delivered to two copies of the hook.
+    fn reinstall(&mut self) -> Result<(), String> {
+        // SAFETY: hook installation on the hook thread, which owns these hooks
+        // and removes each handle exactly once.
+        unsafe {
+            let keyboard = SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard_proc), self.module, 0)
+                .map_err(|err| err.to_string())?;
+            let _ = UnhookWindowsHookEx(self.keyboard);
+            self.keyboard = keyboard;
+
+            if self.mouse.is_some() {
+                // If the new mouse hook cannot be made the old one stays.
+                if let Ok(mouse) = SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_proc), self.module, 0)
+                {
+                    if let Some(old) = self.mouse.replace(mouse) {
+                        let _ = UnhookWindowsHookEx(old);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 fn hook_thread(started: &mpsc::Sender<Started>) {
     // SAFETY: Win32 hook installation and the message loop that serves it, all
     // on this thread; the hooks are removed before the thread ends.
@@ -278,19 +325,61 @@ fn hook_thread(started: &mpsc::Sender<Started>) {
         // A thread gets its message queue on first use; `stop` needs it.
         let mut message = MSG::default();
         let _ = PeekMessageW(&mut message, None, WM_USER, WM_USER, PM_NOREMOVE);
+
+        // The watchdog: a once-a-second tick to look at its schedule, and a
+        // hidden window that hears about unlocks, display changes and wake-ups.
+        let watch = Watch::open(module);
+        let timer = SetTimer(None, 0, WATCHDOG_TICK_MS, None);
+        let mut watchdog = HookWatchdog::new(
+            Hooks {
+                keyboard,
+                mouse,
+                module,
+            },
+            keyhook_hotkey::clock_ms(),
+        );
         let _ = started.send(Ok(GetCurrentThreadId()));
 
         while GetMessageW(&mut message, None, 0, 0).0 > 0 {
             if message.message == WM_SYNC_MOUSE {
-                apply_mouse(&mut mouse, module);
+                apply_mouse(&mut watchdog.installer_mut().mouse, module);
                 continue;
             }
-            let _ = TranslateMessage(&message);
-            DispatchMessageW(&message);
+            let is_tick = timer != 0 && message.message == WM_TIMER && message.wParam.0 == timer;
+            if !is_tick {
+                let _ = TranslateMessage(&message);
+                DispatchMessageW(&message);
+            }
+            // Sent messages (a display change) are served inside GetMessageW,
+            // so the flags are read after every message, and the tick makes
+            // sure the loop wakes up to read them.
+            let now = keyhook_hotkey::clock_ms();
+            for reason in keyhook_watch::take_events() {
+                watchdog.note(reason, now);
+            }
+            if is_tick {
+                match watchdog.tick(now) {
+                    Tick::Idle | Tick::StillFailing => {}
+                    Tick::Reinstalled(reason) => {
+                        tracing::debug!(?reason, "the keyboard hook was put in again");
+                    }
+                    Tick::Failed {
+                        reason,
+                        message: error,
+                    } => {
+                        tracing::warn!(?reason, %error, "could not put the keyboard hook in again");
+                    }
+                }
+            }
         }
 
-        let _ = UnhookWindowsHookEx(keyboard);
-        if let Some(mouse) = mouse {
+        if timer != 0 {
+            let _ = KillTimer(None, timer);
+        }
+        watch.close();
+        let hooks = watchdog.into_installer();
+        let _ = UnhookWindowsHookEx(hooks.keyboard);
+        if let Some(mouse) = hooks.mouse {
             let _ = UnhookWindowsHookEx(mouse);
         }
     }

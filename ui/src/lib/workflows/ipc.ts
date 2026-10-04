@@ -73,8 +73,10 @@ export interface GalleryEntry {
 }
 
 export interface Gallery {
-  /** The address the index was fetched from. */
+  /** The address the index was fetched from (pinned to a release tag). */
   source: string;
+  /** Set when the list is not from this build's own release, and why. */
+  note?: string | null;
   name: string;
   entries: GalleryEntry[];
   skipped: number;
