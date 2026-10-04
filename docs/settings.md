@@ -58,6 +58,12 @@ On **Wayland**, use the same **Set up GNOME shortcut** button.
 
 Links to: `[general] actions_hotkey` in configuration.
 
+### Accept shortcuts sent by other programs
+
+Windows only. Off by default: Sevak's keyboard hook then ignores key presses that another program sends, so nothing else on your desktop can open Sevak or trigger Universal Actions by pressing the shortcut for you. Turn it on if AutoHotkey, PowerToys Keyboard Manager or a similar remapper is meant to type the shortcut. The change applies when you save.
+
+Links to: `[general] accept_injected_hotkeys` in configuration.
+
 ### Use the clipboard if the selection can't be read
 
 **Wayland**, terminal windows and some apps prevent Sevak from reading the selection. Turn this on to act on the clipboard instead when the direct method fails.

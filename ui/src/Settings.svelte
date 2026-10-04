@@ -49,6 +49,7 @@
     general: {
       hotkey: "",
       actions_hotkey: "",
+      accept_injected_hotkeys: false,
       hide_on_blur: true,
       launch_at_login: false,
       check_for_updates: true,
@@ -643,6 +644,23 @@
                 </p>
               {/if}
             </div>
+
+            {#if platform === "windows"}
+              <div class="row">
+                <div class="label">
+                  <span class="name">Accept shortcuts sent by other programs</span>
+                  <span class="hint">
+                    Off: only keys you press count, so no other program can open Sevak by sending
+                    its shortcut. Turn on if AutoHotkey, PowerToys or another remapper types the
+                    shortcut for you.
+                  </span>
+                </div>
+                <Toggle
+                  bind:checked={draft.general.accept_injected_hotkeys}
+                  label="Accept shortcuts sent by other programs"
+                />
+              </div>
+            {/if}
 
             <div class="row">
               <div class="label">

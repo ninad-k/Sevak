@@ -126,7 +126,7 @@ workflow, enabled, and valid; otherwise the launcher opens and says why.
 | **System command** | `lock`, `sleep`, `hibernate`, `restart`, `shutdown`, `logout`, `empty_trash` | needs permission; the destructive ones ask each time |
 | **Terminal command** | opens your terminal and runs a command line | needs permission; see [quoting](#placeholders-the-argument-and-variables) |
 | **Copy** | puts text on the clipboard | |
-| **Paste** | pastes text into the app you were using | copies instead where pasting is unavailable |
+| **Paste** | pastes text into the app you were using | copies instead where pasting is unavailable; types into another app, so needs permission |
 
 #### Run script
 
@@ -143,9 +143,16 @@ matter what it contains.
   argument, if under 16 kB), `SEVAK_WORKFLOW_ID`, `SEVAK_WORKFLOW_DIR`,
   `SEVAK_WORKFLOW_DATA` (a folder for the script's own files),
   `SEVAK_VERSION`, and the names Alfred workflows read (`alfred_workflow_*`).
-  Variables named like `PATH`, `HOME`, `LD_*` and a few others are never
-  exported, so a value cannot change how programs start. A node's own
-  *Environment variables* are always passed.
+  A script does not inherit Sevak's whole environment: it gets `PATH`, the
+  home and temp folders, the locale, the `XDG_*` folders, the display variables
+  and what Windows programs need to start, nothing else (tokens and credentials
+  in Sevak's environment stay out of reach). Variables that change how programs
+  start or where they look (`PATH`, `HOME`, `TMPDIR`, `BASH_ENV`, `PYTHON*`,
+  `NODE_*`, `PERL5*`, `RUBY*`, `JAVA_*`, `LD_*`, `DYLD_*`, `GIT_*`, `DOTNET_*`,
+  proxy and certificate variables, `XDG_*`, `SEVAK_*` and a few more, in any
+  letter case) are never exported from workflow variables, and a node's own
+  *Environment variables* may not name them: the builder reports an error and
+  the workflow does not load until it is removed. Other names are passed.
 - What it prints (standard output, up to 1 MiB, minus the final newline) becomes
   the **argument** of the next nodes. If it prints Alfred's envelope
   `{"alfredworkflow": {"arg": "...", "variables": {"name": "value"}}}`, the
@@ -263,10 +270,16 @@ trigger's (a script filter row's), and nodes can add more.
 
 **Permission.** A workflow whose nodes can run code or commands (**Run script**,
 **Script filter**, **Launch app**, **System command**, **Terminal command**,
-**Open file**, because opening a program or script runs it) does
-nothing until you allow it. Sevak shows a dialog with the workflow's name, what
-starts it, what it runs and whether it will receive your Universal Actions
-selection, and remembers your answer in `script-plugin-approvals.json` (the
+**Open file**, because opening a program or script runs it) or type into other
+apps (**Paste**) does nothing until you allow it. Sevak shows a dialog with the
+workflow's name, what starts it, whether it will receive your Universal Actions
+selection, every command **with its arguments**, the *names* of the environment
+variables a script node sets, whether it sends text to a program's standard
+input, and "also does:" lines for every node that pastes text or opens a
+file or link. It closes with the folder's name and a short contents id. Text
+written by the workflow's author is shown with control and direction-changing
+characters removed and long text cut, so it cannot fake extra lines or hide
+what runs. Sevak remembers your answer in `script-plugin-approvals.json` (the
 file script plugins use). **Not now** asks again at the next start; the
 workflow's row has **Review…** if you change your mind.
 
@@ -274,9 +287,12 @@ What you allow is **what can run**: the settings of those nodes, the
 connections, the workflow's variables and the *contents* of the script files
 they name. If any of that changes (an edit in the builder, or a script file
 changed on disk), Sevak asks again after the next reload. Moving boxes,
-renaming and retitling do not. A workflow that only opens links, copies,
-pastes and shows text runs without asking, because it can do no more than the
-actions in the launcher can; it still never runs anything you did not trigger.
+renaming and retitling do not. A workflow that only opens links, copies and
+shows text runs without asking, because it can do no more than the actions in
+the launcher can; it still never runs anything you did not trigger. A
+**Paste** node does ask: it types into whatever app was in front, which is as
+good as you typing it, so a workflow that pastes needs your yes too (workflows
+you had with a Paste node ask once after upgrading).
 A file that an **Open file** node names inside the workflow's folder is part
 of what you allow, like a script.
 

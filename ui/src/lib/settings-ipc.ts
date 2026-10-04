@@ -38,6 +38,8 @@ export interface Config {
     hotkey: string;
     /** Shortcut for Universal Actions; empty turns it off. */
     actions_hotkey: string;
+    /** Windows: honour shortcuts other programs send (AutoHotkey, PowerToys remaps). */
+    accept_injected_hotkeys: boolean;
     hide_on_blur: boolean;
     launch_at_login: boolean;
     check_for_updates: boolean;

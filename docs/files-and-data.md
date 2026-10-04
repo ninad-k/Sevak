@@ -118,7 +118,7 @@ Cached European Central Bank exchange rates, only if currency conversion (`[calc
 
 ### script-plugin-approvals.json
 
-The script plugins and workflows you allowed to run. Delete it to be asked again for each of them.
+The script plugins and workflows you allowed to run, each with a hash of what you allowed (a script plugin's manifest, script files and folder; a workflow's code-running nodes and script files). Delete it to be asked again for each of them. Files written by older versions are read but never match, so each script plugin asks once after an upgrade.
 
 ### plugins/ and workflows/ (data folder)
 

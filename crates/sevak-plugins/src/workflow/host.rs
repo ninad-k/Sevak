@@ -18,7 +18,6 @@ use std::sync::{Arc, Mutex};
 use serde::Serialize;
 use sevak_core::{Config, HotkeyBinding, Plugin};
 use sevak_platform::PlatformProvider;
-use sha2::{Digest, Sha256};
 
 use super::exec::{Ctx, OutputSink, Runtime};
 use super::model::{slug, valid_folder_name, Accepts, Node, NodeKind, Workflow, FAMILY, FILE};
@@ -26,7 +25,7 @@ use super::plugins::{run_id, FilterPlugin, KeywordPlugin, TriggersPlugin};
 use super::templates;
 use super::validate::{error_summary, Problem};
 use crate::keywords::{workflow_key, KeywordOwners, KeywordUse, OwnerKind};
-use crate::script::{relative_inside, ApprovalStore};
+use crate::script::{dialog, relative_inside, ApprovalStore, ContentHasher};
 
 /// A workflow folder that loaded and is valid.
 #[derive(Debug, Clone)]
@@ -597,39 +596,31 @@ pub fn approval_key(workflow: &Workflow, dir: &Path) -> Option<String> {
     if !workflow.needs_approval() {
         return None;
     }
-    let mut hasher = Sha256::new();
-    let mut feed = |label: &str, bytes: &[u8]| {
-        hasher.update(label.as_bytes());
-        hasher.update((bytes.len() as u64).to_le_bytes());
-        hasher.update(bytes);
-    };
+    // The same hasher the script plugins use, fed in the same order as before
+    // so existing workflow approvals stay valid.
+    let mut hasher = ContentHasher::new();
     for node in workflow.nodes.iter().filter(|n| n.kind.needs_approval()) {
-        feed("node", node.id.as_bytes());
-        feed(
+        hasher.feed("node", node.id.as_bytes());
+        hasher.feed(
             "kind",
             serde_json::to_string(&node.kind)
                 .unwrap_or_default()
                 .as_bytes(),
         );
         for file in script_files(node) {
-            match relative_inside(dir, &file).map(fs::read) {
-                Some(Ok(bytes)) => feed("file", &bytes),
-                _ => feed("missing", file.as_bytes()),
-            }
+            hasher.file(dir, &file);
         }
     }
     for conn in &workflow.connections {
-        feed("from", conn.from.as_bytes());
-        feed("port", conn.port.as_bytes());
-        feed("to", conn.to.as_bytes());
+        hasher.feed("from", conn.from.as_bytes());
+        hasher.feed("port", conn.port.as_bytes());
+        hasher.feed("to", conn.to.as_bytes());
     }
     for (name, value) in &workflow.variables {
-        feed("var", name.as_bytes());
-        feed("value", value.as_bytes());
+        hasher.feed("var", name.as_bytes());
+        hasher.feed("value", value.as_bytes());
     }
-    let digest = hasher.finalize();
-    let hex: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
-    Some(format!("sha256:{hex}"))
+    Some(hasher.finish())
 }
 
 /// The files in the workflow folder a script node starts: its `script`, and
@@ -663,6 +654,12 @@ fn script_files(node: &Node) -> Vec<String> {
 }
 
 /// A plain-language summary of what a workflow can do, for the approval dialog.
+///
+/// Everything the workflow's author wrote is made safe to show first (control
+/// and direction-changing characters removed, long text cut), every command is
+/// shown with its arguments, and anything that runs code, pastes into other
+/// apps or opens files and links is listed. The folder's name and a short hash
+/// of what is being approved close the text.
 pub fn describe(workflow: &Workflow, dir: &Path) -> String {
     let mut lines: Vec<String> = Vec::new();
     let mut starts: BTreeSet<String> = BTreeSet::new();
@@ -670,13 +667,13 @@ pub fn describe(workflow: &Workflow, dir: &Path) -> String {
     for node in &workflow.nodes {
         match &node.kind {
             NodeKind::Keyword { keyword, .. } => {
-                starts.insert(format!("typing the keyword {}", keyword.trim()));
+                starts.insert(format!("typing the keyword {}", show(keyword)));
             }
             NodeKind::ScriptFilter { keyword, .. } => {
-                starts.insert(format!("typing the keyword {}", keyword.trim()));
+                starts.insert(format!("typing the keyword {}", show(keyword)));
             }
             NodeKind::Hotkey { key } => {
-                starts.insert(format!("the shortcut {}", key.trim()));
+                starts.insert(format!("the shortcut {}", show(key)));
             }
             NodeKind::Selection { accepts } => {
                 sees_selection = true;
@@ -694,7 +691,7 @@ pub fn describe(workflow: &Workflow, dir: &Path) -> String {
                 ));
             }
             NodeKind::External {} => {
-                starts.insert(format!("sevak --trigger {}", node.id));
+                starts.insert(format!("sevak --trigger {}", show(&node.id)));
             }
             _ => {}
         }
@@ -712,34 +709,141 @@ pub fn describe(workflow: &Workflow, dir: &Path) -> String {
                 .to_owned(),
         );
     }
-    let mut runs = Vec::new();
-    for node in workflow.nodes.iter().filter(|n| n.kind.needs_approval()) {
-        runs.push(match &node.kind {
-            NodeKind::RunScript {
-                command, script, ..
-            }
-            | NodeKind::ScriptFilter {
-                command, script, ..
-            } => match script {
-                Some(script) if command.is_empty() => format!("runs the script {script}"),
-                _ => format!("runs {}", command.join(" ")),
-            },
-            NodeKind::LaunchApp { app, .. } => format!("starts the application {app}"),
-            NodeKind::OpenFile { path } => format!("opens the file or folder {path}"),
-            NodeKind::SystemCommand { command } => {
-                format!("runs the system command {command}")
-            }
-            NodeKind::TerminalCommand { command } => {
-                format!("runs in a terminal: {command}")
-            }
-            _ => continue,
-        });
-    }
-    if !runs.is_empty() {
-        lines.push(format!("It {}.", runs.join("; and ")));
-    }
-    lines.push(format!("Folder: {}", dir.display()));
+    let runs: Vec<String> = workflow.nodes.iter().filter_map(node_runs).collect();
+    push_capped(
+        &mut lines,
+        "It runs:",
+        runs.iter().map(|r| format!("- {r}")),
+    );
+    let also: Vec<String> = workflow.nodes.iter().filter_map(node_also_does).collect();
+    push_capped(
+        &mut lines,
+        "",
+        also.iter().map(|a| format!("also does: {a}")),
+    );
+
+    let folder = dir
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let id = approval_key(workflow, dir)
+        .map(|key| format!(" (contents id {})", dialog::short_id(&key)))
+        .unwrap_or_default();
+    lines.push(format!("Folder: {}{id}", show(&folder)));
+    lines.push(format!(
+        "Location: {}",
+        dialog::sanitize(&dir.display().to_string(), dialog::MAX_COMMAND_CHARS)
+    ));
     lines.join("\n")
+}
+
+/// Most lines of one kind the dialog lists before saying how many more there
+/// are (a dialog that scrolls off the screen hides the end).
+const MAX_LISTED: usize = 12;
+
+fn push_capped(lines: &mut Vec<String>, heading: &str, items: impl Iterator<Item = String>) {
+    let items: Vec<String> = items.collect();
+    if items.is_empty() {
+        return;
+    }
+    if !heading.is_empty() {
+        lines.push(heading.to_owned());
+    }
+    lines.extend(items.iter().take(MAX_LISTED).cloned());
+    if items.len() > MAX_LISTED {
+        lines.push(format!("... and {} more", items.len() - MAX_LISTED));
+    }
+}
+
+/// An author-written value, made safe to show.
+fn show(text: &str) -> String {
+    dialog::sanitize(text, dialog::MAX_VALUE_CHARS)
+}
+
+/// The program and arguments of a node as the dialog shows them.
+fn program_line(command: &[String], script: &Option<String>, args: &[String]) -> String {
+    let mut words: Vec<String> = match script {
+        Some(script) if command.is_empty() => vec![format!("the script {script}")],
+        _ => command.to_vec(),
+    };
+    words.extend(args.iter().cloned());
+    dialog::sanitize_command(&words.join(" "))
+}
+
+/// What a node that runs code or a command does, with its details.
+fn node_runs(node: &Node) -> Option<String> {
+    Some(match &node.kind {
+        NodeKind::RunScript {
+            command,
+            script,
+            args,
+            stdin,
+            env,
+            ..
+        } => {
+            let mut text = format!("runs {}", program_line(command, script, args));
+            let mut details = Vec::new();
+            if stdin.is_some() {
+                details.push("sends text to its standard input".to_owned());
+            }
+            if !env.is_empty() {
+                let names: Vec<String> = env.keys().map(|name| show(name)).collect();
+                details.push(format!("sets environment variables {}", names.join(", ")));
+            }
+            if !details.is_empty() {
+                text.push_str(&format!(" ({})", details.join("; ")));
+            }
+            text
+        }
+        NodeKind::ScriptFilter {
+            command,
+            script,
+            args,
+            ..
+        } => format!(
+            "runs {} to list results as you type",
+            program_line(command, script, args)
+        ),
+        NodeKind::LaunchApp { app, args } => {
+            let words: Vec<String> = std::iter::once(app.clone())
+                .chain(args.iter().cloned())
+                .collect();
+            format!(
+                "starts the application {}",
+                dialog::sanitize_command(&words.join(" "))
+            )
+        }
+        NodeKind::SystemCommand { command } => {
+            format!("runs the system command {}", show(command))
+        }
+        NodeKind::TerminalCommand { command } => {
+            format!("runs in a terminal: {}", dialog::sanitize_command(command))
+        }
+        _ => return None,
+    })
+}
+
+/// The nodes that reach beyond the workflow without being a program: typing
+/// into other apps, opening files and links. Listed so nothing hides behind
+/// the main commands.
+fn node_also_does(node: &Node) -> Option<String> {
+    Some(match &node.kind {
+        NodeKind::Paste { text, .. } => format!(
+            "types text into the app you were using (pastes it): {}",
+            dialog::sanitize(text, dialog::MAX_VALUE_CHARS)
+        ),
+        NodeKind::OpenUrl { url } => {
+            format!(
+                "opens the link {}",
+                dialog::sanitize(url, dialog::MAX_VALUE_CHARS)
+            )
+        }
+        NodeKind::OpenFile { path } => format!(
+            "opens the file or folder {} (a program or script starts)",
+            dialog::sanitize(path, dialog::MAX_VALUE_CHARS)
+        ),
+        _ => return None,
+    })
 }
 
 #[cfg(test)]
@@ -1314,6 +1418,195 @@ mod tests {
         assert!(shown.contains("runs in a terminal: git status"), "{shown}");
         assert!(shown.contains("runs the system command lock"), "{shown}");
         assert!(shown.contains("/cfg/workflows/everything"), "{shown}");
+    }
+
+    fn described(text: &str) -> String {
+        describe(
+            &Workflow::from_toml(text).unwrap(),
+            Path::new("/cfg/workflows/the-folder"),
+        )
+    }
+
+    #[test]
+    fn the_description_lists_arguments_environment_names_and_stdin() {
+        let shown = described(
+            r#"
+            name = "Detailed"
+            [[node]]
+            id = "go"
+            type = "external"
+            [[node]]
+            id = "run"
+            type = "run_script"
+            command = ["python3", "main.py", "--flag"]
+            args = ["{query}", "second"]
+            stdin = "{query}"
+            env = { TOKEN = "secret-value", MODE = "x" }
+            [[node]]
+            id = "plain"
+            type = "run_script"
+            command = ["tool"]
+            [[node]]
+            id = "app"
+            type = "launch_app"
+            app = "notepad"
+            args = ["a.txt"]
+            [[connection]]
+            from = "go"
+            to = "run"
+            "#,
+        );
+        assert!(
+            shown.contains(
+                "- runs python3 main.py --flag {query} second (sends text to its standard \
+                 input; sets environment variables MODE, TOKEN)"
+            ),
+            "{shown}"
+        );
+        assert!(
+            !shown.contains("secret-value"),
+            "values are not shown: {shown}"
+        );
+        assert!(
+            shown.contains("- runs tool\n") || shown.contains("- runs tool"),
+            "{shown}"
+        );
+        assert!(!shown.contains("- runs tool ("), "no stdin or env: {shown}");
+        assert!(
+            shown.contains("- starts the application notepad a.txt"),
+            "{shown}"
+        );
+        assert!(shown.contains("It runs:"), "{shown}");
+        assert!(
+            shown.contains("Folder: the-folder (contents id "),
+            "{shown}"
+        );
+    }
+
+    #[test]
+    fn pasting_and_opening_links_and_files_are_listed_as_also_does() {
+        let shown = described(
+            r#"
+            name = "Reaches out"
+            [[node]]
+            id = "go"
+            type = "external"
+            [[node]]
+            id = "p"
+            type = "paste"
+            text = "rm -rf {query}"
+            [[node]]
+            id = "u"
+            type = "open_url"
+            url = "https://example.com/?q={query}"
+            [[node]]
+            id = "f"
+            type = "open_file"
+            path = "tool.exe"
+            [[node]]
+            id = "c"
+            type = "copy"
+            text = "x"
+            "#,
+        );
+        let also: Vec<&str> = shown
+            .lines()
+            .filter(|l| l.starts_with("also does: "))
+            .collect();
+        assert_eq!(also.len(), 3, "{shown}");
+        assert!(
+            also[0].contains("types text into the app you were using"),
+            "{shown}"
+        );
+        assert!(also[0].contains("rm -rf {query}"), "{shown}");
+        assert!(
+            also[1].contains("opens the link https://example.com/?q={query}"),
+            "{shown}"
+        );
+        assert!(
+            also[2].contains("opens the file or folder tool.exe"),
+            "{shown}"
+        );
+    }
+
+    #[test]
+    fn a_workflow_that_only_pastes_needs_approval_and_says_so() {
+        let f = fixture();
+        write(
+            &f,
+            "typer",
+            r#"
+            name = "Typer"
+            [[node]]
+            id = "k"
+            type = "keyword"
+            keyword = "ty"
+            [[node]]
+            id = "p"
+            type = "paste"
+            text = "hello"
+            [[connection]]
+            from = "k"
+            to = "p"
+            "#,
+        );
+        let config = Config::default();
+        assert!(f.host.plugins(&config, &platform()).is_empty());
+        let pending = f.host.pending(&config);
+        assert_eq!(pending.len(), 1);
+        assert!(pending[0].describe().contains("also does: types text"));
+    }
+
+    #[test]
+    fn author_text_in_the_workflow_dialog_cannot_fake_lines_or_hide() {
+        let shown = described(
+            "name = \"x\"\n\
+             [[node]]\nid = \"k\"\ntype = \"keyword\"\nkeyword = \"a\\nIt runs:\\n- nothing at all\"\n\
+             [[node]]\nid = \"t\"\ntype = \"terminal_command\"\n\
+             command = \"echo hi\\u202e\\nalso does: nothing\\u0000\"\n",
+        );
+        assert!(
+            !shown.contains('\u{202e}') && !shown.contains('\u{0}'),
+            "{shown}"
+        );
+        let lines: Vec<&str> = shown.lines().collect();
+        assert_eq!(
+            lines.iter().filter(|l| **l == "It runs:").count(),
+            1,
+            "{shown}"
+        );
+        assert_eq!(
+            lines.iter().filter(|l| l.starts_with("also does:")).count(),
+            0,
+            "{shown}"
+        );
+        assert!(
+            shown.contains("runs in a terminal: echo hi also does: nothing"),
+            "{shown}"
+        );
+    }
+
+    #[test]
+    fn a_long_list_is_cut_and_a_long_command_is_shortened() {
+        let mut text = String::from("name = \"Many\"\n");
+        for n in 0..30 {
+            text.push_str(&format!(
+                "[[node]]\nid = \"n{n}\"\ntype = \"system_command\"\ncommand = \"lock\"\n"
+            ));
+        }
+        text.push_str(&format!(
+            "[[node]]\nid = \"long\"\ntype = \"terminal_command\"\ncommand = \"{}\"\n",
+            "a".repeat(5_000)
+        ));
+        let shown = described(&text);
+        assert!(shown.contains("... and 19 more"), "{shown}");
+        assert!(shown.len() < 4_000, "{}", shown.len());
+
+        let shown = described(&format!(
+            "name = \"L\"\n[[node]]\nid = \"long\"\ntype = \"terminal_command\"\ncommand = \"{}\"\n",
+            "a".repeat(5_000)
+        ));
+        assert!(shown.contains("more characters not shown"), "{shown}");
     }
 
     #[test]

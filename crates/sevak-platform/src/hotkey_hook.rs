@@ -22,9 +22,35 @@
 //! is logged or kept beyond the state machine's few flags; the hook only ever
 //! reports which configured shortcut was pressed.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::accelerator::Combo;
+
+/// Whether the hook may act on key events another program injected
+/// (`SendInput`: AutoHotkey, PowerToys remaps, remote-control tools). Off by
+/// default: a program on the desktop could otherwise press Sevak's shortcut for
+/// the user (open the launcher, make Universal Actions copy the foreground
+/// app's selection). `[general] accept_injected_hotkeys` turns it on.
+static ACCEPT_INJECTED: AtomicBool = AtomicBool::new(false);
+
+/// Sets whether injected key events count; see [`accepts_injected`].
+pub fn set_accept_injected(accept: bool) {
+    ACCEPT_INJECTED.store(accept, Ordering::SeqCst);
+}
+
+/// Whether injected key events count as the user pressing the key.
+pub fn accepts_injected() -> bool {
+    ACCEPT_INJECTED.load(Ordering::SeqCst)
+}
+
+/// Whether the hook should look at an event at all: always for a real key
+/// press, and for an injected one only when `accept` says so. Sevak's own
+/// injected keys (the mask) never reach this check: the shared hook passes them
+/// straight on, whatever the setting.
+pub const fn event_wanted(injected: bool, accept: bool) -> bool {
+    accept || !injected
+}
 
 /// How long a swallowed key counts as still held without another event for it.
 /// Auto-repeat starts within 1 second of the press and then repeats every few
@@ -943,6 +969,23 @@ mod tests {
             events.lock().unwrap().last(),
             Some(&HookEvent::RecordCancelled)
         );
+    }
+
+    #[test]
+    fn injected_keys_count_only_when_the_setting_says_so() {
+        // Real keys always count; injected ones only with the setting.
+        assert!(event_wanted(false, false));
+        assert!(event_wanted(false, true));
+        assert!(!event_wanted(true, false));
+        assert!(event_wanted(true, true));
+        // The default refuses them. (Tests run in one process, so the global is
+        // put back as found.)
+        let before = accepts_injected();
+        set_accept_injected(false);
+        assert!(!accepts_injected());
+        set_accept_injected(true);
+        assert!(accepts_injected());
+        set_accept_injected(before);
     }
 
     #[test]

@@ -34,6 +34,12 @@ hotkey = "Super+Space"
 # On Wayland run `sevak --setup-hotkey` to bind it to `sevak --actions`. See [actions].
 actions_hotkey = "Ctrl+Alt+Space"
 
+# Windows: also react to shortcuts that another program types for you (AutoHotkey,
+# PowerToys Keyboard Manager and other remappers send "injected" keys). Off by
+# default so that a program on your desktop cannot open Sevak or trigger Universal
+# Actions by sending the shortcut itself; turn it on if a remapper is meant to.
+accept_injected_hotkeys = false
+
 # Hide the window when it loses focus.
 hide_on_blur = true
 
@@ -415,6 +421,10 @@ pub struct GeneralConfig {
     pub hotkey: String,
     /// Accelerator for Universal Actions; empty turns the feature off.
     pub actions_hotkey: String,
+    /// Windows keyboard hook: also honour key events another program injects
+    /// (`SendInput`: AutoHotkey, PowerToys remaps). Off by default, so a
+    /// program on the desktop cannot press Sevak's shortcut for the user.
+    pub accept_injected_hotkeys: bool,
     pub hide_on_blur: bool,
     pub launch_at_login: bool,
     /// Look for a new release at startup and daily (asks before installing).
@@ -460,6 +470,7 @@ impl Default for GeneralConfig {
         Self {
             hotkey: "Super+Space".to_owned(),
             actions_hotkey: "Ctrl+Alt+Space".to_owned(),
+            accept_injected_hotkeys: false,
             hide_on_blur: true,
             launch_at_login: false,
             check_for_updates: true,
@@ -1902,6 +1913,28 @@ expand_in_terminals = true
     #[test]
     fn wrong_types_are_rejected() {
         assert!(Config::from_toml_str("[general]\nhide_on_blur = \"yes\"\n").is_err());
+        assert!(Config::from_toml_str("[general]\naccept_injected_hotkeys = \"yes\"\n").is_err());
+        assert!(Config::from_toml_str("[general]\naccept_injected_hotkeys = 1\n").is_err());
+    }
+
+    #[test]
+    fn injected_hotkeys_are_refused_unless_asked_for() {
+        assert!(!Config::default().general.accept_injected_hotkeys);
+        assert!(
+            !Config::from_toml_str("")
+                .unwrap()
+                .general
+                .accept_injected_hotkeys
+        );
+        let config = Config::from_toml_str("[general]\naccept_injected_hotkeys = true\n").unwrap();
+        assert!(config.general.accept_injected_hotkeys);
+        // The documented default file says the same, with its explanation.
+        assert!(DEFAULT_CONFIG_TOML.contains("accept_injected_hotkeys = false"));
+        assert!(DEFAULT_CONFIG_TOML.contains("AutoHotkey"));
+        assert_eq!(
+            Config::from_toml_str(DEFAULT_CONFIG_TOML).unwrap(),
+            Config::default()
+        );
     }
 
     #[test]

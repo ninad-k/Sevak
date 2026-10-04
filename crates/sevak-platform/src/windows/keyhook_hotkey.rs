@@ -19,10 +19,11 @@ use std::time::Instant;
 
 use windows::Win32::UI::Input::KeyboardAndMouse::{INPUT, VIRTUAL_KEY};
 use windows::Win32::UI::WindowsAndMessaging::{
-    KBDLLHOOKSTRUCT, WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP,
+    KBDLLHOOKSTRUCT, KBDLLHOOKSTRUCT_FLAGS, LLKHF_INJECTED, LLKHF_LOWER_IL_INJECTED, WM_KEYDOWN,
+    WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP,
 };
 
-use crate::hotkey_hook::{vk, HookBackend, HotkeyHookService};
+use crate::hotkey_hook::{self, vk, HookBackend, HotkeyHookService};
 
 use super::keyhook::{self, Client, OWN_EXTRA_INFO};
 use super::paste::{key_input, send_inputs};
@@ -63,12 +64,23 @@ fn press_or_release(message: u32) -> Option<bool> {
     }
 }
 
+/// Whether the event was injected by a program (`SendInput`), including one
+/// running at a lower integrity level.
+fn is_injected(flags: KBDLLHOOKSTRUCT_FLAGS) -> bool {
+    flags.0 & (LLKHF_INJECTED.0 | LLKHF_LOWER_IL_INJECTED.0) != 0
+}
+
 /// Called by the shared hook for each event that is not Sevak's own. Returns
 /// whether the event is to be swallowed.
 pub(super) fn on_key(message: u32, info: &KBDLLHOOKSTRUCT) -> bool {
     let Some(down) = press_or_release(message) else {
         return false;
     };
+    // Keys another program sent (SendInput) are not the user pressing the
+    // shortcut, unless `[general] accept_injected_hotkeys` says remappers count.
+    if !hotkey_hook::event_wanted(is_injected(info.flags), hotkey_hook::accepts_injected()) {
+        return false;
+    }
     // Not running (no service yet) means nothing to watch for.
     let Some(service) = SERVICE.get() else {
         return false;
@@ -106,6 +118,16 @@ mod tests {
         assert_eq!(press_or_release(WM_KEYUP), Some(false));
         assert_eq!(press_or_release(WM_SYSKEYUP), Some(false));
         assert_eq!(press_or_release(0x0200), None);
+    }
+
+    #[test]
+    fn injected_events_are_recognised_at_any_integrity_level() {
+        assert!(!is_injected(KBDLLHOOKSTRUCT_FLAGS(0)));
+        assert!(is_injected(LLKHF_INJECTED));
+        assert!(is_injected(LLKHF_LOWER_IL_INJECTED));
+        assert!(is_injected(KBDLLHOOKSTRUCT_FLAGS(
+            LLKHF_INJECTED.0 | LLKHF_LOWER_IL_INJECTED.0
+        )));
     }
 
     #[test]
