@@ -10,7 +10,7 @@ use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
 
 use serde::Deserialize;
-use sevak_platform::process::{script_runner, ScriptRunner};
+use sevak_platform::process::{pin_program, script_runner, ScriptRunner};
 
 /// The protocol version this Sevak speaks (`protocol` in the manifest and in
 /// the `initialize` message).
@@ -249,7 +249,12 @@ impl Manifest {
 /// against `dir` (a plugin or workflow folder). Shared by script plugins and
 /// the script nodes of workflows.
 ///
-/// Programs without a path separator are looked up on `PATH` by the OS.
+/// Programs without a path separator are looked up on `PATH`. On Unix that
+/// lookup is done here (`sevak_platform::process::pin_program`) and the file
+/// found is what runs: left to `exec`, an empty `PATH` entry would mean "the
+/// plugin folder", where a package could place a file named like the
+/// interpreter. A program `PATH` does not have is an error. On Windows the OS
+/// lookup is kept (it never searches the working directory).
 pub fn resolve_launch(launch: &Launch, dir: &Path) -> Result<Vec<String>, String> {
     match launch {
         Launch::Command(argv) => {
@@ -262,6 +267,9 @@ pub fn resolve_launch(launch: &Launch, dir: &Path) -> Result<Vec<String>, String
                 let resolved = relative_inside(dir, program)
                     .ok_or_else(|| format!("`{program}` points outside the plugin folder"))?;
                 argv[0] = resolved.to_string_lossy().into_owned();
+            } else if !has_path {
+                argv[0] = pin_program(&argv[0])
+                    .map_err(|err| format!("cannot run `{}`: {err}", argv[0]))?;
             }
             Ok(argv)
         }
@@ -276,7 +284,13 @@ pub fn resolve_launch(launch: &Launch, dir: &Path) -> Result<Vec<String>, String
                 .map(|ext| ext.to_string_lossy().into_owned())
                 .unwrap_or_default();
             let mut argv = match script_runner(&extension) {
-                ScriptRunner::Interpreter(prefix) => prefix,
+                ScriptRunner::Interpreter(mut prefix) => {
+                    if let Some(first) = prefix.first_mut() {
+                        *first = pin_program(first)
+                            .map_err(|err| format!("cannot run `{first}`: {err}"))?;
+                    }
+                    prefix
+                }
                 ScriptRunner::Direct => Vec::new(),
                 ScriptRunner::Missing(names) => {
                     return Err(format!(
@@ -473,13 +487,25 @@ mod tests {
             )
             .unwrap()
         };
-        // A bare program name is left for the OS to find on PATH.
-        assert_eq!(
-            parse("[\"python\", \"main.py\"]")
+        // A bare program name is looked up on PATH: Unix runs the file found
+        // (an empty PATH entry can never stand for the plugin folder), Windows
+        // leaves the lookup to the OS.
+        let argv = parse("[\"sh\", \"main.sh\"]")
+            .resolve_argv(dir.path())
+            .unwrap();
+        if cfg!(unix) {
+            assert!(Path::new(&argv[0]).is_absolute(), "{argv:?}");
+            assert!(argv[0].ends_with("/sh"), "{argv:?}");
+        } else {
+            assert_eq!(argv, ["sh", "main.sh"]);
+        }
+        assert_eq!(argv[1], "main.sh");
+        if cfg!(unix) {
+            let err = parse("[\"sevak-definitely-not-installed\"]")
                 .resolve_argv(dir.path())
-                .unwrap(),
-            ["python", "main.py"]
-        );
+                .unwrap_err();
+            assert!(err.contains("not found on PATH"), "{err}");
+        }
         // A relative path is anchored in the plugin folder.
         let argv = parse("[\"./run\"]").resolve_argv(dir.path()).unwrap();
         assert_eq!(Path::new(&argv[0]), dir.path().join("./run"));

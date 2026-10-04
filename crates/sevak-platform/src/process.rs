@@ -15,8 +15,16 @@ use crate::error::{PlatformError, Result};
 /// users type `notepad` rather than `notepad.exe`.
 pub fn find_in_path(program: &str) -> Option<PathBuf> {
     let path = env::var_os("PATH")?;
+    find_in_dirs(env::split_paths(&path), program)
+}
+
+/// [`find_in_path`] over an explicit list of folders. An empty entry (a stray
+/// `::` or a trailing `:`) or a relative one would mean "the working
+/// directory" to a shell; here it is skipped, so a file that happens to sit
+/// next to the process can never stand in for a program.
+fn find_in_dirs(dirs: impl Iterator<Item = PathBuf>, program: &str) -> Option<PathBuf> {
     let try_exe = cfg!(windows) && !program.contains('.');
-    env::split_paths(&path).find_map(|dir| {
+    dirs.filter(|dir| dir.is_absolute()).find_map(|dir| {
         let candidate = dir.join(program);
         if candidate.is_file() {
             return Some(candidate);
@@ -117,8 +125,42 @@ fn interpreter_candidates(extension: &str, windows: bool) -> Vec<Vec<&'static st
     }
 }
 
-fn detached_command<S: AsRef<OsStr>>(program: &str, args: &[S], cwd: Option<&Path>) -> Command {
-    let mut command = Command::new(program);
+/// The program to give [`Command::new`].
+///
+/// On Unix a bare name (no `/`) is replaced by the file [`find_in_path`] finds,
+/// and is `NotFound` when `PATH` has none: handed to `exec` as it is, an empty
+/// `PATH` entry would make it look in the working directory, where a file of
+/// that name could be waiting. A name with a separator is returned as given,
+/// and so is everything on Windows (where Rust's own lookup never searches the
+/// working directory).
+pub fn pin_program(program: &str) -> std::io::Result<String> {
+    pin_with(program, cfg!(unix), &find_in_path)
+}
+
+fn pin_with(
+    program: &str,
+    unix: bool,
+    find: &dyn Fn(&str) -> Option<PathBuf>,
+) -> std::io::Result<String> {
+    if !unix || program.contains(['/', '\\']) {
+        return Ok(program.to_owned());
+    }
+    find(program)
+        .map(|path| path.to_string_lossy().into_owned())
+        .ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("`{program}` was not found on PATH"),
+            )
+        })
+}
+
+fn detached_command<S: AsRef<OsStr>>(
+    program: &str,
+    args: &[S],
+    cwd: Option<&Path>,
+) -> Result<Command> {
+    let mut command = Command::new(pin_program(program).map_err(|err| spawn_error(program, err))?);
     command
         .args(args)
         .stdin(Stdio::null())
@@ -128,7 +170,7 @@ fn detached_command<S: AsRef<OsStr>>(program: &str, args: &[S], cwd: Option<&Pat
         command.current_dir(cwd);
     }
     apply_child_env(&mut command, crate::session::xwayland_forced());
-    command
+    Ok(command)
 }
 
 fn spawn_error(program: &str, err: std::io::Error) -> PlatformError {
@@ -155,22 +197,21 @@ pub fn spawn_detached_in<S: AsRef<OsStr>>(
 ) -> Result<()> {
     use std::os::unix::process::CommandExt;
 
-    let mut child = detached_command(program, args, cwd)
+    let mut child = detached_command(program, args, cwd)?
         .process_group(0)
         .spawn()
         .map_err(|err| spawn_error(program, err))?;
 
-    let name = program.to_owned();
     let reaper = std::thread::Builder::new()
         .name("sevak-reaper".into())
         .spawn(move || match child.wait() {
             Ok(status) if status.success() => {}
-            Ok(status) => tracing::debug!(program = %name, %status, "detached child exited"),
-            Err(err) => tracing::debug!(program = %name, %err, "waiting on detached child failed"),
+            Ok(status) => tracing::debug!(%status, "detached child exited"),
+            Err(err) => tracing::debug!(%err, "waiting on detached child failed"),
         });
     if let Err(err) = reaper {
         // The child is already running; losing the reaper only risks a zombie.
-        tracing::debug!(program, %err, "could not start reaper thread");
+        tracing::debug!(%err, "could not start reaper thread");
     }
     Ok(())
 }
@@ -189,7 +230,7 @@ pub fn spawn_detached_in<S: AsRef<OsStr>>(
     const DETACHED_PROCESS: u32 = 0x0000_0008;
     const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
 
-    detached_command(program, args, cwd)
+    detached_command(program, args, cwd)?
         .creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
         .spawn()
         .map(drop)
@@ -206,7 +247,7 @@ pub fn run_checked<S: AsRef<OsStr>>(program: &str, args: &[S], grace: Duration) 
     use std::io::Read;
     use std::sync::mpsc;
 
-    let mut command = Command::new(program);
+    let mut command = Command::new(pin_program(program).map_err(|err| spawn_error(program, err))?);
     command
         .args(args)
         .stdin(Stdio::null())
@@ -225,7 +266,6 @@ pub fn run_checked<S: AsRef<OsStr>>(program: &str, args: &[S], grace: Duration) 
     // A thread owns the child so a slow program never blocks the caller and is
     // still reaped; it reports the exit through the channel if anyone listens.
     let (tx, rx) = mpsc::channel();
-    let name = program.to_owned();
     let waiter = std::thread::Builder::new()
         .name("sevak-run".into())
         .spawn(move || {
@@ -235,12 +275,12 @@ pub fn run_checked<S: AsRef<OsStr>>(program: &str, args: &[S], grace: Duration) 
             }
             let status = child.wait();
             if let Err(err) = &status {
-                tracing::debug!(program = %name, %err, "waiting on child failed");
+                tracing::debug!(%err, "waiting on child failed");
             }
             let _ = tx.send((status, stderr));
         });
     if let Err(err) = waiter {
-        tracing::debug!(program, %err, "could not start waiter thread");
+        tracing::debug!(%err, "could not start waiter thread");
         return Ok(());
     }
 
@@ -321,6 +361,39 @@ mod tests {
     #[test]
     fn finds_nothing_for_nonsense_program() {
         assert!(find_in_path("sevak-definitely-not-a-real-program").is_none());
+    }
+
+    #[test]
+    fn bare_program_names_are_pinned_to_the_file_found_on_path_on_unix() {
+        let found = |name: &str| (name == "tool").then(|| PathBuf::from("/usr/bin/tool"));
+        // Unix: a bare name becomes the file PATH found; none found is an error.
+        assert_eq!(pin_with("tool", true, &found).unwrap(), "/usr/bin/tool");
+        let err = pin_with("other", true, &found).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+        // A path is the caller's own choice, and Windows keeps Rust's lookup.
+        assert_eq!(
+            pin_with("/opt/x/tool", true, &found).unwrap(),
+            "/opt/x/tool"
+        );
+        assert_eq!(pin_with("./tool", true, &found).unwrap(), "./tool");
+        assert_eq!(pin_with("other", false, &found).unwrap(), "other");
+    }
+
+    #[test]
+    fn empty_and_relative_path_entries_never_match() {
+        // `cargo test` runs in the crate folder, so `Cargo.toml` is a file that
+        // an empty or relative entry would find.
+        assert!(Path::new("Cargo.toml").is_file());
+        let relative = [PathBuf::new(), PathBuf::from("."), PathBuf::from("./")];
+        assert_eq!(find_in_dirs(relative.into_iter(), "Cargo.toml"), None);
+        // An absolute entry still works, wherever the empty one sits.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("sevak-probe"), b"x").unwrap();
+        let found = find_in_dirs(
+            [PathBuf::new(), dir.path().to_path_buf()].into_iter(),
+            "sevak-probe",
+        );
+        assert_eq!(found, Some(dir.path().join("sevak-probe")));
     }
 
     #[cfg(windows)]
