@@ -11,8 +11,8 @@ use crate::cli::{self, Launch};
 use crate::state::AppState;
 use crate::{
     ai, autostart, backdrop, backup, commands, diagnostics, direct, expansion, extensions,
-    file_buffer, hotkey,
-    icons, search, selection, settings, takeover, themes, tray, updater, window, workflows,
+    file_buffer, hotkey, icons, search, selection, settings, takeover, themes, tray, updater,
+    window, workflows,
 };
 
 pub fn run(
