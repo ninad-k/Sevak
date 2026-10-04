@@ -396,8 +396,10 @@ impl SearchEngine {
 
         let total = started.elapsed();
         if total > LATENCY_BUDGET {
+            // Never the text itself: queries can hold what the user pasted or
+            // typed to a private plugin, and the log is a plain file kept a week.
             tracing::warn!(
-                query = trimmed,
+                query_chars = trimmed.chars().count(),
                 elapsed_ms = total.as_secs_f64() * 1000.0,
                 slowest_plugin = slowest.1.as_str(),
                 slowest_ms = slowest.0.as_secs_f64() * 1000.0,
@@ -406,7 +408,7 @@ impl SearchEngine {
             );
         } else {
             tracing::debug!(
-                query = trimmed,
+                query_chars = trimmed.chars().count(),
                 elapsed_us = total.as_micros() as u64,
                 results = results.len(),
                 "query"

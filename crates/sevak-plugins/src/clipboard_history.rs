@@ -494,6 +494,15 @@ impl Shared {
     fn clear(&self) {
         lock(&self.state).items.clear();
         self.persist();
+        // Plaintext copies of the old history that are not the history file: a
+        // file moved aside as unreadable, and a half-written temporary.
+        if let Some(path) = &self.path {
+            for suffix in [".corrupt", ".tmp"] {
+                let mut leftover = path.as_os_str().to_owned();
+                leftover.push(suffix);
+                let _ = fs::remove_file(leftover);
+            }
+        }
         if let Some(store) = &self.store {
             store.prune(&HashSet::new());
         }
@@ -833,9 +842,15 @@ fn read_history_checked(path: &Path) -> Option<Vec<Entry>> {
         Err(err) => {
             let mut aside = path.as_os_str().to_owned();
             aside.push(".corrupt");
+            // Where it went wrong, never serde's message: for a wrong type it
+            // quotes the offending value, which here is clipboard text.
             tracing::warn!(
-                "{} is not a valid clipboard history ({err}); moving it aside",
-                path.display()
+                "{} is not a valid clipboard history ({:?} error at line {}, column {}); \
+                 moving it aside",
+                path.display(),
+                err.classify(),
+                err.line(),
+                err.column()
             );
             let _ = fs::rename(path, aside);
             None
@@ -1258,6 +1273,13 @@ fn offers_clear(input: &str) -> bool {
 impl Plugin for ClipboardPlugin {
     fn id(&self) -> &str {
         "clipboard"
+    }
+
+    /// A row's id is a hash of the copied text and the query is often a piece
+    /// of it, so none of that goes into `usage.json`, which "Clear clipboard
+    /// history" does not touch.
+    fn tracks_usage(&self) -> bool {
+        false
     }
 
     fn name(&self) -> &str {
@@ -2104,6 +2126,22 @@ mod tests {
         assert!(plugin.shared.as_ref().unwrap().snapshot().is_empty());
         let saved = fs::read_to_string(&file).unwrap();
         assert!(!saved.contains("clear cache command"));
+    }
+
+    #[test]
+    fn clearing_also_removes_plaintext_leftovers_and_usage_is_not_tracked() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join(FILE_NAME);
+        let corrupt = dir.path().join(format!("{FILE_NAME}.corrupt"));
+        let temp = dir.path().join(format!("{FILE_NAME}.tmp"));
+        fs::write(&corrupt, "old secret").unwrap();
+        fs::write(&temp, "half written secret").unwrap();
+        let plugin = plugin(&MockPlatform::empty(), true, Some(file));
+        assert!(!plugin.tracks_usage());
+
+        plugin.shared.as_ref().unwrap().clear();
+        assert!(!corrupt.exists());
+        assert!(!temp.exists());
     }
 
     #[test]

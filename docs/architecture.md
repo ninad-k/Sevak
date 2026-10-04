@@ -468,6 +468,7 @@ sequenceDiagram
 
 ## More information
 
+- For **why** Sevak is built this way (local-first, the closed action vocabulary, approval before run, the release process and more), see the [design decisions](decisions/index.md). For what it protects and how, see the [threat model](security/threat-model.md).
 - For how to write a **built-in plugin**, see [Writing plugins](plugins.md).
 - For **external script plugins** (Python, PowerShell, Node.js), see [External plugins](plugins.md#external-plugins).
 - For **development setup**, see [Developing Sevak](development.md).

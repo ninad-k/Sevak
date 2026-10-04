@@ -19,7 +19,7 @@ Sevak is local-first. Your data stays on your machine except when you explicitly
 - Logs (for debugging)
 - Script plugins, workflows and their data
 
-All data is stored in a single folder on your machine; none is uploaded anywhere.
+All data is stored in a single folder on your machine; none is uploaded anywhere. What Sevak defends against, and what it does not, is set out in the [threat model](security/threat-model.md).
 
 ## What touches the network
 
@@ -50,7 +50,7 @@ Disable with `[calculator] currency = false` to turn off the network request.
 
 Opt-in feature (on by default). When enabled via `[general] check_for_updates = true`:
 
-- Sevak checks **GitHub Releases** at startup and once per day for a new version
+- Sevak checks **GitHub Releases** a minute after startup, then every six hours and when the launcher opens if the last check is over an hour old
 - URL: `https://github.com/ninad-k/Sevak/releases/latest/download/latest.json` (small JSON metadata)
 - No account required
 - Done in the background (not during typing)

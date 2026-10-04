@@ -17,6 +17,7 @@
 //! [`Plugin::refresh`]: sevak_core::Plugin::refresh
 
 use std::collections::BTreeMap;
+use std::io::Read;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -439,9 +440,20 @@ fn download() -> Result<String, String> {
     }
     let client = reqwest::blocking::Client::builder()
         .timeout(REQUEST_TIMEOUT)
+        // Like the gallery downloads (`crate::net`): a redirect may not leave
+        // https, and there are not many of them.
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if attempt.url().scheme() != "https" {
+                attempt.error("a redirect to a non-https address")
+            } else if attempt.previous().len() >= 5 {
+                attempt.error("too many redirects")
+            } else {
+                attempt.follow()
+            }
+        }))
         .build()
         .map_err(|e| e.to_string())?;
-    let response = client
+    let mut response = client
         .get(ECB_URL)
         .send()
         .and_then(reqwest::blocking::Response::error_for_status)
@@ -452,11 +464,21 @@ fn download() -> Result<String, String> {
     {
         return Err("the rates file is unexpectedly large".to_owned());
     }
-    let body = response.bytes().map_err(|e| e.to_string())?;
-    if body.len() > MAX_BODY_BYTES {
+    read_limited(&mut response, MAX_BODY_BYTES)
+}
+
+/// Reads `reader` as UTF-8 text, refusing more than `max` bytes. It reads at
+/// most one byte over, because without a Content-Length header (chunked) the
+/// whole body would otherwise be buffered before any check.
+fn read_limited(reader: &mut impl Read, max: usize) -> Result<String, String> {
+    let mut body = Vec::new();
+    Read::take(reader, max as u64 + 1)
+        .read_to_end(&mut body)
+        .map_err(|e| e.to_string())?;
+    if body.len() > max {
         return Err("the rates file is unexpectedly large".to_owned());
     }
-    String::from_utf8(body.to_vec()).map_err(|e| e.to_string())
+    String::from_utf8(body).map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -598,6 +620,16 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use super::*;
+
+    #[test]
+    fn a_download_over_the_limit_is_refused_without_reading_it_all() {
+        let mut exact = std::io::repeat(b'a').take(100);
+        assert_eq!(read_limited(&mut exact, 100).unwrap().len(), 100);
+        // An endless body ends at the limit instead of filling memory.
+        let mut endless = std::io::repeat(b'a');
+        assert!(read_limited(&mut endless, 100).is_err());
+        assert!(read_limited(&mut &[0xff_u8, 0xfe][..], 100).is_err());
+    }
 
     /// A trimmed copy of the real ECB feed (2026-10-02).
     pub(crate) const FIXTURE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>

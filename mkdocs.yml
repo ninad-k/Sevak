@@ -94,6 +94,8 @@ plugins:
         - releasing.md
         - testing.md
         - brand.md
+        - security/*
+        - decisions/*
 
 nav:
   - Home: index.md
@@ -143,3 +145,18 @@ nav:
       - Releasing: releasing.md
       - Testing: testing.md
       - Name and brand: brand.md
+  - Security:
+      - Threat model: security/threat-model.md
+  - Design decisions:
+      - decisions/index.md
+      - "0001 Local-first, no telemetry": decisions/0001-local-first-no-telemetry.md
+      - "0002 Tauri, Rust core, plugins": decisions/0002-tauri-rust-core-plugins.md
+      - "0003 Closed Action vocabulary": decisions/0003-closed-action-vocabulary.md
+      - "0004 Routing and ranking": decisions/0004-keyword-routing-and-ranking.md
+      - "0005 Approval before run": decisions/0005-approval-before-run.md
+      - "0006 Alfred compatibility": decisions/0006-alfred-script-filter-compat.md
+      - "0007 Release on every merge": decisions/0007-release-on-every-merge.md
+      - "0008 TOML configuration": decisions/0008-text-config-toml.md
+      - "0009 Hotkey takeover": decisions/0009-hotkey-takeover-per-os.md
+      - "0010 Opt-in network": decisions/0010-opt-in-network-features.md
+      - "0011 Snippet expansion hooks": decisions/0011-snippet-expansion-hooks-no-wayland.md

@@ -642,6 +642,14 @@ fn script_files(node: &Node) -> Vec<String> {
         | NodeKind::ScriptFilter {
             command, script, ..
         } => (command.as_slice(), script.as_deref()),
+        // The file an open-file node starts, when it ships in the folder.
+        NodeKind::OpenFile { path } => {
+            return if relative_inside(Path::new(""), path).is_some() {
+                vec![path.clone()]
+            } else {
+                Vec::new()
+            };
+        }
         _ => return Vec::new(),
     };
     let mut files: Vec<String> = script.iter().map(|s| (*s).to_owned()).collect();
@@ -717,6 +725,7 @@ pub fn describe(workflow: &Workflow, dir: &Path) -> String {
                 _ => format!("runs {}", command.join(" ")),
             },
             NodeKind::LaunchApp { app, .. } => format!("starts the application {app}"),
+            NodeKind::OpenFile { path } => format!("opens the file or folder {path}"),
             NodeKind::SystemCommand { command } => {
                 format!("runs the system command {command}")
             }
@@ -875,6 +884,45 @@ mod tests {
         fs::write(dir.join("main.py"), "print('evil')").unwrap();
         assert_eq!(f.host.pending(&config).len(), 1);
         assert!(f.host.plugins(&config, &platform()).is_empty());
+    }
+
+    #[test]
+    fn opening_a_file_needs_approval_and_a_bundled_file_is_hashed() {
+        let opening = |path: &str| {
+            format!(
+                r#"
+                name = "Opens"
+                [[node]]
+                id = "k"
+                type = "keyword"
+                keyword = "opn"
+                [[node]]
+                id = "f"
+                type = "open_file"
+                path = "{path}"
+                [[connection]]
+                from = "k"
+                to = "f"
+                "#
+            )
+        };
+        let f = fixture();
+        let dir = write(&f, "opens", &opening("payload.bat"));
+        fs::write(dir.join("payload.bat"), "echo 1").unwrap();
+        let config = Config::default();
+        // Not loaded until the user has allowed it, and the dialog says what opens.
+        assert!(f.host.plugins(&config, &platform()).is_empty());
+        let pending = f.host.pending(&config);
+        assert_eq!(pending.len(), 1);
+        assert!(pending[0]
+            .describe()
+            .contains("opens the file or folder payload.bat"));
+
+        f.host.approve(&pending[0]).unwrap();
+        assert!(f.host.pending(&config).is_empty());
+        // Replacing the file the node starts asks again.
+        fs::write(dir.join("payload.bat"), "echo evil").unwrap();
+        assert_eq!(f.host.pending(&config).len(), 1);
     }
 
     #[test]

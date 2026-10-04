@@ -446,7 +446,9 @@ impl NodeKind {
     }
 
     /// Whether the node runs code or commands, so a workflow containing it has
-    /// to be allowed by the user first.
+    /// to be allowed by the user first. `OpenFile` counts: it hands the file to
+    /// the system's default handler, which runs a program, script or shortcut,
+    /// and a relative path reaches files shipped inside the workflow's folder.
     pub fn needs_approval(&self) -> bool {
         matches!(
             self,
@@ -455,6 +457,7 @@ impl NodeKind {
                 | Self::LaunchApp { .. }
                 | Self::SystemCommand { .. }
                 | Self::TerminalCommand { .. }
+                | Self::OpenFile { .. }
         )
     }
 }
@@ -824,12 +827,13 @@ mod tests {
                 app: "x".into(),
                 args: Vec::new(),
             },
+            // Opening a file runs it when it is a program or script.
+            NodeKind::OpenFile { path: "x".into() },
         ] {
             assert!(kind.needs_approval(), "{}", kind.type_name());
         }
         for kind in [
             NodeKind::OpenUrl { url: "x".into() },
-            NodeKind::OpenFile { path: "x".into() },
             NodeKind::Paste {
                 text: "x".into(),
                 restore_clipboard: None,

@@ -309,7 +309,7 @@ fn run_execute(
     let state = app.state::<AppState>();
     let search = &state.search;
     let Some((item, query)) = search.result(ticket, id) else {
-        tracing::warn!(id, "execute: result expired");
+        tracing::warn!("execute: result expired");
         return Err("result expired".to_owned());
     };
 
@@ -320,7 +320,7 @@ fn run_execute(
         Some(index) => match item.secondary_as_primary(index) {
             Some(derived) => derived,
             None => {
-                tracing::warn!(id, index, "execute: no such action");
+                tracing::warn!(index, "execute: no such action");
                 return Err("that action is not available".to_owned());
             }
         },
@@ -332,7 +332,10 @@ fn run_execute(
             .and_then(|index| item.secondary.get(index))
             .map_or(item.title.as_str(), |secondary| secondary.label.as_str());
         if !confirmed(app, label, question) {
-            tracing::info!(id, "execute: declined at the confirmation");
+            tracing::info!(
+                plugin = item.plugin_id,
+                "execute: declined at the confirmation"
+            );
             return Ok(());
         }
     }
@@ -351,8 +354,9 @@ fn run_execute(
     };
     match outcome {
         Ok(()) => {
+            // The plugin, not the result id: for the shell plugin and files the
+            // id is the command or path the user typed.
             tracing::info!(
-                id,
                 plugin = item.plugin_id,
                 elapsed_ms = started.elapsed().as_millis() as u64,
                 "executed result"
@@ -366,7 +370,7 @@ fn run_execute(
             Ok(())
         }
         Err(err) => {
-            tracing::warn!(id, plugin = item.plugin_id, "execute failed: {err}");
+            tracing::warn!(plugin = item.plugin_id, "execute failed: {err}");
             if optimistic {
                 window::reveal(app);
             }
