@@ -294,7 +294,7 @@ and folders.
 
 **Network activity:**
 
-- **Optional update checks** (default on): Check GitHub for a new version at startup and daily. Disable with `[general] check_for_updates = false`. An update is downloaded only after you agree.
+- **Optional update checks** (default on): Check GitHub for a new version shortly after startup, every six hours and when you open Sevak. Disable with `[general] check_for_updates = false`. An update is downloaded only after you agree.
 - **Web searches and links:** When you run a web search or open a bookmark, your browser contacts that site (Google, YouTube, GitHub, etc.). Sevak does not proxy or log these.
 - **Currency conversion** (off by default): When enabled, Sevak downloads the European Central Bank's daily rates once per day for currency conversion.
 - **Theme and workflow galleries:** Only when you click **Browse online themes** or **Load gallery**, and a package only when you click **Install**.
