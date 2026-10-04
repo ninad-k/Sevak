@@ -38,6 +38,20 @@ pub fn init(paths: &AppPaths) {
     if let Some(err) = file_error {
         tracing::warn!(dir = %paths.log_dir.display(), "file logging disabled: {err}");
     }
+    log_panics();
+}
+
+/// Writes every panic to the log (release builds have no console to show it
+/// on); the diagnostics report counts these lines. The default hook still runs.
+fn log_panics() {
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        // `thread panicked at <file>:<line>:<column>:<message>`, on one line.
+        let text = info.to_string().replace(['\n', '\r'], " ");
+        let text = text.replacen("panicked at", "thread panicked at", 1);
+        tracing::error!("{text}");
+        previous(info);
+    }));
 }
 
 fn file_appender(paths: &AppPaths) -> Result<RollingFileAppender, String> {

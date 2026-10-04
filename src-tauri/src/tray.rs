@@ -22,6 +22,11 @@ pub fn init(app: &AppHandle) {
     }
 }
 
+/// Whether the tray icon exists (for the diagnostics report).
+pub fn exists(app: &AppHandle) -> bool {
+    app.tray_by_id(TRAY_ID).is_some()
+}
+
 fn build(app: &AppHandle) -> tauri::Result<()> {
     let menu = Menu::with_items(
         app,

@@ -245,6 +245,8 @@ pub struct Search {
     indexing: AtomicUsize,
     /// Bumped by every reload so a superseded one does not swap in.
     reload_generation: AtomicU64,
+    /// The plugins whose last refresh failed, with the error (diagnostics).
+    refresh_failures: Mutex<Vec<(String, String)>>,
 }
 
 impl Search {
@@ -278,7 +280,17 @@ impl Search {
             saver: UsageSaver::new(paths.usage_file.clone()),
             indexing: AtomicUsize::new(0),
             reload_generation: AtomicU64::new(0),
+            refresh_failures: Mutex::new(Vec::new()),
         }
+    }
+
+    /// `(plugin id, error)` of the plugins whose last refresh failed.
+    pub fn refresh_failures(&self) -> Vec<(String, String)> {
+        lock(&self.refresh_failures).clone()
+    }
+
+    fn record_failures(&self, failures: Vec<(String, String)>) {
+        *lock(&self.refresh_failures) = failures;
     }
 
     pub fn engine(&self) -> Arc<SearchEngine> {
@@ -383,7 +395,8 @@ fn emit_index(app: &AppHandle, state: &'static str) {
     }
 }
 
-fn refresh(engine: &SearchEngine, what: &str) {
+/// Refreshes every plugin; returns `(plugin id, error)` for those that failed.
+fn refresh(engine: &SearchEngine, what: &str) -> Vec<(String, String)> {
     let started = Instant::now();
     let failures = engine.refresh_all();
     tracing::info!(
@@ -391,6 +404,10 @@ fn refresh(engine: &SearchEngine, what: &str) {
         failed_plugins = failures.len(),
         "{what} finished"
     );
+    failures
+        .into_iter()
+        .map(|(id, err)| (id, err.to_string()))
+        .collect()
 }
 
 fn spawn_thread(name: &str, work: impl FnOnce() + Send + 'static) {
@@ -418,15 +435,17 @@ pub fn start(app: &AppHandle) {
     spawn_thread("sevak-index", move || {
         {
             let _guard = guard;
-            let engine = indexer.state::<AppState>().search.engine();
-            refresh(&engine, "initial indexing");
+            let search = &indexer.state::<AppState>().search;
+            let failures = refresh(&search.engine(), "initial indexing");
+            search.record_failures(failures);
         }
         loop {
             std::thread::sleep(REFRESH_INTERVAL);
             // The engine may have been replaced by a reload meanwhile. These
             // periodic runs are quiet: the old index stays usable throughout.
-            let engine = indexer.state::<AppState>().search.engine();
-            refresh(&engine, "periodic indexing");
+            let search = &indexer.state::<AppState>().search;
+            let failures = refresh(&search.engine(), "periodic indexing");
+            search.record_failures(failures);
         }
     });
 
@@ -488,13 +507,14 @@ pub fn reload(app: &AppHandle, config: &Config) {
         // Usage is irrelevant while warming up; the real snapshot is taken at
         // swap time so launches during indexing are not lost.
         let warm_up = SearchEngine::new(plugins.clone(), UsageStore::default(), options.clone());
-        refresh(&warm_up, "reload indexing");
+        let failures = refresh(&warm_up, "reload indexing");
 
         if app
             .state::<AppState>()
             .search
             .install(generation, plugins, options)
         {
+            app.state::<AppState>().search.record_failures(failures);
             tracing::info!("search engine reloaded");
         } else {
             tracing::info!("reload superseded by a newer one; discarding");

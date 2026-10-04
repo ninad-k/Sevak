@@ -31,6 +31,9 @@ Options:
                          move that shortcut, after you confirm.
       --restore-hotkey   Put back what Sevak changed to get its shortcut: GNOME's
                          input-source shortcuts, macOS Spotlight's shortcut
+      --diagnostics      Print a report for bug reports (version, system, settings
+                         summary, plugin status, recent log lines) with private
+                         data removed. Reads files only; sends nothing anywhere.
       --config PATH      Use PATH as the config folder (or the config file, if
                          it ends in .toml) instead of the default; overrides
                          SEVAK_CONFIG_DIR. Only used when this process starts
@@ -92,6 +95,8 @@ pub enum Invocation {
     SetupHotkey(Option<String>),
     /// Undo the system shortcut changes Sevak made with permission.
     RestoreHotkey,
+    /// Print the diagnostics report (see `diagnostics`) and exit.
+    Diagnostics,
     Help,
     Version,
 }
@@ -199,6 +204,7 @@ where
             "-h" | "--help" => set(&mut invocation, Invocation::Help)?,
             "-V" | "--version" => set(&mut invocation, Invocation::Version)?,
             "--restore-hotkey" => set(&mut invocation, Invocation::RestoreHotkey)?,
+            "--diagnostics" => set(&mut invocation, Invocation::Diagnostics)?,
             "--setup-hotkey" => {
                 // The key is optional; `--config` after it is not the key.
                 let key = match args.peek() {
@@ -520,6 +526,24 @@ mod tests {
         assert!(parse_strs(&["--restore-hotkey", "Alt+Space"]).is_err());
         // A running instance is not asked to restore anything: it is a plain launch.
         let remote = parse_remote(&argv(&["sevak", "--restore-hotkey"]));
+        assert_eq!(remote.launch, Launch::Show);
+    }
+
+    #[test]
+    fn diagnostics_stands_alone() {
+        assert_eq!(parse_strs(&["--diagnostics"]), Ok(Invocation::Diagnostics));
+        assert_eq!(
+            parse(["--config", "d", "--diagnostics"]).unwrap(),
+            Command {
+                invocation: Invocation::Diagnostics,
+                config: Some("d".into()),
+            }
+        );
+        assert!(parse_strs(&["--diagnostics", "--toggle"]).is_err());
+        assert!(parse_strs(&["--toggle", "--diagnostics"]).is_err());
+        assert!(parse_strs(&["--diagnostics", "stray"]).is_err());
+        // A running instance is never asked for a report: a plain launch.
+        let remote = parse_remote(&argv(&["sevak", "--diagnostics"]));
         assert_eq!(remote.launch, Launch::Show);
     }
 
