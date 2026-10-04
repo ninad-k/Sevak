@@ -125,4 +125,4 @@ Read individual feature pages for options:
 - [Automation tasks](tasks.md) and [media controls](media.md)
 - [Contacts](contacts.md), [1Password](1password.md) and [the dictionary](dictionary.md)
 
-All options are in `[section]` of `config.toml`. After editing, choose **Reload index** from the tray menu or restart Sevak.
+Every plugin has its options in **Settings** (see [Settings window](../settings.md)) and in a `[section]` of `config.toml`. After editing the file by hand, choose **Reload index** from the tray menu or restart Sevak.

@@ -18,7 +18,11 @@ Each tab covers a different aspect of Sevak. Changes are **not saved** until you
 | ++arrow-up++/++arrow-down++ on a tab button | Move between tabs |
 | ++home++/++end++ on a tab button | Jump to first or last tab |
 
-Validation errors appear under each field and prevent saving until they are fixed.
+Validation errors appear under each field and prevent saving until they are fixed. A red dot on a tab says that the page has a problem. Keywords are checked as you type: Sevak tells you when one is already used by a web search engine, a fixed keyword (`>`, `cb`, `s`, `emoji`, `:`, `@`, `uuid`) or another search, and both fields of a clash are marked.
+
+Saving keeps your comments, the order of your keys and every `[[snippet]]` entry exactly as they are in `config.toml`; only the lines you changed are rewritten.
+
+Pages: [General](#general), [Hotkeys](#hotkeys), [Appearance](#appearance), [Search](#search), [Plugins](#plugins), [Workflows](#workflows), [Gallery](#gallery), [Web search](#web-search), [Files & bookmarks](#files-bookmarks), [Clipboard & paste](#clipboard-paste), [Tasks & media](#tasks-media), [Integrations](#integrations), [System & terminal](#system-terminal) and, on Linux, [Linux](#linux).
 
 ## General
 
@@ -57,6 +61,12 @@ Links to: `[general] actions_hotkey` in configuration.
 **Wayland**, terminal windows and some apps prevent Sevak from reading the selection. Turn this on to act on the clipboard instead when the direct method fails.
 
 Links to: `[actions] use_clipboard_fallback` in configuration.
+
+### Read highlighted text first (X11)
+
+Linux X11 only. Universal Actions reads the PRIMARY selection (the text you have highlighted) before it presses ++ctrl+c++. Turn it off to always copy with the keyboard. Hidden on Wayland, Windows and macOS, where there is no PRIMARY selection.
+
+Links to: `[actions] use_primary_selection` in configuration.
 
 ### Hide when focus is lost
 
@@ -221,22 +231,22 @@ Enable or disable built-in result sources:
 
 - **Applications** (Windows Start Menu shortcuts and packages, macOS app bundles, Linux desktop entries)
 - **Calculator** (arithmetic, unit conversion, currency)
-- **Files** (indexed folders; also see Files tab)
-- **Bookmarks** (browser bookmarks; also see Bookmarks section in configuration)
-- **Clipboard history** (if enabled; search recent copied text, images and files)
+- **Files** (indexed folders; also see [Files & bookmarks](#files-bookmarks))
+- **Bookmarks** (browser bookmarks; options under [Files & bookmarks](#files-bookmarks))
+- **Clipboard history** (search recent copied text, images and files; also needs **Keep a clipboard history** on the [Clipboard & paste](#clipboard-paste) page)
 - **Snippets** (saved text templates)
 - **Emoji picker** (`:heart`, `emoji heart`)
-- **System commands** (lock, sleep, settings, etc.)
-- **Automation tasks** (dark mode, volume, quit, kill, eject, keep awake…)
-- **Media controls** (play, pause, next, now playing)
-- **Shell** (type `> command` to run in a terminal)
+- **System commands** (lock, sleep, settings, etc.; options under [System & terminal](#system-terminal))
+- **Automation tasks** (dark mode, volume, quit, kill, eject, keep awake…; options under [Tasks & media](#tasks-media))
+- **Media controls** (play, pause, next, now playing; options under [Tasks & media](#tasks-media))
+- **Terminal commands** (type `> command` to run in a terminal; options under [System & terminal](#system-terminal))
 - **Selection** (Universal Actions)
-- **Contacts** and **1Password** (also need `enabled = true` in `config.toml`)
-- **Dictionary** (`define`, `spell`)
+- **Contacts** and **1Password** (also need their own switch on the [Integrations](#integrations) page)
+- **Dictionary** (`define`, `spell`; options under [Integrations](#integrations))
 - **Script plugins** and **workflows** you installed
 - **Web search engines** (see Web search tab)
 
-Contacts, 1Password, the dictionary, automation tasks and media controls have no fields of their own here; edit their sections in `config.toml` ([configuration](configuration.md)).
+Each plugin's own options are on the page named next to it. A plugin switched off here stays off, whatever its page says: its page shows a note when that is the case.
 
 ### Currency conversion
 
@@ -253,7 +263,11 @@ Off by default. When on, typing a snippet's keyword in any app replaces it with 
 - **Keyword prefix**: typed before every keyword, such as `;`, so that `;sig` expands and a plain `sig` does not.
 - **Expand**: as soon as the keyword is typed, or after a space or punctuation mark.
 
-A warning under the switch says what is missing (macOS Input Monitoring permission, Wayland). The other options (`case_sensitive`, `ignore_apps`, `expand_in_terminals`) are in `config.toml`.
+A warning under the switch says what is missing (macOS Input Monitoring permission, Wayland). Three more fields appear:
+
+- **Match case**: off lets `SIG` and `sig` both expand.
+- **Expand in terminals**: terminal windows are skipped unless this is on.
+- **Never expand in these apps**: a list of program or app names (any case), such as `KeePassXC`. Type a name and press ++enter++ or **Add**; click the **×** to remove one.
 
 Links to: `[snippets]` in [configuration](configuration.md#snippets) and [Expand snippets as you type](features/snippets.md#expand-snippets-as-you-type).
 
@@ -295,7 +309,7 @@ Sevak starts with Google, YouTube and GitHub. You can remove them and add your o
 
 Links to: `[[web_search]]` in [configuration](configuration.md#web_search).
 
-## Files
+## Files & bookmarks
 
 ### Folders to search
 
@@ -349,6 +363,149 @@ Turns `ff` (file names anywhere) and `in` (words inside files) on or off. Both a
 Every keyword must be one word and differ from all other keywords; Settings refuses to save a clash.
 
 Links to: `[files] use_os_index`, `index_keyword` and `content_keyword` in configuration, and [Whole-disk and content search](features/files.md#whole-disk-and-content-search).
+
+### File buffer
+
+**Keep the buffer when Sevak hides**: the [file buffer](features/files.md#file-buffer) (files you collect with ++alt+arrow-down++ to act on together) is emptied whenever the launcher hides. Turn this on to keep it.
+
+Links to: `[file_buffer] keep_between_shows` in configuration.
+
+### Bookmarks
+
+- **Keyword**: type "keyword term" to search only bookmarks. Default `b`; empty removes the keyword.
+- **Show in ordinary searches**: also list matching bookmarks for plain searches.
+- **Browsers**: a checklist of Chrome, Edge, Brave, Vivaldi, Chromium, Opera, Opera GX, Firefox, LibreWolf and Zen. **None ticked reads every browser Sevak finds.** All profiles of a ticked browser are read.
+
+Bookmarks are read from disk when you search; nothing is sent anywhere. An id in `config.toml` that the checklist does not know is kept and shown as a chip you can remove.
+
+Links to: `[bookmarks]` in [configuration](configuration.md#bookmarks) and [Bookmarks](features/bookmarks.md).
+
+## Clipboard & paste
+
+### Keep a clipboard history
+
+Off by default. When on, Sevak watches the clipboard and keeps what you copy so that `cb` can paste it back. Only what you copy after you turn it on is remembered.
+
+!!! warning "Privacy"
+    The history is stored on this computer, **unencrypted**: text and the paths of copied files in `clipboard-history.json`, images as PNG files in the `clipboard` folder, both in Sevak's data folder. Nothing is sent anywhere. Content that a password manager marks as secret is never recorded on Windows and macOS; Linux has no such marker, so list those apps under **Ignore apps**.
+
+If **Clipboard history** is switched off under **Plugins**, the page says so: `cb` then shows nothing whatever this switch says.
+
+Links to: `[clipboard] enabled` in configuration and [Clipboard history](features/clipboard.md).
+
+### What to keep
+
+These apply while the history is on.
+
+| Field | Range | Default | Notes |
+|---|---|---|---|
+| **Number of items** | 1–5000 | 200 | Older entries are dropped with their image files. |
+| **Longest text** | up to 4096 KB | 64 KB | Longer text is not recorded. |
+| **Record images** | on/off | on | Copied pictures, saved as PNG files. |
+| **Largest image** | up to 64 MB | 10 MB | A picture whose PNG is larger is not recorded. |
+| **Record files** | on/off | on | Only the paths of copied files and folders are kept. |
+| **Ignore apps** | list | empty | Copies made in these apps are never recorded (program or app names, any case). |
+
+The sizes are shown in KB and MB and written to `config.toml` in bytes.
+
+Links to: `[clipboard]` in [configuration](configuration.md#clipboard).
+
+### Clear clipboard history
+
+**Clear history…** asks once more (**Delete everything**) and then deletes every saved entry and the image files. It works at once and is not part of **Save**; it also deletes what an earlier run left behind when the history is off now. It cannot be undone.
+
+### Put the clipboard back after pasting
+
+After pasting a clipboard entry or a snippet, restore what was on the clipboard before. Off leaves the pasted text there. A note under it says what pasting needs on your system (macOS Accessibility permission; administrator windows on Windows; Wayland).
+
+Links to: `[paste] restore_clipboard` in configuration.
+
+## Tasks & media
+
+### Automation tasks
+
+[Automation tasks](features/tasks.md) are ready-made actions: dark mode, volume, screenshots, quit or kill an app, eject a drive and more.
+
+- **Ask before risky tasks**: confirm before force quitting an app, ending a process and restarting Explorer or Finder.
+- **Keyword**: type the keyword and a space to list the tasks. Default `t`; empty removes it.
+- **Show in ordinary searches**: also match task names in plain searches, such as `dark mode` or `kill chrome`.
+- **Tasks to offer**: a checklist of every task. Untick one to hide it. Only the tasks that work on your computer are offered at all.
+
+A note says what your system needs (Windows: allow desktop apps under *Privacy & security, Radios* for Wi-Fi and Bluetooth; macOS: System Events and Accessibility permission; Linux: helper programs such as `wmctrl` and `nmcli`).
+
+Links to: `[tasks]` in [configuration](configuration.md#tasks).
+
+### Media controls
+
+[Media controls](features/media.md) press play, pause, next and previous for whatever is playing.
+
+- **Keyword**: type the keyword and a space to list the buttons and the track. Default `play`; empty removes it.
+- **Show in ordinary searches**: also match `pause`, `next track` and so on in plain searches.
+- **Show what is playing**: a row with the title, artist and app. It is read from your media player when you search and never stored or sent anywhere.
+
+On **Linux** the buttons are not offered until `playerctl` is installed, and the page says so. On macOS only Music and Spotify report the track.
+
+Links to: `[media]` in [configuration](configuration.md#media).
+
+## Integrations
+
+### Contacts
+
+Off by default. Search your address book with `c` or `@`.
+
+- **Search contacts**: the on switch.
+- **Keyword**: default `c`; the `@` keyword always works too. It cannot be empty.
+- **Read the system address book**: also search the Contacts app (macOS: the first search asks for permission), the Windows People store, or Evolution's local address books (Linux).
+- **vCard files and folders**: `.vcf` files and folders of them, which work everywhere without a permission. **Add file…** and **Add folder…** open a picker; you can also type a path such as `~/contacts.vcf` and press ++enter++.
+
+Contacts are read into memory only and are never written to disk, logged or sent anywhere. Searches in it stay out of the search history.
+
+Links to: `[contacts]` in [configuration](configuration.md#contacts) and [Contacts](features/contacts.md).
+
+### 1Password
+
+Off by default. Find a login by title or website with `1p`. Sevak uses the official `op` command-line tool and never reads a password, one-time code or note.
+
+- **Search 1Password logins**: the on switch.
+- **Keyword**: default `1p`. It cannot be empty.
+- **Path to op**: empty looks on `PATH` and in the usual install folders. **Browse…** picks the program.
+- **Account**: which account to use when several are signed in (its address, short name or ID). Empty uses `op`'s default.
+- **Keep the list of logins**: 1–1440 minutes (default 10) in memory before it is refreshed. A refresh may ask you to unlock 1Password.
+
+**Needs the 1Password CLI**: install `op` and turn on *Settings, Developer, Integrate with 1Password CLI* in the 1Password app. Sevak asks `op` only for titles, vault names, websites and usernames, and keeps that list in memory.
+
+Links to: `[onepassword]` in [configuration](configuration.md#onepassword) and [1Password](features/1password.md).
+
+### Dictionary and spelling
+
+On by default (switch it off under **Plugins**). Everything is offline.
+
+- **Definitions keyword**: default `define`. It cannot be empty.
+- **Spelling keyword**: default `spell`. It cannot be empty.
+- **Prefer the system dictionary**: use the macOS Dictionary and the Windows spell checker where there is one. Linux has none Sevak can ask, so it always uses the bundled English dictionary. Off always uses the bundled one.
+
+Links to: `[dictionary]` in [configuration](configuration.md#dictionary) and [Dictionary](features/dictionary.md).
+
+## System & terminal
+
+### System commands
+
+[System commands](features/system.md) lock, sleep, restart and shut down, and open settings pages.
+
+- **Ask before destructive commands**: confirm restart, shut down, log out and emptying the trash. This also applies to a hotkey bound to one of them.
+- **Commands to offer**: a checklist of the commands and of every settings page. Untick **All settings pages** to hide them all. Only the commands that exist on your computer are offered at all.
+
+Links to: `[system]` in [configuration](configuration.md#system).
+
+### Terminal commands
+
+[Shell commands](features/shell.md): type `> command` and press ++enter++ to run it in a terminal. Nothing runs until you press ++enter++.
+
+- **Terminal**: a program name or full path, optionally with arguments (`wt`, `iterm`, `kitty --class sevak`). Empty detects one. **Browse…** picks the program.
+- **Shell**: the program that runs the command. Empty detects one. Not used on macOS, where the terminal starts your login shell.
+- **Keep the terminal open**: leave it at a shell prompt after the command exits; off closes it.
+
+Links to: `[shell]` in [configuration](configuration.md#shell).
 
 ## Linux
 

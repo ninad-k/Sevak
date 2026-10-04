@@ -1,6 +1,13 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import AppearanceExtras from "./lib/AppearanceExtras.svelte";
+  import ClipboardPage from "./lib/settings-pages/ClipboardPage.svelte";
+  import FilesExtras from "./lib/settings-pages/FilesExtras.svelte";
+  import IntegrationsPage from "./lib/settings-pages/IntegrationsPage.svelte";
+  import ListEditor from "./lib/settings-pages/ListEditor.svelte";
+  import SystemPage from "./lib/settings-pages/SystemPage.svelte";
+  import TasksMediaPage from "./lib/settings-pages/TasksMediaPage.svelte";
+  import { tidyPluginSettings } from "./lib/settings-pages/tidy";
   import HotkeyField from "./lib/HotkeyField.svelte";
   import HotkeyList from "./lib/HotkeyList.svelte";
   import ThemeEditor from "./lib/ThemeEditor.svelte";
@@ -49,6 +56,7 @@
     window: { width: 720 },
     linux: { wayland_use_xwayland: true },
     actions: { use_primary_selection: true, use_clipboard_fallback: false },
+    paste: { restore_clipboard: false },
     search: { max_results: 8, fallback_web_search: "", query_history: true },
     appearance: {
       theme: "system",
@@ -82,6 +90,22 @@
       expand_in_terminals: false,
     },
     bookmarks: { browsers: [], keyword: "", global: true },
+    file_buffer: { keep_between_shows: false },
+    clipboard: {
+      enabled: false,
+      max_items: 200,
+      max_item_bytes: 64 * 1024,
+      ignore_apps: [],
+      images: true,
+      files: true,
+      max_image_bytes: 10 * 1024 * 1024,
+    },
+    contacts: { enabled: false, keyword: "c", use_system: true, vcard_files: [] },
+    onepassword: { enabled: false, keyword: "1p", op_path: "", account: "", cache_minutes: 10 },
+    dictionary: { define_keyword: "define", spell_keyword: "spell", use_system: true },
+    system: { confirm: true, disabled: [] },
+    tasks: { confirm: true, disabled: [], keyword: "t", global: true },
+    media: { keyword: "play", global: true, now_playing: true },
     shell: { terminal: "", shell: "", keep_open: true },
     web_search: [],
     hotkey: [],
@@ -141,7 +165,11 @@
         { id: "workflows", label: "Workflows" },
         { id: "gallery", label: "Gallery" },
         { id: "web", label: "Web search" },
-        { id: "files", label: "Files" },
+        { id: "files", label: "Files & bookmarks" },
+        { id: "clipboard", label: "Clipboard & paste" },
+        { id: "tasks", label: "Tasks & media" },
+        { id: "integrations", label: "Integrations" },
+        { id: "system", label: "System & terminal" },
         ...(showLinux ? [{ id: "linux", label: "Linux" }] : []),
       ] as { id: PageId; label: string }[]
     ).map((section) => ({
@@ -224,6 +252,8 @@
   });
 
   const family = (id: string) => id.split(":")[0];
+  /** A plugin switched off under Plugins: its page still edits the settings, and says so. */
+  const pluginOff = (id: string) => !pluginEnabled(id);
   const pluginEnabled = (id: string) =>
     !draft.plugins.disabled.includes(id) && !draft.plugins.disabled.includes(family(id));
 
@@ -348,6 +378,7 @@
     payload.files.index_keyword = payload.files.index_keyword.trim();
     payload.files.content_keyword = payload.files.content_keyword.trim();
     payload.files.directories = payload.files.directories.map((dir) => dir.trim());
+    tidyPluginSettings(payload);
     payload.search.fallback_web_search = Array.isArray(payload.search.fallback_web_search)
       ? payload.search.fallback_web_search.map((k) => k.trim())
       : payload.search.fallback_web_search.trim();
@@ -625,6 +656,22 @@
               />
             </div>
 
+            {#if display === "x11"}
+              <div class="row">
+                <div class="label">
+                  <span class="name">Read highlighted text first (X11)</span>
+                  <span class="hint">
+                    Universal Actions reads the PRIMARY selection, the text you have highlighted,
+                    before it presses Ctrl+C.
+                  </span>
+                </div>
+                <Toggle
+                  bind:checked={draft.actions.use_primary_selection}
+                  label="Read highlighted text first"
+                />
+              </div>
+            {/if}
+
             <div class="row">
               <div class="label">
                 <span class="name">Hide when focus is lost</span>
@@ -882,6 +929,35 @@
                   <option value="delimiter">After a space or punctuation</option>
                 </select>
               </div>
+
+              <div class="row">
+                <div class="label">
+                  <span class="name">Match case</span>
+                  <span class="hint">Off: <code>SIG</code> and <code>sig</code> both expand.</span>
+                </div>
+                <Toggle bind:checked={draft.snippets.case_sensitive} label="Match case" />
+              </div>
+
+              <div class="row">
+                <div class="label">
+                  <span class="name">Expand in terminals</span>
+                  <span class="hint">Terminal windows are skipped unless this is on.</span>
+                </div>
+                <Toggle
+                  bind:checked={draft.snippets.expand_in_terminals}
+                  label="Expand in terminals"
+                />
+              </div>
+
+              <ListEditor
+                id="snippets-ignore-apps"
+                bind:items={draft.snippets.ignore_apps}
+                label="Never expand in these apps"
+                hint="Nothing is watched or expanded while one of these has focus, such as KeePassXC. Program or app names, any case."
+                placeholder="App name"
+                emptyText="No apps ignored."
+                divider
+              />
             {/if}
           </section>
           <p class="note">
@@ -965,7 +1041,7 @@
             <button type="button" class="btn" onclick={addEngine}>Add engine</button>
           </div>
         {:else if active === "files"}
-          <h1>Files</h1>
+          <h1>Files &amp; bookmarks</h1>
 
           <section class="group">
             <div class="field">
@@ -1027,19 +1103,19 @@
               <div class="label">
                 <label class="name" for="files-keyword">Keyword</label>
                 <span class="hint">Type “keyword name” to search only files.</span>
-                {#if problems.filesKeyword}
-                  <span class="msg error" role="alert">{problems.filesKeyword}</span>
+                {#if problems.keywords["files.keyword"]}
+                  <span class="msg error" role="alert">{problems.keywords["files.keyword"]}</span>
                 {/if}
               </div>
               <input
                 id="files-keyword"
                 class="input number"
-                class:invalid={!!problems.filesKeyword}
+                class:invalid={!!problems.keywords["files.keyword"]}
                 type="text"
                 bind:value={draft.files.keyword}
                 spellcheck="false"
                 autocomplete="off"
-                aria-invalid={!!problems.filesKeyword}
+                aria-invalid={!!problems.keywords["files.keyword"]}
               />
             </div>
 
@@ -1069,10 +1145,15 @@
                 <div class="label">
                   <label class="name" for="files-index-keyword">Whole-disk keyword</label>
                   <span class="hint">Empty turns off name search.</span>
+                  {#if problems.keywords["files.index_keyword"]}
+                    <span class="msg error" role="alert">{problems.keywords["files.index_keyword"]}</span>
+                  {/if}
                 </div>
                 <input
                   id="files-index-keyword"
                   class="input number"
+                  class:invalid={!!problems.keywords["files.index_keyword"]}
+                  aria-invalid={!!problems.keywords["files.index_keyword"]}
                   type="text"
                   bind:value={draft.files.index_keyword}
                   spellcheck="false"
@@ -1084,10 +1165,15 @@
                 <div class="label">
                   <label class="name" for="files-content-keyword">Contents keyword</label>
                   <span class="hint">Empty turns off content search.</span>
+                  {#if problems.keywords["files.content_keyword"]}
+                    <span class="msg error" role="alert">{problems.keywords["files.content_keyword"]}</span>
+                  {/if}
                 </div>
                 <input
                   id="files-content-keyword"
                   class="input number"
+                  class:invalid={!!problems.keywords["files.content_keyword"]}
+                  aria-invalid={!!problems.keywords["files.content_keyword"]}
                   type="text"
                   bind:value={draft.files.content_keyword}
                   spellcheck="false"
@@ -1096,6 +1182,21 @@
               </div>
             {/if}
           </section>
+
+          <FilesExtras bind:config={draft} {problems} {pluginOff} />
+        {:else if active === "clipboard"}
+          <ClipboardPage
+            bind:config={draft}
+            {problems}
+            {platform}
+            pluginOff={pluginOff("clipboard")}
+          />
+        {:else if active === "tasks"}
+          <TasksMediaPage bind:config={draft} {problems} {platform} {pluginOff} />
+        {:else if active === "integrations"}
+          <IntegrationsPage bind:config={draft} {problems} {platform} {pluginOff} />
+        {:else if active === "system"}
+          <SystemPage bind:config={draft} {platform} {pluginOff} />
         {:else if active === "linux"}
           <h1>Linux</h1>
 

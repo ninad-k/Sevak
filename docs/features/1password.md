@@ -12,7 +12,7 @@ This plugin is **off by default**.
 
 1. Install the 1Password CLI (`op`).
 2. In the 1Password app, turn on *Settings → Developer → Integrate with 1Password CLI*.
-3. Add to `config.toml`, then choose **Reload index**:
+3. Open **Settings → Integrations**, switch on **Search 1Password logins** and press **Save**. Or add to `config.toml`, then choose **Reload index**:
 
 ```toml
 [onepassword]

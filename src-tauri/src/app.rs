@@ -82,6 +82,8 @@ pub fn run(
             settings::suspend_hotkey,
             settings::resume_hotkey,
             settings::pick_directory,
+            settings::pick_file,
+            settings::clear_clipboard_history,
             settings::setup_wayland_hotkey,
             settings::start_hotkey_recording,
             settings::stop_hotkey_recording,

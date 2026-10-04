@@ -1,6 +1,6 @@
 # Configuration file reference
 
-Sevak stores settings in a TOML file. You can edit it by hand or use the Settings window. This page documents every configuration key.
+Sevak stores settings in a TOML file. You can edit it by hand or use the [Settings window](settings.md), which has a page for every section except `[[snippet]]` entries. This page documents every configuration key.
 
 ## Where the file is
 
@@ -342,7 +342,7 @@ ignore_apps = []
 
 ### [file_buffer]
 
-The [file buffer](features/files.md#file-buffer) (++alt+arrow-down++ on a file result collects it). There is no settings page for it.
+The [file buffer](features/files.md#file-buffer) (++alt+arrow-down++ on a file result collects it). Set it in **Settings → Files & bookmarks**.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -355,7 +355,7 @@ keep_between_shows = false
 
 ### [contacts]
 
-[Contacts](features/contacts.md) (`c <name>` or `@name`). Off by default. Contacts are read into memory only; nothing is written to disk or sent anywhere. The Settings window has no fields for this section.
+[Contacts](features/contacts.md) (`c <name>` or `@name`). Off by default. Contacts are read into memory only; nothing is written to disk or sent anywhere. Set it in **Settings → Integrations**.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -374,7 +374,7 @@ vcard_files = []
 
 ### [onepassword]
 
-[1Password](features/1password.md) logins (`1p github`) through the official `op` command-line tool. Off by default. Only titles, vault names, websites and usernames are read, never passwords or one-time codes. The Settings window has no fields for this section.
+[1Password](features/1password.md) logins (`1p github`) through the official `op` command-line tool. Off by default. Only titles, vault names, websites and usernames are read, never passwords or one-time codes. Set it in **Settings → Integrations**.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -395,7 +395,7 @@ cache_minutes = 10
 
 ### [dictionary]
 
-[Dictionary and spelling](features/dictionary.md), all offline. On by default; turn it off with `"dict"` in `[plugins] disabled`. The Settings window has no fields for this section.
+[Dictionary and spelling](features/dictionary.md), all offline. On by default; turn it off with `"dict"` in `[plugins] disabled`. Set it in **Settings → Integrations**.
 
 | Key | Type | Default | Description |
 |---|---|---|---|

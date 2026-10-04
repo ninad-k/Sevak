@@ -125,7 +125,7 @@ Check these in order:
 | Check | What to do |
 |---|---|
 | Query length | Use at least two characters after `f ` |
-| Indexed root | Add the containing folder in Settings → Files |
+| Indexed root | Add the containing folder in Settings → Files & bookmarks |
 | Search depth | Increase depth if the file is nested too deeply |
 | Dot-file visibility | Enable hidden-file indexing if needed |
 | Excluded directory | Generated/cache directories are deliberately pruned |
@@ -154,8 +154,9 @@ Check local plugins and indexing first, or disable the fallback under
 ## `c`, `1p`, `define` or `spell` does nothing
 
 - **Contacts and 1Password are off by default.** The row says "Contacts are off"
-  or "1Password is off"; add `[contacts] enabled = true` or
-  `[onepassword] enabled = true` to `config.toml` and choose **Reload index**.
+  or "1Password is off"; switch them on in **Settings → Integrations**, or add
+  `[contacts] enabled = true` or `[onepassword] enabled = true` to `config.toml`
+  and choose **Reload index**.
 - **No contacts found.** The plugin reads vCard files from `vcard_files` and, with
   `use_system = true`, the system address book. On macOS the first `c` shows
   "Allow Sevak to read your Contacts": press Enter and answer the system
@@ -167,7 +168,7 @@ Check local plugins and indexing first, or disable the fallback under
   [1Password CLI](https://developer.1password.com/docs/cli/get-started/), turn on
   *Settings → Developer → Integrate with 1Password CLI* in the 1Password app, and
   run `op account list` in a terminal to check. If `op` is somewhere unusual, set
-  `[onepassword] op_path`. After you dismiss the unlock prompt, press Enter on
+  **Path to op** under 1Password in **Settings → Integrations** (`[onepassword] op_path`). After you dismiss the unlock prompt, press Enter on
   "Try again". Sevak never reads or shows passwords.
 - **`define` finds nothing.** The bundled dictionary has single words and their
   common inflections, not phrases or names of people. Check the spelling with

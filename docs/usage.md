@@ -238,7 +238,7 @@ By default, dot-files and cache folders (node_modules, .git, etc.) are excluded.
 
 **File buffer**: press ++alt+arrow-down++ on file results to collect them, then ++alt+arrow-right++ to open, move, copy, zip or trash them all at once. See [File buffer](features/files.md#file-buffer).
 
-Configure in **Settings → Files** or with `[files]` in config.toml.
+Configure in **Settings → Files & bookmarks** or with `[files]` in config.toml.
 
 More: [Files](features/files.md) plugin.
 
@@ -254,7 +254,7 @@ More: [Bookmarks](features/bookmarks.md) plugin.
 
 ### Clipboard history
 
-**Optional and off by default.** Enable in **Settings → Plugins** or with `[clipboard] enabled = true`.
+**Optional and off by default.** Enable in **Settings → Clipboard & paste** or with `[clipboard] enabled = true`.
 
 Type **`cb `** to search what you copied recently: text, images and files. **++enter++** pastes the entry into your previous app. `cb image` shows copied images as a grid of thumbnails.
 
@@ -273,7 +273,7 @@ Placeholders:
 - `{uuid}`: a new random UUID
 - `{{`, `}}`: literal `{` and `}`
 
-Configure in `[paste]` and with `[[snippet]]` entries in config.toml.
+Configure pasting in **Settings → Clipboard & paste** (or `[paste]`), and snippets with `[[snippet]]` entries in config.toml.
 
 **Expand as you type** (off by default): with `[snippets] auto_expand = true` (or **Settings → Plugins**), typing a snippet's `keyword` in any app replaces it with the snippet. While on, Sevak watches your keystrokes, keeping only the last 64 characters in memory. See [Expand snippets as you type](features/snippets.md#expand-snippets-as-you-type).
 
@@ -283,7 +283,7 @@ More: [Snippets](features/snippets.md) plugin.
 
 Type a command's name: `lock`, `sleep`, `restart`, `shutdown`, `logout`, `empty trash`, or settings pages (`bluetooth`, `display`, `wifi`, `sound`, etc.).
 
-Dangerous actions (restart, shut down, logout, empty trash) ask for confirmation first. You can disable the ask or hide commands in **Settings → Plugins** or with `[system]` in config.toml.
+Dangerous actions (restart, shut down, logout, empty trash) ask for confirmation first. You can disable the ask or hide commands in **Settings → System & terminal** or with `[system]` in config.toml.
 
 More: [System commands](features/system.md) plugin.
 
@@ -307,7 +307,7 @@ Type **`> `** (or `>`) followed by a shell command. **++enter++** opens your ter
 
 Nothing runs until you press Enter—the launcher only prepares the command.
 
-Terminal auto-detection by platform; customize in **Settings** or with `[shell]` in config.toml.
+Terminal auto-detection by platform; customize in **Settings → System & terminal** or with `[shell]` in config.toml.
 
 More: [Shell](features/shell.md) plugin.
 

@@ -3,14 +3,17 @@
 use std::collections::HashSet;
 
 use serde::Serialize;
-use sevak_core::config::{Config, Theme};
+use sevak_core::config::{
+    Config, Theme, MAX_CLIPBOARD_IMAGE_BYTES_LIMIT, MAX_CLIPBOARD_ITEMS_LIMIT,
+    MAX_CLIPBOARD_ITEM_BYTES_LIMIT, MAX_ONEPASSWORD_CACHE_MINUTES,
+};
 use sevak_core::theme;
 use sevak_platform::accelerator;
 use sevak_platform::{gnome, hotkey_hook, open, paths, session, HotkeyStrategy};
 use sevak_plugins::keywords::{
     configurable_keywords, ConfigurableKeyword, KeywordOwners, FIXED_KEYWORDS,
 };
-use sevak_plugins::{PluginInfo, PluginRegistry};
+use sevak_plugins::{clipboard_history, PluginInfo, PluginRegistry};
 use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
@@ -190,17 +193,54 @@ pub fn validate(config: &Config, strategy: HotkeyStrategy) -> Result<(), String>
     if prefix.chars().any(|c| c.is_whitespace() || c.is_control()) {
         return Err("The snippet prefix cannot contain spaces.".to_owned());
     }
+    validate_limits(config)
+}
+
+/// The numbers `Config::normalized` would silently clamp: the form shows the
+/// same ranges, so a hand-crafted call gets told instead of changed.
+fn validate_limits(config: &Config) -> Result<(), String> {
+    let clipboard = &config.clipboard;
+    let ranges = [
+        (
+            "Clipboard history: the number of items",
+            clipboard.max_items,
+            MAX_CLIPBOARD_ITEMS_LIMIT,
+        ),
+        (
+            "Clipboard history: the longest text",
+            clipboard.max_item_bytes,
+            MAX_CLIPBOARD_ITEM_BYTES_LIMIT,
+        ),
+        (
+            "Clipboard history: the largest image",
+            clipboard.max_image_bytes,
+            MAX_CLIPBOARD_IMAGE_BYTES_LIMIT,
+        ),
+    ];
+    for (what, value, max) in ranges {
+        if !(1..=max).contains(&value) {
+            return Err(format!("{what} must be from 1 to {max}."));
+        }
+    }
+    let minutes = config.onepassword.cache_minutes;
+    if !(1..=MAX_ONEPASSWORD_CACHE_MINUTES).contains(&minutes) {
+        return Err(format!(
+            "1Password: the cache time must be from 1 to {MAX_ONEPASSWORD_CACHE_MINUTES} minutes."
+        ));
+    }
     Ok(())
 }
 
 /// The configurable keywords of the built-in plugins (`[files]`, `[bookmarks]`,
 /// `[tasks]`, `[media]`, `[contacts]`, `[onepassword]`, `[dictionary]`) are one
-/// word each, and no two searches share a keyword (the lists live in
+/// word each (and never empty for the contacts, 1Password and dictionary
+/// ones, whose empty value would silently become the default), and no two
+/// searches share a keyword (the lists live in
 /// `sevak_plugins::keywords`, which also finds workflow and script plugin
 /// clashes, only a warning there): not two built-in ones, not a
 /// built-in one and a fixed keyword (`>`, `cb`, `s`, `emoji`, `:`, `@`, `uuid`),
 /// and not either of those and a web search engine (`web`, lowercased). An
-/// empty keyword turns that keyword off and never clashes.
+/// empty keyword turns that search off and never clashes.
 fn validate_builtin_keywords(config: &Config, web: &HashSet<String>) -> Result<(), String> {
     for (keyword, owner) in FIXED_KEYWORDS {
         if web.contains(*keyword) {
@@ -217,10 +257,14 @@ fn validate_builtin_keywords(config: &Config, web: &HashSet<String>) -> Result<(
         label,
         keyword,
         owner,
+        required,
     } in configurable_keywords(config)
     {
         let keyword = keyword.trim();
         if keyword.is_empty() {
+            if required {
+                return Err(format!("The {label} keyword cannot be empty."));
+            }
             continue;
         }
         if keyword.chars().any(char::is_whitespace) {
@@ -368,12 +412,16 @@ fn save(app: &AppHandle, mut config: Config) -> Result<(), String> {
 /// Opens a native folder picker over the settings window. `None` when the
 /// user cancels. The path comes back `~`-relative where possible.
 #[tauri::command]
-pub async fn pick_directory(app: AppHandle, window: WebviewWindow) -> Option<String> {
+pub async fn pick_directory(
+    app: AppHandle,
+    window: WebviewWindow,
+    title: Option<String>,
+) -> Option<String> {
     tauri::async_runtime::spawn_blocking(move || {
         let picked = app
             .dialog()
             .file()
-            .set_title("Choose a folder to search")
+            .set_title(title.unwrap_or_else(|| "Choose a folder to search".to_owned()))
             .set_parent(&window)
             .blocking_pick_folder()?;
         match picked.into_path() {
@@ -389,6 +437,50 @@ pub async fn pick_directory(app: AppHandle, window: WebviewWindow) -> Option<Str
         tracing::warn!("folder picker failed: {err}");
         None
     })
+}
+
+/// Opens a native file picker over the settings window (`extensions` limits it
+/// to those file types, such as `vcf`; empty shows every file). `None` when the
+/// user cancels. The path comes back `~`-relative where possible.
+#[tauri::command]
+pub async fn pick_file(
+    app: AppHandle,
+    window: WebviewWindow,
+    title: String,
+    extensions: Vec<String>,
+) -> Option<String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut dialog = app.dialog().file().set_title(title).set_parent(&window);
+        if !extensions.is_empty() {
+            let extensions: Vec<&str> = extensions.iter().map(String::as_str).collect();
+            dialog = dialog.add_filter("Files", &extensions);
+        }
+        match dialog.blocking_pick_file()?.into_path() {
+            Ok(path) => Some(paths::home_relative(&path)),
+            Err(err) => {
+                tracing::warn!("the picked file is not a local path: {err}");
+                None
+            }
+        }
+    })
+    .await
+    .unwrap_or_else(|err| {
+        tracing::warn!("file picker failed: {err}");
+        None
+    })
+}
+
+/// "Clear clipboard history" in Settings: deletes the saved history and its
+/// image files, whether or not the plugin is on right now.
+#[tauri::command]
+pub async fn clear_clipboard_history() -> Result<(), String> {
+    let Some(file) = clipboard_history::default_history_path() else {
+        return Err("Sevak's data folder could not be found.".to_owned());
+    };
+    tauri::async_runtime::spawn_blocking(move || clipboard_history::clear_history(&file))
+        .await
+        .map_err(|err| format!("clearing did not finish: {err}"))?
+        .map_err(|err| format!("could not delete the clipboard history: {err}"))
 }
 
 /// "Set up GNOME shortcut": see [`gnome::setup_for_ui`]. The saved `[[hotkey]]`
@@ -616,11 +708,20 @@ mod tests {
                 set(&mut config, taken);
                 assert!(check(&config).is_err(), "{name} = {taken:?}");
             }
-            // A free word is fine, and empty turns the keyword off.
-            for free in ["zz", ""] {
-                let mut config = Config::default();
-                set(&mut config, free);
-                assert_eq!(check(&config), Ok(()), "{name} = {free:?}");
+            // A free word is fine.
+            let mut config = Config::default();
+            set(&mut config, "zz");
+            assert_eq!(check(&config), Ok(()), "{name} = zz");
+            // Empty turns a search off, but the contacts, 1Password and
+            // dictionary keywords cannot be off: empty would silently mean the
+            // default.
+            let mut config = Config::default();
+            set(&mut config, "");
+            if ["tasks", "media", "bookmarks"].contains(&name) {
+                assert_eq!(check(&config), Ok(()), "{name} = empty");
+            } else {
+                let err = check(&config).unwrap_err();
+                assert!(err.contains("cannot be empty"), "{name}: {err}");
             }
         }
         // Two configurable ones clash with each other too.
@@ -633,6 +734,79 @@ mod tests {
         let mut config = Config::default();
         config.web_search[0].keyword = "cb".into();
         assert!(check(&config).is_err());
+    }
+
+    #[test]
+    fn the_plugin_numbers_have_the_ranges_the_form_shows() {
+        type Set = fn(&mut Config, usize);
+        let setters: [(&str, Set, usize, usize); 4] = [
+            (
+                "number of items",
+                |c, n| c.clipboard.max_items = n,
+                1,
+                5_000,
+            ),
+            (
+                "longest text",
+                |c, n| c.clipboard.max_item_bytes = n,
+                1,
+                4 * 1024 * 1024,
+            ),
+            (
+                "largest image",
+                |c, n| c.clipboard.max_image_bytes = n,
+                1,
+                64 * 1024 * 1024,
+            ),
+            (
+                "cache time",
+                |c, n| c.onepassword.cache_minutes = n as u32,
+                1,
+                24 * 60,
+            ),
+        ];
+        for (what, set, min, max) in setters {
+            for good in [min, (min + max) / 2, max] {
+                let mut config = Config::default();
+                set(&mut config, good);
+                assert_eq!(check(&config), Ok(()), "{what} = {good}");
+            }
+            for bad in [0, max + 1] {
+                let mut config = Config::default();
+                set(&mut config, bad);
+                let err = check(&config).unwrap_err();
+                assert!(err.to_lowercase().contains(what), "{what} = {bad}: {err}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_config_with_every_plugin_field_set_is_valid() {
+        let mut config = Config::default();
+        config.actions.use_primary_selection = false;
+        config.actions.use_clipboard_fallback = true;
+        config.paste.restore_clipboard = true;
+        config.clipboard.enabled = true;
+        config.clipboard.max_items = 500;
+        config.clipboard.ignore_apps = vec!["KeePassXC".into()];
+        config.file_buffer.keep_between_shows = true;
+        config.contacts.enabled = true;
+        config.contacts.keyword = "people".into();
+        config.contacts.vcard_files = vec!["~/contacts.vcf".into()];
+        config.onepassword.enabled = true;
+        config.onepassword.keyword = "pw".into();
+        config.onepassword.op_path = "C:/Tools/op.exe".into();
+        config.dictionary.define_keyword = "def".into();
+        config.dictionary.spell_keyword = "sp".into();
+        config.tasks.keyword = "do".into();
+        config.tasks.disabled = vec!["kill".into()];
+        config.media.keyword = "music".into();
+        config.system.disabled = vec!["hibernate".into()];
+        config.shell.terminal = "wt".into();
+        config.bookmarks.browsers = vec!["zen".into()];
+        config.bookmarks.keyword = "bm".into();
+        config.snippets.ignore_apps = vec!["Terminal".into()];
+        assert_eq!(check(&config), Ok(()));
     }
 
     #[test]

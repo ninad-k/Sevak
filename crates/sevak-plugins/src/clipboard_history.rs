@@ -124,6 +124,34 @@ pub fn default_history_path() -> Option<PathBuf> {
         .map(|paths| paths.data_dir.join(FILE_NAME))
 }
 
+/// Deletes the saved history and the image files it keeps: what the Settings
+/// window's "Clear clipboard history" button does, so it works while the plugin
+/// is off too (the data of an earlier run stays on disk).
+///
+/// A history that is in use is emptied through its live state, so the monitor
+/// cannot write the old entries back; otherwise the file and the images are
+/// removed directly. Files in the folder that are not Sevak's are left alone.
+pub fn clear_history(history_file: &Path) -> std::io::Result<()> {
+    let live = lock(&LIVE)
+        .iter()
+        .find(|(path, _)| path == history_file)
+        .and_then(|(_, shared)| shared.upgrade());
+    if let Some(shared) = live {
+        shared.clear();
+        tracing::info!("clipboard history cleared from the settings window");
+        return Ok(());
+    }
+    match fs::remove_file(history_file) {
+        Err(err) if err.kind() != std::io::ErrorKind::NotFound => return Err(err),
+        _ => {}
+    }
+    if let Some(dir) = history_file.parent() {
+        MediaStore::new(dir.join(clipboard_store::DIR_NAME)).prune(&HashSet::new());
+    }
+    tracing::info!("clipboard history deleted from the settings window");
+    Ok(())
+}
+
 /// An image the history keeps: the hash of its pixels names its files in the
 /// [`MediaStore`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -2624,6 +2652,38 @@ mod tests {
         assert!(rig.shared().snapshot().is_empty());
         let saved = fs::read_to_string(rig.dir.path().join(FILE_NAME)).unwrap();
         assert!(!saved.contains("hash"), "{saved}");
+    }
+
+    #[test]
+    fn clearing_from_settings_empties_a_live_history_and_its_files() {
+        let mut rig = Rig::new();
+        rig.copy_image(&picture(1));
+        rig.copy_text("secret text");
+        assert_eq!(rig.media_files().len(), 2);
+
+        clear_history(&rig.dir.path().join(FILE_NAME)).unwrap();
+        assert!(rig.shared().snapshot().is_empty());
+        assert!(rig.media_files().is_empty());
+        let saved = fs::read_to_string(rig.dir.path().join(FILE_NAME)).unwrap();
+        assert!(!saved.contains("secret text"), "{saved}");
+    }
+
+    #[test]
+    fn clearing_from_settings_deletes_what_an_earlier_run_left_behind() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join(FILE_NAME);
+        let store = MediaStore::new(dir.path().join(clipboard_store::DIR_NAME));
+        store.write(0xabc, b"png", b"thumb").unwrap();
+        fs::write(&file, br#"{"version":1,"items":[]}"#).unwrap();
+        let mine = store.dir().join("notes.txt");
+        fs::write(&mine, b"not sevak's").unwrap();
+
+        clear_history(&file).unwrap();
+        assert!(!file.exists());
+        assert!(!store.contains(0xabc));
+        assert!(mine.exists(), "only Sevak's own files are deleted");
+        // Nothing to delete is fine too.
+        clear_history(&file).unwrap();
     }
 
     #[test]
