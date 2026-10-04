@@ -8,6 +8,8 @@ Configure Sevak through the Settings window.
   select **Settings** (on Linux, click the icon and select **Settings**)
 - Run `sevak --settings` from the command line
 
+The tabs run from General to Files, with Linux where it applies and **Help** last.
+
 ## Using Settings
 
 Each tab covers a different aspect of Sevak. Changes are **not saved** until you click **Save**. Click **Close** or **Cancel** to discard them.
@@ -352,12 +354,27 @@ Turn this off to use the native Wayland backend (experimental; you may need to p
 
 Links to: `[linux] wayland_use_xwayland` in configuration.
 
+## Help
+
+Make a **diagnostics report** for a bug report. Sevak has no telemetry, so this is how you tell the maintainers what your installation looks like.
+
+The page makes the report as soon as you open it and shows it in a read-only box, exactly as it will be copied or saved. Read it first: the top says what is included and what is not, and the log lines at the end are the part most worth a glance.
+
+| Button | Action |
+|---|---|
+| **Copy diagnostics** | Puts the text in the box on the clipboard; paste it into the **Diagnostics report** box of the [bug report form](https://github.com/ninad-k/Sevak/issues/new/choose) |
+| **Save as file…** | Asks where to save the text (`sevak-diagnostics.md` by default) |
+| **Open logs folder** | Shows the folder with the raw log files, for when more than the last 100 lines is needed |
+| **Refresh** | Makes the report again |
+
+Nothing is sent anywhere; copying and saving are the only things that leave the box. The report is the fuller twin of [`sevak --diagnostics`](cli.md#-diagnostics): it also says whether the shortcut is registered, whether the tray icon exists and which plugins loaded. See [Privacy](privacy.md#diagnostics-report) for exactly what it contains.
+
 ## Footer buttons
 
 | Button | Action |
 |---|---|
 | **Open config file** | Opens `config.toml` in your default editor |
-| **Reveal logs folder** | Shows the folder containing Sevak's debug logs |
+| **Reveal logs folder** | Shows the folder containing Sevak's debug logs (also on the Help page as **Open logs folder**) |
 | **Save** | Save and apply all changes (only enabled when valid) |
 | **Cancel** / **Close** | Close Settings without saving (or discard changes if you made any) |
 
