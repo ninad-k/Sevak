@@ -1,0 +1,143 @@
+name: Release test report
+description: Record the result of running the manual release test plan on one OS.
+title: "Release test: vX.Y.Z on <OS>"
+labels: [release-test]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One report per release and operating system. The plan, the row IDs and the
+        severity levels are in [docs/testing.md](https://github.com/ninad-k/Sevak/blob/main/docs/testing.md#release-test-checklist).
+        Record the failures and the rows you could not run, not the ones that passed.
+        Any S1 failure blocks the release.
+
+  - type: input
+    id: version
+    attributes:
+      label: Version tested
+      description: The release or draft tag, or the commit of the `bundle` artifact.
+      placeholder: "v0.4.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Machine
+      options:
+        - W10 - Windows 10
+        - W11 - Windows 11
+        - MI - macOS on Intel
+        - MA - macOS on Apple silicon
+        - UX - Ubuntu, GNOME on X11
+        - UW - Ubuntu, GNOME on Wayland
+        - FW - Fedora, GNOME on Wayland
+        - Other (describe below)
+    validations:
+      required: true
+
+  - type: input
+    id: machine-details
+    attributes:
+      label: OS version, desktop and hardware
+      description: For example "Windows 11 24H2, physical, two monitors at 100% and 150%" or "Fedora 43, GNOME 49, VM".
+    validations:
+      required: true
+
+  - type: dropdown
+    id: package
+    attributes:
+      label: Package tested
+      options:
+        - Windows installer (.exe)
+        - Windows MSI
+        - macOS .dmg
+        - .deb
+        - .rpm
+        - AppImage
+        - Package manager (winget, Scoop, Homebrew, AUR)
+        - Built from source
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-kind
+    attributes:
+      label: Install path
+      description: Fresh install, or an upgrade from the previous release.
+      options:
+        - Fresh install on a clean account or VM
+        - Upgrade from the previous release
+        - Both
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: areas
+    attributes:
+      label: Areas covered
+      description: Tick what you ran. Leave unticked what you skipped, and say why under "Could not run".
+      options:
+        - label: Smoke test (every row marked S)
+        - label: Install, upgrade, uninstall (INS)
+        - label: Installer scenarios (INS-A, once the branded installer ships)
+        - label: Launch and hotkey (LCH)
+        - label: Tray (TRY)
+        - label: Search, calculator and files (SRC, CAL, FIL)
+        - label: Bookmarks (BKM)
+        - label: Clipboard history and paste (CLP, PST)
+        - label: Universal Actions (UAC)
+        - label: Snippets and auto-expansion (SNP)
+        - label: File buffer (FBF)
+        - label: Tasks, system commands and media (TSK, MED)
+        - label: Contacts and 1Password (CON)
+        - label: Script plugins and workflows (SCR, WFL)
+        - label: Themes and settings (THM, SET)
+        - label: Updates (UPD)
+        - label: Diagnostics report (DIA)
+        - label: Network and privacy (NET)
+        - label: Accessibility (A11)
+        - label: Performance sanity (PRF)
+
+  - type: textarea
+    id: failures
+    attributes:
+      label: Failures
+      description: One line per failing row - ID, severity, what happened, link to the issue you filed.
+      placeholder: |
+        - LCH-W2 (S1): Win+Space also opened the language flyout - #123
+        - CLP-4 (S1): KeePassXC password appeared in `cb` - #124
+        - FIL-3 (S3): `in` found nothing until Windows Search finished indexing - #125
+
+  - type: textarea
+    id: not-run
+    attributes:
+      label: Could not run
+      description: Rows you skipped, with the reason (no second monitor, no password manager, VM without audio ...).
+      placeholder: |
+        - MED-1: no audio device in the VM
+        - A11-3: NVDA not available
+
+  - type: textarea
+    id: accessibility
+    attributes:
+      label: Accessibility notes
+      description: What you found with the keyboard only, a screen reader or high-contrast mode, including the rows still marked Unknown in the plan.
+
+  - type: dropdown
+    id: recommendation
+    attributes:
+      label: Recommendation for this OS
+      options:
+        - Ship - no S1 or S2 failures
+        - Ship with waivers - S2 failures listed above that I accept
+        - Hold - at least one S1 failure
+        - Incomplete - core rows could not be run
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Surprises, slow moments, things the plan should have asked.

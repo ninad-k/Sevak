@@ -31,7 +31,7 @@ examples/plugins        example script plugins (Python, PowerShell, Node)
 examples/workflows      example workflows (also packaged for the gallery)
 gallery                 the opt-in online galleries: index.json and packages/*.zip (workflows and
                         script plugins), themes.json and themes/*.toml (themes)
-.github/workflows       ci.yml, release.yml
+.github/workflows       ci.yml, release.yml, coverage.yml, bench.yml, docs.yml
 ```
 
 ## Architecture
@@ -111,6 +111,24 @@ npm run check
 npm run build
 ```
 
+Further commands (what each layer covers, and the manual release checklist, are in
+[Testing](testing.md)):
+
+```sh
+npm test                          # UI unit tests (Vitest); npm run test:watch to keep them running
+npm run test:coverage             # the same with a coverage report in ui/coverage/
+cargo test --profile fast-release -p sevak-plugins --test latency -- --nocapture
+                                  # search latency budget (skips itself in a debug build)
+cargo bench -p sevak-plugins      # search latency and startup benchmark (criterion)
+```
+
+Coverage of the Rust crates uses `cargo-llvm-cov` (`cargo install --locked
+cargo-llvm-cov`, `rustup component add llvm-tools-preview`); the exact command and
+the current numbers are in [Testing](testing.md#coverage). CI runs `npm test` and the
+latency budget on Ubuntu on every push, and the `Coverage` workflow (pull requests,
+weekly) and `Benchmark` workflow (weekly, manual) publish their tables in the job
+summary. Neither gates a merge.
+
 ### Linux code from a Windows machine
 
 Type-check the Linux backend without a Linux toolchain:
@@ -184,9 +202,11 @@ Bundle settings are the `bundle` object in `src-tauri/tauri.conf.json`:
 
 1. `lint-test`: fmt, clippy, tests and the UI checks on `windows-latest`,
    `macos-latest` and `ubuntu-22.04`.
-2. `fedora`: builds and tests in a `fedora` container to prove the Fedora
+2. `ui-tests` and `latency-budget` (Ubuntu): the Vitest suite, and the search
+   latency budget in an optimized build.
+3. `fedora`: builds and tests in a `fedora` container to prove the Fedora
    toolchain and libraries work. Bump the image tag when the release goes EOL.
-3. `bundle` (after `lint-test`): builds the installers (Windows: nsis+msi;
+4. `bundle` (after `lint-test`): builds the installers (Windows: nsis+msi;
    macOS: app+dmg; ubuntu-22.04: deb+rpm+appimage) and uploads them as
    workflow artifacts.
    Ubuntu 22.04 is the oldest supported base, so the `.deb` and AppImage run on 22.04+.

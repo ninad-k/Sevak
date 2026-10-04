@@ -92,6 +92,7 @@ plugins:
         - plugins.md
         - development.md
         - releasing.md
+        - testing.md
         - brand.md
 
 nav:
@@ -140,4 +141,5 @@ nav:
       - Writing plugins: plugins.md
       - Development: development.md
       - Releasing: releasing.md
+      - Testing: testing.md
       - Name and brand: brand.md

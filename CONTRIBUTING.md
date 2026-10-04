@@ -48,7 +48,11 @@ examples in `examples/plugins/`.
    cargo clippy --workspace --all-targets -- -D warnings
    cargo test --workspace
    npm run check
+   npm test
    ```
+
+   [docs/testing.md](docs/testing.md) explains the test layers, coverage, the
+   latency benchmark and the manual checklist run before a release.
 
 CI also builds and tests on Windows, macOS, Ubuntu and Fedora, so you don't
 need every OS locally. Say in the pull request which platforms you tested on

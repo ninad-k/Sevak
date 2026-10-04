@@ -1,0 +1,53 @@
+name: Benchmark
+
+# Search latency: SearchEngine::query end to end with the default built-in
+# plugins over a large mock index (5 000 apps, 100 000 files, 10 000 bookmarks,
+# 200 clipboard entries, the example workflows), and the startup index build.
+# Runs weekly and on demand; results go to the job summary and an artifact.
+# It never fails on a number: shared runners are too noisy for that. The
+# coarse guard against catastrophic regressions is the `latency-budget` job in
+# ci.yml. See docs/testing.md for how to read the table.
+on:
+  schedule:
+    - cron: "43 3 * * 0" # Sundays 03:43 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  bench:
+    name: Search latency (Linux)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-rust
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      - name: Run the benchmark
+        run: cargo bench -p sevak-plugins --bench engine_query 2>&1 | tee bench.txt
+
+      - name: Summarize
+        run: |
+          {
+            echo "### Search latency on $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | xargs), $(nproc) cores"
+            echo
+            node scripts/bench-summary.mjs target/criterion
+            echo
+            grep '^startup:' bench.txt || true
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bench
+          retention-days: 90
+          path: |
+            bench.txt
+            target/criterion/

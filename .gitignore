@@ -33,3 +33,6 @@ site/
 
 # Generated SBOMs (scripts/generate-sbom.mjs)
 /sbom/
+
+# Vitest coverage reports
+ui/coverage/
