@@ -68,6 +68,9 @@ in the pull request title and commit messages:
 | `feat!:` / `BREAKING CHANGE:` footer | `feat!: rename config keys` | major (minor while on 0.x) |
 | `docs:`, `chore:`, `ci:`, `refactor:`, `test:` | `docs: macOS install notes` | patch, or none if only docs change |
 
+Releases can also be staged (beta, then promote) and rolled back; see
+[docs/releasing.md](docs/releasing.md).
+
 Use the imperative mood and keep the title under about 70 characters. Pull
 requests that only touch Markdown, `docs/` or `LICENSE` don't trigger a release.
 

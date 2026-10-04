@@ -91,6 +91,7 @@ plugins:
         - architecture.md
         - plugins.md
         - development.md
+        - releasing.md
         - brand.md
 
 nav:
@@ -135,4 +136,5 @@ nav:
       - How Sevak works: architecture.md
       - Writing plugins: plugins.md
       - Development: development.md
+      - Releasing: releasing.md
       - Name and brand: brand.md
