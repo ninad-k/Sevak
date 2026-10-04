@@ -59,6 +59,10 @@ impl ExpandDriver for WindowsExpand {
         wait_for_modifier_release();
     }
 
+    fn foreground_token(&self) -> Option<u64> {
+        foreground_window().map(|hwnd| hwnd_to_int(hwnd) as u64)
+    }
+
     fn press_backspaces(&self, count: usize) -> Result<()> {
         let mut remaining = count;
         while remaining > 0 {

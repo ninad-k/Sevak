@@ -289,6 +289,16 @@ impl PasteDriver for X11Driver {
         Ok(())
     }
 
+    fn target_unchanged(&self) -> bool {
+        let Some(target) = *REMEMBERED
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+        else {
+            return false;
+        };
+        X::connect().is_ok_and(|x| x.active_window() == Some(target))
+    }
+
     fn press_paste(&self) -> Result<()> {
         let x = X::connect()?;
         let control = x

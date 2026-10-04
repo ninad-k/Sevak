@@ -133,6 +133,14 @@ pub(crate) trait PasteDriver {
     fn focus_previous(&self) -> std::result::Result<(), String>;
     /// Sends Ctrl+V / Cmd+V to the focused window.
     fn press_paste(&self) -> Result<()>;
+    /// Whether the window that [`PasteDriver::focus_previous`] brought back is
+    /// still the one in front, asked immediately before the paste keystroke:
+    /// focus can move in the moments after (a notification, the user switching
+    /// windows), and the keystroke goes to whoever has it. Where nothing was
+    /// remembered it means the window in front is not Sevak's own.
+    fn target_unchanged(&self) -> bool {
+        true
+    }
 }
 
 /// What a paste puts on the clipboard first.
@@ -211,6 +219,13 @@ pub(crate) fn paste(
     if delays {
         sleep(FOCUS_SETTLE);
     }
+    // The last look: if another window took the focus meanwhile the content is
+    // only copied, rather than pasted into the wrong app.
+    if !driver.target_unchanged() {
+        return Ok(PasteOutcome::CopiedOnly(
+            "The window in front changed before pasting; it is on the clipboard".to_owned(),
+        ));
+    }
     if let Err(err) = driver.press_paste() {
         tracing::warn!("could not send the paste keystroke: {err}");
         return Ok(PasteOutcome::CopiedOnly(format!(
@@ -252,6 +267,8 @@ mod tests {
     struct Fake {
         clipboard: RefCell<Option<String>>,
         log: RefCell<Vec<String>>,
+        /// Focus moves to another window after the target was brought back.
+        focus_moves_away: bool,
         focus_error: Option<String>,
         key_error: bool,
         /// The clipboard's change counter (this fake has one).
@@ -291,6 +308,10 @@ mod tests {
             self.log.borrow_mut().push("focus".into());
             self.focus_error.clone().map_or(Ok(()), Err)
         }
+        fn target_unchanged(&self) -> bool {
+            self.log.borrow_mut().push("check".into());
+            !self.focus_moves_away
+        }
         fn press_paste(&self) -> Result<()> {
             self.log.borrow_mut().push("paste".into());
             if let Some(newer) = &self.copied_meanwhile {
@@ -320,7 +341,27 @@ mod tests {
     fn copies_then_focuses_then_pastes() {
         let fake = Fake::default();
         assert_eq!(run(&fake, false), PasteOutcome::Pasted);
-        assert_eq!(*fake.log.borrow(), ["set new", "focus", "paste"]);
+        assert_eq!(*fake.log.borrow(), ["set new", "focus", "check", "paste"]);
+    }
+
+    #[test]
+    fn the_target_is_checked_just_before_the_keystroke() {
+        let fake = Fake::default();
+        assert_eq!(run(&fake, false), PasteOutcome::Pasted);
+        assert_eq!(*fake.log.borrow(), ["set new", "focus", "check", "paste"]);
+    }
+
+    #[test]
+    fn a_window_that_took_the_focus_gets_nothing_pasted() {
+        let fake = Fake {
+            focus_moves_away: true,
+            ..Fake::default()
+        };
+        *fake.clipboard.borrow_mut() = Some("old".into());
+        assert!(matches!(run(&fake, true), PasteOutcome::CopiedOnly(_)));
+        // No keystroke, and the text stays on the clipboard to be pasted by hand.
+        assert_eq!(*fake.log.borrow(), ["set new", "focus", "check"]);
+        assert_eq!(fake.clipboard.borrow().as_deref(), Some("new"));
     }
 
     #[test]
@@ -328,7 +369,10 @@ mod tests {
         let fake = Fake::default();
         *fake.clipboard.borrow_mut() = Some("old".into());
         assert_eq!(run(&fake, true), PasteOutcome::Pasted);
-        assert_eq!(*fake.log.borrow(), ["set new", "focus", "paste", "set old"]);
+        assert_eq!(
+            *fake.log.borrow(),
+            ["set new", "focus", "check", "paste", "set old"]
+        );
         assert_eq!(fake.clipboard.borrow().as_deref(), Some("old"));
     }
 
@@ -350,7 +394,7 @@ mod tests {
         assert_eq!(outcome, PasteOutcome::Pasted);
         let log = fake.log.borrow();
         assert!(log[0].starts_with("set Image"), "{log:?}");
-        assert_eq!(log[1..], ["focus", "paste", "set old"]);
+        assert_eq!(log[1..], ["focus", "check", "paste", "set old"]);
     }
 
     #[test]
@@ -368,7 +412,7 @@ mod tests {
                 Some("newer"),
                 "no_counter: {no_counter}"
             );
-            assert_eq!(*fake.log.borrow(), ["set new", "focus", "paste"]);
+            assert_eq!(*fake.log.borrow(), ["set new", "focus", "check", "paste"]);
         }
     }
 

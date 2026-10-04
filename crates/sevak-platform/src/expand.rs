@@ -14,7 +14,7 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use crate::clipboard::{self, ClipboardSnapshot, SyntheticCopy};
-use crate::error::Result;
+use crate::error::{PlatformError, Result};
 
 /// Gap between the Backspaces and the paste, so the app has processed the
 /// deletion before the new text arrives.
@@ -32,6 +32,12 @@ pub(crate) trait ExpandDriver {
     fn press_backspaces(&self, count: usize) -> Result<()>;
     /// Presses Ctrl+V / Cmd+V.
     fn press_paste(&self) -> Result<()>;
+    /// An identity for the window (or app) in front, to tell that it changed:
+    /// the keys go to whoever has the focus when they are pressed. `None` if it
+    /// cannot be told.
+    fn foreground_token(&self) -> Option<u64> {
+        None
+    }
 }
 
 /// The clipboard operations a replacement needs; a trait so the order of
@@ -92,6 +98,11 @@ pub(crate) fn replace_typed_text(
     // Until the clipboard is back as it was, the history must not see `text`.
     let _borrowed = SyntheticCopy::begin();
 
+    // The window the keyword was typed into. Keys are only sent while it is
+    // still in front.
+    let origin = driver.foreground_token();
+    let moved = || origin.is_some() && driver.foreground_token() != origin;
+
     driver.release_modifiers();
 
     let saved = clipboard.snapshot();
@@ -116,7 +127,7 @@ pub(crate) fn replace_typed_text(
 
     // The last look before pressing keys: waiting for the modifiers and the
     // clipboard took a moment, in which typing may have gone on.
-    if !still_current() {
+    if !still_current() || moved() {
         put_back();
         return Ok(false);
     }
@@ -126,6 +137,17 @@ pub(crate) fn replace_typed_text(
         if delays {
             sleep(SETTLE);
         }
+    }
+    // The last look before the paste. The Backspaces are done and cannot be
+    // taken back, but the text must not land in another window: it stays on the
+    // clipboard for the user to paste.
+    if moved() {
+        return Err(PlatformError::Os {
+            operation: "paste",
+            message:
+                "the window in front changed during the expansion; the text is on the clipboard"
+                    .to_owned(),
+        });
     }
     driver.press_paste()?;
 
@@ -154,6 +176,9 @@ mod tests {
         no_counter: bool,
         /// Somebody copies this while the paste is being handled.
         copied_meanwhile: Option<String>,
+        /// What `foreground_token` answers, one entry per call (the last one
+        /// repeats).
+        tokens: RefCell<Vec<Option<u64>>>,
     }
 
     impl ExpandClipboard for Fake {
@@ -191,6 +216,14 @@ mod tests {
                 Err(PlatformError::Unsupported("keys"))
             } else {
                 Ok(())
+            }
+        }
+        fn foreground_token(&self) -> Option<u64> {
+            let mut tokens = self.tokens.borrow_mut();
+            if tokens.len() > 1 {
+                tokens.remove(0)
+            } else {
+                tokens.first().copied().flatten()
             }
         }
         fn press_paste(&self) -> Result<()> {
@@ -263,6 +296,48 @@ mod tests {
                 "no_counter: {no_counter}"
             );
             assert!(!fake.log.borrow().contains(&"restore".to_owned()));
+        }
+    }
+
+    fn with_tokens(tokens: &[Option<u64>]) -> Fake {
+        Fake {
+            tokens: RefCell::new(tokens.to_vec()),
+            ..with_clipboard("old")
+        }
+    }
+
+    #[test]
+    fn a_window_change_before_any_key_cancels_the_replacement() {
+        // The keyword was typed in window 1; by the time keys would go out,
+        // window 2 has the focus.
+        let fake = with_tokens(&[Some(1), Some(2)]);
+        assert!(!run(&fake, 4).unwrap());
+        assert_eq!(*fake.log.borrow(), ["release", "set expanded", "restore"]);
+        assert_eq!(fake.clipboard.borrow().text.as_deref(), Some("old"));
+    }
+
+    #[test]
+    fn a_window_change_after_the_backspaces_keeps_the_text_for_pasting_by_hand() {
+        let fake = with_tokens(&[Some(1), Some(1), Some(2)]);
+        let err = run(&fake, 4).unwrap_err();
+        assert!(err.to_string().contains("window"), "{err}");
+        // No paste keystroke reached the new window, and the text is on the
+        // clipboard.
+        assert_eq!(
+            *fake.log.borrow(),
+            ["release", "set expanded", "backspace 4"]
+        );
+        assert_eq!(fake.clipboard.borrow().text.as_deref(), Some("expanded"));
+    }
+
+    #[test]
+    fn the_same_window_throughout_expands_and_an_unknown_one_is_not_checked() {
+        for tokens in [vec![Some(7)], vec![None]] {
+            let fake = Fake {
+                tokens: RefCell::new(tokens),
+                ..with_clipboard("old")
+            };
+            assert!(run(&fake, 4).unwrap());
         }
     }
 
