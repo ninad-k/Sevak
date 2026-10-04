@@ -10,7 +10,7 @@ use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
 
 use serde::Deserialize;
-use sevak_platform::process::{script_runner, ScriptRunner};
+use sevak_platform::process::{is_interpreter_variable, script_runner, ScriptRunner};
 
 /// The protocol version this Sevak speaks (`protocol` in the manifest and in
 /// the `initialize` message).
@@ -68,6 +68,9 @@ struct Raw {
     /// Extra files in the plugin folder that are part of the approval.
     #[serde(default)]
     files: Vec<String>,
+    /// Names of Sevak's own environment variables the script wants.
+    #[serde(default)]
+    inherit_env: Vec<String>,
     #[serde(default)]
     mode: Mode,
     #[serde(default)]
@@ -98,6 +101,9 @@ pub struct Manifest {
     /// Support files (modules the script imports, data it reads) that the
     /// approval also covers; plain paths inside the plugin folder.
     pub files: Vec<String>,
+    /// Environment variables of Sevak's own that the script is given in
+    /// addition to the small base set (shown in the Allow dialog).
+    pub inherit_env: Vec<String>,
     pub mode: Mode,
     pub format: Format,
     /// How long a query waits for the script before the list is shown without
@@ -202,6 +208,8 @@ impl Manifest {
             files.push(file);
         }
 
+        let inherit_env = check_inherit_env(raw.inherit_env)?;
+
         if raw.mode == Mode::Persistent && raw.format == Format::Alfred {
             return Err("`format = \"alfred\"` needs `mode = \"oneshot\"`".to_owned());
         }
@@ -220,6 +228,7 @@ impl Manifest {
             keyword,
             launch,
             files,
+            inherit_env,
             mode: raw.mode,
             format: raw.format,
             timeout: Duration::from_millis(
@@ -325,6 +334,44 @@ pub fn resolve_launch(launch: &Launch, dir: &Path) -> Result<Vec<String>, String
     }
 }
 
+/// Most `inherit_env` names a manifest may list.
+const MAX_INHERITED: usize = 32;
+
+/// Validates `inherit_env`: plain variable names, no interpreter hooks.
+fn check_inherit_env(names: Vec<String>) -> Result<Vec<String>, String> {
+    if names.len() > MAX_INHERITED {
+        return Err(format!(
+            "`inherit_env` lists {} names; at most {MAX_INHERITED} are allowed",
+            names.len()
+        ));
+    }
+    let mut out = Vec::new();
+    for name in names {
+        let name = name.trim().to_owned();
+        let mut chars = name.chars();
+        let plain = chars
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+            && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+            && name.len() <= 64;
+        if !plain {
+            return Err(format!(
+                "`inherit_env` may only list plain variable names, not \"{name}\""
+            ));
+        }
+        if is_interpreter_variable(&name) {
+            return Err(format!(
+                "`inherit_env` cannot include {name}: it changes how programs start"
+            ));
+        }
+        if !out.contains(&name) {
+            out.push(name);
+        }
+    }
+    out.sort();
+    Ok(out)
+}
+
 fn quote(arg: &str) -> String {
     if arg.is_empty() || arg.contains(char::is_whitespace) || arg.contains('"') {
         let mut out = String::from("\"");
@@ -421,6 +468,37 @@ mod tests {
         )
         .unwrap();
         assert_eq!(m.support_files(), ["-u", "m.py"]);
+    }
+
+    #[test]
+    fn inherit_env_lists_plain_names_and_refuses_interpreter_hooks() {
+        let text = format!(
+            "{MINIMAL}inherit_env = [\"OPENAI_API_KEY\", \"HTTPS_PROXY\", \"OPENAI_API_KEY\"]\n"
+        );
+        let m = Manifest::parse(&text, "x").unwrap();
+        assert_eq!(m.inherit_env, ["HTTPS_PROXY", "OPENAI_API_KEY"]);
+        assert!(Manifest::parse(MINIMAL, "x")
+            .unwrap()
+            .inherit_env
+            .is_empty());
+
+        for bad in [
+            "BASH_ENV",
+            "node_options",
+            "PYTHONPATH",
+            "LD_PRELOAD",
+            "PATH",
+            "A=B",
+            "a b",
+            "1X",
+        ] {
+            let text = format!("{MINIMAL}inherit_env = [{bad:?}]\n");
+            let err = Manifest::parse(&text, "x").expect_err(bad);
+            assert!(err.contains("inherit_env"), "{err}");
+        }
+        let many: Vec<String> = (0..40).map(|n| format!("\"V{n}\"")).collect();
+        let text = format!("{MINIMAL}inherit_env = [{}]\n", many.join(","));
+        assert!(Manifest::parse(&text, "x").unwrap_err().contains("at most"));
     }
 
     #[test]

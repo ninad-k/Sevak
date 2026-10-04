@@ -377,6 +377,47 @@ fn oneshot_scripts_run_per_query_with_the_query_as_an_argument() {
 }
 
 #[test]
+fn script_plugins_get_a_scrubbed_environment_plus_what_the_manifest_inherits() {
+    // Names nothing else uses, so setting them cannot disturb other tests.
+    std::env::set_var("SEVAK_TEST_PLUGIN_SECRET", "leaked");
+    std::env::set_var("SEVAK_TEST_PLUGIN_WANTED", "shared");
+    let world = World::new();
+    world.add("plain", "pe", &["oneshot-env"], "mode = \"oneshot\"");
+    world.add(
+        "wants",
+        "we",
+        &["oneshot-env"],
+        "mode = \"oneshot\"\ninherit_env = [\"SEVAK_TEST_PLUGIN_WANTED\"]",
+    );
+    world.approve_all();
+    let (engine, rx) = world.engine();
+
+    let title = |query: &str| query_until_results(&engine, &rx, query)[0].title.clone();
+    assert_eq!(
+        title("pe SEVAK_TEST_PLUGIN_SECRET"),
+        "SEVAK_TEST_PLUGIN_SECRET=<unset>"
+    );
+    assert_eq!(
+        title("pe SEVAK_TEST_PLUGIN_WANTED"),
+        "SEVAK_TEST_PLUGIN_WANTED=<unset>"
+    );
+    assert_eq!(
+        title("we SEVAK_TEST_PLUGIN_WANTED"),
+        "SEVAK_TEST_PLUGIN_WANTED=shared"
+    );
+    assert_eq!(
+        title("we SEVAK_TEST_PLUGIN_SECRET"),
+        "SEVAK_TEST_PLUGIN_SECRET=<unset>",
+        "only the names the manifest lists"
+    );
+    assert!(
+        !title("pe PATH").ends_with("=<unset>"),
+        "the base set is still there"
+    );
+    assert_eq!(title("pe SEVAK_PLUGIN_ID"), "SEVAK_PLUGIN_ID=script:plain");
+}
+
+#[test]
 fn alfred_script_filter_output_is_mapped_to_actions() {
     let world = World::new();
     world.add(

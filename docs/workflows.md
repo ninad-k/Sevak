@@ -141,9 +141,16 @@ matter what it contains.
   argument, if under 16 kB), `SEVAK_WORKFLOW_ID`, `SEVAK_WORKFLOW_DIR`,
   `SEVAK_WORKFLOW_DATA` (a folder for the script's own files),
   `SEVAK_VERSION`, and the names Alfred workflows read (`alfred_workflow_*`).
-  Variables named like `PATH`, `HOME`, `LD_*` and a few others are never
-  exported, so a value cannot change how programs start. A node's own
-  *Environment variables* are always passed.
+  A script does not inherit Sevak's whole environment: it gets `PATH`, the
+  home and temp folders, the locale, the `XDG_*` folders, the display variables
+  and what Windows programs need to start, nothing else (tokens and credentials
+  in Sevak's environment stay out of reach). Variables that change how programs
+  start or where they look (`PATH`, `HOME`, `TMPDIR`, `BASH_ENV`, `PYTHON*`,
+  `NODE_*`, `PERL5*`, `RUBY*`, `JAVA_*`, `LD_*`, `DYLD_*`, `GIT_*`, `DOTNET_*`,
+  proxy and certificate variables, `XDG_*`, `SEVAK_*` and a few more, in any
+  letter case) are never exported from workflow variables, and a node's own
+  *Environment variables* may not name them: the builder reports an error and
+  the workflow does not load until it is removed. Other names are passed.
 - What it prints (standard output, up to 1 MiB, minus the final newline) becomes
   the **argument** of the next nodes. If it prints Alfred's envelope
   `{"alfredworkflow": {"arg": "...", "variables": {"name": "value"}}}`, the

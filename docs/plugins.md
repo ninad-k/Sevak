@@ -954,6 +954,7 @@ hard_timeout_ms   = 3000         # unanswered this long = hung, restart it (500-
 idle_timeout_secs = 300          # persistent: stop after this much inactivity (0 = never)
 
 files       = ["lib/util.py"]    # optional: more files of this folder the approval covers
+inherit_env = ["MY_API_KEY"]     # optional: Sevak's own variables the script may see
 ```
 
 - `id` is **stable forever**, like every plugin id: it is part of result ids and
@@ -1011,8 +1012,24 @@ On Windows, `python` and `python3` can be Microsoft Store stubs that open the
 Store instead of running Python, which is why `.py` prefers the `py` launcher.
 Use `command = ["C:\\Path\\to\\python.exe", "main.py"]` to pin an interpreter.
 
-The script runs with the **plugin folder as its working directory** and these
-environment variables (on top of Sevak's own environment):
+The script runs with the **plugin folder as its working directory** and a
+**scrubbed environment**: not everything Sevak itself was started with, but
+only a base set (`PATH`, the home, profile and temp folders, `LANG` and the
+`LC_*` locale variables, the `XDG_*` folders, `DISPLAY`/`WAYLAND_DISPLAY`,
+`SystemRoot`/`ComSpec` and the other variables Windows programs need to start)
+plus the variables below. API keys, tokens, cloud credentials, proxy settings
+and the roots of version managers that happen to be in Sevak's environment do
+not reach the script. A plugin that needs one asks for it by name:
+
+```toml
+inherit_env = ["OPENAI_API_KEY", "HTTPS_PROXY"]   # Sevak's own values of these names
+```
+
+The names are shown in the Allow dialog and are part of what the approval
+covers. Variables that make an interpreter run something else (`BASH_ENV`,
+`ENV`, `PYTHON*`, `NODE_OPTIONS`, `NODE_PATH`, `PERL5OPT`, `RUBYOPT`,
+`JAVA_TOOL_OPTIONS`, `LD_*`, `DYLD_*`, `GIT_*`, `DOTNET_*`, `PATH`, ...) cannot be
+inherited; a manifest that lists one does not load. The script also gets:
 
 | Variable | Value |
 |---|---|

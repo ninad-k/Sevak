@@ -27,7 +27,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use sevak_platform::process::configure_helper_command;
+use sevak_platform::process::{configure_helper_command, scrub_environment};
 
 use super::approvals::script_approval_key;
 use super::delivery::Delivery;
@@ -101,6 +101,9 @@ impl Spec {
         self.check_approval()?;
         let argv = self.manifest.resolve_argv(&self.dir)?;
         let mut command = Command::new(&argv[0]);
+        // A scrubbed environment: only the base set and what the manifest
+        // asks for (`inherit_env`), then the plugin's own variables below.
+        scrub_environment(&mut command, &self.manifest.inherit_env);
         command.args(&argv[1..]);
         if let Some(query) = query {
             command.arg(query);

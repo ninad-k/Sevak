@@ -29,3 +29,26 @@ now tied to a SHA-256 over:
 
 Workflows already worked this way; they now share the same hashing code, and
 their existing approvals stay valid.
+
+## Scripts get a scrubbed environment
+
+Script plugins and workflow scripts used to inherit everything in Sevak's
+environment, and a workflow could export a long but incomplete list of
+variable names. Now:
+
+- A script starts with a small base set: `PATH`, the home, profile and temp
+  folders, the locale, `XDG_*`, the display variables and what Windows programs
+  need to start. Tokens, cloud credentials, proxy settings and version-manager
+  roots in Sevak's environment are no longer passed on.
+- A plugin that needs a variable lists it in its manifest, for example
+  `inherit_env = ["OPENAI_API_KEY"]`. The names are part of what the approval
+  covers.
+- Variables that make an interpreter or loader run something else (startup
+  files, module and library search paths, option strings) can be neither
+  inherited nor set by a workflow. A workflow node that sets one now fails
+  validation instead of being silently passed on. Names are compared without
+  regard to case.
+
+**What you will notice:** a script that relied on a variable from Sevak's
+environment (a proxy, `JAVA_HOME`, `PYENV_ROOT`, a token) stops seeing it
+until its manifest lists it in `inherit_env`.

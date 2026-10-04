@@ -8,6 +8,7 @@ use std::collections::{HashMap, HashSet};
 
 use regex::RegexBuilder;
 use serde::Serialize;
+use sevak_platform::process::is_reserved_variable;
 use sevak_platform::SystemCommand;
 
 use crate::keywords::KeywordOwners;
@@ -407,6 +408,11 @@ fn check_node(node: &Node, problems: &mut Vec<Problem>) {
                 if !valid_env_name(name) {
                     error(&format!(
                         "\"{name}\" is not a valid environment variable name"
+                    ));
+                } else if is_reserved_variable(name) {
+                    error(&format!(
+                        "\"{name}\" cannot be set: it changes how programs start or where they \
+                         look for things"
                     ));
                 }
             }
@@ -830,6 +836,20 @@ mod tests {
                     log_stderr: false,
                 },
                 "environment variable",
+            ),
+            (
+                NodeKind::RunScript {
+                    command: vec!["x".into()],
+                    script: None,
+                    args: vec![],
+                    stdin: None,
+                    env: [("BASH_ENV".to_owned(), "/tmp/x".to_owned())]
+                        .into_iter()
+                        .collect(),
+                    timeout_ms: None,
+                    log_stderr: false,
+                },
+                "changes how programs start",
             ),
             (
                 NodeKind::OpenUrl {

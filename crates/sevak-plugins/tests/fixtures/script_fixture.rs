@@ -189,6 +189,14 @@ fn main() {
             pause_for(&query);
             println!("{}", json!({"items": sevak_items(&query)}));
         }
+        // The query names an environment variable; the one row says what it is.
+        Some("oneshot-env") => {
+            let value = std::env::var(&query).unwrap_or_else(|_| "<unset>".into());
+            println!(
+                "{}",
+                json!({"items": [{"key": "env", "title": format!("{query}={value}")}]})
+            );
+        }
         Some("oneshot-alfred") => {
             pause_for(&query);
             println!(
