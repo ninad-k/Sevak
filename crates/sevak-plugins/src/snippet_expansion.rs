@@ -1168,7 +1168,9 @@ mod tests {
         // The keyword is complete, and before Sevak gets to press Backspace the
         // user types another character: deleting now would eat the wrong text.
         let fake = Arc::new(Fake {
-            latency: Duration::from_millis(200),
+            // Long enough that a loaded CI runner still types the next
+            // character inside the window.
+            latency: Duration::from_millis(800),
             ..Arc::into_inner(Fake::new()).unwrap()
         });
         let cfg = config(vec![snippet("Sig", Some("sig"), "Regards")], immediate());
@@ -1177,7 +1179,7 @@ mod tests {
         std::thread::sleep(Duration::from_millis(60));
         fake.type_text("x");
         fake.settle();
-        std::thread::sleep(Duration::from_millis(300));
+        std::thread::sleep(Duration::from_millis(1000));
         assert!(fake.replaced.lock().unwrap().is_empty());
 
         // And the next keyword still works: the buffer was wiped, not wedged.

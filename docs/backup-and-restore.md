@@ -26,7 +26,7 @@ The list of what can be in a backup is an **allowlist**: a file is only included
 - AI assistant and other API keys, tokens and passwords (a key in a section that is otherwise included is dropped too: names such as `api_key`, `token`, `secret` and `password` are removed)
 - clipboard history and the images you copied
 - search and usage history (`usage.json`)
-- anything from a password manager or the system credential store, including all 1Password data (the `[onepassword]` section is left out)
+- anything from a password manager or the system credential store, including all 1Password data (the `[onepassword]` section is left out), and the AI assistant's settings (the `[ai]` section and its API keys: set them up again after a restore)
 - the encrypted history database, if you use one
 - logs and diagnostic reports
 - **which scripts, plugins and workflows you allowed to run** (see [Scripts are never trusted automatically](#scripts-are-never-trusted-automatically))

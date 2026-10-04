@@ -950,7 +950,9 @@ fn unknown_sections_and_secret_looking_keys_in_a_backup_are_ignored_with_a_warni
     let written = target.config_text();
     assert!(written.contains("Alt+Space"));
     assert!(!written.contains("HOSTILE"));
-    assert!(!written.contains("[ai]"));
+    // The target has its own default `[ai]`; the backup's value must not arrive.
+    assert!(!written.contains("key = \"x\""));
+    assert_eq!(target.config().ai, Config::default().ai);
     assert_eq!(target.config().onepassword, Config::default().onepassword);
 }
 
