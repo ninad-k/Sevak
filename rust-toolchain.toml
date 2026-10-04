@@ -1,0 +1,9 @@
+# The single source of truth for the Rust toolchain: rustup reads this file for
+# local builds, and CI (.github/actions/setup-rust) installs exactly this.
+# Bump it deliberately in its own pull request (docs/development.md,
+# "Security and supply chain"). The toolchain-canary workflow warns when a newer
+# stable or beta would break the build.
+[toolchain]
+channel = "1.99.0"
+profile = "minimal"
+components = ["clippy", "rustfmt"]
