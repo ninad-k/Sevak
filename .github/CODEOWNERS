@@ -1,0 +1,23 @@
+# Default owner for everything
+* @ninad-k
+
+# Security-sensitive paths: platform-specific hotkey and keyhook code
+/crates/sevak-platform/src/windows/keyhook* @ninad-k
+/crates/sevak-platform/src/hotkey_hook.rs @ninad-k
+
+# Security-sensitive paths: plugins and workflows that run user code
+/crates/sevak-plugins/src/script/ @ninad-k
+/crates/sevak-plugins/src/workflow/ @ninad-k
+
+# Security-sensitive paths: Tauri capabilities and configuration
+/src-tauri/capabilities/ @ninad-k
+/src-tauri/tauri.conf.json @ninad-k
+
+# Security-sensitive paths: GitHub automation and release process
+/.github/workflows/ @ninad-k
+
+# Security and documentation
+/SECURITY.md @ninad-k
+/gallery/ @ninad-k
+
+# Future: co-maintainers can be added as @ninad-k, @username for specific paths
