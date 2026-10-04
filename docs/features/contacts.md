@@ -6,7 +6,7 @@ This plugin is **off by default**.
 
 ## Turn it on
 
-Add to `config.toml`, then choose **Reload index** from the tray menu:
+Open **Settings → Integrations**, switch on **Search contacts** and press **Save**. Or add to `config.toml`, then choose **Reload index** from the tray menu:
 
 ```toml
 [contacts]
@@ -14,7 +14,7 @@ enabled = true
 vcard_files = ["~/contacts.vcf"]   # optional: .vcf files or folders of them
 ```
 
-The Settings window has no fields for this section; its plugin list can still switch the plugin off.
+**Settings → Integrations** has a field for each option below, including buttons to add a vCard file or a folder of them.
 
 ## How to use it
 

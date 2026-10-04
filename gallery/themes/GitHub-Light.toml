@@ -1,0 +1,36 @@
+# Palette: GitHub Primer primitives, MIT licence (https://github.com/primer/primitives).
+name = "GitHub Light"
+author = "Sevak"
+description = "GitHub's light look: clean white with a link blue."
+
+[font]
+size = 15
+
+[layout]
+radius = 14
+opacity = 100
+row_height = 48
+search_size = 22
+icon_size = 32
+window_width = 720
+
+[light]
+background = "#ffffff"
+text = "#1f2328"
+subtext = "#59636e"
+border = "rgba(31, 35, 40, 0.12)"
+accent = "#0969da"
+accent_strong = "#0756b3"
+on_accent = "#ffffff"
+selection = "rgba(9, 105, 218, 0.1)"
+tile = "rgba(31, 35, 40, 0.06)"
+kbd_background = "rgba(31, 35, 40, 0.06)"
+kbd_border = "rgba(31, 35, 40, 0.14)"
+shadow = "0 8px 28px rgba(31, 35, 40, 0.22), 0 1px 3px rgba(31, 35, 40, 0.12)"
+surface = "rgba(31, 35, 40, 0.035)"
+input_background = "#ffffff"
+input_border = "rgba(31, 35, 40, 0.22)"
+switch_off = "rgba(31, 35, 40, 0.26)"
+warn = "#9a6700"
+error = "#d1242f"
+ok = "#1a7f37"

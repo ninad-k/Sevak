@@ -1,0 +1,16 @@
+# Type "id" for fresh unique identifiers: UUID v4 and v7, ULID, NanoID.
+#
+# A one-shot Python plugin (Python 3.8 or newer, standard library only). It
+# generates everything locally with the operating system's secure random source
+# and never touches the network or any file. Enter copies the id you picked.
+# (Sevak also has a built-in "uuid" keyword; this one adds the sortable kinds.)
+protocol    = 1
+id          = "script:id-generator"
+name        = "ID generator (Python)"
+description = "id gives a UUID v4, a sortable UUID v7, a ULID and a NanoID. Offline."
+keyword     = "id"
+mode        = "oneshot"
+script      = "ids.py"
+
+# Python starts a little slower than the default 50 ms wait.
+timeout_ms  = 200

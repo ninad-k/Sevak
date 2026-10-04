@@ -45,6 +45,12 @@ launch_at_login = false
 # [calculator]), this is the only request Sevak makes on its own.
 check_for_updates = true
 
+# Which releases to follow: "stable" (the default) or "beta". Beta builds arrive
+# earlier and may be less tested; they come from the same GitHub releases page.
+# Switching back to "stable" never downgrades: Sevak waits for the next stable
+# version that is newer than the one you have.
+update_channel = "stable"
+
 [window]
 # Width of the search window in logical pixels (400-1600).
 width = 720
@@ -124,7 +130,8 @@ content_keyword = "in"
 [bookmarks]
 # Browsers whose bookmarks are searchable; [] means every browser found.
 # Names: "chrome", "edge", "brave", "vivaldi", "chromium", "opera", "opera-gx",
-# "firefox", "librewolf", "zen". All profiles of each browser are read.
+# "firefox", "librewolf", "zen", and "safari" (macOS; needs Full Disk Access).
+# All profiles of each browser are read.
 browsers = []
 # Type "<keyword> <text>" to search only bookmarks.
 keyword = "b"
@@ -332,6 +339,8 @@ pub const MAX_CLIPBOARD_IMAGE_BYTES_LIMIT: usize = 64 * 1024 * 1024;
 pub const MIN_WINDOW_WIDTH: u32 = 400;
 pub const MAX_WINDOW_WIDTH: u32 = 1600;
 pub const MAX_RESULTS_LIMIT: usize = 20;
+/// Longest time (a day) the 1Password list of logins is kept.
+pub const MAX_ONEPASSWORD_CACHE_MINUTES: u32 = 24 * 60;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -410,6 +419,40 @@ pub struct GeneralConfig {
     pub launch_at_login: bool,
     /// Look for a new release at startup and daily (asks before installing).
     pub check_for_updates: bool,
+    /// Which releases the update check follows. See [`UpdateChannel`].
+    pub update_channel: UpdateChannel,
+}
+
+/// The release channel the update check follows.
+///
+/// `stable` reads the manifest of the newest stable release; `beta` also
+/// follows pre-releases. A misspelt value in `config.toml` means `stable`, the
+/// safe choice, rather than costing the user the rest of the file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum UpdateChannel {
+    #[default]
+    Stable,
+    Beta,
+}
+
+impl UpdateChannel {
+    /// Parses a channel name (case-insensitive, surrounding spaces ignored);
+    /// anything unknown is [`UpdateChannel::Stable`].
+    #[must_use]
+    pub fn parse(text: &str) -> Self {
+        if text.trim().eq_ignore_ascii_case("beta") {
+            Self::Beta
+        } else {
+            Self::Stable
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for UpdateChannel {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        String::deserialize(deserializer).map(|text| Self::parse(&text))
+    }
 }
 
 impl Default for GeneralConfig {
@@ -420,6 +463,7 @@ impl Default for GeneralConfig {
             hide_on_blur: true,
             launch_at_login: false,
             check_for_updates: true,
+            update_channel: UpdateChannel::default(),
         }
     }
 }
@@ -1209,12 +1253,30 @@ impl Config {
                 *keyword = default.to_owned();
             }
         }
-        self.contacts
-            .vcard_files
-            .retain(|path| !path.trim().is_empty());
+        for keyword in [
+            &mut self.files.keyword,
+            &mut self.files.index_keyword,
+            &mut self.files.content_keyword,
+            &mut self.bookmarks.keyword,
+            &mut self.tasks.keyword,
+            &mut self.media.keyword,
+        ] {
+            *keyword = keyword.trim().to_owned();
+        }
+        for list in [
+            &mut self.system.disabled,
+            &mut self.tasks.disabled,
+            &mut self.bookmarks.browsers,
+            &mut self.contacts.vcard_files,
+        ] {
+            list.retain(|entry| !entry.trim().is_empty());
+        }
         self.onepassword.op_path = self.onepassword.op_path.trim().to_owned();
         self.onepassword.account = self.onepassword.account.trim().to_owned();
-        self.onepassword.cache_minutes = self.onepassword.cache_minutes.clamp(1, 24 * 60);
+        self.onepassword.cache_minutes = self
+            .onepassword
+            .cache_minutes
+            .clamp(1, MAX_ONEPASSWORD_CACHE_MINUTES);
         self.snippets.prefix = self.snippets.prefix.trim().to_owned();
         self.snippets
             .ignore_apps
@@ -1800,6 +1862,44 @@ expand_in_terminals = true
     }
 
     #[test]
+    fn update_channel_defaults_to_stable_and_reads_beta() {
+        assert_eq!(
+            Config::default().general.update_channel,
+            UpdateChannel::Stable
+        );
+        let parsed = Config::from_toml_str(DEFAULT_CONFIG_TOML).unwrap();
+        assert_eq!(parsed.general.update_channel, UpdateChannel::Stable);
+        assert!(DEFAULT_CONFIG_TOML.contains("update_channel = \"stable\""));
+
+        let beta = Config::from_toml_str("[general]\nupdate_channel = \"beta\"\n").unwrap();
+        assert_eq!(beta.general.update_channel, UpdateChannel::Beta);
+        // Names are forgiving about case and spaces.
+        assert_eq!(UpdateChannel::parse(" Beta "), UpdateChannel::Beta);
+    }
+
+    #[test]
+    fn an_unknown_update_channel_means_stable_and_keeps_the_rest_of_the_file() {
+        let text = "[general]\nhotkey = \"Alt+Space\"\nupdate_channel = \"nightly\"\n";
+        let config = Config::from_toml_str(text).unwrap();
+        assert_eq!(config.general.update_channel, UpdateChannel::Stable);
+        assert_eq!(config.general.hotkey, "Alt+Space");
+    }
+
+    #[test]
+    fn update_channel_is_saved_in_place() {
+        let mut config = Config::default();
+        config.general.update_channel = UpdateChannel::Beta;
+        let text = saved(Some(DEFAULT_CONFIG_TOML), &config);
+        assert!(text.contains("update_channel = \"beta\""));
+        // The comment above the key survives.
+        assert!(text.contains("Which releases to follow"));
+        assert_eq!(
+            Config::from_toml_str(&text).unwrap().general.update_channel,
+            UpdateChannel::Beta
+        );
+    }
+
+    #[test]
     fn wrong_types_are_rejected() {
         assert!(Config::from_toml_str("[general]\nhide_on_blur = \"yes\"\n").is_err());
     }
@@ -1894,6 +1994,194 @@ expand_in_terminals = true
         let hotkey = text.find("hotkey = ").unwrap();
         let hide = text.find("hide_on_blur").unwrap();
         assert!(general < hotkey && hotkey < hide);
+    }
+
+    /// A file with every field of the plugin sections set away from its default,
+    /// each with a comment of its own, as someone who edits `config.toml` by
+    /// hand and also uses the Settings window would have it.
+    const PLUGIN_SECTIONS: &str = r##"# my config
+[general]
+hotkey = "Alt+Space"   # my key
+
+[actions]
+use_primary_selection = false   # no PRIMARY
+use_clipboard_fallback = true
+
+[paste]
+restore_clipboard = true   # keep my clipboard
+
+[clipboard]
+enabled = true   # history on
+max_items = 500
+max_item_bytes = 131072
+images = false
+files = false
+max_image_bytes = 5242880
+ignore_apps = ["KeePassXC", "Bitwarden"]   # secrets
+
+[file_buffer]
+keep_between_shows = true   # keep the buffer
+
+[contacts]
+enabled = true
+keyword = "people"   # not c
+use_system = false
+vcard_files = ["~/contacts.vcf", "~/Contacts"]   # my cards
+
+[onepassword]
+enabled = true
+keyword = "pw"
+op_path = "C:/Tools/op.exe"
+account = "my.1password.com"
+cache_minutes = 30   # half an hour
+
+[dictionary]
+define_keyword = "def"
+spell_keyword = "sp"   # spelling
+use_system = false
+
+[tasks]
+confirm = false   # no prompts
+disabled = ["kill", "wifi"]
+keyword = "do"
+global = false
+
+[media]
+keyword = "music"
+global = false
+now_playing = false   # private
+
+[system]
+confirm = false   # no prompts
+disabled = ["hibernate", "settings:bluetooth"]
+
+[shell]
+terminal = "wt"   # my terminal
+shell = "pwsh"
+keep_open = false
+
+[bookmarks]
+browsers = ["firefox", "zen"]   # just these
+keyword = "bm"
+global = false
+
+[files]
+directories = ["~/Projects"]
+max_depth = 6
+include_hidden = true
+keyword = "fi"
+global = false
+use_os_index = false
+index_keyword = "all"
+content_keyword = "grep"   # inside files
+
+[snippets]
+auto_expand = true
+prefix = ";"
+expand_on = "delimiter"
+case_sensitive = false
+ignore_apps = ["Terminal"]   # never there
+expand_in_terminals = true
+
+[[snippet]]
+name = "Sig"   # mine
+keyword = "sig"
+text = "Best,\nme"
+"##;
+
+    /// What the Settings window does: the config goes to the page as JSON and
+    /// comes back as JSON, then is saved over the file.
+    fn through_the_settings_window(config: &Config) -> Config {
+        let json = serde_json::to_string(config).unwrap();
+        serde_json::from_str::<Config>(&json).unwrap().normalized()
+    }
+
+    #[test]
+    fn every_plugin_setting_survives_a_settings_save_unchanged() {
+        let config = Config::from_toml_str(PLUGIN_SECTIONS).unwrap();
+        // The file really sets the fields away from their defaults.
+        assert_ne!(config, Config::default());
+        assert_eq!(config.clipboard.max_items, 500);
+        assert_eq!(config.onepassword.cache_minutes, 30);
+        assert_eq!(config.bookmarks.browsers, ["firefox", "zen"]);
+
+        // The first save adds the keys the file never had (with their defaults)
+        // and keeps every line the user wrote.
+        let first = saved(Some(PLUGIN_SECTIONS), &through_the_settings_window(&config));
+        for line in PLUGIN_SECTIONS.lines() {
+            assert!(first.lines().any(|saved| saved == line), "lost {line:?}");
+        }
+        // After that, saving what the window sends back changes nothing.
+        let reloaded = Config::from_toml_str(&first).unwrap();
+        assert_eq!(reloaded, config);
+        let second = saved(Some(&first), &through_the_settings_window(&reloaded));
+        assert_eq!(second, first, "a save without changes rewrote the file");
+    }
+
+    #[test]
+    fn changing_plugin_settings_keeps_comments_snippets_and_the_other_sections() {
+        let mut config = Config::from_toml_str(PLUGIN_SECTIONS).unwrap();
+        config.actions.use_primary_selection = true;
+        config.paste.restore_clipboard = false;
+        config.clipboard.max_items = 300;
+        config.clipboard.ignore_apps.push("Keychain".to_owned());
+        config.file_buffer.keep_between_shows = false;
+        config.contacts.vcard_files.remove(0);
+        config.onepassword.cache_minutes = 5;
+        config.dictionary.spell_keyword = "fix".to_owned();
+        config.tasks.disabled = Vec::new();
+        config.media.now_playing = true;
+        config.system.disabled.push("lock".to_owned());
+        config.shell.keep_open = true;
+        config.bookmarks.browsers = Vec::new();
+        config.files.include_hidden = false;
+        config.snippets.ignore_apps = Vec::new();
+
+        let text = saved(Some(PLUGIN_SECTIONS), &through_the_settings_window(&config));
+        for kept in [
+            "# my config",
+            "hotkey = \"Alt+Space\"   # my key",
+            "restore_clipboard = false   # keep my clipboard",
+            "keyword = \"people\"   # not c",
+            "cache_minutes = 5   # half an hour",
+            "spell_keyword = \"fix\"   # spelling",
+            "now_playing = true   # private",
+            "terminal = \"wt\"   # my terminal",
+            "content_keyword = \"grep\"   # inside files",
+            "name = \"Sig\"   # mine",
+            "text = \"Best,\\nme\"",
+        ] {
+            assert!(text.contains(kept), "lost {kept:?}:\n{text}");
+        }
+        assert_eq!(Config::from_toml_str(&text).unwrap(), config);
+        // Only the lines of the fields that changed differ.
+        let changed = PLUGIN_SECTIONS
+            .lines()
+            .filter(|line| !text.lines().any(|saved| saved == *line))
+            .count();
+        assert!(changed <= 16, "{changed} lines changed:\n{text}");
+    }
+
+    #[test]
+    fn plugin_lists_drop_blank_entries_and_keywords_are_trimmed() {
+        let config = Config::from_toml_str(
+            "[system]\ndisabled = [\"lock\", \" \", \"\"]\n\
+             [tasks]\nkeyword = \" do \"\ndisabled = [\"\", \"kill\"]\n\
+             [bookmarks]\nbrowsers = [\"zen\", \"  \"]\nkeyword = \" bm\"\n\
+             [files]\nindex_keyword = \"all \"\n\
+             [media]\nkeyword = \" \"\n",
+        )
+        .unwrap();
+        assert_eq!(config.system.disabled, ["lock"]);
+        assert_eq!(config.tasks.disabled, ["kill"]);
+        assert_eq!(config.tasks.keyword, "do");
+        assert_eq!(config.bookmarks.browsers, ["zen"]);
+        assert_eq!(config.bookmarks.keyword, "bm");
+        assert_eq!(config.files.index_keyword, "all");
+        assert_eq!(
+            config.media.keyword, "",
+            "an empty keyword turns the search off"
+        );
     }
 
     fn fallbacks(text: &str) -> Vec<String> {

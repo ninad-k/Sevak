@@ -413,6 +413,12 @@ fn existing_path(text: &str) -> Option<PathBuf> {
     if text.is_empty() || text.len() > 4096 || text.contains(['\n', '\r', '\0']) {
         return None;
     }
+    // Selected text is whatever a web page or document said: a UNC path in it
+    // must not be probed, because that makes Windows contact (and sign in to)
+    // the named server.
+    if sevak_core::preview::is_network_path(text) {
+        return None;
+    }
     let path = Path::new(text);
     (path.is_absolute() && path.exists()).then(|| path.to_path_buf())
 }
@@ -478,6 +484,21 @@ impl Plugin for SelectionPlugin {
 mod tests {
     use super::*;
     use crate::test_util::MockPlatform;
+
+    #[test]
+    fn network_paths_in_selected_text_are_never_probed() {
+        for text in [
+            r"\\attacker.example\share\x",
+            "//attacker.example/share/x",
+            r#""\\attacker.example@SSL\share""#,
+            r"\\?\UNC\attacker.example\share",
+        ] {
+            assert_eq!(existing_path(text), None, "{text}");
+        }
+        // A local absolute path that exists is still recognised.
+        let here = std::env::current_dir().unwrap();
+        assert_eq!(existing_path(&here.to_string_lossy()), Some(here));
+    }
 
     fn engines() -> Vec<WebSearchEngine> {
         WebSearchEngine::defaults()

@@ -1,6 +1,26 @@
-# Dependency updates. Every merge to main publishes a release, so updates are
-# grouped into one pull request per ecosystem per month rather than one per
-# package. Security updates still arrive as soon as they are published.
+# Dependency updates. Every merge to main publishes a release, so routine
+# updates are batched to cut PR noise:
+#
+#   - minor and patch updates: ONE grouped pull request per ecosystem per month
+#   - major updates: their own pull request each (they can break the build and
+#     deserve an individual look at the changelog)
+#   - security updates: never grouped and never wait for the schedule; once
+#     "Dependabot security updates" is enabled in the repository settings
+#     (Settings > Advanced Security), each advisory gets its own immediate PR.
+#     Those settings are not controlled by this file (docs/development.md,
+#     "Security and supply chain").
+#
+# GitHub Actions pinning policy
+#   - First-party actions (owned by GitHub: `actions/*`, `github/*`) may be
+#     referenced by a version tag such as `actions/checkout@v7`.
+#   - Third-party actions (everything else, e.g. Swatinem/rust-cache,
+#     EmbarkStudios/cargo-deny-action, tauri-apps/tauri-action) are pinned to a
+#     full commit SHA with the version in a trailing comment:
+#         uses: owner/repo@<40-char sha> # v1.2.3
+#     Dependabot understands that form and bumps the SHA and the comment together.
+#   - New workflows from this point pin everything by SHA. Still on tags and
+#     candidates for pinning: tauri-apps/tauri-action, KSXGitHub/github-actions-deploy-aur
+#     and vedantmgoyal9/winget-releaser in release.yml.
 version: 2
 updates:
   - package-ecosystem: cargo
@@ -10,8 +30,9 @@ updates:
     commit-message:
       prefix: "chore(deps)"
     groups:
-      cargo:
-        patterns: ["*"]
+      cargo-minor-patch:
+        applies-to: version-updates
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: npm
     directory: /
@@ -25,8 +46,9 @@ updates:
       - dependency-name: typescript
         update-types: ["version-update:semver-major"]
     groups:
-      npm:
-        patterns: ["*"]
+      npm-minor-patch:
+        applies-to: version-updates
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: github-actions
     directory: /
@@ -35,5 +57,15 @@ updates:
     commit-message:
       prefix: "ci(deps)"
     groups:
-      actions:
-        patterns: ["*"]
+      actions-minor-patch:
+        applies-to: version-updates
+        update-types: ["minor", "patch"]
+
+  # rust-toolchain.toml pins the Rust version CI uses. A bump arrives as a PR,
+  # so CI (and the clippy lints of the new release) vet it before it lands.
+  - package-ecosystem: rust-toolchain
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "chore(toolchain)"

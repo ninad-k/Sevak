@@ -8,7 +8,10 @@ are all welcome.
 
 - **Bugs and small fixes:** open a pull request directly, or an
   [issue](https://github.com/ninad-k/Sevak/issues/new/choose) first if you're
-  not sure it is a bug.
+  not sure it is a bug. For an issue, `sevak --diagnostics` (or Settings →
+  Help → Copy diagnostics) makes a report with your version, system, plugin
+  status and recent log lines, with private data removed; nothing is sent
+  anywhere, so read it and paste it yourself.
 - **New features and plugins:** open an issue first so we can agree on the
   approach before you spend time on it. Built-in plugins should be useful to
   most people, fast (they run on every keystroke) and work offline.
@@ -48,11 +51,20 @@ examples in `examples/plugins/`.
    cargo clippy --workspace --all-targets -- -D warnings
    cargo test --workspace
    npm run check
+   npm test
    ```
+
+   [docs/testing.md](docs/testing.md) explains the test layers, coverage, the
+   latency benchmark and the manual checklist run before a release.
 
 CI also builds and tests on Windows, macOS, Ubuntu and Fedora, so you don't
 need every OS locally. Say in the pull request which platforms you tested on
 by hand.
+
+The Rust version is pinned in `rust-toolchain.toml` (rustup uses it
+automatically). If you add or update a dependency, run `cargo deny check`; see
+[Security and supply chain](docs/development.md#security-and-supply-chain) for
+the licence policy and how to handle an advisory.
 
 ## Pull request titles decide the version
 
@@ -67,6 +79,9 @@ in the pull request title and commit messages:
 | `feat:` | `feat(files): search hidden folders` | minor (0.1.0 → 0.2.0) |
 | `feat!:` / `BREAKING CHANGE:` footer | `feat!: rename config keys` | major (minor while on 0.x) |
 | `docs:`, `chore:`, `ci:`, `refactor:`, `test:` | `docs: macOS install notes` | patch, or none if only docs change |
+
+Releases can also be staged (beta, then promote) and rolled back; see
+[docs/releasing.md](docs/releasing.md).
 
 Use the imperative mood and keep the title under about 70 characters. Pull
 requests that only touch Markdown, `docs/` or `LICENSE` don't trigger a release.

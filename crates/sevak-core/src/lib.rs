@@ -7,6 +7,7 @@
 
 pub mod checksum;
 pub mod config;
+pub mod diagnostics;
 pub mod engine;
 pub mod fuzzy;
 pub mod model;
@@ -21,7 +22,7 @@ pub mod usage;
 pub use config::{
     ActionsConfig, ClipboardConfig, Config, ConfigError, ConfigOrigin, ExpandOn, FileBufferConfig,
     GeneralConfig, HotkeyBinding, HotkeyTarget, LinuxConfig, PasteConfig, ShellConfig, Snippet,
-    SnippetsConfig, WindowConfig,
+    SnippetsConfig, UpdateChannel, WindowConfig,
 };
 pub use engine::{EngineOptions, SearchEngine};
 pub use fuzzy::FuzzyQuery;

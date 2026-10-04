@@ -1,0 +1,36 @@
+# Palette: Catppuccin Mocha, MIT licence (https://github.com/catppuccin/catppuccin).
+name = "Catppuccin Mocha"
+author = "Sevak"
+description = "The darkest Catppuccin flavor, with soft mauve accents."
+
+[font]
+size = 15
+
+[layout]
+radius = 14
+opacity = 100
+row_height = 48
+search_size = 22
+icon_size = 32
+window_width = 720
+
+[dark]
+background = "#1e1e2e"
+text = "#cdd6f4"
+subtext = "#a6adc8"
+border = "rgba(205, 214, 244, 0.12)"
+accent = "#cba6f7"
+accent_strong = "#a688cb"
+on_accent = "#1e1e2e"
+selection = "rgba(203, 166, 247, 0.2)"
+tile = "rgba(205, 214, 244, 0.08)"
+kbd_background = "rgba(205, 214, 244, 0.08)"
+kbd_border = "rgba(205, 214, 244, 0.16)"
+shadow = "0 8px 28px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.4)"
+surface = "rgba(205, 214, 244, 0.05)"
+input_background = "rgba(205, 214, 244, 0.06)"
+input_border = "rgba(205, 214, 244, 0.24)"
+switch_off = "rgba(205, 214, 244, 0.28)"
+warn = "#f9e2af"
+error = "#f38ba8"
+ok = "#a6e3a1"

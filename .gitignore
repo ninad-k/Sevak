@@ -30,3 +30,9 @@ src-tauri/gen/schemas/
 
 # Documentation site build output
 site/
+
+# Generated SBOMs (scripts/generate-sbom.mjs)
+/sbom/
+
+# Vitest coverage reports
+ui/coverage/

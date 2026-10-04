@@ -124,6 +124,34 @@ pub fn default_history_path() -> Option<PathBuf> {
         .map(|paths| paths.data_dir.join(FILE_NAME))
 }
 
+/// Deletes the saved history and the image files it keeps: what the Settings
+/// window's "Clear clipboard history" button does, so it works while the plugin
+/// is off too (the data of an earlier run stays on disk).
+///
+/// A history that is in use is emptied through its live state, so the monitor
+/// cannot write the old entries back; otherwise the file and the images are
+/// removed directly. Files in the folder that are not Sevak's are left alone.
+pub fn clear_history(history_file: &Path) -> std::io::Result<()> {
+    let live = lock(&LIVE)
+        .iter()
+        .find(|(path, _)| path == history_file)
+        .and_then(|(_, shared)| shared.upgrade());
+    if let Some(shared) = live {
+        shared.clear();
+        tracing::info!("clipboard history cleared from the settings window");
+        return Ok(());
+    }
+    match fs::remove_file(history_file) {
+        Err(err) if err.kind() != std::io::ErrorKind::NotFound => return Err(err),
+        _ => {}
+    }
+    if let Some(dir) = history_file.parent() {
+        MediaStore::new(dir.join(clipboard_store::DIR_NAME)).prune(&HashSet::new());
+    }
+    tracing::info!("clipboard history deleted from the settings window");
+    Ok(())
+}
+
 /// An image the history keeps: the hash of its pixels names its files in the
 /// [`MediaStore`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -466,6 +494,15 @@ impl Shared {
     fn clear(&self) {
         lock(&self.state).items.clear();
         self.persist();
+        // Plaintext copies of the old history that are not the history file: a
+        // file moved aside as unreadable, and a half-written temporary.
+        if let Some(path) = &self.path {
+            for suffix in [".corrupt", ".tmp"] {
+                let mut leftover = path.as_os_str().to_owned();
+                leftover.push(suffix);
+                let _ = fs::remove_file(leftover);
+            }
+        }
         if let Some(store) = &self.store {
             store.prune(&HashSet::new());
         }
@@ -805,9 +842,15 @@ fn read_history_checked(path: &Path) -> Option<Vec<Entry>> {
         Err(err) => {
             let mut aside = path.as_os_str().to_owned();
             aside.push(".corrupt");
+            // Where it went wrong, never serde's message: for a wrong type it
+            // quotes the offending value, which here is clipboard text.
             tracing::warn!(
-                "{} is not a valid clipboard history ({err}); moving it aside",
-                path.display()
+                "{} is not a valid clipboard history ({:?} error at line {}, column {}); \
+                 moving it aside",
+                path.display(),
+                err.classify(),
+                err.line(),
+                err.column()
             );
             let _ = fs::rename(path, aside);
             None
@@ -1230,6 +1273,13 @@ fn offers_clear(input: &str) -> bool {
 impl Plugin for ClipboardPlugin {
     fn id(&self) -> &str {
         "clipboard"
+    }
+
+    /// A row's id is a hash of the copied text and the query is often a piece
+    /// of it, so none of that goes into `usage.json`, which "Clear clipboard
+    /// history" does not touch.
+    fn tracks_usage(&self) -> bool {
+        false
     }
 
     fn name(&self) -> &str {
@@ -2079,6 +2129,22 @@ mod tests {
     }
 
     #[test]
+    fn clearing_also_removes_plaintext_leftovers_and_usage_is_not_tracked() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join(FILE_NAME);
+        let corrupt = dir.path().join(format!("{FILE_NAME}.corrupt"));
+        let temp = dir.path().join(format!("{FILE_NAME}.tmp"));
+        fs::write(&corrupt, "old secret").unwrap();
+        fs::write(&temp, "half written secret").unwrap();
+        let plugin = plugin(&MockPlatform::empty(), true, Some(file));
+        assert!(!plugin.tracks_usage());
+
+        plugin.shared.as_ref().unwrap().clear();
+        assert!(!corrupt.exists());
+        assert!(!temp.exists());
+    }
+
+    #[test]
     fn history_survives_a_restart() {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("nested").join(FILE_NAME);
@@ -2624,6 +2690,38 @@ mod tests {
         assert!(rig.shared().snapshot().is_empty());
         let saved = fs::read_to_string(rig.dir.path().join(FILE_NAME)).unwrap();
         assert!(!saved.contains("hash"), "{saved}");
+    }
+
+    #[test]
+    fn clearing_from_settings_empties_a_live_history_and_its_files() {
+        let mut rig = Rig::new();
+        rig.copy_image(&picture(1));
+        rig.copy_text("secret text");
+        assert_eq!(rig.media_files().len(), 2);
+
+        clear_history(&rig.dir.path().join(FILE_NAME)).unwrap();
+        assert!(rig.shared().snapshot().is_empty());
+        assert!(rig.media_files().is_empty());
+        let saved = fs::read_to_string(rig.dir.path().join(FILE_NAME)).unwrap();
+        assert!(!saved.contains("secret text"), "{saved}");
+    }
+
+    #[test]
+    fn clearing_from_settings_deletes_what_an_earlier_run_left_behind() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join(FILE_NAME);
+        let store = MediaStore::new(dir.path().join(clipboard_store::DIR_NAME));
+        store.write(0xabc, b"png", b"thumb").unwrap();
+        fs::write(&file, br#"{"version":1,"items":[]}"#).unwrap();
+        let mine = store.dir().join("notes.txt");
+        fs::write(&mine, b"not sevak's").unwrap();
+
+        clear_history(&file).unwrap();
+        assert!(!file.exists());
+        assert!(!store.contains(0xabc));
+        assert!(mine.exists(), "only Sevak's own files are deleted");
+        // Nothing to delete is fine too.
+        clear_history(&file).unwrap();
     }
 
     #[test]

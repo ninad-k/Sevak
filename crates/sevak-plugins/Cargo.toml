@@ -6,6 +6,7 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 rust-version.workspace = true
+publish = false
 
 # A tiny script plugin for tests/script_plugins.rs. A binary target is the one
 # kind of helper cargo builds before an integration test and locates for it
@@ -16,9 +17,20 @@ path = "tests/fixtures/script_fixture.rs"
 test = false
 doc = false
 
+# Latency benchmark of the search engine (`cargo bench -p sevak-plugins`); see
+# docs/testing.md. `harness = false`: criterion provides `main`.
+[[bench]]
+name = "engine_query"
+harness = false
+
 # The real-clipboard tests (ignored by default) write images the way another app would.
 [target.'cfg(windows)'.dev-dependencies]
 arboard.workspace = true
+
+[dev-dependencies]
+# Statistics for the latency benchmark. No plotting (the plotters tree), only the
+# text output and the JSON estimates the bench workflow summarizes.
+criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
 
 [dependencies]
 sevak-core.workspace = true
@@ -39,6 +51,10 @@ getrandom = "0.4"
 rusqlite = { version = "0.40", features = ["bundled"] }
 # Local date and time for snippet placeholders (no timezone database needed).
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+# Safari's `Bookmarks.plist` for the bookmarks plugin (a binary property list;
+# parsed on every OS so the reader is tested everywhere, used on macOS). Already
+# in the build through the platform crate and the Tauri stack.
+plist = "1"
 walkdir = "2"
 # Compress to .zip in the file buffer, and unpack the workflow gallery's packages
 # (pure Rust; the version the updater already links, with only deflate).

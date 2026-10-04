@@ -140,8 +140,11 @@ enum ShellKind {
     PowerShell,
     /// `cmd`: `/S /K <command>`.
     Cmd,
-    /// `sh`, `bash`, `zsh`, `fish`, ...: `-c <script>`.
+    /// `sh`, `bash`, `zsh`, ...: `-c <script>`.
     Posix,
+    /// `fish`: `-c <script>` like Posix, but inside single quotes a backslash
+    /// and `\'` are escapes, so a POSIX-quoted value can end its own string.
+    Fish,
 }
 
 /// The lowercase file name of `program` without directory and `.exe`.
@@ -158,6 +161,7 @@ fn shell_kind(shell: &str) -> ShellKind {
     match program_stem(shell).as_str() {
         "pwsh" | "powershell" => ShellKind::PowerShell,
         "cmd" => ShellKind::Cmd,
+        "fish" => ShellKind::Fish,
         _ => ShellKind::Posix,
     }
 }
@@ -167,8 +171,10 @@ fn shell_kind(shell: &str) -> ShellKind {
 /// command node quotes the text it inserts this way).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShellQuoting {
-    /// `sh`, `bash`, `zsh`, `fish`, ...: single quotes.
+    /// `sh`, `bash`, `zsh`, ...: single quotes.
     Posix,
+    /// `fish`: single quotes, with a backslash and `'` escaped by a backslash.
+    Fish,
     /// `pwsh` / `powershell`: single quotes, with every kind of single quote
     /// doubled.
     PowerShell,
@@ -182,6 +188,7 @@ impl From<ShellKind> for ShellQuoting {
             ShellKind::PowerShell => Self::PowerShell,
             ShellKind::Cmd => Self::Cmd,
             ShellKind::Posix => Self::Posix,
+            ShellKind::Fish => Self::Fish,
         }
     }
 }
@@ -243,12 +250,20 @@ fn cd_command(kind: ShellKind, dir: &Path) -> Result<String> {
             format!("cd /d \"{dir}\"")
         }
         ShellKind::Posix => format!("cd {}", sh_quote(&dir)),
+        ShellKind::Fish => format!("cd {}", fish_quote(&dir)),
     })
 }
 
-/// Single-quotes `text` for a POSIX shell (also valid in fish).
+/// Single-quotes `text` for a POSIX shell. Not for fish: see [`fish_quote`].
 fn sh_quote(text: &str) -> String {
     format!("'{}'", text.replace('\'', r"'\''"))
+}
+
+/// Single-quotes `text` for fish, where a backslash and `\'` are the only
+/// escapes inside single quotes (`'\''` would not close the string there, and
+/// a trailing backslash would escape the closing quote).
+fn fish_quote(text: &str) -> String {
+    format!("'{}'", text.replace('\\', r"\\").replace('\'', r"\'"))
 }
 
 /// Standard base64 (with padding) of `bytes`.
@@ -308,14 +323,19 @@ fn shell_args(kind: ShellKind, shell: &str, command: &str, keep_open: bool) -> V
             args.push(command.to_owned());
             args
         }
-        ShellKind::Posix => {
+        ShellKind::Posix | ShellKind::Fish => {
             if command.is_empty() {
                 return Vec::new();
             }
+            let quote = if kind == ShellKind::Fish {
+                fish_quote
+            } else {
+                sh_quote
+            };
             // A newline (not `;`) so a trailing `# comment` or `&` in the
             // command cannot swallow the `exec`.
             let script = if keep_open {
-                format!("{command}\nexec {}", sh_quote(shell))
+                format!("{command}\nexec {}", quote(shell))
             } else {
                 command.to_owned()
             };
@@ -546,6 +566,18 @@ fn applescript_escape(text: &str) -> String {
 /// terminal starts the user's login shell, which runs the command, so
 /// `[shell] shell` does not apply.
 pub fn plan_macos(command: &str, config: &ShellConfig) -> Result<Invocation> {
+    // The text is typed into a live terminal, where the line editor acts on
+    // control characters even inside quotes (^C abandons the line, so the rest
+    // would run as a new command; ESC sequences edit it). Unlike the argv
+    // other platforms use, quoting cannot make them literal.
+    if command
+        .chars()
+        .any(|c| c.is_control() && !matches!(c, '\n' | '\r' | '\t'))
+    {
+        return Err(terminal_error(
+            "the command contains a control character, which a terminal would act on",
+        ));
+    }
     let name = program_stem(config.terminal.trim_end_matches('/'));
     let name = name.strip_suffix(".app").unwrap_or(&name);
     // `; exit` closes the window (per the terminal's own "close when the shell
@@ -731,7 +763,7 @@ mod tests {
         );
         assert_eq!(shell_kind("PowerShell.EXE"), ShellKind::PowerShell);
         assert_eq!(shell_kind("cmd.exe"), ShellKind::Cmd);
-        assert_eq!(shell_kind("/usr/bin/fish"), ShellKind::Posix);
+        assert_eq!(shell_kind("/usr/bin/fish"), ShellKind::Fish);
         assert_eq!(shell_kind("C:\\Git\\bin\\bash.exe"), ShellKind::Posix);
     }
 
@@ -1073,6 +1105,33 @@ mod tests {
         let inv = plan_macos("", &config("iterm", "", true)).unwrap();
         assert_eq!(inv.args.iter().filter(|a| *a == "-e").count(), 4);
         assert!(plan_macos("ls", &config("kitty", "", true)).is_err());
+    }
+
+    #[test]
+    fn macos_refuses_control_characters_a_terminal_would_act_on() {
+        for bad in ["echo '\u{3}'; evil", "echo \u{1b}[2K", "a\u{7f}b", "x\0y"] {
+            assert!(
+                plan_macos(bad, &config("terminal", "", true)).is_err(),
+                "{bad:?}"
+            );
+        }
+        // Tabs and line breaks are ordinary text in a command.
+        assert!(plan_macos("echo 'a\tb\nc'", &config("terminal", "", true)).is_ok());
+    }
+
+    #[test]
+    fn fish_gets_its_own_quoting() {
+        assert_eq!(fish_quote("it's"), r"'it\'s'");
+        assert_eq!(fish_quote(r"a\"), r"'a\\'");
+        assert_eq!(fish_quote(r"\'; evil #"), r"'\\\'; evil #'");
+        assert_eq!(ShellQuoting::from(ShellKind::Fish), ShellQuoting::Fish);
+        let dir = absolute(r"it's \");
+        assert_eq!(
+            cd_command(ShellKind::Fish, &dir).unwrap(),
+            format!("cd {}", fish_quote(&dir.to_string_lossy()))
+        );
+        let args = shell_args(ShellKind::Fish, "/odd/it's/fish", "ls", true);
+        assert_eq!(args, ["-c", "ls\nexec '/odd/it\\'s/fish'"]);
     }
 
     #[test]

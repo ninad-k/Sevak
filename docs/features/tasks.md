@@ -55,6 +55,8 @@ run = "tasks:volume:30"      # also "tasks:keep_awake:45", "tasks:kill:chrome.ex
 
 ## Options
 
+All of these are in **Settings → Tasks & media**; the hidden-tasks list there is a checklist of the keys below.
+
 | Setting | Default | What it does | Config section |
 |---|---|---|---|
 | Confirm | `true` | Ask before force quit, kill and restarting Explorer or Finder | [`[tasks] confirm`](../configuration.md#tasks) |

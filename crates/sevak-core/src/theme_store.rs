@@ -576,4 +576,101 @@ mod tests {
                 .is_empty());
         }
     }
+
+    /// Every theme in the gallery, built-in or not: the index and the file agree,
+    /// the colors validate and reach WCAG AA for body text, nothing is listed
+    /// twice and no theme file is left out of the index.
+    #[test]
+    fn every_gallery_theme_is_valid_accessible_and_listed_once() {
+        use crate::theme_file::{contrast_checks, Mode};
+
+        let gallery = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../gallery");
+        let text = fs::read_to_string(gallery.join("themes.json")).unwrap();
+        let raw: serde_json::Value = serde_json::from_str(&text).unwrap();
+        let listed = raw["themes"].as_array().unwrap().len();
+        let entries = parse_index(&text).unwrap();
+        assert_eq!(entries.len(), listed, "an entry of themes.json is invalid");
+        assert!(entries.len() >= 19, "the gallery lost themes");
+
+        let raw_url = "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/";
+        let mut files = Vec::new();
+        let mut names = std::collections::HashSet::new();
+        for entry in &entries {
+            let file = entry
+                .url
+                .strip_prefix(raw_url)
+                .unwrap_or_else(|| panic!("{}: the url must be a raw GitHub address", entry.id));
+            assert!(
+                file.ends_with(".toml") && !file.contains('/') && !file.contains('?'),
+                "{}: {file}",
+                entry.id
+            );
+            assert!(
+                names.insert(entry.name.to_lowercase()),
+                "{} twice",
+                entry.name
+            );
+            let bytes = fs::read(gallery.join("themes").join(file))
+                .unwrap_or_else(|err| panic!("{}: {file}: {err}", entry.id));
+            assert!(
+                (bytes.len() as u64) <= MAX_THEME_BYTES,
+                "{}: the file is too large",
+                entry.id
+            );
+            assert_eq!(entry.sha256, sha256_hex(&bytes), "{}: hash", entry.id);
+            let text = String::from_utf8(bytes).unwrap();
+            assert!(!text.contains('\r'), "{file} must use LF line endings");
+            let parsed = theme_file::parse(&text).unwrap();
+            assert!(parsed.warnings.is_empty(), "{file}: {:?}", parsed.warnings);
+
+            let spec = &parsed.spec;
+            assert_eq!(spec.name, entry.name, "{file}: name");
+            assert_eq!(spec.author, entry.author, "{file}: author");
+            assert_eq!(spec.description, entry.description, "{file}: description");
+            assert!(!entry.description.is_empty() && entry.description.chars().count() <= 200);
+            let palettes = spec.palettes();
+            assert!(!palettes.is_empty(), "{file}: no palette");
+            let mode = match palettes.as_slice() {
+                [(Mode::Light, _)] => "light",
+                [(Mode::Dark, _)] => "dark",
+                _ => "",
+            };
+            assert_eq!(
+                entry.mode, mode,
+                "{file}: `mode` must say which single palette it has"
+            );
+            for (mode, palette) in palettes {
+                for check in contrast_checks(palette, mode) {
+                    assert!(
+                        check.aa,
+                        "{file}: {} is {:.2}:1, below AA",
+                        check.label, check.ratio
+                    );
+                }
+            }
+            // The text the app installs is this theme in canonical form: the
+            // file, minus leading `#` comments, already is that.
+            let body: String = text
+                .lines()
+                .skip_while(|line| line.starts_with('#'))
+                .map(|line| format!("{line}\n"))
+                .collect();
+            assert_eq!(body, spec.to_toml(), "{file} is not in canonical form");
+            // A theme that is not built in must say where its palette is from.
+            if builtin_by_name(&spec.name).is_none() {
+                let first = text.lines().next().unwrap_or_default();
+                assert!(
+                    first.starts_with('#')
+                        && (first.contains("MIT") || first.contains("Apache-2.0")),
+                    "{file}: start the file with a comment naming the palette and its licence"
+                );
+            }
+            files.push(file.to_owned());
+        }
+        // No theme file may sit in the folder without an entry.
+        for item in fs::read_dir(gallery.join("themes")).unwrap() {
+            let name = item.unwrap().file_name().to_string_lossy().into_owned();
+            assert!(files.contains(&name), "{name} is not listed in themes.json");
+        }
+    }
 }

@@ -12,6 +12,12 @@ name: Release
 #               its secret is set)
 # A failed build leaves only a draft (no tag), which the next run replaces.
 # Docs-only pushes don't release; nor does a head commit containing [skip release].
+#
+# Opt-in staged flow (docs/releasing.md): with the repository variable
+# RELEASE_MODE=staged, or a manual run with channel=beta, the same pipeline
+# publishes a pre-release vX.Y.Z-beta.N with latest-beta.json instead; latest.json
+# and the package managers stay untouched until promote.yml publishes it as
+# stable. Unset or "auto" (the default) is the behaviour described above.
 
 on:
   push:
@@ -24,6 +30,12 @@ on:
       - ".github/*.md"
       - ".github/dependabot.yml"
   workflow_dispatch:
+    inputs:
+      channel:
+        description: "default = follow the RELEASE_MODE repository variable (auto = stable); beta = publish a pre-release"
+        type: choice
+        options: [default, stable, beta]
+        default: default
 
 concurrency:
   group: release
@@ -44,6 +56,7 @@ jobs:
       contents: write
     outputs:
       version: ${{ steps.version.outputs.version }}
+      channel: ${{ steps.channel.outputs.channel }}
       release_id: ${{ steps.draft.outputs.release_id }}
     steps:
       - uses: actions/checkout@v7
@@ -63,10 +76,39 @@ jobs:
             exit 1
           fi
 
+      - name: Choose the release channel
+        id: channel
+        env:
+          INPUT: ${{ inputs.channel }}
+          RELEASE_MODE: ${{ vars.RELEASE_MODE }}
+        run: |
+          case "${INPUT:-default}" in
+            stable | beta) channel=$INPUT ;;
+            *)
+              # Anything but "staged" (unset, "auto", a typo) keeps today's behaviour.
+              case "$RELEASE_MODE" in
+                staged) channel=beta ;;
+                "" | auto) channel=stable ;;
+                *)
+                  echo "::warning::RELEASE_MODE='$RELEASE_MODE' is not 'auto' or 'staged'; releasing stable."
+                  channel=stable
+                  ;;
+              esac
+              ;;
+          esac
+          echo "Release channel: $channel"
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
+
       - name: Compute the next version
         id: version
+        env:
+          CHANNEL: ${{ steps.channel.outputs.channel }}
         run: |
-          version=$(node scripts/release-version.mjs next)
+          if [ "$CHANNEL" = beta ]; then
+            version=$(node scripts/release-version.mjs next-beta)
+          else
+            version=$(node scripts/release-version.mjs next)
+          fi
           if [ -z "$version" ]; then
             echo "HEAD is already released; nothing to do."
           else
@@ -80,6 +122,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: v${{ steps.version.outputs.version }}
+          CHANNEL: ${{ steps.channel.outputs.channel }}
         run: |
           # A draft for this tag left by an earlier failed run is replaced; a
           # published one means the tag already exists, which plan never reuses.
@@ -95,13 +138,32 @@ jobs:
             fi
           done
 
+          intro="Downloads for Windows, macOS and Linux are below. Installation notes: [docs/install.md](https://github.com/$GITHUB_REPOSITORY/blob/$TAG/docs/install.md). Verify downloads against \`SHA256SUMS.txt\`."
+          # The maintainer can edit this section while the release is a draft.
+          known=$'## Known issues and upgrade notes\n\nNone known for this release.'
+          if [ "$CHANNEL" = beta ]; then
+            # Only people on the beta update channel are offered a beta (Settings,
+            # General, Update channel). Its notes are generated here against the
+            # previous release tag, so the channel-beta pointer release (a tag
+            # without a version) can never be picked as the comparison base.
+            prev=$(node scripts/release-version.mjs previous-tag)
+            generated=$(gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+              -f tag_name="$TAG" -f target_commitish="$GITHUB_SHA" \
+              ${prev:+-f previous_tag_name="$prev"} --jq .body)
+            body="**Beta build.** Only people on the beta update channel are offered it; it may be less tested than a stable release."$'\n\n'"$intro"$'\n\n'"$known"$'\n\n'"$generated"
+            extra=(-F prerelease=true)
+          else
+            body="$intro"$'\n\n'"$known"
+            extra=(-F generate_release_notes=true)
+          fi
+
           id=$(gh api "repos/$GITHUB_REPOSITORY/releases" \
             -f tag_name="$TAG" \
             -f target_commitish="$GITHUB_SHA" \
             -f name="Sevak $TAG" \
-            -f body="Downloads for Windows, macOS and Linux are below. Installation notes: [docs/install.md](https://github.com/$GITHUB_REPOSITORY/blob/$TAG/docs/install.md). Verify downloads against \`SHA256SUMS.txt\`." \
+            -f body="$body" \
             -F draft=true \
-            -F generate_release_notes=true \
+            "${extra[@]}" \
             --jq .id)
           echo "release_id=$id" >> "$GITHUB_OUTPUT"
 
@@ -138,11 +200,11 @@ jobs:
             libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
             libxdo-dev libssl-dev
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/setup-rust
         with:
           targets: ${{ matrix.rust-targets }}
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - uses: actions/setup-node@v7
         with:
@@ -176,6 +238,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       RELEASE_ID: ${{ needs.plan.outputs.release_id }}
       VERSION: ${{ needs.plan.outputs.version }}
+      CHANNEL: ${{ needs.plan.outputs.channel }}
     steps:
       - uses: actions/checkout@v7
 
@@ -196,6 +259,9 @@ jobs:
 
       - name: Add latest.json and SHA256SUMS.txt
         run: |
+          # A beta publishes latest-beta.json and leaves latest.json alone.
+          manifest=latest.json
+          if [ "$CHANNEL" = beta ]; then manifest=latest-beta.json; fi
           upload() {
             gh api -X POST -H "Content-Type: $2" --input "$1" \
               "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=$(basename "$1")" \
@@ -203,20 +269,72 @@ jobs:
           }
           gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" --jq .body > notes.md
           node scripts/updater-manifest.mjs release-assets "$VERSION" \
-            "https://github.com/$GITHUB_REPOSITORY/releases/download/v$VERSION" notes.md
-          upload release-assets/latest.json application/json
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/v$VERSION" notes.md \
+            --name "$manifest"
+          upload "release-assets/$manifest" application/json
           (cd release-assets && sha256sum -- * > ../SHA256SUMS.txt)
           cat SHA256SUMS.txt
           upload SHA256SUMS.txt text/plain
 
       - name: Publish
         run: |
-          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
-            -F draft=false -f make_latest=true --jq .html_url
+          if [ "$CHANNEL" = beta ]; then
+            # A pre-release is never "latest", so stable users' latest.json is untouched.
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+              -F draft=false -F prerelease=true -f make_latest=false --jq .html_url
+          else
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+              -F draft=false -f make_latest=true --jq .html_url
+          fi
+
+      - name: Point the beta channel at this release
+        if: env.CHANNEL == 'beta'
+        run: |
+          # GitHub's releases/latest/download/ shortcut skips pre-releases, so beta
+          # installs read latest-beta.json from one fixed pre-release, channel-beta.
+          if ! gh release view channel-beta > /dev/null 2>&1; then
+            gh release create channel-beta --target "$GITHUB_SHA" --prerelease --latest=false \
+              --title "Beta channel (do not download)" \
+              --notes "Holds latest-beta.json, which Sevak's beta update channel reads. It always points at the newest beta; the downloads are on the vX.Y.Z-beta.N releases."
+          fi
+          gh release upload channel-beta release-assets/latest-beta.json --clobber
+
+  # A release published with the default GITHUB_TOKEN does not start workflows
+  # that listen for `release: published` (GitHub ignores events caused by that
+  # token), so sbom.yml and attest.yml are called from here, once the stable
+  # release is out. Betas are not attested or given an SBOM until promote.yml
+  # publishes them as stable (it makes the same calls). The permissions below
+  # are exactly what each called workflow's job declares. A failure here does
+  # not undo the release; re-run just that job, or run the workflow by hand
+  # for the tag (docs/security/supply-chain.md).
+  sbom:
+    name: Attach the SBOMs
+    needs: [plan, publish]
+    if: needs.plan.outputs.channel == 'stable'
+    permissions:
+      contents: write # upload release assets
+    uses: ./.github/workflows/sbom.yml
+    with:
+      tag: v${{ needs.plan.outputs.version }}
+
+  attest:
+    name: Attest the installers
+    needs: [plan, publish]
+    if: needs.plan.outputs.channel == 'stable'
+    permissions:
+      id-token: write # sign the attestation with the workflow's OIDC identity
+      attestations: write # store it
+      contents: read
+    uses: ./.github/workflows/attest.yml
+    with:
+      tag: v${{ needs.plan.outputs.version }}
 
   distribute:
     name: Update package managers
     needs: [plan, publish]
+    # Betas are pre-releases and reach the package managers only when
+    # promote.yml publishes them as stable.
+    if: needs.plan.outputs.channel == 'stable'
     runs-on: ubuntu-latest
     # The release is already out; a package manager that fails to update must
     # not mark it as failed. Each channel is skipped while its secret is unset

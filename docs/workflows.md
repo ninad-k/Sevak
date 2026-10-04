@@ -33,6 +33,8 @@ anything else.
 
 ## The builder
 
+![The workflow builder showing a keyword trigger, a conditional and two Open URL actions joined by lines, with the workflow details on the right.](media/settings-workflow-builder.png)
+
 **Settings → Workflows** lists every workflow, with a switch to turn each on or
 off, **Edit**, **Delete**, and **Review…** for one that waits for your
 permission. **New workflow** starts a blank one; **New from template…** offers
@@ -119,7 +121,7 @@ workflow, enabled, and valid; otherwise the launcher opens and says why.
 |---|---|---|
 | **Run script** | runs a program; what it prints becomes the argument | [details below](#run-script) |
 | **Open URL** | opens a web or mail link | only `http`, `https` and `mailto`; placeholders are URL-encoded |
-| **Open file** | opens a file or folder with its default program | `~` is your home folder; a relative path is inside the workflow's folder |
+| **Open file** | opens a file or folder with its default program | `~` is your home folder; a relative path is inside the workflow's folder; a program or script opens by running, so needs permission |
 | **Launch app** | starts an application by name (as in the launcher) or by path | runs code, so needs permission |
 | **System command** | `lock`, `sleep`, `hibernate`, `restart`, `shutdown`, `logout`, `empty_trash` | needs permission; the destructive ones ask each time |
 | **Terminal command** | opens your terminal and runs a command line | needs permission; see [quoting](#placeholders-the-argument-and-variables) |
@@ -260,7 +262,8 @@ trigger's (a script filter row's), and nodes can add more.
 ## Permission, privacy and limits
 
 **Permission.** A workflow whose nodes can run code or commands (**Run script**,
-**Script filter**, **Launch app**, **System command**, **Terminal command**) does
+**Script filter**, **Launch app**, **System command**, **Terminal command**,
+**Open file**, because opening a program or script runs it) does
 nothing until you allow it. Sevak shows a dialog with the workflow's name, what
 starts it, what it runs and whether it will receive your Universal Actions
 selection, and remembers your answer in `script-plugin-approvals.json` (the
@@ -271,10 +274,11 @@ What you allow is **what can run**: the settings of those nodes, the
 connections, the workflow's variables and the *contents* of the script files
 they name. If any of that changes (an edit in the builder, or a script file
 changed on disk), Sevak asks again after the next reload. Moving boxes,
-renaming and retitling do not. A workflow that only opens links and files,
-copies, pastes and shows text runs without asking, because it can do no more
-than the actions in the launcher can; it still never runs anything you did not
-trigger.
+renaming and retitling do not. A workflow that only opens links, copies,
+pastes and shows text runs without asking, because it can do no more than the
+actions in the launcher can; it still never runs anything you did not trigger.
+A file that an **Open file** node names inside the workflow's folder is part
+of what you allow, like a script.
 
 Two caveats. A script may read other files the workflow folder refers to (a
 module it imports) without Sevak noticing a change in them: install workflows
@@ -305,6 +309,31 @@ recorded like any result).
 3. The new folder is not allowed yet: Sevak shows its usual permission dialog
    before anything in it runs.
 
+### What the gallery offers
+
+Ten workflows and six script plugins ship in the gallery, all written by the Sevak
+project and described in [gallery/README.md](https://github.com/ninad-k/Sevak/blob/main/gallery/README.md):
+
+| Workflow | Does | Runs code? |
+|---|---|---|
+| DuckDuckGo search | `ddg words` | no |
+| Developer search | `so`, `mdn`, `crate`, `docsrs`, `npm`, `pypi` open that site's search | no |
+| GitHub search | `ghr` repositories, `ghi` issues and pull requests, `ghu` people | no |
+| Wikipedia search | `wiki words`; change the `lang` variable for another language | no |
+| Maps search | `map place` (OpenStreetMap), `gmap place` (Google Maps) | no |
+| Open selection as a link | Universal Actions: opens a selected web address; `javascript:`, `file:` and non-addresses are refused | no |
+| Tidy up whitespace | Universal Actions: collapses spaces and line breaks and pastes the result | no |
+| Markdown helpers | Universal Actions: Markdown link, bold, code, quote, bullet list | no |
+| Decode and encode | Universal Actions: Base64 and URL decoding in a text view, encoding to the clipboard | no |
+| Selection toolkit | Universal Actions: word count (Large Type), JSON pretty-print and minify, timestamp and date | a short Python 3 script, after you allow it |
+
+The plugins are the case converter (Node.js) and Python 3 plugins for passwords
+(`pw`), IDs (`id`: UUID v4/v7, ULID, NanoID), colors (`color`), placeholder text
+(`lorem`) and checksums (`hash`). The search workflows only open your browser at
+the site named in the workflow; none of the gallery's content makes a network
+request itself. Packages are small and readable on purpose, and the repository's
+tests run every workflow and script against sample input.
+
 Each request sends only what any web request does (your address, and a user
 agent `Sevak/<version> (gallery)`). Nothing else leaves your computer, and Sevak
 keeps no account or identifier. The bundled examples are in
@@ -312,7 +341,10 @@ keeps no account or identifier. The bundled examples are in
 
 To offer your own package: pack the folder (`cargo run -p sevak-plugins --example
 gallery_pack -- <folder> <out.zip>` prints the SHA-256), add an entry to
-`gallery/index.json` and open a pull request. See
+`gallery/index.json` (`node scripts/gallery-check.mjs --update` fills in the
+hashes and checks the rest) and open a pull request. The rules a package has
+to meet and a pre-merge checklist are in
+[gallery/README.md](https://github.com/ninad-k/Sevak/blob/main/gallery/README.md); see also
 [plugins.md](plugins.md#workflows-for-contributors).
 
 ## The file format
@@ -386,6 +418,11 @@ understood. Differences worth knowing:
 - Modifier keys: Alfred's `cmd` is Sevak's `Ctrl` (Command on macOS).
 - Anything that runs code needs your permission first, and the permission is
   tied to what runs.
+
+!!! note "Trademark"
+    Alfred is a trademark of Running with Crayons Ltd. Sevak is not affiliated
+    with or endorsed by it; the name is used only to describe the file format
+    and conventions Sevak reads.
 
 ## Troubleshooting
 

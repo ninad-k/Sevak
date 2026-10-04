@@ -34,6 +34,8 @@ Everything is offline. macOS uses its own Dictionary for `define`, Windows its s
 
 ## Options
 
+All of these are in **Settings → Integrations**.
+
 | Setting | Default | What it does | Config section |
 |---|---|---|---|
 | Define keyword | `define` | Keyword for definitions | [`[dictionary] define_keyword`](../configuration.md#dictionary) |

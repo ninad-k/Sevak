@@ -1,0 +1,158 @@
+# Select text in any app, press the Universal Actions shortcut (Ctrl+Alt+Space)
+# and choose:
+#   Count words and characters   shown huge (Large Type)
+#   Pretty-print JSON            shown in Sevak's text view
+#   Minify JSON                  replaces the selection (nothing is pasted when it is not JSON)
+#   Timestamp <-> date           a Unix timestamp becomes a date, a date becomes a timestamp
+# This one runs code: toolkit.py, a short standard-library-only Python 3 script
+# (no network, no files). Sevak asks for your permission before it runs the first
+# time and again if the script or this workflow changes. It needs Python 3 on
+# the PATH ("py -3" on Windows, python3 elsewhere). The selection reaches the
+# script on its standard input; nothing is logged.
+format = 1
+name = "Selection toolkit (Python)"
+description = "Universal Actions: count words, pretty-print or minify JSON, and convert Unix timestamps and dates. Needs Python 3."
+author = "Sevak"
+version = "1.0"
+
+[[node]]
+id = "stats"
+type = "selection"
+title = "Count words and characters"
+x = 40.0
+y = 40.0
+accepts = ["text"]
+
+[[node]]
+id = "stats-run"
+type = "run_script"
+title = "Count words and characters"
+x = 340.0
+y = 40.0
+script = "toolkit.py"
+args = ["stats"]
+stdin = "{query}"
+timeout_ms = 5000
+
+[[node]]
+id = "stats-out"
+type = "large_type"
+title = "Show it huge"
+x = 660.0
+y = 40.0
+text = "{query}"
+
+[[node]]
+id = "pretty"
+type = "selection"
+title = "Pretty-print JSON"
+x = 40.0
+y = 200.0
+accepts = ["text"]
+
+[[node]]
+id = "pretty-run"
+type = "run_script"
+title = "Pretty-print JSON"
+x = 340.0
+y = 200.0
+script = "toolkit.py"
+args = ["pretty"]
+stdin = "{query}"
+timeout_ms = 5000
+
+[[node]]
+id = "pretty-out"
+type = "text_view"
+title = "Show it"
+x = 660.0
+y = 200.0
+heading = "Pretty-print JSON"
+text = "{query}"
+
+[[node]]
+id = "minify"
+type = "selection"
+title = "Minify JSON"
+x = 40.0
+y = 360.0
+accepts = ["text"]
+
+[[node]]
+id = "minify-run"
+type = "run_script"
+title = "Minify JSON"
+x = 340.0
+y = 360.0
+script = "toolkit.py"
+args = ["minify"]
+stdin = "{query}"
+timeout_ms = 5000
+
+[[node]]
+id = "minify-out"
+type = "paste"
+title = "Replace the selection"
+x = 660.0
+y = 360.0
+text = "{query}"
+
+[[node]]
+id = "time"
+type = "selection"
+title = "Timestamp <-> date"
+x = 40.0
+y = 520.0
+accepts = ["text"]
+
+[[node]]
+id = "time-run"
+type = "run_script"
+title = "Timestamp <-> date"
+x = 340.0
+y = 520.0
+script = "toolkit.py"
+args = ["time"]
+stdin = "{query}"
+timeout_ms = 5000
+
+[[node]]
+id = "time-out"
+type = "text_view"
+title = "Show it"
+x = 660.0
+y = 520.0
+heading = "Timestamp <-> date"
+text = "{query}"
+
+[[connection]]
+from = "stats"
+to = "stats-run"
+
+[[connection]]
+from = "stats-run"
+to = "stats-out"
+
+[[connection]]
+from = "pretty"
+to = "pretty-run"
+
+[[connection]]
+from = "pretty-run"
+to = "pretty-out"
+
+[[connection]]
+from = "minify"
+to = "minify-run"
+
+[[connection]]
+from = "minify-run"
+to = "minify-out"
+
+[[connection]]
+from = "time"
+to = "time-run"
+
+[[connection]]
+from = "time-run"
+to = "time-out"

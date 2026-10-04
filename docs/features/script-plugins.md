@@ -118,6 +118,10 @@ The Sevak repository includes example plugins you can install:
     - **Keyword**: `case`
     - **How to use**: Type `case hello` to see case-conversion options.
 
+### More plugins in the gallery
+
+The gallery (Settings → Gallery) also offers offline Python 3 plugins, none of which touches the network or writes files: `pw` (random passwords, PINs and tokens; `pw 24` sets the length), `id` (UUID v4 and v7, ULID, NanoID), `color` (HEX, RGB, HSL, HSV and WCAG contrast of a color), `lorem` (placeholder text) and `hash` (checksums of text, or of a file given by its full path). Their sources are in [`examples/plugins/`](https://github.com/ninad-k/Sevak/tree/main/examples/plugins).
+
 ## Views, modifiers and the gallery
 
 - A script can ask for its rows to be shown as a **grid of tiles** (pictures, icons) or mark a row whose long text opens in the **Text View**; see [Views: text and grid](../plugins.md#views-text-and-grid). The [preview pane](../usage.md#preview-text-view-and-grid-view) works for script results too.

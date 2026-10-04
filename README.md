@@ -69,6 +69,10 @@ They show the workflow rather than measured search or launch times.
 
 ![Four examples: launch an app, calculate and copy, find a project file, and search the web.](docs/media/sevak-features.png)
 
+And more once you know the keys: preview a result, pick emoji from a grid, open every action, collect files in a buffer.
+
+![Four more features: the preview pane, an emoji grid, the action panel for a result, and the file buffer strip.](docs/media/sevak-features-more.png)
+
 | Task | Try typing | What Enter does |
 |---|---|---|
 | Launch an installed app | `code` | Launches the selected application |
@@ -111,7 +115,7 @@ Sevak also includes:
   Base64, URL encoding, JSON) and paste back, calculate, open, show in folder,
   open in a terminal. [How it works →](docs/usage.md#universal-actions)
 - **Preview, Text View and Grid View** — tap `Shift` or press `Ctrl+Y` to
-  see what a result is (file contents, images, folders, links, snippets)
+  see what a result is (file contents, images, a PDF's first page, folders, links, snippets)
   without opening it; `Ctrl+T` reads a long text in full; picture-like results
   such as emoji are shown as a grid of tiles.
   [How it works →](docs/usage.md#preview-text-view-and-grid-view)
@@ -125,20 +129,23 @@ Sevak also includes:
   several fallback engines for queries with no match.
 - **Plugins** — enable the sources you need, build a compiled-in extension, or
   drop in a [script plugin](docs/plugins.md#external-plugins) (Python,
-  PowerShell, Node…). Many Alfred Script Filter scripts run unchanged.
+  PowerShell, Node…). Scripts that print the Script Filter JSON format used by
+  Alfred run unchanged in many cases.
 - **Workflows** — chain a keyword, hotkey, Universal Actions entry or
   `sevak --trigger` to actions and outputs in a visual builder (Settings →
-  Workflows). Script filters run your own scripts, with Alfred Script Filter
-  JSON supported; anything that runs code asks first.
+  Workflows). Script filters run your own scripts, and the Script Filter JSON
+  format used by Alfred is understood; anything that runs code asks first.
   [How workflows work →](docs/workflows.md)
-- **Gallery** — an optional list of ready-made workflows and script plugins,
-  fetched only when you press **Load gallery**, installed only when you press
-  **Install**, checksum-verified.
+- **Gallery** — an optional list of ready-made workflows (site searches,
+  Markdown, Base64 and JSON helpers) and offline script plugins (passwords,
+  IDs, colors, lorem ipsum, hashes), fetched only when you press **Load
+  gallery**, installed only when you press **Install**, checksum-verified.
 - **Custom hotkeys** — extra global keys that open Sevak with text typed in
   (`> `, `g `) or run a result directly.
 - **Themes** — light, dark or system, plus accent color, font, radius, opacity
   and your own stylesheet. A visual theme editor with a live preview, eight
-  built-in themes and an optional online theme gallery are in Settings →
+  built-in themes and an optional online gallery with eleven more (Tokyo
+  Night, Catppuccin, Rosé Pine, GitHub and others) are in Settings →
   Appearance ([themes guide](docs/themes.md)).
 - **Settings and TOML** — use the settings window or a commented config file,
   which can live in a synced folder.
@@ -153,8 +160,9 @@ Sevak also includes:
 ![Sevak's Settings interface showing shortcut, startup, hide-on-blur and update preferences.](docs/media/sevak-settings.png)
 
 Open **Settings** from the tray or run `sevak --settings`. Choose your shortcut,
-search folders, result limit, theme, web engines, and plugins. Click **Save**
-to apply your changes.
+search folders, result limit, theme, web engines, and plugins, plus each
+plugin's own options (clipboard history, contacts, 1Password, tasks, media and
+more). Click **Save** to apply your changes.
 
 ![The same Sevak app search shown in light and dark themes.](docs/media/sevak-themes.png)
 
@@ -167,7 +175,7 @@ Choose a package from [GitHub Releases](https://github.com/ninad-k/Sevak/release
 
 | Platform | Package | Instructions |
 |---|---|---|
-| Windows 10 / 11 | Per-user `.exe` installer or `.msi` | [Windows](docs/install.md#windows-10--11) |
+| Windows 10 / 11 | `.exe` installer (for you or all users) or `.msi` | [Windows](docs/install.md#windows-10--11) |
 | macOS 11+ | Universal `.dmg` for Apple silicon and Intel | [macOS](docs/install.md#macos-11) |
 | Ubuntu 22.04+ / Debian | `.deb` | [Ubuntu / Debian](docs/install.md#ubuntu-2204--debian) |
 | Fedora 39+ | `.rpm` | [Fedora](docs/install.md#fedora-39) |
@@ -214,7 +222,7 @@ a cloud search service. Usage history includes your recent searches and the
 `>` commands you ran; clipboard history (off by default) is stored unencrypted
 in the data folder, including copied text, the paths of copied files and copied
 images (as PNG files; `[clipboard] images` and `files` turn those off).
-Bookmarks are read from your browsers' files, read-only.
+Bookmarks are read from your browsers' files, read-only (Safari's, on macOS, only after you allow Full Disk Access).
 
 These features stay on your computer and make no network request:
 
@@ -222,7 +230,9 @@ These features stay on your computer and make no network request:
   file index (Windows Search, Spotlight, locate, Tracker or Baloo); the words
   you type go to that local service and nowhere else.
 - The preview pane reads the selected file or folder from your disk, only while
-  it is open; links are shown as addresses and never fetched.
+  it is open; links are shown as addresses and never fetched. A PDF's first
+  page is drawn by your operating system (a short-lived helper process, no
+  network, temporary files deleted at once).
 - Universal Actions reads your selection only when you press its shortcut, by
   briefly borrowing the clipboard and restoring it. The selection is never
   written to disk, logged or sent anywhere.
@@ -263,8 +273,8 @@ Every network request Sevak itself makes is in this list:
   (including a Universal Actions web search) opens it in your browser, where
   the site receives your search terms.
 - **Update checks.** Release information is fetched from GitHub after startup
-  and once a day. Disable them in **Settings → General** or set
-  `general.check_for_updates = false`.
+  and once a day (one more small file if you choose the beta channel). Disable
+  them in **Settings → General** or set `general.check_for_updates = false`.
 - **Installing an update.** Its package is downloaded after you agree. Windows
   installation may also download WebView2 if it is missing.
 - **Currency rates.** If you turn currency conversion on (`[calculator]
@@ -315,10 +325,11 @@ readable right here on GitHub:
 | Restyle the launcher: theme editor, theme gallery or your own CSS | [Themes](docs/themes.md) |
 | Fix a shortcut, search or update problem | [Troubleshooting](docs/troubleshooting.md) and [FAQ](docs/faq.md) |
 | Know what touches the network | [Privacy](docs/privacy.md) |
+| Check a download, or see how Sevak is built and defended | [Supply chain](docs/security/supply-chain.md), [Threat model](docs/security/threat-model.md) and [Security policy](SECURITY.md) |
 | Install on another platform | [Installation](docs/install.md) |
-| Understand how Sevak works inside | [How Sevak works](docs/architecture.md) |
+| Understand how Sevak works inside | [How Sevak works](docs/architecture.md) and the [design decisions](docs/decisions/index.md) |
 | Write a plugin (Rust or a script) | [Plugin guide](docs/plugins.md) |
-| Build, test or package Sevak | [Development](docs/development.md) |
+| Build, test or package Sevak | [Development](docs/development.md), [Testing](docs/testing.md) and [Releasing](docs/releasing.md) |
 | Understand the name and visual identity | [Brand story](docs/brand.md) |
 
 ## Build from source
@@ -331,6 +342,7 @@ You need **Rust 1.90+**, **Node.js 22+**, and the native libraries required by
 npm ci
 npm run tauri dev        # Desktop app with frontend hot reload
 npm run check            # Svelte and TypeScript checks
+npm test                 # UI unit tests
 npm run build            # Production frontend
 npx tauri build          # Packages for the current platform
 ```
@@ -340,9 +352,20 @@ npx tauri build          # Packages for the current platform
 Bug reports, documentation improvements and plugins are welcome. Read
 [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md).
 Include your Sevak version, operating system and reproduction steps in issue
-reports. Report security issues through [SECURITY.md](SECURITY.md).
+reports; `sevak --diagnostics` (or **Settings → Help**) prepares a report for
+that with your user name, home folder and anything secret removed. It is shown
+to you and never sent anywhere. Report security issues through [SECURITY.md](SECURITY.md).
 Questions and ideas are welcome in
 [Discussions](https://github.com/ninad-k/Sevak/discussions).
 
 [Apache License 2.0](LICENSE) · Built with Rust, Tauri and Svelte ·
-[Third-party notices](THIRD_PARTY_NOTICES.md) (the bundled WordNet dictionary).
+[Third-party notices](THIRD_PARTY_NOTICES.md) (every dependency's licence, the
+bundled WordNet dictionary and Unicode emoji data) ·
+[Supply chain: checksums, SBOM and build provenance](docs/security/supply-chain.md).
+
+Alfred is a trademark of Running with Crayons Ltd; Sevak is not affiliated with
+or endorsed by it, and mentions it only to describe a compatible file format.
+1Password is a trademark of AgileBits Inc.; Sevak is not affiliated with or
+endorsed by it and works with its official `op` command-line tool. Other product
+names (Google, Apple, Microsoft and so on) belong to their owners and are used
+only to identify them.

@@ -1,0 +1,76 @@
+# GitHub search: ghr <words> finds repositories, ghi <words> issues and pull
+# requests, ghu <words> people and organizations. It opens github.com's own search
+# page in your browser and needs no account for these searches. (The built-in "gh"
+# keyword is separate; these use their own so both keep working.)
+# Runs no code, so Sevak does not ask for approval.
+format = 1
+name = "GitHub search"
+description = "Search GitHub repositories, issues and pull requests, and people from the launcher. Runs no code."
+author = "Sevak"
+version = "1.0"
+
+[[node]]
+id = "kw-repos"
+type = "keyword"
+title = "Search GitHub repositories for {query}"
+x = 40.0
+y = 40.0
+keyword = "ghr"
+argument = "required"
+subtitle = "Opens the results in your browser"
+
+[[node]]
+id = "open-repos"
+type = "open_url"
+title = "Open repos"
+x = 400.0
+y = 40.0
+url = "https://github.com/search?q={query}&type=repositories"
+
+[[node]]
+id = "kw-issues"
+type = "keyword"
+title = "Search GitHub issues and pull requests for {query}"
+x = 40.0
+y = 160.0
+keyword = "ghi"
+argument = "required"
+subtitle = "Opens the results in your browser"
+
+[[node]]
+id = "open-issues"
+type = "open_url"
+title = "Open issues"
+x = 400.0
+y = 160.0
+url = "https://github.com/search?q={query}&type=issues"
+
+[[node]]
+id = "kw-users"
+type = "keyword"
+title = "Search GitHub people for {query}"
+x = 40.0
+y = 280.0
+keyword = "ghu"
+argument = "required"
+subtitle = "Opens the results in your browser"
+
+[[node]]
+id = "open-users"
+type = "open_url"
+title = "Open users"
+x = 400.0
+y = 280.0
+url = "https://github.com/search?q={query}&type=users"
+
+[[connection]]
+from = "kw-repos"
+to = "open-repos"
+
+[[connection]]
+from = "kw-issues"
+to = "open-issues"
+
+[[connection]]
+from = "kw-users"
+to = "open-users"

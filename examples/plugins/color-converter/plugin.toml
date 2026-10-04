@@ -1,0 +1,16 @@
+# Type "color" and a color: "color #ff8800", "color rgb(255, 136, 0)",
+# "color hsl(32 100% 50%)", "color 255 136 0" or a name like "color tomato".
+#
+# A one-shot Python plugin (Python 3.8 or newer, standard library only) that
+# converts between HEX, RGB, HSL and HSV and reports the WCAG contrast against
+# white and black. It runs entirely offline; Enter copies the row you picked.
+protocol    = 1
+id          = "script:color-converter"
+name        = "Color converter (Python)"
+description = "color #ff8800 shows HEX, RGB, HSL, HSV and contrast. Also takes rgb(), hsl() and names."
+keyword     = "color"
+mode        = "oneshot"
+script      = "color.py"
+
+# Python starts a little slower than the default 50 ms wait.
+timeout_ms  = 200

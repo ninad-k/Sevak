@@ -1,16 +1,20 @@
 // Writes the update manifest (latest.json) that installed copies of Sevak poll
 // (tauri-plugin-updater; endpoint in src-tauri/tauri.conf.json).
 //
-//   node scripts/updater-manifest.mjs <assets-dir> <version> <download-base-url> [notes-file]
+//   node scripts/updater-manifest.mjs <assets-dir> <version> <download-base-url> [notes-file] [--name <file>]
+//
+// The manifest is written to <assets-dir>/latest.json, or to <file> (the beta
+// channel uses latest-beta.json).
 //
 // <assets-dir> holds a release's files, each signed artifact next to its
 // `.sig`. The updater looks up `{os}-{arch}-{installer}` and then `{os}-{arch}`,
 // so every installer gets its own key and each OS gets a default.
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 // [file name pattern, manifest keys]. The first match for a key wins.
-const TARGETS = [
+export const TARGETS = [
   [/_x64-setup\.exe$/, ["windows-x86_64-nsis", "windows-x86_64"]],
   [/_x64_[\w-]+\.msi$/, ["windows-x86_64-msi"]],
   // The universal app runs on both architectures.
@@ -23,7 +27,7 @@ const TARGETS = [
   [/\.x86_64\.rpm$/, ["linux-x86_64-rpm"]],
 ];
 
-function manifest(files, readSignature, version, baseUrl, notes, pubDate) {
+export function manifest(files, readSignature, version, baseUrl, notes, pubDate) {
   const platforms = {};
   for (const file of [...files].sort()) {
     if (!files.includes(`${file}.sig`)) continue;
@@ -41,19 +45,31 @@ function manifest(files, readSignature, version, baseUrl, notes, pubDate) {
   return { version, notes, pub_date: pubDate, platforms };
 }
 
-const [dir, version, baseUrl, notesFile] = process.argv.slice(2);
-if (!dir || !version || !baseUrl) {
-  console.error("usage: updater-manifest.mjs <assets-dir> <version> <download-base-url> [notes-file]");
-  process.exit(2);
+function main(argv) {
+  const args = [...argv];
+  let name = "latest.json";
+  const flag = args.indexOf("--name");
+  if (flag !== -1) [name] = args.splice(flag, 2).slice(1);
+  const [dir, version, baseUrl, notesFile] = args;
+  if (!dir || !version || !baseUrl || !/^[\w.-]+\.json$/.test(name)) {
+    console.error(
+      "usage: updater-manifest.mjs <assets-dir> <version> <download-base-url> [notes-file] [--name <file>.json]",
+    );
+    process.exit(2);
+  }
+  const notes = notesFile && existsSync(notesFile) ? readFileSync(notesFile, "utf8").trim() : "";
+  const result = manifest(
+    readdirSync(dir),
+    (file) => readFileSync(join(dir, file), "utf8"),
+    version,
+    baseUrl.replace(/\/$/, ""),
+    notes,
+    new Date().toISOString(),
+  );
+  writeFileSync(join(dir, name), JSON.stringify(result, null, 2) + "\n");
+  console.log(`${name}: ${Object.keys(result.platforms).join(", ")}`);
 }
-const notes = notesFile && existsSync(notesFile) ? readFileSync(notesFile, "utf8").trim() : "";
-const result = manifest(
-  readdirSync(dir),
-  (name) => readFileSync(join(dir, name), "utf8"),
-  version,
-  baseUrl.replace(/\/$/, ""),
-  notes,
-  new Date().toISOString(),
-);
-writeFileSync(join(dir, "latest.json"), JSON.stringify(result, null, 2) + "\n");
-console.log(`latest.json: ${Object.keys(result.platforms).join(", ")}`);
+
+if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+  main(process.argv.slice(2));
+}

@@ -2,6 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
+use sevak_core::preview::{RenderKind, Rendered};
 use sevak_core::{AppEntry, ClipContent, IconData, IconSource, LaunchTarget, ShellConfig};
 
 use crate::browsers::BrowserRoot;
@@ -25,6 +26,12 @@ use crate::tasks::{Drive, ProcessInfo, RunningApp, Task, TaskKind};
 /// entries). Obtain the one for the
 /// current OS with [`crate::native_provider`].
 pub trait PlatformProvider: Send + Sync {
+    /// What the OS calls itself (name, version, build), for the diagnostics
+    /// report. Cheap; reads the registry, `/etc/os-release` or runs `sw_vers`.
+    fn os_info(&self) -> sevak_core::diagnostics::OsInfo {
+        crate::os_info::detect()
+    }
+
     /// Enumerates installed, user-visible applications. Slow (file system and
     /// shell enumeration); call it from a background thread.
     fn list_applications(&self) -> Result<Vec<AppEntry>>;
@@ -186,6 +193,14 @@ pub trait PlatformProvider: Send + Sync {
     /// read.
     fn browser_roots(&self) -> Vec<BrowserRoot> {
         crate::browsers::detect_roots()
+    }
+
+    /// A picture of the first page of `path` (a PDF), or a thumbnail (an Office
+    /// document, a video), drawn by the operating system, for the preview pane.
+    /// Blocks until it is drawn or gives up (every helper has a timeout): call it
+    /// from a background thread. The caller has already limited the file size.
+    fn render_thumbnail(&self, path: &Path, kind: RenderKind) -> Rendered {
+        crate::thumbnail::render(path, kind)
     }
 
     /// The clipboard's text, or `None` if it holds something else.

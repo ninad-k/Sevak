@@ -51,13 +51,15 @@ Setting `accent` derives related CSS variables:
 
 `opacity` fades only the search bar's background; text stays fully opaque. It requires a window that supports transparency, which Sevak uses for rounded corners and shadow anyway.
 
-Sevak does not offer background blur (Acrylic, Mica, vibrancy) because it would blur the transparent margin around the bar, creating a square frame effect.
+`blur = true` (**Settings → Appearance → Frosted-glass blur**) blurs the desktop behind the search bar: Windows Acrylic, macOS vibrancy; it is ignored on Linux. The blur is drawn by the operating system, so it only shows where the bar is see-through: lower `opacity` below 100 to see it. On Windows 11 the system rounds the corners, so `radius` is fixed at 8 px while blur is on. See [Configuration](configuration.md) and [Settings](settings.md#frosted-glass-blur).
 
 `font_size` scales the whole search bar (input, subtitles, row height), not only the result titles. It does not affect the Settings window.
 
 `radius` sets corner rounding. `0` = sharp corners; `32` = very rounded.
 
 ## Theme files and the editor
+
+![Settings, Appearance, Theme editor: eight built-in themes to pick from and a live preview of the search bar with contrast checks.](media/settings-theme-editor.png)
 
 A theme is a small TOML file in the `themes` folder of your config folder (**Settings → Appearance → Open themes folder**). **Settings → Appearance → Theme editor** creates and edits them without touching the file:
 
@@ -138,6 +140,24 @@ The gallery is a list of community themes kept in Sevak's repository (`gallery/t
 - Nothing is requested until you click **Browse online themes** in the theme editor. That one click makes a single `GET` of `https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes.json` (no cookies, no query, no identifying headers beyond a `Sevak/<version> (gallery)` user agent; 20-second timeout; 256 KiB limit), through the same download code as the [workflow gallery](workflows.md#the-gallery). The list is only listed, not installed.
 - **Install** downloads that theme's file (https only, 64 KiB limit) and saves it to your themes folder only if its SHA-256 matches the `sha256` in the list. A mismatch, a file that is not a valid theme, or a download that is too large is refused and nothing is written. The saved file is the validated theme in canonical form.
 - Nothing is sent about you, and nothing is downloaded or updated in the background. Without a network you can still use the built-in themes and **Import…**.
+
+The gallery has the eight built-in themes and eleven more, each reaching WCAG AA for body text:
+
+| Theme | Mode | Palette |
+|---|---|---|
+| Tokyo Night | dark | Tokyo Night (MIT) |
+| Catppuccin Mocha | dark | Catppuccin (MIT) |
+| Catppuccin Latte | light | Catppuccin (MIT) |
+| Rosé Pine | dark | Rosé Pine (MIT) |
+| One Dark | dark | Atom's One Dark (MIT) |
+| Everforest Dark | dark | Everforest (MIT) |
+| Ayu Mirage | dark | Ayu (MIT) |
+| Nightfox | dark | Nightfox (MIT) |
+| GitHub Light | light | GitHub Primer (MIT) |
+| GitHub Dark | dark | GitHub Primer (MIT) |
+| Sevak Amber Glass | dark | original; slightly see-through (88% opacity), made for the frosted-glass blur setting |
+
+Colors taken from a third-party palette are credited, with their licences, in [gallery/README.md](https://github.com/ninad-k/Sevak/blob/main/gallery/README.md#theme-palettes-and-licences) and in the first comment of each theme file; a few notice or subtext colors are adjusted so text stays readable.
 
 To share a theme, put the file in `gallery/themes/`, add an entry to `gallery/themes.json` and open a pull request; see [gallery/README.md](https://github.com/ninad-k/Sevak/blob/main/gallery/README.md).
 

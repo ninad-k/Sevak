@@ -1,0 +1,62 @@
+name: Label pull requests
+
+# Labels each pull request from the Conventional Commit prefix of its title
+# (feat: -> enhancement, fix: -> bug, ...) so the release notes can be grouped by
+# type (.github/release.yml). A title ending a type with "!" or a PR that already
+# carries breaking-change is also labelled breaking-change.
+#
+# pull_request_target gives the token write access on pull requests from forks.
+# That is safe here because nothing from the pull request is checked out or
+# executed: the title only reaches a shell through an environment variable.
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened]
+
+permissions: {}
+
+jobs:
+  label:
+    name: Label from the title
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ github.event.pull_request.number }}
+      TITLE: ${{ github.event.pull_request.title }}
+    steps:
+      - name: Set the type label
+        run: |
+          shopt -s nocasematch
+          type=""
+          breaking=""
+          if [[ "$TITLE" =~ ^([a-z]+)(\([^\)]*\))?(!?): ]]; then
+            type="${BASH_REMATCH[1]}"
+            if [ -n "${BASH_REMATCH[3]}" ]; then breaking=1; fi
+          fi
+          type="${type,,}"
+          case "$type" in
+            feat) label=enhancement ;;
+            fix) label=bug ;;
+            perf) label=performance ;;
+            docs) label=documentation ;;
+            chore | ci | build | refactor | test | style | revert) label=maintenance ;;
+            *) label="" ;;
+          esac
+          all=(enhancement bug performance documentation maintenance)
+          current=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name')
+          for l in "${all[@]}"; do
+            if [ "$l" != "$label" ] && grep -qx "$l" <<< "$current"; then
+              gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --remove-label "$l"
+            fi
+          done
+          add=()
+          [ -n "$label" ] && add+=("$label")
+          [ -n "$breaking" ] && add+=(breaking-change)
+          for l in "${add[@]}"; do
+            gh label create "$l" --repo "$GITHUB_REPOSITORY" --color ededed 2> /dev/null || true
+            gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --add-label "$l"
+          done
+          echo "title: $TITLE -> labels: ${add[*]:-none}"

@@ -23,6 +23,7 @@ pub mod icon_theme;
 pub mod keyboard;
 pub mod media;
 pub mod open;
+pub mod os_info;
 pub mod os_search;
 pub mod paste;
 pub mod paths;
@@ -34,6 +35,7 @@ pub mod spotlight;
 pub mod system;
 pub mod tasks;
 pub mod terminal;
+pub mod thumbnail;
 pub mod trash;
 
 #[cfg(target_os = "linux")]

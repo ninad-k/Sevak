@@ -1,0 +1,129 @@
+name: Toolchain canary
+
+# CI is pinned to the Rust version in rust-toolchain.toml, so a new Rust release
+# (new clippy lints in particular) cannot break an unrelated pull request. This
+# weekly run builds with the newest stable and beta anyway, on Linux only, so
+# the breakage is found early and filed as ONE issue labelled `toolchain`,
+# instead of surprising whoever bumps the pin. The issue closes itself once a
+# weekly run passes again.
+
+on:
+  schedule:
+    - cron: "47 6 * * 1" # Mondays 06:47 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: toolchain-canary
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  RUST_BACKTRACE: "1"
+
+jobs:
+  canary:
+    name: Rust ${{ matrix.toolchain }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: [stable, beta]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential curl file patchelf \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+            libxdo-dev libssl-dev
+
+      # `cargo +<toolchain>` overrides the pin in rust-toolchain.toml.
+      - name: Install Rust ${{ matrix.toolchain }}
+        run: |
+          rustup toolchain install "${{ matrix.toolchain }}" --profile minimal --component clippy
+          cargo "+${{ matrix.toolchain }}" --version
+          rustc "+${{ matrix.toolchain }}" --version
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: canary-${{ matrix.toolchain }}
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Clippy
+        run: cargo "+${{ matrix.toolchain }}" clippy --workspace --all-targets -- -D warnings
+
+      - name: Tests
+        run: cargo "+${{ matrix.toolchain }}" test --workspace
+
+  # Create or update one issue when a canary fails; close it when both pass.
+  report:
+    name: Open or update the toolchain issue
+    if: always()
+    needs: [canary]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          CANARY_RESULT: ${{ needs.canary.result }}
+        with:
+          script: |
+            const title = 'New Rust release breaks the build';
+            const label = 'toolchain';
+            const failed = process.env.CANARY_RESULT === 'failure';
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            const { data: open } = await github.rest.issues.listForRepo({
+              ...context.repo, state: 'open', labels: label, per_page: 100,
+            });
+            const existing = open.find((i) => i.title === title && !i.pull_request);
+
+            if (!failed) {
+              if (existing && process.env.CANARY_RESULT === 'success') {
+                await github.rest.issues.createComment({
+                  ...context.repo, issue_number: existing.number,
+                  body: `Stable and beta build cleanly again (${run}). Closing.`,
+                });
+                await github.rest.issues.update({
+                  ...context.repo, issue_number: existing.number, state: 'closed',
+                  state_reason: 'completed',
+                });
+              }
+              return;
+            }
+
+            const body = [
+              'The weekly toolchain canary failed on a newer Rust than the one pinned in `rust-toolchain.toml`.',
+              '',
+              `Run: ${run}`,
+              '',
+              'The `Rust stable` and `Rust beta` jobs show which one failed, and whether it was clippy or a test. ' +
+                'Fix the new lint or breakage on `main` (or allow the lint with a reason) before bumping the pin; ' +
+                'see docs/development.md, "Security and supply chain".',
+            ].join('\n');
+
+            if (existing) {
+              await github.rest.issues.update({ ...context.repo, issue_number: existing.number, body });
+              await github.rest.issues.createComment({
+                ...context.repo, issue_number: existing.number,
+                body: `Still failing in the latest canary run: ${run}`,
+              });
+            } else {
+              await github.rest.issues.create({ ...context.repo, title, body, labels: [label] });
+            }

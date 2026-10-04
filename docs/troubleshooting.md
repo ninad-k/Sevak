@@ -125,7 +125,7 @@ Check these in order:
 | Check | What to do |
 |---|---|
 | Query length | Use at least two characters after `f ` |
-| Indexed root | Add the containing folder in Settings → Files |
+| Indexed root | Add the containing folder in Settings → Files & bookmarks |
 | Search depth | Increase depth if the file is nested too deeply |
 | Dot-file visibility | Enable hidden-file indexing if needed |
 | Excluded directory | Generated/cache directories are deliberately pruned |
@@ -154,8 +154,9 @@ Check local plugins and indexing first, or disable the fallback under
 ## `c`, `1p`, `define` or `spell` does nothing
 
 - **Contacts and 1Password are off by default.** The row says "Contacts are off"
-  or "1Password is off"; add `[contacts] enabled = true` or
-  `[onepassword] enabled = true` to `config.toml` and choose **Reload index**.
+  or "1Password is off"; switch them on in **Settings → Integrations**, or add
+  `[contacts] enabled = true` or `[onepassword] enabled = true` to `config.toml`
+  and choose **Reload index**.
 - **No contacts found.** The plugin reads vCard files from `vcard_files` and, with
   `use_system = true`, the system address book. On macOS the first `c` shows
   "Allow Sevak to read your Contacts": press Enter and answer the system
@@ -167,7 +168,7 @@ Check local plugins and indexing first, or disable the fallback under
   [1Password CLI](https://developer.1password.com/docs/cli/get-started/), turn on
   *Settings → Developer → Integrate with 1Password CLI* in the 1Password app, and
   run `op account list` in a terminal to check. If `op` is somewhere unusual, set
-  `[onepassword] op_path`. After you dismiss the unlock prompt, press Enter on
+  **Path to op** under 1Password in **Settings → Integrations** (`[onepassword] op_path`). After you dismiss the unlock prompt, press Enter on
   "Try again". Sevak never reads or shows passwords.
 - **`define` finds nothing.** The bundled dictionary has single words and their
   common inflections, not phrases or names of people. Check the spelling with
@@ -280,6 +281,22 @@ Windows or notarized by Apple. Read the
 [platform installation notes](install.md) for the current status and make
 sure the package came from the project's release page.
 
+## The Windows installer asks for administrator permission
+
+Only the **Install for all users on this PC** choice needs it: that installs to
+Program Files for every account. Choose **Install for me only** (the default) and
+Sevak installs to `%LOCALAPPDATA%\Sevak` without any prompt. Updating a copy that
+is installed for all users prompts too, since Sevak is in Program Files; a copy
+installed for you only never does. See [Windows](install.md#windows-10-11).
+
+## Sevak is installed twice on Windows
+
+An installation for you only and one for all users can exist side by side, for
+example after choosing different options in two runs. They compete for the same
+hotkey. Run the installer again and choose to **replace** the other copy (your
+settings in `%APPDATA%\sevak` are kept), or uninstall one in Settings → Apps.
+Both appear there as "Sevak".
+
 ## Does Sevak work offline?
 
 App search, indexed file search, calculations, contacts, the dictionary and
@@ -294,7 +311,7 @@ and folders.
 
 **Network activity:**
 
-- **Optional update checks** (default on): Check GitHub for a new version at startup and daily. Disable with `[general] check_for_updates = false`. An update is downloaded only after you agree.
+- **Optional update checks** (default on): Check GitHub for a new version shortly after startup, every six hours and when you open Sevak. Disable with `[general] check_for_updates = false`. An update is downloaded only after you agree.
 - **Web searches and links:** When you run a web search or open a bookmark, your browser contacts that site (Google, YouTube, GitHub, etc.). Sevak does not proxy or log these.
 - **Currency conversion** (off by default): When enabled, Sevak downloads the European Central Bank's daily rates once per day for currency conversion.
 - **Theme and workflow galleries:** Only when you click **Browse online themes** or **Load gallery**, and a package only when you click **Install**.
@@ -303,13 +320,35 @@ The full list is in [Privacy](privacy.md). See [Files and data](files-and-data.m
 
 ## Reporting a problem
 
-Open an issue through the [repository's issue form](https://github.com/ninad-k/Sevak/issues/new/choose)
-and include:
+Sevak has no telemetry, so it learns about problems only when you report them. A
+**diagnostics report** makes that quick: it lists your version, system, settings
+summary, plugin status and recent log lines, with your user name, home folder and
+anything that looks like a secret removed. It is made on your computer and sent
+nowhere; you read it and paste it yourself.
 
-- Sevak version and operating system.
-- Linux desktop and X11/Wayland session type, if relevant.
+1. Open **Settings → Help** and choose **Copy diagnostics** (the report is shown
+   in the box first, so you see exactly what you copy), or run
+   `sevak --diagnostics` in a terminal. The Settings report is the fuller one: it
+   also knows whether the shortcut is registered, whether the tray icon exists and
+   which plugins loaded.
+2. Read it. The top of the report lists what is and is not included; delete
+   anything you would rather not share. The log lines are the part most worth a
+   glance.
+3. Open an issue through the [repository's issue form](https://github.com/ninad-k/Sevak/issues/new/choose)
+   and paste the report into the **Diagnostics report** box.
+
+Also say:
+
 - The query or shortcut that reproduces the issue.
 - What you expected and what happened.
-- Relevant recent log lines, with private paths or unrelated data removed.
+
+**Open logs folder** on the same Help page (or **Reveal logs folder** at the
+bottom of Settings) shows the raw log files, if the maintainers ask for more than
+the last 100 lines. Logs can contain file names and other private details; look
+through them before sharing. See [Privacy](privacy.md#diagnostics-report) for what
+the report contains.
+
+If Sevak does not start, Settings is out of reach: run `sevak --diagnostics`
+instead. It reads files only, so it works without a running Sevak.
 
 Send security issues through [SECURITY.md](https://github.com/ninad-k/Sevak/blob/main/SECURITY.md) instead of a public issue.

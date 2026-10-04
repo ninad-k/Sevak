@@ -1,0 +1,34 @@
+# Type "wiki" and some words to search Wikipedia. The language is the workflow
+# variable "lang" (open the workflow in Settings > Workflows, select nothing, and
+# edit Variables: de, fr, es, ja, ...). It runs no code, so Sevak does not ask for
+# approval.
+format = 1
+name = "Wikipedia search"
+description = "Type wiki and some words to search Wikipedia in your language. Runs no code."
+author = "Sevak"
+version = "1.0"
+
+[variables]
+lang = "en"
+
+[[node]]
+id = "kw-wiki"
+type = "keyword"
+title = "Search Wikipedia for {query}"
+x = 40.0
+y = 40.0
+keyword = "wiki"
+argument = "required"
+subtitle = "Opens the results in your browser"
+
+[[node]]
+id = "open-wiki"
+type = "open_url"
+title = "Open wiki"
+x = 400.0
+y = 40.0
+url = "https://{var:lang}.wikipedia.org/w/index.php?search={query}"
+
+[[connection]]
+from = "kw-wiki"
+to = "open-wiki"

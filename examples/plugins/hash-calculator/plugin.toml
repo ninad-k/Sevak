@@ -1,0 +1,20 @@
+# Type "hash" and some text ("hash hello") for its MD5, SHA-1, SHA-256, SHA-512,
+# SHA3-256, BLAKE2b and CRC-32 checksums. Give the full path of a file instead
+# ("hash C:\Users\you\Downloads\setup.exe", "hash ~/notes.txt") to checksum that
+# file.
+#
+# A one-shot Python plugin (Python 3.8 or newer, standard library only). It
+# only reads the file you name, never writes anything and never touches the
+# network. Enter copies the checksum you picked.
+protocol    = 1
+id          = "script:hash-calculator"
+name        = "Hash calculator (Python)"
+description = "hash some text, or the full path of a file, for MD5, SHA-1, SHA-256, SHA-512 and more. Offline."
+keyword     = "hash"
+mode        = "oneshot"
+script      = "hashes.py"
+
+# Python starts a little slower than the default 50 ms wait, and a large file
+# takes a while to read.
+timeout_ms      = 200
+hard_timeout_ms = 15000

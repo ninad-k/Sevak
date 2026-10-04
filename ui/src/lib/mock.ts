@@ -361,6 +361,7 @@ export function mockSettings(): SettingsDto {
         hide_on_blur: true,
         launch_at_login: false,
         check_for_updates: true,
+        update_channel: "stable",
       },
       window: { width: 720 },
       linux: { wayland_use_xwayland: true },
@@ -398,6 +399,23 @@ export function mockSettings(): SettingsDto {
         content_keyword: "in",
       },
       bookmarks: { browsers: [], keyword: "b", global: true },
+      paste: { restore_clipboard: false },
+      file_buffer: { keep_between_shows: false },
+      clipboard: {
+        enabled: false,
+        max_items: 200,
+        max_item_bytes: 64 * 1024,
+        ignore_apps: [],
+        images: true,
+        files: true,
+        max_image_bytes: 10 * 1024 * 1024,
+      },
+      contacts: { enabled: false, keyword: "c", use_system: true, vcard_files: [] },
+      onepassword: { enabled: false, keyword: "1p", op_path: "", account: "", cache_minutes: 10 },
+      dictionary: { define_keyword: "define", spell_keyword: "spell", use_system: true },
+      system: { confirm: true, disabled: [] },
+      tasks: { confirm: true, disabled: [], keyword: "t", global: true },
+      media: { keyword: "play", global: true, now_playing: true },
       shell: { terminal: "", shell: "", keep_open: true },
       web_search: [
         { keyword: "g", name: "Google", url: "https://www.google.com/search?q={query}" },
@@ -417,10 +435,24 @@ export function mockSettings(): SettingsDto {
       { id: "shell", name: "Terminal commands", description: "Type `> command` to run it in a terminal; recent commands are offered again.", keyword: ">", enabled: true },
       { id: "uuid", name: "UUID generator", description: "Type `uuid ` to generate random UUIDs; Enter copies one.", keyword: "uuid", enabled: false },
     ],
-    display: new URLSearchParams(location.search).get("display") === "wayland" ? "wayland" : "windows",
+    display: mockDisplay(),
     is_gnome: true,
     config_path: "C:/Users/someone/AppData/Roaming/sevak/config.toml",
     log_dir: "C:/Users/someone/AppData/Roaming/sevak/logs",
-    platform: "windows",
+    platform: mockPlatform(),
   };
+}
+
+/** `?platform=macos|linux` previews the platform notes; Windows otherwise. */
+function mockPlatform(): "windows" | "macos" | "linux" {
+  const asked = new URLSearchParams(location.search).get("platform");
+  return asked === "macos" || asked === "linux" ? asked : "windows";
+}
+
+/** `?display=wayland|x11` previews the Linux pages; the platform's own display otherwise. */
+function mockDisplay(): SettingsDto["display"] {
+  const asked = new URLSearchParams(location.search).get("display");
+  if (asked === "wayland" || asked === "x11") return asked;
+  const platform = mockPlatform();
+  return platform === "macos" ? "macos" : platform === "linux" ? "x11" : "windows";
 }

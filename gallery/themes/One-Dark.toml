@@ -1,0 +1,36 @@
+# Palette: One Dark from Atom (atom/one-dark-syntax), MIT licence. Subtext and error lightened for AA contrast.
+name = "One Dark"
+author = "Sevak"
+description = "The familiar slate-grey editor theme after Atom's One Dark."
+
+[font]
+size = 15
+
+[layout]
+radius = 14
+opacity = 100
+row_height = 48
+search_size = 22
+icon_size = 32
+window_width = 720
+
+[dark]
+background = "#282c34"
+text = "#abb2bf"
+subtext = "#9199a8"
+border = "rgba(171, 178, 191, 0.12)"
+accent = "#61afef"
+accent_strong = "#5090c4"
+on_accent = "#282c34"
+selection = "rgba(97, 175, 239, 0.2)"
+tile = "rgba(171, 178, 191, 0.08)"
+kbd_background = "rgba(171, 178, 191, 0.08)"
+kbd_border = "rgba(171, 178, 191, 0.16)"
+shadow = "0 8px 28px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.4)"
+surface = "rgba(171, 178, 191, 0.05)"
+input_background = "rgba(171, 178, 191, 0.06)"
+input_border = "rgba(171, 178, 191, 0.24)"
+switch_off = "rgba(171, 178, 191, 0.28)"
+warn = "#e5c07b"
+error = "#e8767f"
+ok = "#98c379"

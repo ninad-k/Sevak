@@ -75,11 +75,13 @@ flowchart TD
 | ++tab++ (path browsing) | Complete or drill into a folder |
 | ++shift+tab++ (path browsing) | Go up one folder level |
 | ++alt+arrow-up++ / ++alt+arrow-down++ | Add the file to the [file buffer](#file-buffer) and move on |
-| ++shift++ (tap) or ++ctrl+y++ | Preview the file or folder ([preview pane](../usage.md#preview-text-view-and-grid-view)) |
+| ++shift++ (tap) or ++ctrl+y++ | Preview the file or folder ([preview pane](../usage.md#preview-text-view-and-grid-view)); a PDF shows its first page |
 
 Use ++ctrl+k++ to see all available actions.
 
 ## File buffer
+
+![Search bar with a file buffer strip above the results: three collected items shown as chips, with Alt+Right for actions and Alt+Backspace to clear.](../media/launcher-buffer.png)
 
 Collect several files and folders, then act on all of them. With a file or folder result selected (from file search or a browsed path; not bookmarks or apps):
 

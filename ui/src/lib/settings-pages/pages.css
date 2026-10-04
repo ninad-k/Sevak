@@ -1,0 +1,398 @@
+/*
+ * Styles shared by the plugin settings pages (Clipboard & paste, Tasks & media,
+ * Integrations, System & terminal and the sections added to Files). Everything
+ * is prefixed `sp-` and uses the theme variables of app.css, so it follows the
+ * light, dark and custom themes. Settings.svelte's own classes are scoped to
+ * that file, hence this small copy of the controls.
+ */
+
+.sp-page h1 {
+  margin: 0 0 6px;
+  font-size: 19px;
+  font-weight: 650;
+}
+
+.sp-lead {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.sp-h2 {
+  margin: 22px 0 4px;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.sp-lead + .sp-h2 {
+  margin-top: 6px;
+}
+
+.sp-sub {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.sp-lead code,
+.sp-sub code,
+.sp-hint code,
+.sp-note code,
+.sp-msg code {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--kbd-bg);
+  font-family: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.sp-group {
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface);
+}
+
+.sp-group > * + * {
+  border-top: 1px solid var(--border);
+}
+
+.sp-row,
+.sp-field {
+  padding: 12px 16px;
+}
+
+.sp-field.divider {
+  border-top: 1px solid var(--border);
+}
+
+.sp-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.sp-label {
+  /* Shrinks before the control wraps below it, so a switch stays at the right. */
+  flex: 1 1 220px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sp-control {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sp-name {
+  font-weight: 560;
+}
+
+.sp-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.sp-field .sp-hint {
+  display: block;
+  margin: 1px 0 8px;
+}
+
+.sp-note {
+  margin: 10px 0 0;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.sp-note strong {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.sp-note.warn {
+  border-color: var(--warn);
+  color: var(--fg);
+}
+
+.sp-note.privacy {
+  border-left: 3px solid var(--accent-strong);
+}
+
+.sp-msg {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.sp-msg.error {
+  color: var(--error);
+}
+
+.sp-msg.warn {
+  color: var(--warn);
+}
+
+.sp-msg.ok {
+  color: var(--ok);
+}
+
+.sp-empty {
+  margin: 4px 0 10px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.sp-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/* Controls --------------------------------------------------------------- */
+
+.sp-input {
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--input-border);
+  border-radius: 7px;
+  background: var(--input-bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+}
+
+.sp-input.number {
+  width: 110px;
+}
+
+.sp-input.wide {
+  width: 240px;
+}
+
+.sp-input.mono {
+  font-family: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12.5px;
+}
+
+.sp-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.sp-input.invalid {
+  border-color: var(--error);
+}
+
+.sp-input:disabled {
+  opacity: 0.5;
+}
+
+.sp-unit {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.sp-btn {
+  height: 32px;
+  padding: 0 16px;
+  border: 1px solid var(--input-border);
+  border-radius: 7px;
+  background: var(--input-bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sp-btn:hover:not(:disabled) {
+  border-color: var(--accent-strong);
+}
+
+.sp-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.sp-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.sp-btn.danger {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.sp-btn.danger:hover:not(:disabled) {
+  background: var(--error);
+  border-color: var(--error);
+  color: var(--bg);
+}
+
+.sp-btn.icon {
+  flex: none;
+  width: 32px;
+  padding: 0;
+  color: var(--muted);
+}
+
+.sp-btn.icon:hover:not(:disabled) {
+  color: var(--error);
+  border-color: var(--error);
+}
+
+/* List of text entries ---------------------------------------------------- */
+
+.sp-items {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.sp-items li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 4px 12px;
+}
+
+.sp-items li + li {
+  border-top: 1px solid var(--border);
+}
+
+.sp-item-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12.5px;
+}
+
+.sp-item-text.mono {
+  font-family: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+}
+
+.sp-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.sp-add .sp-input {
+  flex: 1;
+  min-width: 140px;
+}
+
+/* A set of known keys, each on or off ------------------------------------- */
+
+.sp-keys {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 4px 14px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.sp-key {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.sp-key input {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--accent-strong);
+  cursor: pointer;
+}
+
+.sp-key input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.sp-key.hidden {
+  color: var(--muted);
+}
+
+.sp-key-group {
+  margin: 10px 0 2px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.sp-key-group:first-child {
+  margin-top: 0;
+}
+
+.sp-extra {
+  margin-top: 10px;
+}
+
+.sp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 6px 6px 0;
+  padding: 1px 4px 1px 9px;
+  border: 1px solid var(--kbd-border);
+  border-radius: 999px;
+  background: var(--kbd-bg);
+  font-family: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.sp-chip button {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.sp-chip button:hover {
+  color: var(--error);
+}
+
+.sp-chip button:focus-visible {
+  outline: 2px solid var(--accent);
+}
+
+@media (max-width: 620px) {
+  .sp-row {
+    flex-wrap: wrap;
+  }
+}

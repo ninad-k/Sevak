@@ -210,6 +210,10 @@ impl Plugin for AppsPlugin {
         execute_action(self.platform.as_ref(), &item.action)
     }
 
+    fn index_size(&self) -> Option<usize> {
+        Some(self.snapshot().len())
+    }
+
     fn refresh(&self) -> PluginResult<()> {
         let started = std::time::Instant::now();
         let apps = self
@@ -278,6 +282,15 @@ mod tests {
         let plugin = AppsPlugin::new(platform.clone());
         plugin.refresh().unwrap();
         (plugin, platform)
+    }
+
+    #[test]
+    fn the_index_size_is_the_number_of_apps() {
+        let platform = MockPlatform::with_apps(fixture());
+        let plugin = AppsPlugin::new(platform);
+        assert_eq!(plugin.index_size(), Some(0));
+        plugin.refresh().unwrap();
+        assert_eq!(plugin.index_size(), Some(fixture().len()));
     }
 
     #[test]

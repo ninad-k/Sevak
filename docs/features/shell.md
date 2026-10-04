@@ -102,6 +102,8 @@ shell = "pwsh"
 
 ## Options
 
+All of these are in **Settings → System & terminal**, with a **Browse…** button for the terminal and the shell.
+
 | Setting | Default | What it does | Config section |
 |---|---|---|---|
 | Terminal | *(auto-detect)* | Terminal program: `wt`, `iterm`, `kitty`, `alacritty`, or a full path with optional args | [`[shell] terminal`](../configuration.md#shell) |

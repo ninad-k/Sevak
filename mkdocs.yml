@@ -4,7 +4,7 @@ site_url: https://ninad-k.github.io/Sevak/docs/
 repo_url: https://github.com/ninad-k/Sevak
 repo_name: ninad-k/Sevak
 edit_uri: edit/main/docs/
-copyright: Sevak is licensed under the Apache License 2.0.
+copyright: Sevak is licensed under the Apache License 2.0. Alfred is a trademark of Running with Crayons Ltd and 1Password of AgileBits Inc.; Sevak is not affiliated with or endorsed by either.
 
 docs_dir: docs
 # docs/README.md is the folder's landing page when browsing on github.com;
@@ -91,7 +91,11 @@ plugins:
         - architecture.md
         - plugins.md
         - development.md
+        - releasing.md
+        - testing.md
         - brand.md
+        - security/*
+        - decisions/*
 
 nav:
   - Home: index.md
@@ -132,8 +136,26 @@ nav:
       - Troubleshooting: troubleshooting.md
       - FAQ: faq.md
       - Privacy: privacy.md
+  - Security:
+      - Supply chain: security/supply-chain.md
+      - Threat model: security/threat-model.md
   - Developers:
       - How Sevak works: architecture.md
       - Writing plugins: plugins.md
       - Development: development.md
+      - Releasing: releasing.md
+      - Testing: testing.md
       - Name and brand: brand.md
+  - Design decisions:
+      - decisions/index.md
+      - "0001 Local-first, no telemetry": decisions/0001-local-first-no-telemetry.md
+      - "0002 Tauri, Rust core, plugins": decisions/0002-tauri-rust-core-plugins.md
+      - "0003 Closed Action vocabulary": decisions/0003-closed-action-vocabulary.md
+      - "0004 Routing and ranking": decisions/0004-keyword-routing-and-ranking.md
+      - "0005 Approval before run": decisions/0005-approval-before-run.md
+      - "0006 Alfred compatibility": decisions/0006-alfred-script-filter-compat.md
+      - "0007 Release on every merge": decisions/0007-release-on-every-merge.md
+      - "0008 TOML configuration": decisions/0008-text-config-toml.md
+      - "0009 Hotkey takeover": decisions/0009-hotkey-takeover-per-os.md
+      - "0010 Opt-in network": decisions/0010-opt-in-network-features.md
+      - "0011 Snippet expansion hooks": decisions/0011-snippet-expansion-hooks-no-wayland.md

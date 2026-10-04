@@ -12,5 +12,43 @@
   ],
   "g rust traits": [
     {"id":"demo:web","title":"Search Google for “rust traits”","subtitle":"https://www.google.com/search?q=rust%20traits","icon":{"kind":"builtin","name":"web"},"plugin_id":"web:g","action":"open_url"}
-  ]
+  ],
+  "chrome": [
+    {"id":"demo:chrome","title":"Google Chrome","subtitle":"Application","icon":{"kind":"builtin","name":"app"},"plugin_id":"apps","action":"launch","copy_text":"C:/Program Files/Google/Chrome/Application/chrome.exe","secondary":[
+      {"label":"Show in folder","modifier":"ctrl","kind":"reveal_path"},
+      {"label":"Copy path","modifier":"shift","kind":"copy_text"},
+      {"label":"Run as administrator","modifier":"alt","kind":"run_as_admin"}
+    ]},
+    {"id":"demo:chromium","title":"Chromium","subtitle":"Application","icon":{"kind":"builtin","name":"app"},"plugin_id":"apps","action":"launch","secondary":[]}
+  ],
+  "$buffer": [
+    {"path":"~/Documents/project-plan.md","name":"project-plan.md","is_dir":false,"icon":{"kind":"builtin","name":"file"}},
+    {"path":"~/Documents/Projects","name":"Projects","is_dir":true,"icon":{"kind":"builtin","name":"folder"}},
+    {"path":"~/Documents/budget-2026.pdf","name":"budget-2026.pdf","is_dir":false,"icon":{"kind":"builtin","name":"file"}}
+  ],
+  "$previews": {
+    "demo:plan": {
+      "title": "project-plan.md",
+      "subtitle": "~/Documents/project-plan.md",
+      "modified": null,
+      "note": null,
+      "body": {"kind":"text","truncated":false,"text":"# Project plan\n\n- Ship the first beta\n- Write the user guide\n- Collect feedback\n"},
+      "meta": [
+        {"label":"Kind","value":"Markdown document"},
+        {"label":"Size","value":"1.2 KB"},
+        {"label":"Path","value":"~/Documents/project-plan.md"}
+      ]
+    },
+    "demo:folder": {
+      "title": "Projects",
+      "subtitle": "~/Documents/Projects",
+      "modified": null,
+      "note": null,
+      "body": {"kind":"folder","truncated":false,"entries":[
+        {"name":"website","dir":true},{"name":"notes","dir":true},{"name":"archive","dir":true},
+        {"name":"project-plan.md","dir":false},{"name":"budget.xlsx","dir":false}
+      ]},
+      "meta": [{"label":"Kind","value":"Folder"},{"label":"Items","value":"5"}]
+    }
+  }
 }

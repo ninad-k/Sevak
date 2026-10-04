@@ -19,6 +19,7 @@ anyhow = "1"
 arboard = { version = "3", default-features = false, features = ["image-data"] }
 nucleo-matcher = "0.3"
 serde_json = "1"
+semver = "1"
 sha2 = "0.10"
 dirs = "7"
 serde = { version = "1", features = ["derive"] }
@@ -46,6 +47,15 @@ codegen-units = 1
 lto = true
 opt-level = 3
 strip = true
+
+# Optimized but quick to build (no LTO, parallel codegen): the latency budget
+# test in CI runs with `cargo test --profile fast-release` instead of paying for
+# the full release profile's link-time optimization.
+[profile.fast-release]
+inherits = "release"
+lto = false
+codegen-units = 16
+strip = false
 
 # Fuzzy matching runs per keystroke; keep it fast in debug builds too.
 [profile.dev.package.nucleo-matcher]

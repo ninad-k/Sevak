@@ -1,0 +1,105 @@
+# cargo-deny policy for Sevak: https://embarkstudios.github.io/cargo-deny/
+#
+#   cargo install --locked cargo-deny
+#   cargo deny check    # advisories, licenses, bans, sources
+#
+# CI runs it from .github/workflows/security.yml. How to add an exception, and
+# the review rules, are in docs/development.md ("Security and supply chain").
+
+[graph]
+# Sevak ships for Windows, macOS and Linux, so check every target's dependency
+# graph (no `targets` filter) with every feature on.
+all-features = true
+
+[output]
+feature-depth = 1
+
+# ---------------------------------------------------------------------------
+# Advisories (RustSec database)
+# ---------------------------------------------------------------------------
+[advisories]
+# Known vulnerabilities and unsound code always fail the check; cargo-deny has
+# no severity filter, so a new RUSTSEC advisory against anything in Cargo.lock
+# is an error until fixed or listed in `ignore` below.
+# Yanked versions only warn.
+yanked = "warn"
+# Unmaintained crates fail only when a workspace crate depends on them
+# directly (we can replace those). Unmaintained *transitive* crates are not
+# actionable by us; `cargo audit` lists them (the weekly security run does).
+unmaintained = "workspace"
+unsound = "workspace"
+# Stale exceptions are noise: warn so they get removed once the fix lands.
+unused-ignored-advisory = "warn"
+
+# Time-boxed exceptions. Every entry needs: the advisory, why it does not affect
+# Sevak (or why it cannot be fixed yet), and a review date of at most three
+# months out, written as `review-by: YYYY-MM-DD` inside the reason. The
+# security workflow fails once that date has passed, so an exception cannot be
+# forgotten. Format:
+#   { id = "RUSTSEC-YYYY-NNNN", reason = "<why>; review-by: YYYY-MM-DD" }
+ignore = []
+
+# ---------------------------------------------------------------------------
+# Licenses
+# ---------------------------------------------------------------------------
+# Sevak is Apache-2.0. Only permissive licences (plus file-level MPL-2.0, see
+# `exceptions`) are accepted; anything else, including GPL/AGPL/LGPL-only,
+# fails the check until a human reviews it.
+[licenses]
+confidence-threshold = 0.93
+allow = [
+    "MIT",
+    "MIT-0",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception", # rustix, linux-raw-sys, wasi, wit-bindgen
+    "BSD-2-Clause",                   # zerocopy
+    "BSD-3-Clause",                   # brotli, num_enum, subtle, moxcms, ...
+    "0BSD",                           # adler2
+    "ISC",                            # ring, rustls, untrusted, libloading
+    "Zlib",                           # bytemuck, objc2 family, miniz_oxide, ...
+    "Unlicense",                      # aho-corasick, memchr, walkdir (dual with MIT)
+    "CC0-1.0",                        # dunce (dual with MIT-0 / Apache-2.0)
+    "BSL-1.0",                        # clipboard-win, error-code (via arboard)
+    "Unicode-3.0",                    # icu_* / unicode-ident data tables
+    "CDLA-Permissive-2.0",            # webpki-root-certs (Mozilla root list data)
+]
+# r-efi is "MIT OR Apache-2.0 OR LGPL-2.1-or-later": we use it under MIT or
+# Apache-2.0, so LGPL is intentionally not allowed and no exception is needed.
+
+# MPL-2.0 is file-level copyleft: it is compatible with shipping Sevak under
+# Apache-2.0 as long as these crates are used unmodified (they are, from
+# crates.io), and their licence text stays in THIRD_PARTY_NOTICES.md. It is
+# listed per crate, not globally, so a new MPL-2.0 dependency needs a decision.
+exceptions = [
+    { allow = ["MPL-2.0"], crate = "nucleo-matcher" },    # fuzzy matching (direct)
+    { allow = ["MPL-2.0"], crate = "cssparser" },         # via tauri-utils (HTML/CSS)
+    { allow = ["MPL-2.0"], crate = "cssparser-macros" },  # via tauri-utils
+    { allow = ["MPL-2.0"], crate = "dtoa-short" },        # via cssparser
+    { allow = ["MPL-2.0"], crate = "selectors" },         # via tauri-utils
+    { allow = ["MPL-2.0"], crate = "option-ext" },        # via dirs-sys
+]
+
+[licenses.private]
+# The workspace crates are not published; they carry Apache-2.0 anyway.
+ignore = true
+
+# ---------------------------------------------------------------------------
+# Bans
+# ---------------------------------------------------------------------------
+[bans]
+# Duplicate versions come from the Tauri/windows-rs ecosystem and are not
+# something we can resolve; keep them visible as warnings only.
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true # workspace members reference each other by path
+highlight = "all"
+
+# ---------------------------------------------------------------------------
+# Sources
+# ---------------------------------------------------------------------------
+# crates.io only: no git dependencies, no alternative registries.
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

@@ -1,0 +1,36 @@
+# Palette: GitHub Primer primitives, MIT licence (https://github.com/primer/primitives).
+name = "GitHub Dark"
+author = "Sevak"
+description = "GitHub's dark look: neutral grey-blue with a bright link blue."
+
+[font]
+size = 15
+
+[layout]
+radius = 14
+opacity = 100
+row_height = 48
+search_size = 22
+icon_size = 32
+window_width = 720
+
+[dark]
+background = "#0d1117"
+text = "#e6edf3"
+subtext = "#8b949e"
+border = "rgba(230, 237, 243, 0.12)"
+accent = "#58a6ff"
+accent_strong = "#4888d1"
+on_accent = "#0d1117"
+selection = "rgba(88, 166, 255, 0.2)"
+tile = "rgba(230, 237, 243, 0.08)"
+kbd_background = "rgba(230, 237, 243, 0.08)"
+kbd_border = "rgba(230, 237, 243, 0.16)"
+shadow = "0 8px 28px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.4)"
+surface = "rgba(230, 237, 243, 0.05)"
+input_background = "rgba(230, 237, 243, 0.06)"
+input_border = "rgba(230, 237, 243, 0.24)"
+switch_off = "rgba(230, 237, 243, 0.28)"
+warn = "#d29922"
+error = "#f85149"
+ok = "#3fb950"

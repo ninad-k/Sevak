@@ -25,6 +25,8 @@ On Linux the buttons are not offered until `playerctl` is installed. On macOS th
 
 ## Options
 
+All of these are in **Settings → Tasks & media**.
+
 | Setting | Default | What it does | Config section |
 |---|---|---|---|
 | Keyword | `play` | `play ` lists the buttons and the track; `""` removes the keyword | [`[media] keyword`](../configuration.md#media) |

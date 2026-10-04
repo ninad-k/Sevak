@@ -349,6 +349,7 @@ export const KINDS: KindDef[] = [
     label: "Open file",
     category: "action",
     summary: "Opens a file or folder with its default program.",
+    needsApproval: true,
     fields: [
       {
         key: "path",

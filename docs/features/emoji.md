@@ -2,6 +2,8 @@
 
 Find an emoji by name and paste it into the app you were using. Type `:` and a name (`:heart`, `:thumbs up`) or `emoji ` and a name. The matches are shown as a [grid of tiles](../usage.md#preview-text-view-and-grid-view).
 
+![The emoji picker: typing a colon lists emoji as a grid of tiles, with the selected tile named below and Enter to paste.](../media/launcher-grid.png)
+
 ## How to use it
 
 | Type | Shown | Press ++enter++ |

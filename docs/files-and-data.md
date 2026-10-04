@@ -89,6 +89,8 @@ Day-to-day logs from Sevak (one file per day, dated). Useful for troubleshooting
 
 **Automatic cleanup:** Logs older than 7 days are deleted automatically.
 
+To share logs without sharing private details, use the [diagnostics report](privacy.md#diagnostics-report): it holds the last 100 lines with your user name, home folder and anything that looks like a secret removed. **Settings → Help → Open logs folder** shows the raw files.
+
 **Size:** Typically a few kilobytes per day under normal use.
 
 ### usage.json
@@ -201,7 +203,7 @@ Sevak will create a fresh file on next use.
 ### Windows
 
 1. Open Settings → Apps → Installed apps, find Sevak, and click Uninstall.
-   - The installer removes Sevak itself but keeps config and data.
+   - The uninstaller removes Sevak itself but keeps config and data. Its "Also delete the web cache" option only clears the web view's cache.
 2. To also remove config and data:
 
    ```powershell

@@ -177,6 +177,7 @@ fn placeholder(
 fn quote_for(quoting: ShellQuoting, text: &str) -> Result<String, &'static str> {
     match quoting {
         ShellQuoting::Posix => Ok(quote_posix(text)),
+        ShellQuoting::Fish => Ok(quote_fish(text)),
         ShellQuoting::PowerShell => Ok(quote_powershell(text)),
         ShellQuoting::Cmd => quote_cmd(text),
     }
@@ -231,6 +232,14 @@ fn json_escape(text: &str) -> String {
 /// `text` as one POSIX shell word: single quotes, with `'` as `'\''`.
 pub fn quote_posix(text: &str) -> String {
     format!("'{}'", text.replace('\'', "'\\''"))
+}
+
+/// `text` as one fish word: single quotes, with a backslash and `'` escaped by
+/// a backslash, because fish reads both as escapes inside single quotes (the
+/// POSIX `'\''` would not close the string there, and a trailing backslash
+/// would escape the closing quote).
+pub fn quote_fish(text: &str) -> String {
+    format!("'{}'", text.replace('\\', r"\\").replace('\'', r"\'"))
 }
 
 /// `text` as one PowerShell string: single quotes, with `'` doubled (and the
@@ -361,6 +370,15 @@ mod tests {
     fn quoting_for_shells() {
         assert_eq!(quote_posix("it's"), "'it'\\''s'");
         assert_eq!(quote_posix("; rm -rf ~"), "'; rm -rf ~'");
+        // fish reads a backslash and \' as escapes inside single quotes, so
+        // the POSIX form of these would end the string early.
+        assert_eq!(quote_fish("it's"), r"'it\'s'");
+        assert_eq!(quote_fish(r"a\"), r"'a\\'");
+        assert_eq!(quote_fish(r"\'; evil #"), r"'\\\'; evil #'");
+        assert_eq!(
+            command("echo {query}", r"\'; evil", &[], ShellQuoting::Fish).unwrap(),
+            r"echo '\\\'; evil'"
+        );
         assert_eq!(quote_powershell("it's"), "'it''s'");
         assert_eq!(quote_powershell("\u{2019}"), "'\u{2019}\u{2019}'");
         assert_eq!(plain("echo {query|sh}", "a'b", &[]), "echo 'a'\\''b'");

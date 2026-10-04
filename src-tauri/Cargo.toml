@@ -6,6 +6,7 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 rust-version.workspace = true
+publish = false
 
 [build-dependencies]
 tauri-build.workspace = true
@@ -18,6 +19,7 @@ sevak-plugins.workspace = true
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+semver.workspace = true
 # macos-private-api: a transparent window on macOS (app.macOSPrivateApi).
 tauri = { workspace = true, features = ["tray-icon", "macos-private-api"] }
 tauri-plugin-autostart.workspace = true

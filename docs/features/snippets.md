@@ -178,7 +178,7 @@ If the keyword was typed and nothing happened, check [the troubleshooting entry]
 
 ## Editing snippets
 
-The **Settings** window does not let you edit snippets (only the expansion switch, prefix and timing under **Plugins**) (to keep hand-written entries untouched, with proper formatting and comments). Edit them by opening `config.toml` directly:
+The **Settings** window does not let you edit snippets (only the expansion switch and its options under **Plugins**: prefix, timing, case, terminals and ignored apps) (to keep hand-written entries untouched, with proper formatting and comments). Edit them by opening `config.toml` directly:
 
 1. Choose **Settings → Open config file** (or find it in [Files and data](../files-and-data.md)).
 2. Edit the [`[[snippet]]`](../configuration.md#snippet) sections.

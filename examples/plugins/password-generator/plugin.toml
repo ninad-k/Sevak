@@ -1,0 +1,17 @@
+# Type "pw" for fresh random passwords, or "pw 24" for a length of 24.
+#
+# A one-shot Python plugin (Python 3.8 or newer, standard library only). It uses
+# the operating system's secure random source (the `secrets` module), prints
+# the passwords and nothing else, and never touches the network or any file.
+# Enter copies the password you picked. Note that the clipboard history plugin
+# keeps what you copy (its own settings let you turn that off or clear it).
+protocol    = 1
+id          = "script:password-generator"
+name        = "Password generator (Python)"
+description = "pw gives random passwords, PINs and tokens; pw 24 sets the length. Offline."
+keyword     = "pw"
+mode        = "oneshot"
+script      = "password.py"
+
+# Python starts a little slower than the default 50 ms wait.
+timeout_ms  = 200

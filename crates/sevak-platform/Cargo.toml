@@ -6,6 +6,7 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 rust-version.workspace = true
+publish = false
 
 [dependencies]
 sevak-core.workspace = true
@@ -14,6 +15,9 @@ arboard.workspace = true
 dirs.workspace = true
 # Clipboard images are stored as PNG files (and the Windows icon extractor encodes PNG).
 png = "0.18"
+# Private scratch folders and anonymous output files for the preview helpers
+# (see `thumbnail`).
+tempfile = "3"
 # Process list (name, CPU, memory) for the `kill` task; nothing else of it is used.
 sysinfo = { version = "0.38", default-features = false, features = ["system"] }
 thiserror.workspace = true
@@ -22,10 +26,13 @@ tracing.workspace = true
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = [
     "ApplicationModel_Contacts",
+    "Data_Pdf",
     "Devices_Radios",
     "Foundation",
     "Foundation_Collections",
     "Media_Control",
+    "Storage",
+    "Storage_Streams",
     "Win32_Foundation",
     "Win32_Globalization",
     "Win32_Graphics_Dwm",

@@ -1,0 +1,23 @@
+# GitHub's release-notes categories, used when a release is created with
+# generate_release_notes (.github/workflows/release.yml). Pull requests are
+# sorted by label; .github/workflows/pr-labels.yml sets the label from the
+# Conventional Commit prefix of the pull request title, so no one has to.
+changelog:
+  exclude:
+    labels:
+      - skip-changelog
+  categories:
+    - title: "Breaking changes"
+      labels: [breaking-change]
+    - title: "New features"
+      labels: [enhancement]
+    - title: "Fixes"
+      labels: [bug]
+    - title: "Performance"
+      labels: [performance]
+    - title: "Documentation"
+      labels: [documentation]
+    - title: "Maintenance and dependencies"
+      labels: [maintenance, dependencies]
+    - title: "Other changes"
+      labels: ["*"]

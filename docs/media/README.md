@@ -6,8 +6,9 @@
 
 | Asset | Purpose |
 |---|---|
-| [Overview](sevak-overview.png) | README hero and product introduction |
+| [Overview](sevak-overview.png) | README hero and product introduction (shows Win+Space, plus the macOS and Linux keys) |
 | [Feature gallery](sevak-features.png) | Apps, calculations, files and web search |
+| [More features](sevak-features-more.png) | Preview pane, emoji grid, action panel and file buffer, one tile each (README) |
 | [Settings](sevak-settings.png) | The actual Settings component |
 | [Themes](sevak-themes.png) | Light and dark launcher examples |
 | [Workflow](sevak-workflow.svg) | Accessible vector diagram of open → search → act |
@@ -16,7 +17,24 @@
 | [Reel poster](sevak-reel-poster.png) | Static vertical cover |
 | [Captions](sevak-12s.srt) | Plain-text transcript with timing |
 
-Individual launcher captures and `settings-general.png` support the help pages.
+Individual captures support the help pages. Launcher captures
+(`launcher-*.png`) are one card each:
+
+| Capture | Shows | Used on |
+|---|---|---|
+| [ready](launcher-ready.png), [apps](launcher-apps.png), [calculator](launcher-calculator.png), [files](launcher-files.png), [web](launcher-web.png), [light](launcher-light.png) | The search bar with a sample query | Quick start, home page, product page |
+| [preview](launcher-preview.png) | The preview pane (Ctrl+Y) for a text file | More features tile |
+| [actions](launcher-actions.png) | The action panel (Ctrl+K) for an app | More features tile |
+| [grid](launcher-grid.png) | The emoji grid (`:`) | [Emoji picker](../features/emoji.md) |
+| [buffer](launcher-buffer.png) | The file buffer strip | [Files](../features/files.md#file-buffer) |
+| [selection](launcher-selection.png) | Universal Actions for a selected sentence | [Selection actions](../features/selection.md) |
+
+Settings captures are [General](settings-general.png) (product page),
+the [theme editor](settings-theme-editor.png) ([Themes](../themes.md)) and the
+[workflow builder](settings-workflow-builder.png) ([Workflows](../workflows.md)).
+
+The product page's social card (`landing/assets/og-image.png`, also saved as
+`assets/brand/linkedin-launch.png`) is drawn by the same script.
 
 ## What the visuals show
 
@@ -51,6 +69,34 @@ npm install --no-save --package-lock=false playwright @napi-rs/canvas
 node scripts/docs-media/render.mjs
 node scripts/docs-media/render.mjs --video
 ```
+
+`render.mjs` serves the UI on port 1436; set `SEVAK_MEDIA_PORT` to use another
+free port (the app's own dev server uses 1420).
+
+What each command regenerates:
+
+| Command | Writes |
+|---|---|
+| `node scripts/docs-media/render.mjs` | Every `launcher-*.png` and `settings-*.png`, `sevak-overview.png`, `sevak-features.png`, `sevak-features-more.png`, `sevak-themes.png`, `sevak-settings.png`, `sevak-workflow.svg`, the social card |
+| `node scripts/docs-media/render.mjs --video` | The above, plus `sevak-12s.mp4` and `sevak-reel-poster.png` |
+| the `ffmpeg` command below | `sevak-demo.gif`, from the MP4 |
+| edit by hand | `sevak-12s.srt` (captions; keep them in step with the text in `render.mjs`) |
+
+The sample rows, previews and file buffer are in
+[`fixtures.json`](../../scripts/docs-media/fixtures.json); the grid shows the
+mock's real emoji, and the theme editor, workflow builder and Universal Actions
+use the browser-preview data that ships with the UI. After regenerating, run
+`npm run docs:media-check`: it fails on a missing image, an image without alt
+text, or a file in this folder that nothing uses.
+
+The default shortcut is Super+Space. The images show it as **Win+Space**
+(Cmd+Space on macOS, Super+Space on Linux); change the text in `render.mjs`
+if the default changes again.
+
+The frosted-glass blur (Settings → Appearance) is drawn by the operating system
+(Windows Acrylic, macOS vibrancy) behind a transparent window, so a headless
+browser cannot show it truthfully. No image claims to; add one only from a
+real screenshot.
 
 If the renderer packages are installed elsewhere, set
 `SEVAK_MEDIA_NODE_MODULES` to that `node_modules` directory.

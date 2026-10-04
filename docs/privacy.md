@@ -6,7 +6,8 @@ Sevak is local-first. Your data stays on your machine except when you explicitly
 
 - Application index, files and bookmarks (bookmarks are read from your browsers' files, read-only)
 - Whole-disk and content file search (`ff`, `in`): queries go only to your computer's own file index (Windows Search, Spotlight, `locate`, Tracker or Baloo)
-- The preview pane: it reads the selected file or folder from your disk, only while it is open; links are shown as addresses and never fetched
+- The preview pane: it reads the selected file or folder from your disk, only while it is open; links are shown as addresses and never fetched. For a PDF, an Office file or a video it asks your operating system to draw a picture (Windows' PDF engine and thumbnails, macOS Quick Look, or `pdftoppm` on Linux), which may start a short-lived helper process with a time limit; the picture goes to the window in memory, and any temporary file the helper makes is deleted straight away
+- Safari bookmarks (macOS): the bookmarks file is read only after you give Sevak Full Disk Access, only to search it, and nothing from it is stored or sent anywhere
 - Search history (if enabled)
 - Clipboard history (if enabled), including copied images (PNG files) and the paths of copied files, unencrypted
 - Snippet library, and snippet expansion as you type (if enabled): the last 64 typed characters are kept in memory only, never stored, logged or sent
@@ -18,7 +19,7 @@ Sevak is local-first. Your data stays on your machine except when you explicitly
 - Logs (for debugging)
 - Script plugins, workflows and their data
 
-All data is stored in a single folder on your machine; none is uploaded anywhere.
+All data is stored in a single folder on your machine; none is uploaded anywhere. What Sevak defends against, and what it does not, is set out in the [threat model](security/threat-model.md).
 
 ## What touches the network
 
@@ -49,13 +50,17 @@ Disable with `[calculator] currency = false` to turn off the network request.
 
 Opt-in feature (on by default). When enabled via `[general] check_for_updates = true`:
 
-- Sevak checks **GitHub Releases** at startup and once per day for a new version
+- Sevak checks **GitHub Releases** a minute after startup, then every six hours and when the launcher opens if the last check is over an hour old
 - URL: `https://github.com/ninad-k/Sevak/releases/latest/download/latest.json` (small JSON metadata)
 - No account required
 - Done in the background (not during typing)
 - Checking only; updates are never installed without your permission
 
 Disable with `[general] check_for_updates = false` to turn off the network request.
+
+#### Update channel
+
+With the default `[general] update_channel = "stable"`, only the URL above is requested. If you switch to `"beta"` (Settings, General, Update channel), Sevak also requests `https://github.com/ninad-k/Sevak/releases/download/channel-beta/latest-beta.json`. It is the same kind of request to the same GitHub release assets, just a different small JSON file, and it sends nothing about you beyond what any web request does. The signature check on the downloaded package is the same on both channels.
 
 ### Installing an update
 
@@ -94,6 +99,30 @@ Both galleries send nothing but the request itself (no cookies or identifiers be
 
 Script plugins and workflows run with your permissions and can make network requests themselves; review what they do before installing them. Workflows send nothing themselves and keep what you type or select out of the logs. 1Password's `op` tool, which the optional 1Password plugin runs when you type `1p `, talks to 1Password as it normally does; Sevak asks it only for the list of logins, never passwords.
 
+## Diagnostics report
+
+Sevak has no telemetry, so there is nothing to report problems automatically. To
+make a bug report useful you can ask Sevak for a **diagnostics report**: **Settings
+→ Help → Copy diagnostics**, or `sevak --diagnostics` on the command line. The
+report is made on your computer. **It is never sent anywhere**: it is shown in a
+box (or printed), and only you can copy it, save it or paste it into an issue. The
+top of every report says what it contains and what it does not.
+
+**Contains:**
+
+- The Sevak version, commit and build; your OS name, version and architecture; the display server (X11 or Wayland), the desktop and the web view version.
+- Where Sevak is installed and how (per user, Program Files, AppImage, Scoop...).
+- A summary of your settings: which features are on, your shortcut and whether it is registered, the theme, the update setting and the keywords in use. Lists such as the folders you search, snippets and clipboard-ignore apps are only counted.
+- The names and sizes (not contents) of the files in Sevak's config and data folders.
+- Whether each plugin, script plugin and workflow loaded, failed (with the error), is switched off or waits for your approval, and how many apps and files are indexed.
+- A few health checks (does the config parse, is the data folder writable, is the shortcut registered, does the tray icon exist) and the last 100 log lines with a count of recent errors and panics.
+
+**Never contains:** clipboard history or snippet text; what is in any script or workflow; what you searched for or your search history; the usage statistics; contacts or 1Password data; the list of files or bookmark titles; the folders you chose to search; web search addresses; or any setting not listed above (a setting added in a later version stays out until it is deliberately added).
+
+**Removed automatically:** your home folder (shown as `~`), user name (`<user>`) and computer name (`<host>`); other users' profile folders; in log lines, quoted text, paths outside Sevak's and the system's folders, e-mail addresses, web addresses with a query string or credentials, IPv4 and IPv6 addresses, API tokens and keys (GitHub, AWS, Slack, JWTs and similar), values after `password=` or `token:`, long hexadecimal and random-looking strings. This is a safety net, not a guarantee: Sevak's own log lines already avoid what you type, but read the report before you share it.
+
+The script plugin and workflow entries are ids and an "allowed" state only, never their scripts. The checks write and delete one empty file in the data folder to see whether it is writable.
+
 ## Local data files
 
 Inside your config folder (see [Files and data locations](files-and-data.md)):
@@ -109,7 +138,7 @@ Inside your config folder (see [Files and data locations](files-and-data.md)):
 | `plugins/` folder | Script plugins and their data | No, unless the plugin makes network requests |
 | `workflows/` folder | Workflows and their data | No, unless a workflow's script makes network requests |
 | `themes/` folder | Theme files | No |
-| Logs | Diagnostic output for troubleshooting | No (you can share them manually) |
+| Logs | Diagnostic output for troubleshooting | No (you can share them manually, or use the [diagnostics report](#diagnostics-report), which has a redacted tail) |
 
 ## Clipboard behavior
 

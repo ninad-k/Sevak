@@ -1,0 +1,188 @@
+name: Security
+
+# Dependency scanning: cargo-deny (RustSec advisories, licences, bans, sources)
+# and npm audit. See docs/development.md, "Security and supply chain".
+#
+#   pull requests   only when a manifest or lockfile changes, so an advisory
+#                   published tomorrow never blocks an unrelated PR
+#   push to main    re-checks what was merged
+#   weekly          catches advisories published against dependencies that did
+#                   not change; opens (or updates) ONE issue labelled `security`
+#                   and closes it again once a weekly run is clean
+
+on:
+  pull_request:
+    paths:
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "**/Cargo.toml"
+      - "package.json"
+      - "package-lock.json"
+      - "deny.toml"
+      - ".github/workflows/security.yml"
+  push:
+    branches: [main]
+  schedule:
+    - cron: "23 5 * * 1" # Mondays 05:23 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # RustSec advisories. cargo-deny has no severity filter: any advisory that
+  # applies to Cargo.lock and is not listed under `ignore` in deny.toml fails
+  # this job (vulnerabilities, unsound code, unmaintained direct dependencies).
+  # Yanked crates only warn. Because PRs run it only when a lockfile or manifest
+  # changes, a PR fails on findings it introduces or leaves unresolved.
+  deny-advisories:
+    name: cargo-deny (advisories)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Pinned by commit SHA (third party). Bundles cargo-deny 0.20.2.
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check advisories
+
+  # Licences, banned/duplicate crates, and crate sources: deterministic for a
+  # given Cargo.lock, so they always gate.
+  deny-policy:
+    name: cargo-deny (licenses, bans, sources)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check bans licenses sources
+
+      # cargo-deny 0.20 has no expiry for ignored advisories, so exceptions
+      # carry `review-by: YYYY-MM-DD` in their reason; fail once one is overdue.
+      - name: Exception review dates
+        run: |
+          today=$(date -u +%F)
+          overdue=0
+          for date in $(grep -oE 'review-by: [0-9]{4}-[0-9]{2}-[0-9]{2}' deny.toml | cut -d' ' -f2); do
+            if [[ "$date" < "$today" ]]; then
+              echo "::error file=deny.toml::An exception was due for review on $date"
+              overdue=1
+            fi
+          done
+          exit "$overdue"
+
+  # Only high and critical advisories in production npm dependencies fail.
+  # (The UI is bundled at build time; dev tooling never ships.)
+  npm-audit:
+    name: npm audit (production, high+)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+
+      - run: npm audit --omit=dev --audit-level=high
+
+  # Broader weekly report with cargo-audit: unlike the gate above it also lists
+  # unmaintained and unsound crates anywhere in the dependency tree, in the job
+  # summary. It fails only on vulnerabilities.
+  rust-audit:
+    name: cargo-audit (weekly report)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      CARGO_AUDIT_VERSION: "0.22.2"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup-rust
+
+      - name: Install cargo-audit
+        run: cargo install --locked cargo-audit --version "$CARGO_AUDIT_VERSION"
+
+      - name: Audit Cargo.lock
+        run: |
+          set +e
+          cargo audit --color never 2>&1 | tee audit.txt
+          status=${PIPESTATUS[0]}
+          {
+            echo '### cargo audit'
+            echo '```'
+            cat audit.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
+  # One tracking issue for the weekly run: created or updated when something
+  # fails, closed when a later weekly run is clean. Only `schedule` runs file
+  # issues; PR and push failures are already visible on the PR / commit.
+  report:
+    name: Open or update the security issue
+    if: always() && github.event_name == 'schedule'
+    needs: [deny-advisories, deny-policy, npm-audit, rust-audit]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        with:
+          script: |
+            const title = 'Weekly security scan found issues';
+            const label = 'security';
+            const results = JSON.parse(process.env.RESULTS);
+            const failed = Object.entries(results)
+              .filter(([, r]) => r.result === 'failure')
+              .map(([name]) => name);
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            const { data: open } = await github.rest.issues.listForRepo({
+              ...context.repo, state: 'open', labels: label, per_page: 100,
+            });
+            const existing = open.find((i) => i.title === title && !i.pull_request);
+
+            if (failed.length === 0) {
+              if (existing) {
+                await github.rest.issues.createComment({
+                  ...context.repo, issue_number: existing.number,
+                  body: `The weekly security scan is clean again (${run}). Closing.`,
+                });
+                await github.rest.issues.update({
+                  ...context.repo, issue_number: existing.number, state: 'closed',
+                  state_reason: 'completed',
+                });
+              }
+              return;
+            }
+
+            const body = [
+              `The weekly security scan failed in: ${failed.map((f) => `\`${f}\``).join(', ')}.`,
+              '',
+              `Run: ${run}`,
+              '',
+              'The job logs list each advisory or licence finding; `cargo-audit` also writes a summary to the run page. ' +
+                'Fix by updating the dependency (`cargo update -p <crate>`), or add a time-boxed exception to `deny.toml` ' +
+                '(see docs/development.md, "Security and supply chain").',
+            ].join('\n');
+
+            if (existing) {
+              await github.rest.issues.update({ ...context.repo, issue_number: existing.number, body });
+              await github.rest.issues.createComment({
+                ...context.repo, issue_number: existing.number,
+                body: `Still failing in the latest weekly run: ${run}`,
+              });
+            } else {
+              await github.rest.issues.create({ ...context.repo, title, body, labels: [label] });
+            }

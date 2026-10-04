@@ -1,6 +1,6 @@
 # Configuration file reference
 
-Sevak stores settings in a TOML file. You can edit it by hand or use the Settings window. This page documents every configuration key.
+Sevak stores settings in a TOML file. You can edit it by hand or use the [Settings window](settings.md), which has a page for every section except `[[snippet]]` entries. This page documents every configuration key.
 
 ## Where the file is
 
@@ -64,6 +64,7 @@ Main hotkeys and startup behaviour.
 | `hide_on_blur` | boolean | `true` | Hide the launcher when it loses focus to another window. Press Esc or click elsewhere to close; this setting hides it automatically. |
 | `launch_at_login` | boolean | `false` | Start Sevak when you log in to your desktop. |
 | `check_for_updates` | boolean | `true` | Check GitHub for a new version shortly after startup, every six hours, and whenever you open Sevak (if the last check is over an hour old). Updates are only installed after you confirm. Apart from optional currency rates, this is the only automatic network request. |
+| `update_channel` | `"stable"` or `"beta"` | `"stable"` | Which releases the update check follows. `"beta"` also offers pre-release builds (`X.Y.Z-beta.N`), which arrive earlier and may be less tested; Sevak then reads `latest-beta.json` from GitHub Releases as well as `latest.json` and offers the newer of the two. Switching back to `"stable"` never downgrades: Sevak waits for a stable version newer than the one installed. Any other value means `"stable"`. |
 
 ```toml
 [general]
@@ -72,6 +73,7 @@ actions_hotkey = "Ctrl+Alt+Space"
 hide_on_blur = true
 launch_at_login = false
 check_for_updates = true
+update_channel = "stable"
 ```
 
 ### [window]
@@ -204,7 +206,7 @@ Browser bookmark search settings.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `browsers` | array of strings | `[]` | Browser profiles to index. Empty `[]` means every browser found on your system. Supported ids: `"chrome"`, `"edge"`, `"brave"`, `"vivaldi"`, `"chromium"`, `"opera"`, `"opera-gx"`, `"firefox"`, `"librewolf"`, `"zen"`. All profiles of each browser are searched. Unknown ids are ignored. |
+| `browsers` | array of strings | `[]` | Browser profiles to index. Empty `[]` means every browser found on your system. Supported ids: `"chrome"`, `"edge"`, `"brave"`, `"vivaldi"`, `"chromium"`, `"opera"`, `"opera-gx"`, `"firefox"`, `"librewolf"`, `"zen"`, and on macOS `"safari"` (needs [Full Disk Access](features/bookmarks.md#safari-needs-full-disk-access)). All profiles of each browser are searched. Unknown ids are ignored. |
 | `keyword` | string | `"b"` | Prefix to search only bookmarks: type `b term`. Leave empty `""` to disable keyword search. |
 | `global` | boolean | `true` | Show bookmark results in ordinary queries without the keyword. `false` requires `b <term>` to search bookmarks. |
 
@@ -340,7 +342,7 @@ ignore_apps = []
 
 ### [file_buffer]
 
-The [file buffer](features/files.md#file-buffer) (++alt+arrow-down++ on a file result collects it). There is no settings page for it.
+The [file buffer](features/files.md#file-buffer) (++alt+arrow-down++ on a file result collects it). Set it in **Settings → Files & bookmarks**.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -353,7 +355,7 @@ keep_between_shows = false
 
 ### [contacts]
 
-[Contacts](features/contacts.md) (`c <name>` or `@name`). Off by default. Contacts are read into memory only; nothing is written to disk or sent anywhere. The Settings window has no fields for this section.
+[Contacts](features/contacts.md) (`c <name>` or `@name`). Off by default. Contacts are read into memory only; nothing is written to disk or sent anywhere. Set it in **Settings → Integrations**.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -372,7 +374,7 @@ vcard_files = []
 
 ### [onepassword]
 
-[1Password](features/1password.md) logins (`1p github`) through the official `op` command-line tool. Off by default. Only titles, vault names, websites and usernames are read, never passwords or one-time codes. The Settings window has no fields for this section.
+[1Password](features/1password.md) logins (`1p github`) through the official `op` command-line tool. Off by default. Only titles, vault names, websites and usernames are read, never passwords or one-time codes. Set it in **Settings → Integrations**.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -393,7 +395,7 @@ cache_minutes = 10
 
 ### [dictionary]
 
-[Dictionary and spelling](features/dictionary.md), all offline. On by default; turn it off with `"dict"` in `[plugins] disabled`. The Settings window has no fields for this section.
+[Dictionary and spelling](features/dictionary.md), all offline. On by default; turn it off with `"dict"` in `[plugins] disabled`. Set it in **Settings → Integrations**.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -583,6 +585,12 @@ launch_at_login = false
 # [calculator]), this is the only request Sevak makes on its own.
 check_for_updates = true
 
+# Which releases to follow: "stable" (the default) or "beta". Beta builds arrive
+# earlier and may be less tested; they come from the same GitHub releases page.
+# Switching back to "stable" never downgrades: Sevak waits for the next stable
+# version that is newer than the one you have.
+update_channel = "stable"
+
 [window]
 # Width of the search window in logical pixels (400-1600).
 width = 720
@@ -662,7 +670,8 @@ content_keyword = "in"
 [bookmarks]
 # Browsers whose bookmarks are searchable; [] means every browser found.
 # Names: "chrome", "edge", "brave", "vivaldi", "chromium", "opera", "opera-gx",
-# "firefox", "librewolf", "zen". All profiles of each browser are read.
+# "firefox", "librewolf", "zen", and "safari" (macOS; needs Full Disk Access).
+# All profiles of each browser are read.
 browsers = []
 # Type "<keyword> <text>" to search only bookmarks.
 keyword = "b"

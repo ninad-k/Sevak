@@ -7,7 +7,10 @@
 //!   `Bookmarks` JSON file of each profile, see [`chromium`];
 //! - the Firefox family (Firefox, LibreWolf, Zen): `places.sqlite` of each
 //!   profile in `profiles.ini`, read from a private temporary copy because the
-//!   browser keeps the original locked, see [`firefox`].
+//!   browser keeps the original locked, see [`firefox`];
+//! - Safari (macOS only): `~/Library/Safari/Bookmarks.plist`, see [`safari`].
+//!   macOS keeps it behind Full Disk Access; when Sevak is refused, typing the
+//!   keyword (`b `) shows one row that says how to allow it.
 //!
 //! Where the browsers keep their data is the platform layer's business
 //! ([`PlatformProvider::browser_roots`]); this module only parses.
@@ -27,16 +30,18 @@
 
 mod chromium;
 mod firefox;
+mod safari;
 
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Instant, SystemTime};
 
 use sevak_core::config::BookmarksConfig;
-use sevak_core::{Action, FuzzyQuery, IconSource, Plugin, PluginResult, ResultItem};
-use sevak_platform::{BrowserFamily, BrowserRoot, PlatformProvider};
+use sevak_core::{Action, FuzzyQuery, IconSource, Plugin, PluginError, PluginResult, ResultItem};
+use sevak_platform::{BrowserFamily, BrowserRoot, DeepLink, PlatformProvider};
 
 use crate::actions::execute_action;
 
@@ -64,12 +69,23 @@ struct RawBookmark {
     folder: String,
 }
 
+/// Why a source could not be read.
+#[derive(Debug)]
+enum ReadError {
+    /// The file does not exist: the browser was never used. Not a problem.
+    Missing,
+    /// The OS refused (macOS Full Disk Access for Safari).
+    PermissionDenied,
+    Failed(String),
+}
+
 /// A bookmark file of one profile.
 #[derive(Debug, Clone)]
 struct Source {
     browser: &'static str,
     family: BrowserFamily,
-    /// `Bookmarks` (Chromium) or `places.sqlite` (Firefox).
+    /// `Bookmarks` (Chromium), `places.sqlite` (Firefox) or `Bookmarks.plist`
+    /// (Safari).
     path: PathBuf,
 }
 
@@ -79,7 +95,7 @@ impl Source {
     /// Changes to any of these files mean the bookmarks may have changed.
     fn watched_files(&self) -> Vec<PathBuf> {
         match self.family {
-            BrowserFamily::Chromium => vec![self.path.clone()],
+            BrowserFamily::Chromium | BrowserFamily::Safari => vec![self.path.clone()],
             BrowserFamily::Firefox => vec![self.path.clone(), firefox::wal_file(&self.path)],
         }
     }
@@ -94,10 +110,11 @@ impl Source {
             .collect()
     }
 
-    fn read(&self) -> Result<Vec<RawBookmark>, String> {
+    fn read(&self) -> Result<Vec<RawBookmark>, ReadError> {
         match self.family {
-            BrowserFamily::Chromium => chromium::read(&self.path),
-            BrowserFamily::Firefox => firefox::read(&self.path),
+            BrowserFamily::Chromium => chromium::read(&self.path).map_err(ReadError::Failed),
+            BrowserFamily::Firefox => firefox::read(&self.path).map_err(ReadError::Failed),
+            BrowserFamily::Safari => safari::read(&self.path),
         }
     }
 }
@@ -142,6 +159,9 @@ pub struct BookmarksPlugin {
     roots: Option<Vec<BrowserRoot>>,
     cache: Mutex<HashMap<PathBuf, CachedSource>>,
     index: RwLock<Arc<Vec<Entry>>>,
+    /// macOS refused to let Sevak read Safari's bookmarks (Full Disk Access).
+    /// Set and cleared by [`Plugin::refresh`]; read by [`Plugin::query`].
+    safari_denied: AtomicBool,
 }
 
 impl BookmarksPlugin {
@@ -171,6 +191,7 @@ impl BookmarksPlugin {
             roots,
             cache: Mutex::new(HashMap::new()),
             index: RwLock::new(Arc::new(Vec::new())),
+            safari_denied: AtomicBool::new(false),
         }
     }
 
@@ -213,6 +234,7 @@ impl BookmarksPlugin {
             let files = match root.family {
                 BrowserFamily::Chromium => chromium::bookmark_files(&root.dir),
                 BrowserFamily::Firefox => firefox::places_files(&root.dir),
+                BrowserFamily::Safari => safari::bookmark_files(&root.dir),
             };
             for path in files {
                 if !sources.iter().any(|s| s.path == path) {
@@ -229,6 +251,12 @@ impl BookmarksPlugin {
 
     fn search(&self, input: &str) -> Vec<ResultItem> {
         let input = input.trim();
+        if input.is_empty() {
+            // Only the keyword typed (`b `): the one moment to explain why
+            // Safari's bookmarks are missing. Never while searching, and never
+            // before the user asks for bookmarks.
+            return self.safari_hint().into_iter().collect();
+        }
         if input.chars().count() < MIN_QUERY_CHARS {
             return Vec::new();
         }
@@ -262,6 +290,34 @@ impl BookmarksPlugin {
             .into_iter()
             .map(|(score, i)| result_item(&index[i], score))
             .collect()
+    }
+}
+
+/// What Enter does on the Full Disk Access row.
+const OPEN_FULL_DISK_ACCESS: &str = "open-full-disk-access";
+
+impl BookmarksPlugin {
+    /// The row that explains how to let Sevak read Safari's bookmarks, while
+    /// macOS is refusing.
+    fn safari_hint(&self) -> Option<ResultItem> {
+        if !self.safari_denied.load(Ordering::Relaxed) {
+            return None;
+        }
+        Some(
+            ResultItem::new(
+                "bookmarks",
+                "safari-access",
+                "Safari bookmarks need Full Disk Access",
+                Action::Custom {
+                    payload: OPEN_FULL_DISK_ACCESS.to_owned(),
+                },
+            )
+            .with_subtitle(
+                "System Settings → Privacy & Security → Full Disk Access → Sevak. Enter opens it",
+            )
+            .with_icon(IconSource::builtin("web"))
+            .with_score(1.0),
+        )
     }
 }
 
@@ -419,6 +475,12 @@ impl Plugin for BookmarksPlugin {
     }
 
     fn execute(&self, item: &ResultItem) -> PluginResult<()> {
+        if matches!(&item.action, Action::Custom { payload } if payload == OPEN_FULL_DISK_ACCESS) {
+            return self
+                .platform
+                .open_link(&DeepLink::full_disk_access())
+                .map_err(PluginError::other);
+        }
         execute_action(self.platform.as_ref(), &item.action)
     }
 
@@ -433,6 +495,7 @@ impl Plugin for BookmarksPlugin {
         let mut previous = std::mem::take(&mut *cache);
         let mut reread = 0;
         let mut failed = 0;
+        let mut safari_denied = false;
         for source in &sources {
             let stamp = source.stamp();
             let old = previous.remove(&source.path);
@@ -443,7 +506,26 @@ impl Plugin for BookmarksPlugin {
                         reread += 1;
                         CachedSource { stamp, bookmarks }
                     }
-                    Err(err) => {
+                    // Safari was never used: an empty source, remembered by its
+                    // (absent) stamp so it is not read again.
+                    Err(ReadError::Missing) => CachedSource {
+                        stamp,
+                        bookmarks: Vec::new(),
+                    },
+                    Err(ReadError::PermissionDenied) => {
+                        failed += 1;
+                        safari_denied = true;
+                        tracing::debug!(
+                            browser = source.browser,
+                            file = %source.path.display(),
+                            "the OS does not let Sevak read these bookmarks"
+                        );
+                        old.unwrap_or(CachedSource {
+                            stamp: Vec::new(),
+                            bookmarks: Vec::new(),
+                        })
+                    }
+                    Err(ReadError::Failed(err)) => {
                         failed += 1;
                         tracing::warn!(
                             browser = source.browser,
@@ -461,6 +543,13 @@ impl Plugin for BookmarksPlugin {
                 },
             };
             cache.insert(source.path.clone(), entry);
+        }
+
+        if self.safari_denied.swap(safari_denied, Ordering::Relaxed) != safari_denied {
+            tracing::info!(
+                denied = safari_denied,
+                "Safari bookmark access (Full Disk Access) changed"
+            );
         }
 
         if reread == 0 && failed == 0 && previous.is_empty() {
@@ -986,5 +1075,237 @@ mod tests {
         assert!(before[0].is_some());
         fs::write(firefox::wal_file(&source.path), b"wal").unwrap();
         assert_ne!(source.stamp(), before);
+    }
+
+    // --- Safari -----------------------------------------------------------
+
+    fn safari_root(dir: &Path) -> BrowserRoot {
+        BrowserRoot {
+            id: "safari",
+            name: "Safari",
+            family: BrowserFamily::Safari,
+            dir: dir.to_path_buf(),
+        }
+    }
+
+    fn write_safari(dir: &Path) -> PathBuf {
+        let file = dir.join(safari::BOOKMARKS_FILE);
+        fs::write(&file, safari::tests::binary(&safari::tests::sample())).unwrap();
+        file
+    }
+
+    fn plugin_for(config: BookmarksConfig, roots: Vec<BrowserRoot>) -> BookmarksPlugin {
+        BookmarksPlugin::with_roots(config, MockPlatform::empty(), roots)
+    }
+
+    #[test]
+    fn safari_bookmarks_are_indexed_and_merged_with_other_browsers() {
+        let chrome = tempfile::tempdir().unwrap();
+        write_profile(
+            chrome.path(),
+            "Default",
+            &chromium_json(&[("Rust", "https://www.rust-lang.org/")]),
+        );
+        let safari_dir = tempfile::tempdir().unwrap();
+        write_safari(safari_dir.path());
+
+        let plugin = plugin_for(
+            BookmarksConfig::default(),
+            vec![chrome_root(chrome.path()), safari_root(safari_dir.path())],
+        );
+        plugin.refresh().unwrap();
+
+        // Rust (shared), Docs.rs, Crates, Menu item: the mailto, javascript and
+        // file links and the Reading List are not searchable.
+        assert_eq!(plugin.snapshot().len(), 4);
+        let rust = plugin.query("rust-lang");
+        assert_eq!(rust.len(), 1);
+        assert_eq!(
+            rust[0].subtitle,
+            "Bookmarks bar · rust-lang.org · Chrome, Safari"
+        );
+        let crates = plugin.query("crates");
+        assert_eq!(
+            crates[0].subtitle,
+            "Favorites / Dev / Deep · crates.io · Safari"
+        );
+        assert_eq!(titles(&plugin, "menu"), ["Menu item"]);
+        assert!(titles(&plugin, "later").is_empty(), "reading list");
+        assert!(titles(&plugin, "script").is_empty());
+        assert!(
+            plugin.query("").is_empty(),
+            "nothing to explain when Safari was read"
+        );
+    }
+
+    #[test]
+    fn safari_is_selected_by_its_id() {
+        let safari_dir = tempfile::tempdir().unwrap();
+        write_safari(safari_dir.path());
+        let chrome = tempfile::tempdir().unwrap();
+        write_profile(
+            chrome.path(),
+            "Default",
+            &chromium_json(&[("Only chrome", "https://chrome.test/")]),
+        );
+        let roots = vec![chrome_root(chrome.path()), safari_root(safari_dir.path())];
+        let only = |browsers: &[&str]| {
+            let config = BookmarksConfig {
+                browsers: browsers.iter().map(|b| (*b).to_owned()).collect(),
+                ..BookmarksConfig::default()
+            };
+            let plugin = plugin_for(config, roots.clone());
+            plugin.refresh().unwrap();
+            plugin.snapshot().len()
+        };
+        assert_eq!(only(&["safari"]), 4);
+        assert_eq!(only(&["Safari"]), 4);
+        assert_eq!(only(&["chrome"]), 1);
+        assert_eq!(only(&[]), 5);
+    }
+
+    #[test]
+    fn a_safari_file_is_reread_only_when_it_changed() {
+        let safari_dir = tempfile::tempdir().unwrap();
+        let file = write_safari(safari_dir.path());
+        let original = fs::metadata(&file).unwrap().modified().unwrap();
+        let plugin = plugin_for(
+            BookmarksConfig::default(),
+            vec![safari_root(safari_dir.path())],
+        );
+        plugin.refresh().unwrap();
+        let before = plugin.snapshot();
+        assert_eq!(before.len(), 4);
+        plugin.refresh().unwrap();
+        assert!(Arc::ptr_eq(&before, &plugin.snapshot()));
+
+        let changed = safari::tests::root(vec![safari::tests::folder(
+            "BookmarksBar",
+            vec![safari::tests::leaf("Only", "https://only.test/")],
+        )]);
+        fs::write(&file, safari::tests::binary(&changed)).unwrap();
+        set_mtime(&file, original + Duration::from_secs(30));
+        plugin.refresh().unwrap();
+        assert_eq!(titles(&plugin, "only"), ["Only"]);
+        assert_eq!(plugin.snapshot().len(), 1);
+    }
+
+    #[test]
+    fn a_missing_safari_file_is_not_an_error_and_not_a_hint() {
+        let safari_dir = tempfile::tempdir().unwrap();
+        let plugin = plugin_for(
+            BookmarksConfig::default(),
+            vec![safari_root(safari_dir.path())],
+        );
+        plugin.refresh().unwrap();
+        assert!(plugin.snapshot().is_empty());
+        assert!(plugin.query("").is_empty());
+        assert!(plugin.query("anything").is_empty());
+    }
+
+    /// Makes `file` something the OS refuses to open: a directory (Windows says
+    /// "access denied") or a file without permissions (Unix). `false` when the
+    /// tests run as a user who can read it anyway.
+    fn make_unreadable(file: &Path) -> bool {
+        #[cfg(windows)]
+        {
+            fs::create_dir(file).unwrap();
+            true
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::write(file, b"x").unwrap();
+            fs::set_permissions(file, fs::Permissions::from_mode(0o000)).unwrap();
+            fs::File::open(file).is_err()
+        }
+    }
+
+    fn make_readable(file: &Path) {
+        #[cfg(windows)]
+        fs::remove_dir(file).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(file, fs::Permissions::from_mode(0o600)).unwrap();
+            fs::remove_file(file).unwrap();
+        }
+    }
+
+    #[test]
+    fn a_refused_safari_file_is_explained_when_the_keyword_is_typed() {
+        let safari_dir = tempfile::tempdir().unwrap();
+        let file = safari_dir.path().join(safari::BOOKMARKS_FILE);
+        if !make_unreadable(&file) {
+            return;
+        }
+        let platform = MockPlatform::empty();
+        let plugin = BookmarksPlugin::with_roots(
+            BookmarksConfig::default(),
+            platform.clone(),
+            vec![safari_root(safari_dir.path())],
+        );
+        // Nothing at startup (before any refresh).
+        assert!(plugin.query("").is_empty());
+        plugin.refresh().unwrap();
+        assert!(plugin.snapshot().is_empty());
+
+        // Only the bare keyword (`b `) shows the row; searching never does.
+        let rows = plugin.query("");
+        assert_eq!(rows.len(), 1, "{rows:?}");
+        assert_eq!(rows[0].title, "Safari bookmarks need Full Disk Access");
+        assert_eq!(
+            rows[0].subtitle,
+            "System Settings → Privacy & Security → Full Disk Access → Sevak. Enter opens it"
+        );
+        assert_eq!(plugin.query("  ").len(), 1);
+        assert!(plugin.query("r").is_empty());
+        assert!(plugin.query("rust").is_empty());
+        plugin.refresh().unwrap();
+        assert_eq!(plugin.query("").len(), 1);
+
+        // Enter opens the Full Disk Access pane, nothing else.
+        plugin.execute(&rows[0]).unwrap();
+        assert_eq!(
+            *platform.opened_links.lock().unwrap(),
+            ["x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"]
+        );
+        assert!(platform.opened_urls.lock().unwrap().is_empty());
+
+        // Once access is granted the row goes away and the bookmarks appear.
+        make_readable(&file);
+        write_safari(safari_dir.path());
+        plugin.refresh().unwrap();
+        assert!(plugin.query("").is_empty());
+        assert_eq!(titles(&plugin, "menu"), ["Menu item"]);
+    }
+
+    #[test]
+    fn no_hint_when_safari_is_not_one_of_the_chosen_browsers() {
+        let safari_dir = tempfile::tempdir().unwrap();
+        let file = safari_dir.path().join(safari::BOOKMARKS_FILE);
+        if !make_unreadable(&file) {
+            return;
+        }
+        let config = BookmarksConfig {
+            browsers: vec!["chrome".into()],
+            ..BookmarksConfig::default()
+        };
+        let plugin = plugin_for(config, vec![safari_root(safari_dir.path())]);
+        plugin.refresh().unwrap();
+        assert!(plugin.query("").is_empty());
+        make_readable(&file);
+    }
+
+    #[test]
+    fn other_unreadable_files_do_not_raise_the_hint() {
+        let safari_dir = tempfile::tempdir().unwrap();
+        fs::write(safari_dir.path().join(safari::BOOKMARKS_FILE), b"garbage").unwrap();
+        let plugin = plugin_for(
+            BookmarksConfig::default(),
+            vec![safari_root(safari_dir.path())],
+        );
+        plugin.refresh().unwrap();
+        assert!(plugin.query("").is_empty());
     }
 }
