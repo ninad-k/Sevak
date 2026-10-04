@@ -444,3 +444,25 @@ vulnerabilities; the review's individual findings are handled separately
   network request, a new `Action`, a new place that stores user text) should
   update the page in the same pull request. The [development guide](../development.md)
   and [Privacy](../privacy.md) list the same network requests.
+
+### Hardening: script and workflow trust
+
+These items from the [backlog](#hardening-backlog) (1, 8 and part of 11) and
+related review findings are done. What changed for users is listed in
+[Script and workflow trust: changes](script-workflow-trust.md).
+
+- A script plugin's approval is bound to a hash of its manifest, the files its
+  command names and its folder, not just its id and command line; existing
+  approvals ask once more.
+- Script and workflow processes start with a scrubbed environment; a manifest
+  asks for extra variables with `inherit_env`, and variables that change how
+  interpreters or loaders start cannot be set by a workflow or inherited.
+- Stopping a script stops everything it started (job object on Windows,
+  process group on Linux and macOS).
+- A script's results use a closed set of actions; `launch` needs a declared
+  capability. A persistent script's stderr is read with limits.
+- The Allow dialogs clean author-written text and list commands with
+  arguments, environment variable names, standard input use and nodes that
+  paste or open files and links; workflows that paste need approval.
+- The Windows hotkey hook ignores injected key events unless
+  `accept_injected_hotkeys` is set.
