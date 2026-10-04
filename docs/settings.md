@@ -76,6 +76,18 @@ Look for a new version at startup and once per day. If an update is available, y
 
 Links to: `[general] check_for_updates` in configuration.
 
+### Update channel
+
+**Stable** (the default) offers regular releases. **Beta** also offers pre-release builds (`1.3.0-beta.2`), which arrive
+earlier and may be less tested. Both are downloaded from the same GitHub releases page and
+checked with the same update signature.
+
+Going back from Beta to Stable never downgrades: Sevak keeps the version you have and
+offers the next stable version that is newer. If you want to leave a beta right away,
+reinstall the stable version from the [Releases page](https://github.com/ninad-k/Sevak/releases).
+
+Links to: `[general] update_channel` in configuration.
+
 ## Hotkeys
 
 Define custom global hotkeys that open Sevak with text already typed, or run a result without showing the launcher.

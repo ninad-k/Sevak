@@ -1,0 +1,223 @@
+name: Promote
+
+# Publishes an existing release (normally a beta, vX.Y.Z-beta.N) as the stable
+# release, without rebuilding anything:
+#   1. promote     download the release's assets, verify SHA256SUMS.txt and the
+#                  signatures, write latest.json from them, make the release the
+#                  newest stable one (this is what installed copies poll)
+#   2. distribute  update winget, Scoop, Homebrew and the AUR, as release.yml does
+# Manual only. See docs/releasing.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish as stable, e.g. v1.3.0-beta.2"
+        type: string
+        required: true
+
+# Shares release.yml's group so a promotion never races a release in progress.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  promote:
+    name: Promote ${{ inputs.tag }} to stable
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      promoted: ${{ steps.publish.outputs.promoted }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Check the release and the version order
+        id: release
+        run: |
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::'$TAG' is not a release tag like v1.3.0 or v1.3.0-beta.2"
+            exit 1
+          fi
+          version=${TAG#v}
+          release=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate \
+            --jq ".[] | select(.tag_name == \"$TAG\") | {id, draft, prerelease}" | jq -c -s '.[0] // empty')
+          if [ -z "$release" ]; then
+            echo "::error::There is no release for $TAG"
+            exit 1
+          fi
+          if [ "$(jq -r .draft <<< "$release")" = true ]; then
+            echo "::error::$TAG is still a draft: publish or delete it first (a draft has no public assets)"
+            exit 1
+          fi
+          echo "release_id=$(jq -r .id <<< "$release")" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          # Promotion moves stable users forward only. Going back is rollback.yml.
+          current_tag=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>/dev/null || true)
+          if [ -n "$current_tag" ]; then
+            order=$(node scripts/release-version.mjs compare "$version" "${current_tag#v}")
+            if [ "$order" = 0 ]; then
+              echo "::notice::$TAG is already the stable release; nothing to do."
+              echo "already=true" >> "$GITHUB_OUTPUT"
+            elif [ "$order" = -1 ]; then
+              echo "::error::$TAG is older than the current stable release $current_tag. To go back, use the Rollback workflow."
+              exit 1
+            fi
+          fi
+
+      - name: Download and verify the assets
+        if: steps.release.outputs.already != 'true'
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.release_id }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          mkdir release-assets
+          gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets" --paginate \
+            --jq '.[] | [.id, .name] | @tsv' |
+          while IFS=$'\t' read -r id name; do
+            gh api -H "Accept: application/octet-stream" \
+              "repos/$GITHUB_REPOSITORY/releases/assets/$id" > "release-assets/$name"
+          done
+          ls -l release-assets
+          # Checksums of every asset, a signature next to every installer, and
+          # (for a beta) a latest-beta.json that matches both. A release without
+          # latest.json is expected: that file is what this workflow adds.
+          manifests=()
+          for m in latest.json latest-beta.json; do
+            if [ -f "release-assets/$m" ]; then manifests+=("$m"); fi
+          done
+          node scripts/verify-release.mjs release-assets "$VERSION" "${manifests[@]}"
+
+      - name: Write latest.json and refresh SHA256SUMS.txt
+        id: publish
+        if: steps.release.outputs.already != 'true'
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.release_id }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          replace() { # <file> <content type>: upload, replacing an asset of the same name
+            name=$(basename "$1")
+            gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets" --paginate \
+              --jq ".[] | select(.name == \"$name\") | .id" |
+            while read -r id; do
+              gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$id"
+            done
+            gh api -X POST -H "Content-Type: $2" --input "$1" \
+              "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=$name" \
+              --jq .browser_download_url
+          }
+          gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" --jq .body > notes.md
+          node scripts/updater-manifest.mjs release-assets "$VERSION" \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG" notes.md
+          rm release-assets/SHA256SUMS.txt
+          (cd release-assets && sha256sum -- * > ../SHA256SUMS.txt)
+          cp SHA256SUMS.txt release-assets/SHA256SUMS.txt
+          node scripts/verify-release.mjs release-assets "$VERSION" latest.json
+          replace release-assets/latest.json application/json
+          replace SHA256SUMS.txt text/plain
+
+          # Same call release.yml makes for a stable release. Installed copies
+          # now see this version at releases/latest/download/latest.json.
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+            -F draft=false -F prerelease=false -f make_latest=true --jq .html_url
+          echo "promoted=true" >> "$GITHUB_OUTPUT"
+
+      - name: Check what users will download
+        if: steps.publish.outputs.promoted == 'true'
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          # The public URL stable installs poll. GitHub's cache can lag a minute.
+          for attempt in 1 2 3 4 5 6; do
+            served=$(curl -fsSL "https://github.com/$GITHUB_REPOSITORY/releases/latest/download/latest.json" | jq -r .version || true)
+            if [ "$served" = "$VERSION" ]; then
+              echo "latest.json now serves $served"
+              exit 0
+            fi
+            echo "latest.json serves '$served', expected $VERSION (attempt $attempt)"
+            sleep 20
+          done
+          echo "::warning::latest.json does not serve $VERSION yet; check releases/latest/download/latest.json by hand."
+
+  distribute:
+    name: Update package managers
+    needs: promote
+    if: needs.promote.outputs.promoted == 'true'
+    runs-on: ubuntu-latest
+    # Same as release.yml: the release is out; a package manager that fails to
+    # update must not mark it as failed. Keep these steps in sync with the
+    # distribute job there. Each channel is skipped while its secret is unset.
+    continue-on-error: true
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.promote.outputs.version }}
+      PACKAGING_TOKEN: ${{ secrets.PACKAGING_TOKEN }}
+      WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+      AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Render the manifests
+        run: |
+          gh release download "v$VERSION" --pattern SHA256SUMS.txt
+          node scripts/package-manifests.mjs "$VERSION" SHA256SUMS.txt dist
+
+      - name: Homebrew tap and Scoop bucket
+        if: env.PACKAGING_TOKEN != ''
+        run: |
+          publish() { # <repo> <rendered file> <path in repo>
+            rm -rf repo
+            git clone --depth 1 "https://x-access-token:${PACKAGING_TOKEN}@github.com/$1.git" repo
+            mkdir -p "repo/$(dirname "$3")"
+            cp "$2" "repo/$3"
+            cd repo
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add "$3"
+            if git diff --cached --quiet; then
+              echo "$1 is already at $VERSION"
+            else
+              git commit -m "sevak $VERSION"
+              git push
+            fi
+            cd ..
+          }
+          publish ninad-k/homebrew-tap dist/homebrew/Casks/sevak.rb Casks/sevak.rb
+          publish ninad-k/scoop-bucket dist/scoop/sevak.json bucket/sevak.json
+
+      - name: AUR (sevak-bin)
+        if: env.AUR_SSH_PRIVATE_KEY != ''
+        uses: KSXGitHub/github-actions-deploy-aur@v4.2.0
+        with:
+          pkgname: sevak-bin
+          pkgbuild: dist/aur/PKGBUILD
+          commit_username: Ninad Kulkarni
+          commit_email: 47207171+ninad-k@users.noreply.github.com
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: sevak ${{ needs.promote.outputs.version }}
+
+      - name: winget (NinadKulkarni.Sevak)
+        if: env.WINGET_TOKEN != ''
+        uses: vedantmgoyal9/winget-releaser@v2
+        with:
+          identifier: NinadKulkarni.Sevak
+          version: ${{ needs.promote.outputs.version }}
+          release-tag: v${{ needs.promote.outputs.version }}
+          installers-regex: '_x64-setup\.exe$'
+          token: ${{ secrets.WINGET_TOKEN }}

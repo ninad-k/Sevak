@@ -1,9 +1,11 @@
 //! Self-update from GitHub Releases (`tauri-plugin-updater`).
 //!
-//! Every release publishes a signed `latest.json` (see `.github/workflows/release.yml`).
-//! Sevak checks it shortly after startup, then every six hours, and when the
-//! launcher opens if the last check is over an hour old. All of that needs
-//! `general.check_for_updates`; the tray's "Check for updates" always works.
+//! Every release publishes a signed `latest.json` (see `.github/workflows/release.yml`);
+//! beta releases also publish `latest-beta.json`, which `general.update_channel
+//! = "beta"` adds to the check (see [`find_update`]). Sevak checks shortly after
+//! startup, then every six hours, and when the launcher opens if the last check
+//! is over an hour old. All of that needs `general.check_for_updates`; the
+//! tray's "Check for updates" always works.
 //! An available update is only installed after the user agrees in a dialog;
 //! its signature is verified against the public key in `tauri.conf.json`.
 //!
@@ -16,6 +18,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime};
 
+use sevak_core::UpdateChannel;
 use tauri::{AppHandle, Manager, Wry};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_updater::{Update, UpdaterExt};
@@ -214,7 +217,12 @@ async fn check(app: &AppHandle, trigger: Trigger) {
         }
         return;
     }
-    let result = find_update(app).await;
+    let channel = app
+        .try_state::<AppState>()
+        .map_or_else(UpdateChannel::default, |state| {
+            state.config().general.update_channel
+        });
+    let result = find_update(app, channel).await;
     CHECKING.store(false, Ordering::SeqCst);
 
     let current = app.package_info().version.to_string();
@@ -243,9 +251,89 @@ async fn check(app: &AppHandle, trigger: Trigger) {
     }
 }
 
-async fn find_update(app: &AppHandle) -> Result<Option<Update>, String> {
-    let updater = app.updater().map_err(|err| err.to_string())?;
+/// Where the beta channel's manifest lives: a fixed pre-release
+/// (`channel-beta`) that the release workflow keeps pointing at the newest
+/// beta, because GitHub's `releases/latest/download/` shortcut never resolves
+/// to a pre-release. Same host and kind of request as the stable manifest.
+const BETA_ENDPOINT: &str =
+    "https://github.com/ninad-k/Sevak/releases/download/channel-beta/latest-beta.json";
+
+/// The manifest endpoints for `channel`, or `None` to keep the ones in
+/// `tauri.conf.json` (the newest stable release's `latest.json`). The signing
+/// key is the same for both, so the signature check is unchanged.
+fn endpoint_override(channel: UpdateChannel) -> Option<Vec<tauri::Url>> {
+    match channel {
+        UpdateChannel::Stable => None,
+        UpdateChannel::Beta => Some(vec![BETA_ENDPOINT
+            .parse()
+            .expect("BETA_ENDPOINT is a valid URL")]),
+    }
+}
+
+/// Looks for an update on the channel the user chose.
+///
+/// Stable reads only the stable manifest. Beta reads the beta manifest *and*
+/// the stable one and offers the newer of the two, so a stable release that
+/// follows the last beta still reaches beta users. Nothing here downgrades:
+/// the updater only offers a version greater than the installed one, which is
+/// also why going from beta back to stable just waits for a newer stable.
+async fn find_update(app: &AppHandle, channel: UpdateChannel) -> Result<Option<Update>, String> {
+    let beta = match endpoint_override(channel) {
+        Some(endpoints) => Some(check_endpoints(app, Some(endpoints)).await),
+        None => None,
+    };
+    let stable = check_endpoints(app, None).await;
+    match beta {
+        Some(beta) => combine(beta, stable, |update| update.version.clone()),
+        None => stable,
+    }
+}
+
+async fn check_endpoints(
+    app: &AppHandle,
+    endpoints: Option<Vec<tauri::Url>>,
+) -> Result<Option<Update>, String> {
+    let mut builder = app.updater_builder();
+    if let Some(endpoints) = endpoints {
+        builder = builder
+            .endpoints(endpoints)
+            .map_err(|err| err.to_string())?;
+    }
+    let updater = builder.build().map_err(|err| err.to_string())?;
     updater.check().await.map_err(|err| err.to_string())
+}
+
+/// Merges the beta and stable check results: the newer version wins (the
+/// stable one on a tie), and one failing check does not hide the other's
+/// answer (the beta manifest does not exist before the first beta). Only when
+/// both fail is the stable error reported.
+fn combine<T>(
+    beta: Result<Option<T>, String>,
+    stable: Result<Option<T>, String>,
+    version: impl Fn(&T) -> String,
+) -> Result<Option<T>, String> {
+    match (beta, stable) {
+        (Ok(Some(beta)), Ok(Some(stable))) => {
+            let newer = |a: &T, b: &T| match (
+                semver::Version::parse(&version(a)),
+                semver::Version::parse(&version(b)),
+            ) {
+                (Ok(a), Ok(b)) => a > b,
+                _ => false,
+            };
+            Ok(Some(if newer(&beta, &stable) { beta } else { stable }))
+        }
+        (Ok(update), Ok(None)) | (Ok(None), Ok(update)) => Ok(update),
+        (Ok(update), Err(err)) => {
+            tracing::warn!("stable update check failed: {err}");
+            Ok(update)
+        }
+        (Err(err), Ok(update)) => {
+            tracing::info!("beta update check failed (no beta published yet?): {err}");
+            Ok(update)
+        }
+        (Err(_), Err(err)) => Err(err),
+    }
 }
 
 async fn offer(app: &AppHandle, update: Update, trigger: Trigger) {
@@ -262,8 +350,9 @@ async fn offer(app: &AppHandle, update: Update, trigger: Trigger) {
         }
     }
 
+    let beta = if version.contains('-') { " beta" } else { "" };
     let prompt = format!(
-        "Sevak {version} is available (you have {}).\n\n\
+        "Sevak{beta} {version} is available (you have {}).\n\n\
          Install it now? Sevak restarts when the update is done.\n\n\
          Release notes: https://github.com/ninad-k/Sevak/releases/tag/v{version}",
         update.current_version
@@ -377,5 +466,72 @@ mod tests {
         );
         assert!(!updater.pubkey.is_empty());
         assert!(!updater.dangerous_insecure_transport_protocol);
+    }
+
+    #[test]
+    fn stable_keeps_the_configured_endpoint_and_beta_adds_its_own() {
+        assert!(endpoint_override(UpdateChannel::Stable).is_none());
+        let beta = endpoint_override(UpdateChannel::Beta).unwrap();
+        assert_eq!(beta.len(), 1);
+        assert_eq!(beta[0].scheme(), "https");
+        assert_eq!(beta[0].host_str(), Some("github.com"));
+        assert!(beta[0]
+            .path()
+            .starts_with("/ninad-k/Sevak/releases/download/"));
+        assert!(beta[0].path().ends_with("/latest-beta.json"));
+    }
+
+    fn version_of(update: &&str) -> String {
+        (*update).to_owned()
+    }
+
+    #[test]
+    fn beta_users_get_the_newer_of_the_beta_and_stable_releases() {
+        let pick = |beta, stable| combine(Ok(beta), Ok(stable), version_of).unwrap();
+        // A beta ahead of stable, a stable that overtook the last beta, a tie
+        // (a promoted beta is the stable release) and pre-release ordering:
+        // 1.3.0 is newer than 1.3.0-beta.2, and beta.10 than beta.9.
+        assert_eq!(
+            pick(Some("1.3.0-beta.2"), Some("1.2.9")),
+            Some("1.3.0-beta.2")
+        );
+        assert_eq!(pick(Some("1.3.0-beta.2"), Some("1.3.0")), Some("1.3.0"));
+        assert_eq!(pick(Some("1.4.0"), Some("1.4.0")), Some("1.4.0"));
+        assert_eq!(
+            pick(Some("1.3.0-beta.10"), Some("1.3.0-beta.9")),
+            Some("1.3.0-beta.10")
+        );
+        assert_eq!(pick(None, Some("1.2.9")), Some("1.2.9"));
+        assert_eq!(pick(Some("1.3.0-beta.1"), None), Some("1.3.0-beta.1"));
+        assert_eq!(pick(None, None), None);
+    }
+
+    #[test]
+    fn a_failing_manifest_does_not_hide_the_other_one() {
+        let err = || Err::<Option<&str>, String>("404".to_owned());
+        // No beta published yet: stable still answers.
+        assert_eq!(
+            combine(err(), Ok(Some("1.2.9")), version_of),
+            Ok(Some("1.2.9"))
+        );
+        assert_eq!(
+            combine(Ok(Some("1.3.0-beta.1")), err(), version_of),
+            Ok(Some("1.3.0-beta.1"))
+        );
+        assert_eq!(combine(err(), Ok(None), version_of), Ok(None));
+        assert_eq!(combine(err(), err(), version_of), Err("404".to_owned()));
+    }
+
+    /// Moving from beta back to stable must never downgrade: the updater only
+    /// offers a version greater than the installed one, and semver orders
+    /// 1.3.0-beta.2 after 1.2.x and before 1.3.0.
+    #[test]
+    fn stable_never_offers_an_older_version_than_the_installed_beta() {
+        let installed = semver::Version::parse("1.3.0-beta.2").unwrap();
+        let newer = |remote: &str| semver::Version::parse(remote).unwrap() > installed;
+        assert!(!newer("1.2.9"), "an older stable is not offered");
+        assert!(!newer("1.3.0-beta.2"), "the same version is not offered");
+        assert!(newer("1.3.0"), "the stable release of the same number is");
+        assert!(newer("1.3.1"));
     }
 }

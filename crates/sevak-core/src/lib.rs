@@ -21,7 +21,7 @@ pub mod usage;
 pub use config::{
     ActionsConfig, ClipboardConfig, Config, ConfigError, ConfigOrigin, ExpandOn, FileBufferConfig,
     GeneralConfig, HotkeyBinding, HotkeyTarget, LinuxConfig, PasteConfig, ShellConfig, Snippet,
-    SnippetsConfig, WindowConfig,
+    SnippetsConfig, UpdateChannel, WindowConfig,
 };
 pub use engine::{EngineOptions, SearchEngine};
 pub use fuzzy::FuzzyQuery;

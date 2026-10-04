@@ -1,0 +1,142 @@
+name: Rollback
+
+# Stops a bad stable release from reaching more people by pointing the stable
+# channel back at an earlier, known-good release. Manual only.
+#
+# What it does:
+#   - verifies the earlier release (checksums, signatures, its latest.json),
+#   - makes it the newest stable release, so releases/latest/download/latest.json
+#     serves it again,
+#   - marks the bad release as a pre-release with a note on top, and re-points the
+#     beta channel too if that served the bad version.
+#
+# What it cannot do: copies that already installed the bad version are NOT
+# moved back (the updater only offers a newer version, on purpose). They get
+# the fix by you publishing a newer patch release. See docs/releasing.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Known-good release to serve as stable again, e.g. v1.2.4"
+        type: string
+        required: true
+      bad_tag:
+        description: "The bad release to withdraw, e.g. v1.2.5 (optional but recommended)"
+        type: string
+        required: false
+      reason:
+        description: "One line for the note on the bad release"
+        type: string
+        required: false
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  rollback:
+    name: Roll back to ${{ inputs.tag }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ inputs.tag }}
+      BAD_TAG: ${{ inputs.bad_tag }}
+      REASON: ${{ inputs.reason }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Check the tags
+        run: |
+          pattern='^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'
+          for t in "$TAG" "$BAD_TAG"; do
+            if [ -n "$t" ] && ! [[ "$t" =~ $pattern ]]; then
+              echo "::error::'$t' is not a release tag like v1.2.4"
+              exit 1
+            fi
+          done
+          if [ -n "$BAD_TAG" ]; then
+            if [ "$(node scripts/release-version.mjs compare "${BAD_TAG#v}" "${TAG#v}")" != 1 ]; then
+              echo "::error::$BAD_TAG is not newer than $TAG; rollback goes from a newer release back to an older one."
+              exit 1
+            fi
+            gh release view "$BAD_TAG" > /dev/null
+          fi
+          if [ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" != false ]; then
+            echo "::error::$TAG is a draft; it has no public assets to serve."
+            exit 1
+          fi
+
+      - name: Download and verify the known-good release
+        run: |
+          mkdir release-assets
+          gh release download "$TAG" --dir release-assets
+          ls -l release-assets
+          # Every asset matches SHA256SUMS.txt, every installer has its signature,
+          # and latest.json is for this version and agrees with those signatures.
+          node scripts/verify-release.mjs release-assets "${TAG#v}" latest.json
+
+      - name: Make it the stable release again
+        run: |
+          # First the good release becomes "latest", so there is never a moment
+          # with no valid stable release; then the bad one is withdrawn.
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$(gh release view "$TAG" --json databaseId --jq .databaseId)" \
+            -F draft=false -F prerelease=false -f make_latest=true --jq .html_url
+          if [ -n "$BAD_TAG" ]; then
+            note="> **Withdrawn $(date -u +%F).** ${REASON:-This release had a problem.} Stable installs are offered $TAG instead; a fixed release follows. Do not install this version."
+            body=$(gh release view "$BAD_TAG" --json body --jq .body)
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$(gh release view "$BAD_TAG" --json databaseId --jq .databaseId)" \
+              -F prerelease=true -f make_latest=false -f body="$note"$'\n\n'"$body" --jq .html_url
+          fi
+
+      - name: Re-point the beta channel if it served the bad version
+        run: |
+          if ! gh release view channel-beta > /dev/null 2>&1; then
+            echo "No beta channel release exists; nothing to re-point."
+            exit 0
+          fi
+          mkdir -p pointer
+          gh release download channel-beta --pattern latest-beta.json --dir pointer --clobber || {
+            echo "The beta channel has no latest-beta.json; nothing to re-point."
+            exit 0
+          }
+          served=$(jq -r .version pointer/latest-beta.json)
+          echo "The beta channel serves $served."
+          if [ -n "$BAD_TAG" ] && [ "$served" = "${BAD_TAG#v}" ]; then
+            cp release-assets/latest.json release-assets/latest-beta.json
+            gh release upload channel-beta release-assets/latest-beta.json --clobber
+            echo "Beta channel re-pointed at ${TAG#v}."
+          else
+            echo "::notice::The beta channel serves $served, not the withdrawn release; left as it is. If $served has the same problem, publish a fixed beta."
+          fi
+
+      - name: Check what users will download
+        run: |
+          # The public URL stable installs poll. GitHub's cache can lag a minute.
+          for attempt in 1 2 3 4 5 6; do
+            served=$(curl -fsSL "https://github.com/$GITHUB_REPOSITORY/releases/latest/download/latest.json" | jq -r .version || true)
+            if [ "$served" = "${TAG#v}" ]; then
+              echo "latest.json serves $served"
+              break
+            fi
+            echo "latest.json serves '$served', expected ${TAG#v} (attempt $attempt)"
+            sleep 20
+          done
+          {
+            echo "## Rollback to $TAG"
+            echo
+            echo "- Stable installs that have not updated yet, new downloads, and \`latest.json\` now point at **$TAG**."
+            [ -n "$BAD_TAG" ] && echo "- $BAD_TAG is marked as a pre-release with a note; its assets remain for investigation."
+            echo "- Installed copies of ${BAD_TAG:-the bad version} are **not** downgraded. Publish a fixed newer release now (a \`fix:\` merge to main); they update to it."
+            echo "- winget, Scoop, Homebrew and the AUR were not touched. If they already carry the bad version, update those manifests by hand; see docs/releasing.md."
+            [ "$served" = "${TAG#v}" ] || echo "- **Warning:** \`latest.json\` served '$served' at the end of the check; verify it by hand."
+          } >> "$GITHUB_STEP_SUMMARY"
