@@ -1,0 +1,144 @@
+# Developer search: one keyword per site, each opens that site's search in your browser.
+#   so <words>      Stack Overflow          mdn <words>     MDN Web Docs
+#   crate <words>   crates.io               docsrs <words>  docs.rs
+#   npm <words>     npm                     pypi <words>    PyPI
+# Each keyword is a Keyword trigger wired to an Open URL node; the typed text is
+# percent-encoded for you. It runs no code, so Sevak does not ask for approval and
+# nothing is sent anywhere except the page your browser opens.
+format = 1
+name = "Developer search"
+description = "Search Stack Overflow, MDN, crates.io, docs.rs, npm and PyPI from the launcher. Runs no code."
+author = "Sevak"
+version = "1.0"
+
+[[node]]
+id = "kw-so"
+type = "keyword"
+title = "Search Stack Overflow for {query}"
+x = 40.0
+y = 40.0
+keyword = "so"
+argument = "required"
+subtitle = "Opens the results in your browser"
+
+[[node]]
+id = "open-so"
+type = "open_url"
+title = "Open so"
+x = 400.0
+y = 40.0
+url = "https://stackoverflow.com/search?q={query}"
+
+[[node]]
+id = "kw-mdn"
+type = "keyword"
+title = "Search MDN for {query}"
+x = 40.0
+y = 160.0
+keyword = "mdn"
+argument = "required"
+subtitle = "Opens the results in your browser"
+
+[[node]]
+id = "open-mdn"
+type = "open_url"
+title = "Open mdn"
+x = 400.0
+y = 160.0
+url = "https://developer.mozilla.org/en-US/search?q={query}"
+
+[[node]]
+id = "kw-crate"
+type = "keyword"
+title = "Search crates.io for {query}"
+x = 40.0
+y = 280.0
+keyword = "crate"
+argument = "required"
+subtitle = "Opens the results in your browser"
+
+[[node]]
+id = "open-crate"
+type = "open_url"
+title = "Open crate"
+x = 400.0
+y = 280.0
+url = "https://crates.io/search?q={query}"
+
+[[node]]
+id = "kw-docsrs"
+type = "keyword"
+title = "Search docs.rs for {query}"
+x = 40.0
+y = 400.0
+keyword = "docsrs"
+argument = "required"
+subtitle = "Opens the results in your browser"
+
+[[node]]
+id = "open-docsrs"
+type = "open_url"
+title = "Open docsrs"
+x = 400.0
+y = 400.0
+url = "https://docs.rs/releases/search?query={query}"
+
+[[node]]
+id = "kw-npm"
+type = "keyword"
+title = "Search npm for {query}"
+x = 40.0
+y = 520.0
+keyword = "npm"
+argument = "required"
+subtitle = "Opens the results in your browser"
+
+[[node]]
+id = "open-npm"
+type = "open_url"
+title = "Open npm"
+x = 400.0
+y = 520.0
+url = "https://www.npmjs.com/search?q={query}"
+
+[[node]]
+id = "kw-pypi"
+type = "keyword"
+title = "Search PyPI for {query}"
+x = 40.0
+y = 640.0
+keyword = "pypi"
+argument = "required"
+subtitle = "Opens the results in your browser"
+
+[[node]]
+id = "open-pypi"
+type = "open_url"
+title = "Open pypi"
+x = 400.0
+y = 640.0
+url = "https://pypi.org/search/?q={query}"
+
+[[connection]]
+from = "kw-so"
+to = "open-so"
+
+[[connection]]
+from = "kw-mdn"
+to = "open-mdn"
+
+[[connection]]
+from = "kw-crate"
+to = "open-crate"
+
+[[connection]]
+from = "kw-docsrs"
+to = "open-docsrs"
+
+[[connection]]
+from = "kw-npm"
+to = "open-npm"
+
+[[connection]]
+from = "kw-pypi"
+to = "open-pypi"

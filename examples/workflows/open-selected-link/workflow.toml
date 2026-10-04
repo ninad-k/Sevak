@@ -1,0 +1,104 @@
+# Select a web address in any app (it may be bare, like example.com/docs), press
+# the Universal Actions shortcut (Ctrl+Alt+Space) and choose "Open as a link".
+# http, https and mailto links open as they are, a bare address gets https://, and
+# anything else (including javascript: and file: links) is refused with a
+# notification. Sevak never reads your clipboard on its own, so this works on the
+# selection. It runs no code, so Sevak does not ask for approval; the text stays
+# in memory and is never logged.
+format = 1
+name = "Open selection as a link"
+description = "Universal Actions: select a web address in any app and open it in your browser. Runs no code."
+author = "Sevak"
+version = "1.0"
+
+[[node]]
+id = "selection"
+type = "selection"
+title = "Open as a link"
+x = 40.0
+y = 140.0
+accepts = ["text", "url"]
+
+[[node]]
+id = "trim"
+type = "transform"
+title = "Trim the ends"
+x = 300.0
+y = 140.0
+op = "trim"
+input = "{query}"
+
+[[node]]
+id = "is-link"
+type = "conditional"
+title = "Already a web or mail link?"
+x = 560.0
+y = 140.0
+left = "{query}"
+test = "matches"
+right = '^(https?://|mailto:)\S+$'
+ignore_case = true
+
+[[node]]
+id = "open"
+type = "open_url"
+title = "Open it"
+x = 860.0
+y = 60.0
+url = "{query|raw}"
+
+[[node]]
+id = "is-address"
+type = "conditional"
+title = "A bare web address?"
+x = 860.0
+y = 220.0
+left = "{query}"
+test = "matches"
+right = '^(www\.)?[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}(:\d+)?([/?#]\S*)?$'
+ignore_case = true
+
+[[node]]
+id = "open-https"
+type = "open_url"
+title = "Open it with https"
+x = 1160.0
+y = 160.0
+url = "https://{query|raw}"
+
+[[node]]
+id = "refuse"
+type = "notification"
+title = "Say no"
+x = 1160.0
+y = 300.0
+heading = "Not a web address"
+body = "The selection does not look like a web address, so nothing was opened."
+
+[[connection]]
+from = "selection"
+to = "trim"
+
+[[connection]]
+from = "trim"
+to = "is-link"
+
+[[connection]]
+from = "is-link"
+port = "then"
+to = "open"
+
+[[connection]]
+from = "is-link"
+port = "else"
+to = "is-address"
+
+[[connection]]
+from = "is-address"
+port = "then"
+to = "open-https"
+
+[[connection]]
+from = "is-address"
+port = "else"
+to = "refuse"

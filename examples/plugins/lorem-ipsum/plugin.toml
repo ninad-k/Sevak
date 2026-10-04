@@ -1,0 +1,17 @@
+# Type "lorem" for placeholder text: "lorem 3 paragraphs", "lorem 40 words",
+# "lorem 2 sentences" (or just "lorem 40").
+#
+# A one-shot Python plugin (Python 3.8 or newer, standard library only). The
+# text is generated locally and is the same every time you ask for the same
+# amount, so it is easy to compare layouts. Enter copies it; Ctrl+T shows it
+# in the text view.
+protocol    = 1
+id          = "script:lorem-ipsum"
+name        = "Lorem ipsum (Python)"
+description = "lorem 3 paragraphs, lorem 40 words: placeholder text copied in one keystroke. Offline."
+keyword     = "lorem"
+mode        = "oneshot"
+script      = "lorem.py"
+
+# Python starts a little slower than the default 50 ms wait.
+timeout_ms  = 200

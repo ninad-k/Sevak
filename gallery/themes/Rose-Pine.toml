@@ -1,0 +1,36 @@
+# Palette: Rosé Pine, MIT licence (https://github.com/rose-pine/rose-pine-theme).
+name = "Rosé Pine"
+author = "Sevak"
+description = "A muted dark theme with dusky purples and soft rose accents, after the Rosé Pine palette."
+
+[font]
+size = 15
+
+[layout]
+radius = 14
+opacity = 100
+row_height = 48
+search_size = 22
+icon_size = 32
+window_width = 720
+
+[dark]
+background = "#191724"
+text = "#e0def4"
+subtext = "#908caa"
+border = "rgba(224, 222, 244, 0.12)"
+accent = "#c4a7e7"
+accent_strong = "#a189bd"
+on_accent = "#191724"
+selection = "rgba(196, 167, 231, 0.2)"
+tile = "rgba(224, 222, 244, 0.08)"
+kbd_background = "rgba(224, 222, 244, 0.08)"
+kbd_border = "rgba(224, 222, 244, 0.16)"
+shadow = "0 8px 28px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.4)"
+surface = "rgba(224, 222, 244, 0.05)"
+input_background = "rgba(224, 222, 244, 0.06)"
+input_border = "rgba(224, 222, 244, 0.24)"
+switch_off = "rgba(224, 222, 244, 0.28)"
+warn = "#f6c177"
+error = "#eb6f92"
+ok = "#9ccfd8"

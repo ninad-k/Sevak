@@ -1,0 +1,285 @@
+# Select text in any app, press the Universal Actions shortcut (Ctrl+Alt+Space)
+# and choose one of:
+#   Copy as Markdown link   a selected web address becomes [example.com](https://example.com/page)
+#                           on the clipboard (the link text is the site's name)
+#   Make bold               **selection**, pasted over the selection
+#   Make code               `selection`, or a fenced block for several lines
+#   Quote                   "> " at the start of every line
+#   Make a bullet list      "- " in front of every non-empty line
+# Every action runs without code, so Sevak does not ask for approval. They receive
+# only the text you select; it stays in memory and is never logged. Where pasting
+# is not possible (Wayland, macOS without Accessibility), the result is copied.
+format = 1
+name = "Markdown helpers"
+description = "Universal Actions: turn the selected text into a Markdown link, bold, code, a quote or a bullet list. Runs no code."
+author = "Sevak"
+version = "1.0"
+
+[[node]]
+id = "link"
+type = "selection"
+title = "Copy as Markdown link"
+x = 40.0
+y = 40.0
+accepts = ["url"]
+
+[[node]]
+id = "link-line"
+type = "transform"
+title = "First link only"
+x = 320.0
+y = 40.0
+op = "first_line"
+input = "{query}"
+
+[[node]]
+id = "link-trim"
+type = "transform"
+title = "Trim"
+x = 600.0
+y = 40.0
+op = "trim"
+input = "{query}"
+
+[[node]]
+id = "link-label"
+type = "transform"
+title = "Site name as the link text"
+x = 880.0
+y = 40.0
+op = "regex_replace"
+input = "{query}"
+find = '^(?:[a-zA-Z][a-zA-Z0-9+.-]*:(?://)?)?(?:www\.)?([^/?#]*).*$'
+replace = "$1"
+into = "label"
+
+[[node]]
+id = "link-open"
+type = "transform"
+title = "Escape ("
+x = 1160.0
+y = 40.0
+op = "replace"
+input = "{query}"
+find = "("
+replace = "%28"
+
+[[node]]
+id = "link-close"
+type = "transform"
+title = "Escape )"
+x = 1440.0
+y = 40.0
+op = "replace"
+input = "{query}"
+find = ")"
+replace = "%29"
+
+[[node]]
+id = "link-copy"
+type = "copy"
+title = "Copy"
+x = 1720.0
+y = 40.0
+text = "[{var:label}]({query|raw})"
+
+[[node]]
+id = "link-done"
+type = "notification"
+title = "Say so"
+x = 2000.0
+y = 40.0
+heading = "Copied"
+body = "[{var:label}]({query|raw})"
+
+[[node]]
+id = "bold"
+type = "selection"
+title = "Make bold"
+x = 40.0
+y = 200.0
+accepts = ["text"]
+
+[[node]]
+id = "bold-paste"
+type = "paste"
+title = "Replace the selection"
+x = 320.0
+y = 200.0
+text = "**{query}**"
+
+[[node]]
+id = "code"
+type = "selection"
+title = "Make code"
+x = 40.0
+y = 360.0
+accepts = ["text"]
+
+[[node]]
+id = "code-multi"
+type = "conditional"
+title = "More than one line?"
+x = 320.0
+y = 360.0
+left = "{query}"
+test = "contains"
+right = "\n"
+
+[[node]]
+id = "code-block"
+type = "paste"
+title = "Fenced block"
+x = 620.0
+y = 320.0
+text = "```\n{query}\n```"
+
+[[node]]
+id = "code-inline"
+type = "paste"
+title = "Inline code"
+x = 620.0
+y = 440.0
+text = "`{query}`"
+
+[[node]]
+id = "quote"
+type = "selection"
+title = "Quote"
+x = 40.0
+y = 560.0
+accepts = ["text"]
+
+[[node]]
+id = "quote-trim"
+type = "transform"
+title = "Trim"
+x = 320.0
+y = 560.0
+op = "trim"
+input = "{query}"
+
+[[node]]
+id = "quote-lines"
+type = "transform"
+title = "Start every line with >"
+x = 600.0
+y = 560.0
+op = "regex_replace"
+input = "{query}"
+find = '(?m)^'
+replace = "> "
+
+[[node]]
+id = "quote-paste"
+type = "paste"
+title = "Replace the selection"
+x = 880.0
+y = 560.0
+text = "{query}"
+
+[[node]]
+id = "list"
+type = "selection"
+title = "Make a bullet list"
+x = 40.0
+y = 720.0
+accepts = ["text"]
+
+[[node]]
+id = "list-trim"
+type = "transform"
+title = "Trim"
+x = 320.0
+y = 720.0
+op = "trim"
+input = "{query}"
+
+[[node]]
+id = "list-lines"
+type = "transform"
+title = "Add - to each line"
+x = 600.0
+y = 720.0
+op = "regex_replace"
+input = "{query}"
+find = '(?m)^[ \t]*([^\s].*?)[ \t]*$'
+replace = "- $1"
+
+[[node]]
+id = "list-paste"
+type = "paste"
+title = "Replace the selection"
+x = 880.0
+y = 720.0
+text = "{query}"
+
+[[connection]]
+from = "link"
+to = "link-line"
+
+[[connection]]
+from = "link-line"
+to = "link-trim"
+
+[[connection]]
+from = "link-trim"
+to = "link-label"
+
+[[connection]]
+from = "link-label"
+to = "link-open"
+
+[[connection]]
+from = "link-open"
+to = "link-close"
+
+[[connection]]
+from = "link-close"
+to = "link-copy"
+
+[[connection]]
+from = "link-copy"
+to = "link-done"
+
+[[connection]]
+from = "bold"
+to = "bold-paste"
+
+[[connection]]
+from = "code"
+to = "code-multi"
+
+[[connection]]
+from = "code-multi"
+port = "then"
+to = "code-block"
+
+[[connection]]
+from = "code-multi"
+port = "else"
+to = "code-inline"
+
+[[connection]]
+from = "quote"
+to = "quote-trim"
+
+[[connection]]
+from = "quote-trim"
+to = "quote-lines"
+
+[[connection]]
+from = "quote-lines"
+to = "quote-paste"
+
+[[connection]]
+from = "list"
+to = "list-trim"
+
+[[connection]]
+from = "list-trim"
+to = "list-lines"
+
+[[connection]]
+from = "list-lines"
+to = "list-paste"

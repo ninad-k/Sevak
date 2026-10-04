@@ -1433,6 +1433,11 @@ Design notes:
 
 Building a gallery package: `cargo run -p sevak-plugins --example gallery_pack --
 examples/workflows/duckduckgo gallery/packages/duckduckgo.zip` prints the
-SHA-256 for `gallery/index.json`. A test checks that every entry's package exists,
-matches its checksum, installs, and equals the folder in `examples/` it was made
-from.
+SHA-256 for `gallery/index.json` (or run `node scripts/gallery-check.mjs --update`
+to copy every hash into the indexes). Tests check that every entry's package
+exists, matches its checksum, installs, and equals the folder in `examples/` it
+was made from (`workflow/gallery.rs`), and `tests/gallery_content.rs` validates
+and *runs* every gallery workflow and plugin script offline and enforces the
+gallery's policy (allowed nodes, allowed link hosts, standard-library-only
+scripts, free keywords). The policy and a checklist are in `gallery/README.md`.
+An entry may carry `tags` (lower case labels such as `search` or `needs-python`).

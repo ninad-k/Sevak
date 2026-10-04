@@ -510,7 +510,17 @@ fn the_bundled_examples_work_where_their_interpreter_is_installed() {
         let _ = tx.lock().unwrap().send(id.to_owned());
     });
     engine.attach_notifier(&notifier);
-    assert_eq!(engine.plugins().len(), 3, "the three bundled examples");
+    let bundled =
+        std::fs::read_dir(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/plugins"))
+            .unwrap()
+            .filter(|entry| entry.as_ref().unwrap().path().join("plugin.toml").is_file())
+            .count();
+    assert!(bundled >= 8, "the bundled examples are there: {bundled}");
+    assert_eq!(
+        engine.plugins().len(),
+        bundled,
+        "every bundled example loads"
+    );
 
     if installed("py") {
         let items = query_until_results(&engine, &rx, "hello Ada");
@@ -528,6 +538,26 @@ fn the_bundled_examples_work_where_their_interpreter_is_installed() {
         engine.execute(remember, "hello Ada").unwrap();
         let names = root.path().join("data/plugins/hello-python/names.txt");
         assert_eq!(wait_for_file(&names).trim(), "Ada");
+
+        // The gallery's Python plugins, through the real engine: keyword
+        // routing, one-shot process, item parsing and the copy action.
+        let items = query_until_results(&engine, &rx, "hash hello");
+        assert!(
+            items.iter().any(|item| item.action
+                == Action::CopyText {
+                    text: "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824".into()
+                }),
+            "{:?}",
+            titles(&items)
+        );
+        let items = query_until_results(&engine, &rx, "color #ff8800");
+        assert_eq!(items[0].title, "#ff8800");
+        let items = query_until_results(&engine, &rx, "lorem 5 words");
+        assert_eq!(items[0].title, "Lorem ipsum dolor sit amet.");
+        let items = query_until_results(&engine, &rx, "pw 12");
+        assert_eq!(items[0].title.len(), 12);
+        let items = query_until_results(&engine, &rx, "id now");
+        assert_eq!(items[0].title.len(), 36, "a UUID: {}", items[0].title);
     } else {
         eprintln!("skipping the Python example: no interpreter");
     }

@@ -51,6 +51,7 @@ jobs:
 
       - run: npm ci
       - run: npm run check
+      - run: npm run gallery:check
       - run: npm run build
 
       # Node-only guards; once is enough, so Linux only. A stale

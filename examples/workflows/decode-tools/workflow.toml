@@ -1,0 +1,227 @@
+# Select text in any app, press the Universal Actions shortcut (Ctrl+Alt+Space)
+# and choose:
+#   Decode Base64        shows the decoded text in Sevak's text view
+#   Decode URL encoding  shows %20-style text decoded
+#   Encode as Base64     copies the Base64 of the selection
+#   Encode for a URL     copies the percent-encoded selection
+# Decoding accepts standard and URL-safe Base64 with or without padding; text that
+# is not valid (or not UTF-8 once decoded) stops with a notification instead of
+# showing garbage. All of it is done by Sevak's own Transform nodes: no code runs,
+# so Sevak does not ask for approval, and nothing leaves your computer.
+format = 1
+name = "Decode and encode"
+description = "Universal Actions: decode Base64 or URL-encoded text in a text view, or encode the selection and copy it. Runs no code."
+author = "Sevak"
+version = "1.0"
+
+[[node]]
+id = "b64-decode"
+type = "selection"
+title = "Decode Base64"
+x = 40.0
+y = 40.0
+accepts = ["text"]
+
+[[node]]
+id = "b64-decode-trim"
+type = "transform"
+title = "Trim the ends"
+x = 320.0
+y = 40.0
+op = "trim"
+input = "{query}"
+
+[[node]]
+id = "b64-decode-do"
+type = "transform"
+title = "Decode Base64"
+x = 600.0
+y = 40.0
+op = "base64_decode"
+input = "{query}"
+
+[[node]]
+id = "b64-decode-out"
+type = "text_view"
+title = "Show it"
+x = 880.0
+y = 40.0
+heading = "Decode Base64"
+text = "{query}"
+
+[[node]]
+id = "url-decode"
+type = "selection"
+title = "Decode URL encoding"
+x = 40.0
+y = 200.0
+accepts = ["text"]
+
+[[node]]
+id = "url-decode-trim"
+type = "transform"
+title = "Trim the ends"
+x = 320.0
+y = 200.0
+op = "trim"
+input = "{query}"
+
+[[node]]
+id = "url-decode-do"
+type = "transform"
+title = "Decode URL encoding"
+x = 600.0
+y = 200.0
+op = "url_decode"
+input = "{query}"
+
+[[node]]
+id = "url-decode-out"
+type = "text_view"
+title = "Show it"
+x = 880.0
+y = 200.0
+heading = "Decode URL encoding"
+text = "{query}"
+
+[[node]]
+id = "b64-encode"
+type = "selection"
+title = "Encode as Base64"
+x = 40.0
+y = 360.0
+accepts = ["text"]
+
+[[node]]
+id = "b64-encode-trim"
+type = "transform"
+title = "Trim the ends"
+x = 320.0
+y = 360.0
+op = "trim"
+input = "{query}"
+
+[[node]]
+id = "b64-encode-do"
+type = "transform"
+title = "Encode as Base64"
+x = 600.0
+y = 360.0
+op = "base64_encode"
+input = "{query}"
+
+[[node]]
+id = "b64-encode-out"
+type = "copy"
+title = "Copy it"
+x = 880.0
+y = 360.0
+text = "{query}"
+
+[[node]]
+id = "b64-encode-note"
+type = "notification"
+title = "Say so"
+x = 1160.0
+y = 360.0
+heading = "Copied"
+body = "{query}"
+
+[[node]]
+id = "url-encode"
+type = "selection"
+title = "Encode for a URL"
+x = 40.0
+y = 520.0
+accepts = ["text"]
+
+[[node]]
+id = "url-encode-trim"
+type = "transform"
+title = "Trim the ends"
+x = 320.0
+y = 520.0
+op = "trim"
+input = "{query}"
+
+[[node]]
+id = "url-encode-do"
+type = "transform"
+title = "Encode for a URL"
+x = 600.0
+y = 520.0
+op = "url_encode"
+input = "{query}"
+
+[[node]]
+id = "url-encode-out"
+type = "copy"
+title = "Copy it"
+x = 880.0
+y = 520.0
+text = "{query}"
+
+[[node]]
+id = "url-encode-note"
+type = "notification"
+title = "Say so"
+x = 1160.0
+y = 520.0
+heading = "Copied"
+body = "{query}"
+
+[[connection]]
+from = "b64-decode"
+to = "b64-decode-trim"
+
+[[connection]]
+from = "b64-decode-trim"
+to = "b64-decode-do"
+
+[[connection]]
+from = "b64-decode-do"
+to = "b64-decode-out"
+
+[[connection]]
+from = "url-decode"
+to = "url-decode-trim"
+
+[[connection]]
+from = "url-decode-trim"
+to = "url-decode-do"
+
+[[connection]]
+from = "url-decode-do"
+to = "url-decode-out"
+
+[[connection]]
+from = "b64-encode-out"
+to = "b64-encode-note"
+
+[[connection]]
+from = "b64-encode"
+to = "b64-encode-trim"
+
+[[connection]]
+from = "b64-encode-trim"
+to = "b64-encode-do"
+
+[[connection]]
+from = "b64-encode-do"
+to = "b64-encode-out"
+
+[[connection]]
+from = "url-encode-out"
+to = "url-encode-note"
+
+[[connection]]
+from = "url-encode"
+to = "url-encode-trim"
+
+[[connection]]
+from = "url-encode-trim"
+to = "url-encode-do"
+
+[[connection]]
+from = "url-encode-do"
+to = "url-encode-out"

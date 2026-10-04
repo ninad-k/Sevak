@@ -305,6 +305,31 @@ recorded like any result).
 3. The new folder is not allowed yet: Sevak shows its usual permission dialog
    before anything in it runs.
 
+### What the gallery offers
+
+Ten workflows and six script plugins ship in the gallery, all written by the Sevak
+project and described in [gallery/README.md](https://github.com/ninad-k/Sevak/blob/main/gallery/README.md):
+
+| Workflow | Does | Runs code? |
+|---|---|---|
+| DuckDuckGo search | `ddg words` | no |
+| Developer search | `so`, `mdn`, `crate`, `docsrs`, `npm`, `pypi` open that site's search | no |
+| GitHub search | `ghr` repositories, `ghi` issues and pull requests, `ghu` people | no |
+| Wikipedia search | `wiki words`; change the `lang` variable for another language | no |
+| Maps search | `map place` (OpenStreetMap), `gmap place` (Google Maps) | no |
+| Open selection as a link | Universal Actions: opens a selected web address; `javascript:`, `file:` and non-addresses are refused | no |
+| Tidy up whitespace | Universal Actions: collapses spaces and line breaks and pastes the result | no |
+| Markdown helpers | Universal Actions: Markdown link, bold, code, quote, bullet list | no |
+| Decode and encode | Universal Actions: Base64 and URL decoding in a text view, encoding to the clipboard | no |
+| Selection toolkit | Universal Actions: word count (Large Type), JSON pretty-print and minify, timestamp and date | a short Python 3 script, after you allow it |
+
+The plugins are the case converter (Node.js) and Python 3 plugins for passwords
+(`pw`), IDs (`id`: UUID v4/v7, ULID, NanoID), colors (`color`), placeholder text
+(`lorem`) and checksums (`hash`). The search workflows only open your browser at
+the site named in the workflow; none of the gallery's content makes a network
+request itself. Packages are small and readable on purpose, and the repository's
+tests run every workflow and script against sample input.
+
 Each request sends only what any web request does (your address, and a user
 agent `Sevak/<version> (gallery)`). Nothing else leaves your computer, and Sevak
 keeps no account or identifier. The bundled examples are in
@@ -312,7 +337,10 @@ keeps no account or identifier. The bundled examples are in
 
 To offer your own package: pack the folder (`cargo run -p sevak-plugins --example
 gallery_pack -- <folder> <out.zip>` prints the SHA-256), add an entry to
-`gallery/index.json` and open a pull request. See
+`gallery/index.json` (`node scripts/gallery-check.mjs --update` fills in the
+hashes and checks the rest) and open a pull request. The rules a package has
+to meet and a pre-merge checklist are in
+[gallery/README.md](https://github.com/ninad-k/Sevak/blob/main/gallery/README.md); see also
 [plugins.md](plugins.md#workflows-for-contributors).
 
 ## The file format

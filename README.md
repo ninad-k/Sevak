@@ -132,14 +132,16 @@ Sevak also includes:
   Workflows). Script filters run your own scripts, and the Script Filter JSON
   format used by Alfred is understood; anything that runs code asks first.
   [How workflows work →](docs/workflows.md)
-- **Gallery** — an optional list of ready-made workflows and script plugins,
-  fetched only when you press **Load gallery**, installed only when you press
-  **Install**, checksum-verified.
+- **Gallery** — an optional list of ready-made workflows (site searches,
+  Markdown, Base64 and JSON helpers) and offline script plugins (passwords,
+  IDs, colors, lorem ipsum, hashes), fetched only when you press **Load
+  gallery**, installed only when you press **Install**, checksum-verified.
 - **Custom hotkeys** — extra global keys that open Sevak with text typed in
   (`> `, `g `) or run a result directly.
 - **Themes** — light, dark or system, plus accent color, font, radius, opacity
   and your own stylesheet. A visual theme editor with a live preview, eight
-  built-in themes and an optional online theme gallery are in Settings →
+  built-in themes and an optional online gallery with eleven more (Tokyo
+  Night, Catppuccin, Rosé Pine, GitHub and others) are in Settings →
   Appearance ([themes guide](docs/themes.md)).
 - **Settings and TOML** — use the settings window or a commented config file,
   which can live in a synced folder.

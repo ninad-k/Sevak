@@ -139,6 +139,24 @@ The gallery is a list of community themes kept in Sevak's repository (`gallery/t
 - **Install** downloads that theme's file (https only, 64 KiB limit) and saves it to your themes folder only if its SHA-256 matches the `sha256` in the list. A mismatch, a file that is not a valid theme, or a download that is too large is refused and nothing is written. The saved file is the validated theme in canonical form.
 - Nothing is sent about you, and nothing is downloaded or updated in the background. Without a network you can still use the built-in themes and **Import…**.
 
+The gallery has the eight built-in themes and eleven more, each reaching WCAG AA for body text:
+
+| Theme | Mode | Palette |
+|---|---|---|
+| Tokyo Night | dark | Tokyo Night (MIT) |
+| Catppuccin Mocha | dark | Catppuccin (MIT) |
+| Catppuccin Latte | light | Catppuccin (MIT) |
+| Rosé Pine | dark | Rosé Pine (MIT) |
+| One Dark | dark | Atom's One Dark (MIT) |
+| Everforest Dark | dark | Everforest (MIT) |
+| Ayu Mirage | dark | Ayu (MIT) |
+| Nightfox | dark | Nightfox (MIT) |
+| GitHub Light | light | GitHub Primer (MIT) |
+| GitHub Dark | dark | GitHub Primer (MIT) |
+| Sevak Amber Glass | dark | original; slightly see-through (88% opacity), made for the frosted-glass blur setting |
+
+Colors taken from a third-party palette are credited, with their licences, in [gallery/README.md](https://github.com/ninad-k/Sevak/blob/main/gallery/README.md#theme-palettes-and-licences) and in the first comment of each theme file; a few notice or subtext colors are adjusted so text stays readable.
+
 To share a theme, put the file in `gallery/themes/`, add an entry to `gallery/themes.json` and open a pull request; see [gallery/README.md](https://github.com/ninad-k/Sevak/blob/main/gallery/README.md).
 
 ## Custom stylesheet

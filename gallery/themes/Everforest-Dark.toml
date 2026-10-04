@@ -1,0 +1,36 @@
+# Palette: Everforest, MIT licence (https://github.com/sainnhe/everforest).
+name = "Everforest Dark"
+author = "Sevak"
+description = "Warm, low-contrast greens for long sessions, after the Everforest palette."
+
+[font]
+size = 15
+
+[layout]
+radius = 14
+opacity = 100
+row_height = 48
+search_size = 22
+icon_size = 32
+window_width = 720
+
+[dark]
+background = "#2d353b"
+text = "#d3c6aa"
+subtext = "#9da9a0"
+border = "rgba(211, 198, 170, 0.12)"
+accent = "#a7c080"
+accent_strong = "#899d69"
+on_accent = "#2d353b"
+selection = "rgba(167, 192, 128, 0.2)"
+tile = "rgba(211, 198, 170, 0.08)"
+kbd_background = "rgba(211, 198, 170, 0.08)"
+kbd_border = "rgba(211, 198, 170, 0.16)"
+shadow = "0 8px 28px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.4)"
+surface = "rgba(211, 198, 170, 0.05)"
+input_background = "rgba(211, 198, 170, 0.06)"
+input_border = "rgba(211, 198, 170, 0.24)"
+switch_off = "rgba(211, 198, 170, 0.28)"
+warn = "#dbbc7f"
+error = "#e67e80"
+ok = "#83c092"

@@ -83,6 +83,10 @@ pub struct Entry {
     pub author: String,
     #[serde(default)]
     pub version: String,
+    /// Short lower-case labels for browsing (`search`, `needs-python`, ...).
+    /// Only informational; invalid ones are dropped when the index is parsed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
     /// The zip package: an `https://` URL.
     pub source: String,
     /// SHA-256 of the zip, as 64 hex digits.
@@ -148,6 +152,7 @@ pub fn parse_index(text: &str) -> Result<Index, String> {
             }
         };
         entry.sha256 = entry.sha256.trim().to_ascii_lowercase();
+        clean_tags(&mut entry.tags);
         if let Err(reason) = check_entry(&entry) {
             skipped.push(format!("{label}: {reason}"));
             continue;
@@ -163,6 +168,24 @@ pub fn parse_index(text: &str) -> Result<Index, String> {
         entries,
         skipped,
     })
+}
+
+/// Most tags an entry keeps, and the longest one.
+const MAX_TAGS: usize = 8;
+const MAX_TAG_CHARS: usize = 24;
+
+/// Keeps the tags that are lower case letters, digits and dashes, once each.
+fn clean_tags(tags: &mut Vec<String>) {
+    let mut seen = HashSet::new();
+    tags.retain(|tag| {
+        !tag.is_empty()
+            && tag.len() <= MAX_TAG_CHARS
+            && tag
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+            && seen.insert(tag.clone())
+    });
+    tags.truncate(MAX_TAGS);
 }
 
 fn check_entry(entry: &Entry) -> Result<(), String> {
@@ -490,6 +513,7 @@ mod tests {
             description: String::new(),
             author: String::new(),
             version: String::new(),
+            tags: Vec::new(),
             source: "https://example.com/p.zip".to_owned(),
             sha256: sha256_hex(bytes),
             homepage: None,
@@ -558,6 +582,35 @@ mod tests {
         assert_eq!(index.entries[0].folder_name(), "one");
         assert_eq!(index.skipped.len(), 7, "{:?}", index.skipped);
         assert!(index.skipped.iter().any(|s| s.starts_with("future")));
+    }
+
+    #[test]
+    fn tags_are_kept_only_when_they_are_plain_labels() {
+        let mut entry = good_entry("tagged");
+        entry["tags"] = serde_json::json!([
+            "search",
+            "Needs Python",
+            "search",
+            "",
+            "x".repeat(25),
+            "no-code",
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f"
+        ]);
+        let text = serde_json::json!({"format": 1, "entries": [entry, good_entry("plain")]});
+        let index = parse_index(&text.to_string()).unwrap();
+        assert_eq!(
+            index.entries[0].tags,
+            ["search", "no-code", "a", "b", "c", "d", "e", "f"]
+        );
+        assert!(index.entries[1].tags.is_empty());
+        // Entries without tags serialize without the field.
+        let json = serde_json::to_value(&index.entries[1]).unwrap();
+        assert!(json.get("tags").is_none());
     }
 
     #[test]

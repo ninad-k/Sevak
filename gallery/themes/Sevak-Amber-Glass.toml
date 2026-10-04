@@ -1,0 +1,36 @@
+# Original Sevak palette (Apache-2.0). Meant for Settings > Appearance > Frosted-glass blur (Windows and macOS): the bar is 88% opaque.
+name = "Sevak Amber Glass"
+author = "Sevak"
+description = "A warm dark amber theme made for the frosted-glass blur, with a slightly see-through bar."
+
+[font]
+size = 15
+
+[layout]
+radius = 20
+opacity = 88
+row_height = 48
+search_size = 22
+icon_size = 32
+window_width = 720
+
+[dark]
+background = "#1a1511"
+text = "#f6ead9"
+subtext = "#bfae96"
+border = "rgba(246, 234, 217, 0.12)"
+accent = "#ffb347"
+accent_strong = "#d1933a"
+on_accent = "#1a1511"
+selection = "rgba(255, 179, 71, 0.2)"
+tile = "rgba(246, 234, 217, 0.08)"
+kbd_background = "rgba(246, 234, 217, 0.08)"
+kbd_border = "rgba(246, 234, 217, 0.16)"
+shadow = "0 10px 34px rgba(0, 0, 0, 0.6), 0 1px 3px rgba(0, 0, 0, 0.45)"
+surface = "rgba(246, 234, 217, 0.05)"
+input_background = "rgba(246, 234, 217, 0.06)"
+input_border = "rgba(246, 234, 217, 0.24)"
+switch_off = "rgba(246, 234, 217, 0.28)"
+warn = "#ffcf70"
+error = "#ff8f7a"
+ok = "#9be28a"
