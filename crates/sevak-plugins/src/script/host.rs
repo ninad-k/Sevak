@@ -50,6 +50,21 @@ pub struct Candidate {
     pub reviewed_before: bool,
 }
 
+impl Candidate {
+    /// The text of the Allow dialog (see `dialog::script_prompt`): the folder,
+    /// what runs, what it is given, with everything the author wrote made safe
+    /// to show.
+    pub fn prompt(&self) -> String {
+        super::dialog::script_prompt(
+            &self.manifest,
+            &self.folder,
+            &self.dir.display().to_string(),
+            &self.key,
+            self.reviewed_before,
+        )
+    }
+}
+
 /// One folder found under the plugins directory.
 #[derive(Debug, Clone)]
 pub enum Scanned {

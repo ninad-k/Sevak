@@ -19,6 +19,7 @@
 mod alfred;
 mod approvals;
 pub(crate) mod delivery;
+pub mod dialog;
 mod host;
 mod items;
 mod manifest;

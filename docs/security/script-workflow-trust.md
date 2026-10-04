@@ -82,6 +82,25 @@ dialog lists it. A plugin that uses `launch` without declaring it stops
 showing those rows until its manifest is updated (which asks for approval
 again).
 
+## The Allow dialogs show everything and cannot be spoofed
+
+- Names, commands, folder names and node settings written by a plugin's or
+  workflow's author are cleaned before they appear: control characters, line
+  breaks and invisible or direction-changing characters are removed (they could
+  fake extra lines or reorder text), and long text is cut with an ellipsis.
+- The script plugin dialog shows the folder name with a short contents id, the
+  location, the command, the files covered, the environment variables the
+  plugin asks for, and the `launch` capability.
+- The workflow dialog lists every command with its arguments, the names of the
+  environment variables a script node sets, whether it sends text to standard
+  input, and "also does:" lines for nodes that paste text or open files and
+  links, followed by the folder name and a short contents id.
+- **Paste nodes now need approval.** A node that pastes types text into
+  whatever app was in front, which can be a terminal. A workflow with a Paste
+  node asks once after upgrading, and its dialog says it types into other apps.
+  Copy nodes do not need approval (they only fill the clipboard, like the
+  copy action in the launcher).
+
 ## A script's error output is read with limits
 
 A persistent script's standard error is written to Sevak's log. A line without

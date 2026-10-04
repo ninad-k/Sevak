@@ -54,27 +54,8 @@ pub fn review_new(app: &AppHandle) {
 /// Shows the question for one plugin; true when it was allowed and saved.
 fn ask(app: &AppHandle, candidate: &Candidate) -> bool {
     let manifest = &candidate.manifest;
-    let intro = if candidate.reviewed_before {
-        "Sevak found a script plugin to review again.\n\n\
-         The plugin's contents changed or this is the first review under the new rules: an \
-         allowance now covers the plugin's files and folder, not just its name.\n\n"
-    } else {
-        "Sevak found a script plugin it has not run before.\n\n"
-    };
-    let prompt = format!(
-        "{intro}\
-         Name: {name}\n\
-         Keyword: {keyword}\n\
-         Folder: {folder}\n\
-         Runs: {command}\n\n\
-         A script plugin runs with your account's permissions, like any program you start. \
-         Allow it only if you trust where it came from. You can switch it off any time in \
-         Settings.",
-        name = manifest.name,
-        keyword = manifest.keyword,
-        folder = candidate.dir.display(),
-        command = manifest.command_line(),
-    );
+    // Built (and made safe to show) by sevak-plugins, where it is tested.
+    let prompt = candidate.prompt();
     let allowed = app
         .dialog()
         .message(prompt)
