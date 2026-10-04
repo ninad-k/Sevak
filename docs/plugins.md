@@ -338,9 +338,19 @@ appear (down-weighted like files) for plain queries.
   its `-wal` file into a private temporary folder, reads the copy with a
   bundled SQLite and deletes it again. The browser's own files are never
   written. Tag entries are skipped.
+- **Safari** (macOS): `~/Library/Safari/Bookmarks.plist`, a binary property
+  list read with the `plist` crate (`bookmarks/safari.rs`, parsed on every OS
+  so the tests run everywhere). The root is a folder tree; the Reading List
+  (and any leaf carrying a `ReadingList` dictionary) and History are skipped.
+  The file is behind macOS Full Disk Access: opening it fails with
+  `PermissionDenied`, which `refresh` records (and logs once, at `info`). The
+  plugin then answers the **bare keyword** (`b `, an empty query, which only a
+  keyword route sends) with one row, "Safari bookmarks need Full Disk Access",
+  whose Enter opens `DeepLink::full_disk_access()`. Never at startup, never for
+  a real search. A missing file is not an error and not a hint.
 - `[bookmarks] browsers = []` means every browser found; list ids (`"chrome"`,
   `"edge"`, `"brave"`, `"vivaldi"`, `"chromium"`, `"opera"`, `"opera-gx"`,
-  `"firefox"`, `"librewolf"`, `"zen"`) to restrict it.
+  `"firefox"`, `"librewolf"`, `"zen"`, `"safari"`) to restrict it.
 - **Indexing.** `refresh` runs at startup, on "Reload index" and every ten
   minutes, on a background thread. A source file is re-read only when its
   modification time or size changed (Firefox: the database or its `-wal`), so
@@ -681,7 +691,13 @@ fetched), `copy_text` and `paste_text` the text. To say something better:
 The producer lives in `sevak_core::preview` (no UI or OS dependency) and is
 bounded: text files are read up to 64 KB, images up to 4 MB (sent as `data:`
 URLs, so the content security policy needs no new source), folders list 100
-entries. Only the path the *result* refers to is read: never one supplied by
+entries. PDFs (and Office documents and videos) are drawn by the operating
+system through a `Renderer` the shell passes to `preview::produce_with`:
+`PlatformProvider::render_thumbnail` (`sevak-platform/src/thumbnail.rs`;
+Windows `Windows.Data.Pdf` and the Shell thumbnail, macOS `qlmanage -t`, Linux
+`pdftoppm`). Only files up to 50 MB are handed over, the picture is a PNG of
+at most 4 MB shown as a `data:` URL (the CSP is unchanged), helpers get a
+timeout and are killed, and temporary files are deleted. Only the path the *result* refers to is read: never one supplied by
 the page, never a relative path, never a network location (`\\server\share`),
 and only regular files and folders. The shell commands are `preview(id,
 ticket)` and `text_view(id, ticket)`; a result that expired answers an error.
@@ -834,6 +850,7 @@ the title (a contact's phone number).
 | vCard 2.1, 3.0 and 4.0 | `sevak_platform::contacts::parse_vcards` (unit tested; no crate) |
 | macOS permission | Never asked at startup or while typing. `contacts_access()` only reads the status; a row's Enter calls `request_contacts_access()`. |
 | Non-web links | `sevak_platform::DeepLink`, opened with `PlatformProvider::open_link`. |
+| PDF pages and thumbnails | `PlatformProvider::render_thumbnail(path, RenderKind) -> Rendered`. Pure command builders and parsers in `thumbnail.rs` (tested everywhere), Windows in `windows/thumbnail.rs` (one drawing job at a time on a worker thread with a timeout), helper processes through `run_helper` (timeout, kill, output to an anonymous file). |
 | Definitions | `PlatformProvider::system_definition` (macOS Dictionary Services, `macos/dictionary.rs`) |
 | Spelling | `PlatformProvider::system_spelling` (Windows `ISpellChecker`, `windows/spell.rs`, on a worker thread with a 120 ms answer limit) |
 

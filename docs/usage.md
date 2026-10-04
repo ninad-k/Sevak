@@ -133,7 +133,9 @@ Tap ++shift++ (press and release it alone) or press ++ctrl+y++ (++cmd+y++ on mac
 |---|---|
 | Text and code files | The first 64 KB in a monospace font, with size and modified date |
 | Images (PNG, JPEG, GIF, WebP, SVG, BMP, ICO; up to 4 MB) | The picture and its pixel size |
-| PDFs and other binary files | Kind, size, path and modified date (pages are not rendered) |
+| PDFs (up to 50 MB) | The first page as a picture, with the page count where the system knows it, then kind, size, path and modified date. Linux needs `pdftoppm` (see below) |
+| Word, Excel and PowerPoint files (up to 50 MB) and videos | The system's own thumbnail, when it has one (Windows and macOS), then the details |
+| Other binary files | Kind, size, path and modified date |
 | Folders | The first 100 entries, folders first, and the item count |
 | Applications | Kind, path or launch command, and the version when it is cheap to read (macOS apps) |
 | Web results and bookmarks | The address, title and site. Nothing is fetched from the network |
@@ -141,6 +143,8 @@ Tap ++shift++ (press and release it alone) or press ++ctrl+y++ (++cmd+y++ on mac
 | Clipboard history entries | The copied text, the full image, or the copied file (several files: their paths) |
 | Calculator and conversions | The result and the calculation |
 | Emoji | The emoji large, with its name, keywords and code points |
+
+PDF pages and thumbnails are drawn by your operating system, not by Sevak: Windows uses its built-in PDF engine and the Explorer thumbnail, macOS uses Quick Look, and Linux runs `pdftoppm` from poppler-utils (install it with your package manager, for example `sudo apt install poppler-utils`; without it a PDF shows its details and a one-line hint). Each picture is made by a short-lived helper with a ten-second limit, at most 900 pixels wide, shown only while the pane is open, and deleted at once; nothing is cached on disk. A protected, damaged or very large PDF shows its details and a note instead.
 
 The pane reads only the file or folder the selected result refers to, only when it is open, and never reads network locations (`\\server\share`). The window grows to make room and shrinks back when you close the pane; near the bottom of a small screen it moves up so the pane stays visible.
 

@@ -75,7 +75,7 @@ flowchart TD
 | ++tab++ (path browsing) | Complete or drill into a folder |
 | ++shift+tab++ (path browsing) | Go up one folder level |
 | ++alt+arrow-up++ / ++alt+arrow-down++ | Add the file to the [file buffer](#file-buffer) and move on |
-| ++shift++ (tap) or ++ctrl+y++ | Preview the file or folder ([preview pane](../usage.md#preview-text-view-and-grid-view)) |
+| ++shift++ (tap) or ++ctrl+y++ | Preview the file or folder ([preview pane](../usage.md#preview-text-view-and-grid-view)); a PDF shows its first page |
 
 Use ++ctrl+k++ to see all available actions.
 
