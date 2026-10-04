@@ -9,7 +9,8 @@
     "check": "svelte-check --tsconfig ui/tsconfig.json",
     "icons": "node scripts/generate-icons.mjs",
     "tauri": "tauri",
-    "docs:pdf": "node scripts/docs-pdf.mjs"
+    "docs:pdf": "node scripts/docs-pdf.mjs",
+    "docs:media-check": "node scripts/docs-media/check-media.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.1"

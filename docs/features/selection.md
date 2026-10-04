@@ -2,6 +2,10 @@
 
 Act on text, links, or files selected in another app without copying and pasting manually. Select something, press `Ctrl+Alt+Space` (configurable), and Sevak shows actions for it. Nothing runs until you pick an action with ++up++ / ++down++ and ++enter++, or `Ctrl+1` through `Ctrl+9`.
 
+![Universal Actions for a selected sentence: search the web, show as Large Type, copy, paste as plain text, and change its case or encoding.](../media/launcher-selection.png)
+
+The picture shows sample text, rendered from the real interface with example data.
+
 ## Turn it on
 
 The feature is on by default. To change the hotkey or turn it off:

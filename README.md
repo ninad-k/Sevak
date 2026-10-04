@@ -69,6 +69,10 @@ They show the workflow rather than measured search or launch times.
 
 ![Four examples: launch an app, calculate and copy, find a project file, and search the web.](docs/media/sevak-features.png)
 
+And more once you know the keys: preview a result, pick emoji from a grid, open every action, collect files in a buffer.
+
+![Four more features: the preview pane, an emoji grid, the action panel for a result, and the file buffer strip.](docs/media/sevak-features-more.png)
+
 | Task | Try typing | What Enter does |
 |---|---|---|
 | Launch an installed app | `code` | Launches the selected application |

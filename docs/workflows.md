@@ -33,6 +33,8 @@ anything else.
 
 ## The builder
 
+![The workflow builder showing a keyword trigger, a conditional and two Open URL actions joined by lines, with the workflow details on the right.](media/settings-workflow-builder.png)
+
 **Settings → Workflows** lists every workflow, with a switch to turn each on or
 off, **Edit**, **Delete**, and **Review…** for one that waits for your
 permission. **New workflow** starts a blank one; **New from template…** offers

@@ -81,6 +81,8 @@ Use ++ctrl+k++ to see all available actions.
 
 ## File buffer
 
+![Search bar with a file buffer strip above the results: three collected items shown as chips, with Alt+Right for actions and Alt+Backspace to clear.](../media/launcher-buffer.png)
+
 Collect several files and folders, then act on all of them. With a file or folder result selected (from file search or a browsed path; not bookmarks or apps):
 
 | Key | What it does |
