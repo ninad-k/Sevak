@@ -22,6 +22,7 @@ pub mod icon_file;
 pub mod icon_theme;
 pub mod keyboard;
 pub mod media;
+pub mod netpath;
 pub mod open;
 pub mod os_search;
 pub mod paste;

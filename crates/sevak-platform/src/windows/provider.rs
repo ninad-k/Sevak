@@ -190,6 +190,8 @@ fn launch_with_verb(verb: &str, target: &LaunchTarget) -> Result<()> {
             args,
             working_dir,
         } => {
+            // A program on a network share is only started when allowed.
+            crate::netpath::guard(path)?;
             if let Some(bad) = unsafe_batch_arg(path, args) {
                 return Err(PlatformError::Os {
                     operation: "launch",

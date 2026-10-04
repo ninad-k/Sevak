@@ -142,7 +142,7 @@ Tap ++shift++ (press and release it alone) or press ++ctrl+y++ (++cmd+y++ on mac
 | Calculator and conversions | The result and the calculation |
 | Emoji | The emoji large, with its name, keywords and code points |
 
-The pane reads only the file or folder the selected result refers to, only when it is open, and never reads network locations (`\\server\share`). The window grows to make room and shrinks back when you close the pane; near the bottom of a small screen it moves up so the pane stays visible.
+The pane reads only the file or folder the selected result refers to, only when it is open, and never reads network locations (`\\server\share`), whatever [`allow_network_paths`](configuration.md#files) says. The window grows to make room and shrinks back when you close the pane; near the bottom of a small screen it moves up so the pane stays visible.
 
 ### Text View
 

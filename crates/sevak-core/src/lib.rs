@@ -11,6 +11,7 @@ pub mod engine;
 pub mod fuzzy;
 pub mod gallery_source;
 pub mod model;
+pub mod netpath;
 pub mod plugin;
 pub mod preview;
 pub mod safe_names;

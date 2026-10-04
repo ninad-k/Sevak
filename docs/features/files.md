@@ -32,6 +32,9 @@ Type a path to browse its contents live. ++tab++ and ++shift+tab++ navigate up a
 
 Folders end with `/` (or `\` on Windows), so ++tab++ drills deeper. Path browsing shows contents live without waiting for the full index.
 
+!!! warning "Network paths are off by default (Windows)"
+    A path on another computer (`\\server\share\...`, `//server/share/...`, `\\?\UNC\...`) or on a mapped network drive is not listed, opened or checked: Sevak shows one row, **Network paths are turned off (Settings → Files)**, before it touches the path. Windows signs in to a computer as soon as anything looks at its path, which can hand your Windows credentials to whoever runs that computer, and a path can reach Sevak from a pasted text or another program. Turn **Allow network paths** on (**Settings → Files**, or [`[files] allow_network_paths = true`](../configuration.md#files)) if you keep files on a server you trust. While it is off, folders in `directories` that are on a network share are skipped (a line in the log says so), and the same rule applies to the file buffer's destination picker, workflows' open-file nodes and any other path Sevak is about to open. Device paths such as `\\.\pipe\name` are never used. Text you select in other apps is never checked as a network path, whatever this setting says.
+
 ### Whole-disk and content search
 
 `f` only knows the folders you chose. Two more keywords ask your computer's own file index, which covers the whole disk and can read inside documents:
@@ -122,6 +125,7 @@ What to expect:
 | Directories | `~/Desktop`, `~/Documents`, `~/Downloads` | Folders whose contents are indexed | [`[files] directories`](../configuration.md#files) |
 | Max depth | `4` | How many folder levels below each directory are indexed | [`[files] max_depth`](../configuration.md#files) |
 | Include hidden | `false` | Whether to index dot-files and dot-folders (`.gitignore`, `.config/`) | [`[files] include_hidden`](../configuration.md#files) |
+| Allow network paths | `false` | Windows: use `\\server\share` paths and mapped network drives (see [Path browsing](#path-browsing)) | [`[files] allow_network_paths`](../configuration.md#files) |
 | Keyword | `f` | Keyword to search only files | [`[files] keyword`](../configuration.md#files) |
 | Global | `true` | Also show file results in ordinary searches without the keyword | [`[files] global`](../configuration.md#files) |
 | Use the OS index | `true` | Turn whole-disk (`ff`) and content (`in`) search on or off | [`[files] use_os_index`](../configuration.md#files) |

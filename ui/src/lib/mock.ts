@@ -396,6 +396,7 @@ export function mockSettings(): SettingsDto {
         use_os_index: true,
         index_keyword: "ff",
         content_keyword: "in",
+        allow_network_paths: false,
       },
       bookmarks: { browsers: [], keyword: "b", global: true },
       shell: { terminal: "", shell: "", keep_open: true },

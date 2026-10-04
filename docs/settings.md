@@ -311,6 +311,14 @@ Default: off.
 
 Links to: `[files] include_hidden` in configuration.
 
+### Allow network paths
+
+Windows only. Use paths on other computers (`\\server\share`) and mapped network drives. Off, Sevak shows "Network paths are turned off" instead of looking at them, because Windows signs in to a computer as soon as anything looks at its path. Folders in the list above that are on a share are skipped while this is off.
+
+Default: off.
+
+Links to: `[files] allow_network_paths` in configuration.
+
 ### Keyword
 
 Type "keyword filename" to search only files. Leave empty to disable.

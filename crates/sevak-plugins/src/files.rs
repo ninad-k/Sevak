@@ -8,6 +8,7 @@ use std::time::Instant;
 use sevak_core::config::FilesConfig;
 use sevak_core::model::score;
 use sevak_core::{Action, FuzzyQuery, IconSource, Modifier, Plugin, PluginResult, ResultItem};
+use sevak_platform::netpath::{self, Refusal};
 use sevak_platform::PlatformProvider;
 use walkdir::{DirEntry, WalkDir};
 
@@ -187,10 +188,35 @@ impl FilesPlugin {
         .with_score(score)
     }
 
+    /// A one-line row saying why a typed path was not looked at. Enter copies
+    /// the sentence; nothing else can be done with it.
+    fn refusal_row(why: Refusal) -> ResultItem {
+        let message = why.message();
+        ResultItem::new(
+            "files",
+            "path-refused",
+            message,
+            Action::CopyText {
+                text: message.to_owned(),
+            },
+        )
+        .with_icon(IconSource::builtin("folder"))
+        .with_score(score::KEYWORD)
+    }
+
     pub(crate) fn search(&self, input: &str) -> Vec<ResultItem> {
         let input = input.trim();
+        let allow = self.config.allow_network_paths;
         if let Some(typed) = path_browse::parse(input, self.home.as_deref(), cfg!(windows)) {
+            // Before anything is listed: a share would be contacted by the listing.
+            if let Some(why) = netpath::refusal(&typed.dir.to_string_lossy(), allow) {
+                return vec![Self::refusal_row(why)];
+            }
             return self.browse(&typed);
+        }
+        // `\\server` alone is not browsable, but typing it is still a network path.
+        if let Some(why) = netpath::text_refusal(input, allow) {
+            return vec![Self::refusal_row(why)];
         }
         if input.chars().count() < MIN_QUERY_CHARS {
             return Vec::new();
@@ -367,6 +393,10 @@ impl Plugin for FilesPlugin {
     /// hotkey bound to a file should keep working outside the search depth.
     fn resolve(&self, id: &str) -> Option<ResultItem> {
         let path = PathBuf::from(id.strip_prefix("files:")?);
+        // Asking whether a network path exists would already contact it.
+        if netpath::refusal(&path.to_string_lossy(), self.config.allow_network_paths).is_some() {
+            return None;
+        }
         let metadata = std::fs::metadata(&path).ok()?;
         let name = path.file_name()?.to_string_lossy().into_owned();
         Some(self.row(&name, path, metadata.is_dir(), 0.0))
@@ -377,6 +407,14 @@ impl Plugin for FilesPlugin {
         let mut roots = Vec::new();
         for directory in &self.config.directories {
             let root = expand_home(directory, self.home.as_deref());
+            if netpath::refusal(&root.to_string_lossy(), self.config.allow_network_paths).is_some()
+            {
+                tracing::warn!(
+                    "a files directory is on the network and was skipped; \
+                     set [files] allow_network_paths = true to index it"
+                );
+                continue;
+            }
             if root.is_dir() {
                 roots.push(root);
             } else {
@@ -1025,5 +1063,68 @@ mod tests {
         let plugin = browsing(dir.path(), false);
         assert!(plugin.snapshot().is_empty());
         assert_eq!(titles(&plugin, "~/notes"), ["notes.md"]);
+    }
+
+    /// Typed network paths (Windows): one row, and nothing is listed or
+    /// stat'ed. The default configuration has `allow_network_paths = false`.
+    #[cfg(windows)]
+    #[test]
+    fn typed_network_paths_get_one_refusal_row_and_no_io() {
+        let plugin = FilesPlugin::with_home(FilesConfig::default(), MockPlatform::empty(), None);
+        assert!(!FilesConfig::default().allow_network_paths);
+        for typed in [
+            r"\\server\share\dir\na",
+            "//server/share/dir/na",
+            r"\\?\UNC\server\share\x\y",
+            r"\\.\UNC\server\share\x\y",
+            r"\\host@SSL\share\x\y",
+            r"\\server",
+            r"\\server\share",
+        ] {
+            let rows = plugin.query(typed);
+            assert_eq!(rows.len(), 1, "{typed}: {rows:?}");
+            assert_eq!(
+                rows[0].title,
+                "Network paths are turned off (Settings \u{2192} Files)"
+            );
+            assert_eq!(rows[0].plugin_id, "files");
+        }
+        // A device path is refused whatever the setting says.
+        let config = FilesConfig {
+            allow_network_paths: true,
+            ..FilesConfig::default()
+        };
+        let allowed = FilesPlugin::with_home(config, MockPlatform::empty(), None);
+        let rows = allowed.query(r"\\.\pipe\name");
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].title.contains("device path"), "{:?}", rows[0].title);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_network_path_is_not_resolved_or_indexed() {
+        let config = FilesConfig {
+            directories: vec![
+                r"\\server\share\docs".to_owned(),
+                "//server/share".to_owned(),
+            ],
+            ..FilesConfig::default()
+        };
+        let plugin = FilesPlugin::with_home(config, MockPlatform::empty(), None);
+        // `resolve` would otherwise ask the file system, and so the network.
+        assert!(plugin.resolve(r"files:\\server\share\x.txt").is_none());
+        assert!(plugin.resolve("files://server/share/x.txt").is_none());
+        // The configured shares are skipped, not scanned.
+        plugin.refresh().unwrap();
+        assert!(plugin.snapshot().is_empty());
+    }
+
+    /// Where these spellings are ordinary file names nothing is refused.
+    #[cfg(not(windows))]
+    #[test]
+    fn other_systems_do_not_treat_unc_spellings_as_network_paths() {
+        let plugin = FilesPlugin::with_home(FilesConfig::default(), MockPlatform::empty(), None);
+        let rows = plugin.query(r"\\server\share");
+        assert!(rows.iter().all(|row| row.id != "path-refused"));
     }
 }

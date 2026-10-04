@@ -120,6 +120,12 @@ global = true
 use_os_index = true
 index_keyword = "ff"
 content_keyword = "in"
+# Windows only. Use paths on other computers (\\server\share, or a mapped
+# network drive). Off by default: merely looking at such a path makes Windows
+# connect to that computer and sign in to it, which can hand your Windows
+# credentials to whoever runs it. Turn on if you keep files on a file server
+# you trust; folders listed in "directories" on a share are skipped while off.
+allow_network_paths = false
 
 [bookmarks]
 # Browsers whose bookmarks are searchable; [] means every browser found.
@@ -682,6 +688,9 @@ pub struct FilesConfig {
     pub index_keyword: String,
     /// Keyword for searching inside files; empty turns it off.
     pub content_keyword: String,
+    /// Windows: use network paths (`\\server\share`, mapped network drives).
+    /// Off by default because touching one makes the system connect and sign in.
+    pub allow_network_paths: bool,
 }
 
 impl Default for FilesConfig {
@@ -699,6 +708,7 @@ impl Default for FilesConfig {
             use_os_index: true,
             index_keyword: "ff".to_owned(),
             content_keyword: "in".to_owned(),
+            allow_network_paths: false,
         }
     }
 }
@@ -1465,6 +1475,23 @@ mod tests {
         assert_eq!(config.onepassword.keyword, "1p");
         assert_eq!(config.onepassword.cache_minutes, 1);
         assert_eq!(config.onepassword.op_path, "/bin/op");
+    }
+
+    #[test]
+    fn network_paths_are_off_unless_the_file_says_otherwise() {
+        assert!(!Config::default().files.allow_network_paths);
+        assert!(DEFAULT_CONFIG_TOML.contains("allow_network_paths = false"));
+        // An existing file without the key keeps them off.
+        let old = Config::from_toml_str("[files]\nkeyword = \"f\"\n").unwrap();
+        assert!(!old.files.allow_network_paths);
+        let on = Config::from_toml_str("[files]\nallow_network_paths = true\n").unwrap();
+        assert!(on.files.allow_network_paths);
+        // Saving the settings keeps the key and the file's comments.
+        let mut config = Config::default();
+        config.files.allow_network_paths = true;
+        let text = saved(Some(DEFAULT_CONFIG_TOML), &config);
+        assert!(text.contains("allow_network_paths = true"), "{text}");
+        assert!(text.contains("# Windows only. Use paths on other computers"));
     }
 
     #[test]

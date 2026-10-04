@@ -217,13 +217,19 @@ pub struct RunContext<'a> {
 }
 
 /// Turns the folder a user typed or picked into a path that exists: `~` is
-/// expanded, and it must be a folder.
-pub fn resolve_destination(typed: &str) -> Result<PathBuf, String> {
+/// expanded, and it must be a folder. A network path is refused, before any
+/// file system call, unless `allow_network_paths` (`[files]`) is on.
+pub fn resolve_destination(typed: &str, allow_network_paths: bool) -> Result<PathBuf, String> {
     let text = typed.trim();
     if text.is_empty() {
         return Err("Type or pick a destination folder.".to_owned());
     }
     let path = expand_home(text, home_dir().as_deref());
+    if let Some(why) =
+        sevak_platform::netpath::refusal(&path.to_string_lossy(), allow_network_paths)
+    {
+        return Err(format!("{}.", why.message()));
+    }
     if !path.is_absolute() {
         return Err(
             "Type the destination as a full path, starting with ~, / or a drive letter.".to_owned(),
@@ -889,19 +895,48 @@ mod tests {
         std::fs::write(&file, "x").unwrap();
 
         let typed = format!("{}{}", dir.path().display(), std::path::MAIN_SEPARATOR);
-        assert_eq!(resolve_destination(&typed).unwrap(), PathBuf::from(&typed));
-        assert!(resolve_destination("").is_err());
-        assert!(resolve_destination("  ").is_err());
-        assert!(resolve_destination("relative/dir")
+        assert_eq!(
+            resolve_destination(&typed, false).unwrap(),
+            PathBuf::from(&typed)
+        );
+        assert!(resolve_destination("", false).is_err());
+        assert!(resolve_destination("  ", false).is_err());
+        assert!(resolve_destination("relative/dir", false)
             .unwrap_err()
             .contains("full path"));
-        assert!(resolve_destination(&file.display().to_string())
+        assert!(resolve_destination(&file.display().to_string(), false)
             .unwrap_err()
             .contains("not a folder"));
         let missing = dir.path().join("nope").display().to_string();
-        assert!(resolve_destination(&missing)
+        assert!(resolve_destination(&missing, false)
             .unwrap_err()
             .contains("does not exist"));
+    }
+
+    /// Windows only: a share is refused before the file system is asked about
+    /// it. (Elsewhere these are ordinary, missing, relative names.)
+    #[cfg(windows)]
+    #[test]
+    fn network_destinations_are_refused_unless_allowed() {
+        for typed in [
+            r"\\server\share\folder",
+            "//server/share/folder",
+            r"\\?\UNC\server\share",
+            r"\\.\UNC\server\share",
+        ] {
+            let err = resolve_destination(typed, false).unwrap_err();
+            assert!(
+                err.contains("Network paths are turned off"),
+                "{typed}: {err}"
+            );
+            // Allowed, the question reaches the file system (and the answer is
+            // the ordinary "does not exist" or similar, not the refusal).
+            if let Err(err) = resolve_destination(typed, true) {
+                assert!(!err.contains("turned off"), "{typed}: {err}");
+            }
+        }
+        let err = resolve_destination(r"\\.\pipe\x", true).unwrap_err();
+        assert!(err.contains("device"), "{err}");
     }
 
     #[test]

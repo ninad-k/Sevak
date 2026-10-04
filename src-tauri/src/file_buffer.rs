@@ -268,7 +268,10 @@ fn destination_of(app: &AppHandle, arg: Option<DestinationArg>) -> Result<PathBu
                 Err(format!("{} is not a folder.", path.display()))
             }
         }
-        Some(DestinationArg::Text { text }) => buffer::resolve_destination(&text),
+        Some(DestinationArg::Text { text }) => buffer::resolve_destination(
+            &text,
+            app.state::<AppState>().config().files.allow_network_paths,
+        ),
         None => Err("Pick a destination folder first.".to_owned()),
     }
 }

@@ -296,6 +296,20 @@ most four such listings may be outstanding at once, and the last listing is
 reused for 1.5 s while the user types the filter). A UNC path needs both a
 server and a share before anything is read.
 
+On Windows a typed network path (`\\server\share`, `//server/share`,
+`\\?\UNC\...`, `\\.\UNC\...`, or a mapped network drive) is never read
+unless `[files] allow_network_paths` is on: `FilesPlugin::search` asks
+`sevak_platform::netpath::refusal` *before* the directory is listed and returns
+one status row instead, `resolve` and the configured `directories` ask the same
+question before `metadata` or `is_dir`, and the file buffer's
+`resolve_destination` takes the setting as an argument. Everything that opens a
+path through `PlatformProvider` (`open_path`, `reveal_path`, `move_to_trash`,
+`open_terminal_in`, Windows `launch` of an executable) and the workflow
+open-file and launch nodes also check the process-wide setting
+(`netpath::set_allow_network_paths`, applied from the configuration whenever the
+plugins are built). `sevak_core::netpath` holds the text rules; device paths
+(`\\.\pipe\...`, `\\?\GLOBALROOT\...`) are refused whatever the setting is.
+
 ### The shell plugin
 
 `> some command` (`crates/sevak-plugins/src/shell.rs`) shows "Run `some command`
