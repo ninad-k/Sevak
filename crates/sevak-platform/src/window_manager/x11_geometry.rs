@@ -60,10 +60,6 @@ impl Strut {
     }
 }
 
-fn to_i32(value: u32) -> i32 {
-    i32::try_from(value).unwrap_or(i32::MAX)
-}
-
 /// A rectangle from inclusive `start..=end` along one axis and a fixed span
 /// on the other, or `None` when it has no area.
 fn band(horizontal: bool, fixed_start: i64, fixed_len: i64, start: u32, end: u32) -> Option<Rect> {

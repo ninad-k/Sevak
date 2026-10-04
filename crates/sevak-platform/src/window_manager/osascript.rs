@@ -35,9 +35,18 @@
 
 use sevak_core::window_layout::{Monitor, Rect};
 
+/// Added to coordinates passed to the scripts and taken off again there: an
+/// argument that starts with a minus sign would be read by `osascript` as one of
+/// its own options, and windows on a display left of or above the primary one
+/// have negative coordinates.
+pub const COORDINATE_OFFSET: i32 = 100_000;
+/// Put in front of a window title passed to the scripts, for the same reason
+/// (a title may start with `-`); the scripts cut it off.
+pub const TITLE_PREFIX: &str = "t:";
+
 /// Prints the displays and, for every visible app but Sevak itself, its
-/// windows. `argv[0]` is Sevak's process id; an optional `argv[1]` limits the
-/// listing to one process.
+/// windows. `argv[0]` is Sevak's process id; `argv[1]` is `screens` (only the
+/// displays), `all`, or the process id of the one app to list.
 pub const LIST_SCRIPT: &str = r#"
 function clean(value) {
   return String(value === null || value === undefined ? '' : value).replace(/\s+/g, ' ').trim();
@@ -55,7 +64,10 @@ function run(argv) {
         v.origin.x, v.origin.y, v.size.width, v.size.height, screen.backingScaleFactor].join('\t'));
     }
     const own = parseInt(argv[0], 10);
-    const only = argv.length > 1 ? parseInt(argv[1], 10) : 0;
+    const mode = argv.length > 1 ? argv[1] : 'all';
+    if (mode === 'screens') return lines.join('
+');
+    const only = mode === 'all' ? 0 : parseInt(mode, 10);
     const events = Application('System Events');
     const processes = events.applicationProcesses.whose({backgroundOnly: false})();
     for (const process of processes) {
@@ -86,7 +98,8 @@ function run(argv) {
 "#;
 
 /// Moves and resizes one window. `argv`: process id, window index, expected
-/// title (empty to skip the check), x, y, width, height. When the window at
+/// title with [`TITLE_PREFIX`] (empty after it to skip the check), then x, y
+/// (both plus [`COORDINATE_OFFSET`]), width and height. When the window at
 /// that index no longer has the expected title, the process's window with that
 /// title is used instead. Prints `OK` or `ERR<TAB>message`.
 pub const SET_RECT_SCRIPT: &str = r#"
@@ -102,8 +115,8 @@ function run(argv) {
   try {
     const events = Application('System Events');
     const process = events.applicationProcesses.whose({unixId: parseInt(argv[0], 10)})()[0];
-    const window = find(process, parseInt(argv[1], 10), argv[2]);
-    const x = parseInt(argv[3], 10), y = parseInt(argv[4], 10);
+    const window = find(process, parseInt(argv[1], 10), argv[2].slice(2));
+    const x = parseInt(argv[3], 10) - 100000, y = parseInt(argv[4], 10) - 100000;
     const width = parseInt(argv[5], 10), height = parseInt(argv[6], 10);
     try { if (window.minimized()) window.minimized = false; } catch (e) {}
     try { window.attributes.byName('AXFullScreen').value = false; } catch (e) {}
@@ -120,7 +133,8 @@ function run(argv) {
 "#;
 
 /// Brings one window to the front. `argv`: process id, window index, expected
-/// title (empty to skip the check). Prints `OK` or `ERR<TAB>message`.
+/// title with [`TITLE_PREFIX`] (empty after it to skip the check). Prints `OK`
+/// or `ERR<TAB>message`.
 pub const FOCUS_SCRIPT: &str = r#"
 function run(argv) {
   try {
@@ -129,7 +143,7 @@ function run(argv) {
     const process = events.applicationProcesses.whose({unixId: parseInt(argv[0], 10)})()[0];
     const windows = process.windows();
     const index = parseInt(argv[1], 10);
-    const title = argv[2];
+    const title = argv[2].slice(2);
     let window = windows[index];
     if (title !== '' && !(window && clean(window.name()) === title)) {
       for (const candidate of windows) { if (clean(candidate.name()) === title) { window = candidate; break; } }
@@ -404,6 +418,15 @@ mod tests {
         ] {
             assert_eq!(parse_id(bad), None, "{bad:?}");
         }
+    }
+
+    #[test]
+    fn script_constants_agree_with_the_scripts() {
+        assert_eq!(TITLE_PREFIX.len(), 2, "the scripts cut two characters");
+        assert!(SET_RECT_SCRIPT.contains(&format!("- {COORDINATE_OFFSET}")));
+        assert!(SET_RECT_SCRIPT.contains("argv[2].slice(2)"));
+        assert!(FOCUS_SCRIPT.contains("argv[2].slice(2)"));
+        assert!(LIST_SCRIPT.contains("mode === 'screens'"));
     }
 
     #[test]

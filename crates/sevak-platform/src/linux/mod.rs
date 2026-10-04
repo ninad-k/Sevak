@@ -7,6 +7,7 @@ mod launch;
 mod paste;
 mod scan;
 pub(crate) mod tasks;
+mod wm;
 mod xdg;
 
 use std::io::Read;
@@ -24,6 +25,8 @@ use crate::keyboard::{KeyListener, KeyListenerSupport, KeySink, TypingTarget};
 use crate::paste::{ForegroundApp, PasteContent, PasteOutcome, PasteSupport};
 use crate::provider::PlatformProvider;
 use crate::session;
+use crate::window_manager::{WindowId, WindowInfo, WindowState, WindowSupport};
+use sevak_core::window_layout::{Monitor, Rect};
 
 pub(crate) struct LinuxProvider;
 
@@ -113,6 +116,34 @@ impl PlatformProvider for LinuxProvider {
 
     fn capture_selection(&self, options: &CaptureOptions) -> SelectionCapture {
         capture::capture_selection(options)
+    }
+
+    fn window_support(&self) -> WindowSupport {
+        wm::window_support()
+    }
+
+    fn list_windows(&self) -> Result<Vec<WindowInfo>> {
+        wm::list_windows()
+    }
+
+    fn focus_window(&self, window: &WindowId) -> Result<()> {
+        wm::focus_window(window)
+    }
+
+    fn target_window(&self) -> Result<WindowState> {
+        wm::target_window()
+    }
+
+    fn window_state(&self, window: &WindowId) -> Result<WindowState> {
+        wm::window_state(window)
+    }
+
+    fn set_window_rect(&self, window: &WindowId, rect: Rect) -> Result<()> {
+        wm::set_window_rect(window, rect)
+    }
+
+    fn list_monitors(&self) -> Result<Vec<Monitor>> {
+        wm::list_monitors()
     }
 }
 

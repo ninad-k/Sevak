@@ -8,6 +8,7 @@ mod expand;
 pub(crate) mod media;
 mod paste;
 pub(crate) mod trash;
+mod wm;
 
 use std::collections::HashSet;
 use std::fs;
@@ -25,6 +26,8 @@ use crate::keyboard::{KeyListener, KeyListenerSupport, KeySink, TypingTarget};
 use crate::paste::{ClipboardRead, ForegroundApp, PasteContent, PasteOutcome, PasteSupport};
 use crate::process::spawn_detached_in;
 use crate::provider::PlatformProvider;
+use crate::window_manager::{WindowId, WindowInfo, WindowState, WindowSupport};
+use sevak_core::window_layout::{Monitor, Rect};
 
 /// `open(1)`: launches bundles and opens files/URLs with their default handler.
 pub(crate) const OPEN: &str = "/usr/bin/open";
@@ -154,6 +157,34 @@ impl PlatformProvider for MacProvider {
 
     fn system_definition(&self, word: &str) -> Option<String> {
         dictionary::definition(word)
+    }
+
+    fn window_support(&self) -> WindowSupport {
+        wm::window_support()
+    }
+
+    fn list_windows(&self) -> Result<Vec<WindowInfo>> {
+        wm::list_windows()
+    }
+
+    fn focus_window(&self, window: &WindowId) -> Result<()> {
+        wm::focus_window(window)
+    }
+
+    fn target_window(&self) -> Result<WindowState> {
+        wm::target_window()
+    }
+
+    fn window_state(&self, window: &WindowId) -> Result<WindowState> {
+        wm::window_state(window)
+    }
+
+    fn set_window_rect(&self, window: &WindowId, rect: Rect) -> Result<()> {
+        wm::set_window_rect(window, rect)
+    }
+
+    fn list_monitors(&self) -> Result<Vec<Monitor>> {
+        wm::list_monitors()
     }
 }
 
