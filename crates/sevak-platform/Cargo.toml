@@ -58,6 +58,8 @@ x11rb = { version = "0.13", features = ["record", "xtest"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 plist = "1"
+# Scratch files for `sips` icon conversions: exclusive, unpredictable names.
+tempfile.workspace = true
 # Frontmost app, pasteboard types and the Cmd+V key event (all already in the
 # dependency tree through arboard).
 objc2 = "0.6"
