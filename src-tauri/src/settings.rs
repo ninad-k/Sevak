@@ -90,6 +90,7 @@ pub async fn get_settings(app: AppHandle) -> SettingsDto {
     let mut catalog = PluginRegistry::builtin().catalog(&config, state.search.platform.clone());
     let owners = KeywordOwners::collect(&config, &state.search.scripts, &state.search.workflows);
     catalog.extend(state.search.scripts.catalog(&config, &owners));
+    catalog.extend(state.search.extensions.catalog(&config));
     SettingsDto {
         config,
         catalog,

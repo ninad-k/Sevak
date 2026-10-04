@@ -9,6 +9,7 @@ mod commands;
 mod diagnostics;
 mod direct;
 mod expansion;
+mod extensions;
 mod file_buffer;
 mod hotkey;
 mod icons;

@@ -10,8 +10,8 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent};
 use crate::cli::{self, Launch};
 use crate::state::AppState;
 use crate::{
-    autostart, backdrop, commands, diagnostics, direct, expansion, file_buffer, hotkey, icons,
-    search, selection, settings, takeover, themes, tray, updater, window, workflows,
+    autostart, backdrop, commands, diagnostics, direct, expansion, extensions, file_buffer, hotkey,
+    icons, search, selection, settings, takeover, themes, tray, updater, window, workflows,
 };
 
 pub fn run(
@@ -114,7 +114,16 @@ pub fn run(
             workflows::workflow_templates,
             workflows::open_workflows_folder,
             workflows::gallery_load,
-            workflows::gallery_install
+            workflows::gallery_install,
+            extensions::extensions_overview,
+            extensions::extensions_refresh,
+            extensions::extensions_install,
+            extensions::extensions_update,
+            extensions::extensions_uninstall,
+            extensions::extensions_set_enabled,
+            extensions::extensions_review,
+            extensions::extensions_open_folder,
+            extensions::extensions_take_page
         ])
         .on_window_event(window::on_window_event)
         .setup(move |app| {

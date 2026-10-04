@@ -18,13 +18,14 @@ use sevak_core::{
     UsageStore,
 };
 use sevak_platform::{native_provider, AppPaths, PlatformProvider};
+use sevak_plugins::extensions::ExtensionsHost;
 use sevak_plugins::{builtin_plugins, KeywordOwners, ScriptPluginHost, WorkflowHost};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::icons::IconStore;
 use crate::state::{lock, AppState};
 use crate::workflows::TauriSink;
-use crate::{script_plugins, window, workflows};
+use crate::{extensions, script_plugins, window, workflows};
 
 pub const EVENT_INDEX: &str = "sevak:index";
 /// A script plugin's late answer is ready: the UI runs its current query again.
@@ -61,12 +62,14 @@ fn all_plugins(
     platform: &Arc<dyn PlatformProvider>,
     scripts: &ScriptPluginHost,
     workflows: &WorkflowHost,
+    extensions: &ExtensionsHost,
 ) -> Vec<Arc<dyn Plugin>> {
     // Everything that opens a path checks this (see `sevak_platform::netpath`).
     sevak_platform::netpath::set_allow_network_paths(config.files.allow_network_paths);
     let mut plugins = builtin_plugins(config, platform.clone());
     plugins.extend(scripts.plugins(config, platform));
     plugins.extend(workflows.plugins(config, platform));
+    plugins.extend(extensions.plugins(config));
     // A keyword two plugins answer is not an error, but say so once.
     KeywordOwners::collect(config, scripts, workflows).log_shared();
     plugins
@@ -78,9 +81,10 @@ pub fn build_engine(
     usage: UsageStore,
     scripts: &ScriptPluginHost,
     workflows: &WorkflowHost,
+    extensions: &ExtensionsHost,
 ) -> SearchEngine {
     SearchEngine::new(
-        all_plugins(config, &platform, scripts, workflows),
+        all_plugins(config, &platform, scripts, workflows, extensions),
         usage,
         engine_options(config),
     )
@@ -234,6 +238,8 @@ pub struct Search {
     pub scripts: Arc<ScriptPluginHost>,
     /// Workflows found in `<config dir>/workflows`.
     pub workflows: Arc<WorkflowHost>,
+    /// The extension store and the `ext` / `store` keywords.
+    pub extensions: Arc<ExtensionsHost>,
     /// Where workflow output nodes show their results; gets its window handle
     /// in [`start`].
     pub sink: Arc<TauriSink>,
@@ -269,12 +275,21 @@ impl Search {
             paths.data_dir.join("script-plugin-approvals.json"),
             sink.clone(),
         ));
-        let engine = build_engine(config, platform.clone(), usage, &scripts, &workflows);
+        let extensions = extensions::build_host(paths);
+        let engine = build_engine(
+            config,
+            platform.clone(),
+            usage,
+            &scripts,
+            &workflows,
+            &extensions,
+        );
         Self {
             icons: IconStore::new(platform.clone()),
             platform,
             scripts,
             workflows,
+            extensions,
             sink,
             engine: RwLock::new(Arc::new(engine)),
             latest: Mutex::new(Latest::default()),
@@ -430,6 +445,7 @@ pub fn start(app: &AppHandle) {
         .engine()
         .attach_notifier(&results_notifier(app));
     state.search.sink.attach(app);
+    extensions::attach(app);
     script_plugins::review_new(app);
     workflows::review_new(app);
 
@@ -493,7 +509,13 @@ pub fn reload(app: &AppHandle, config: &Config) {
     let state = app.state::<AppState>();
     let search = &state.search;
     let generation = search.reload_generation.fetch_add(1, Ordering::SeqCst) + 1;
-    let plugins = all_plugins(config, &search.platform, &search.scripts, &search.workflows);
+    let plugins = all_plugins(
+        config,
+        &search.platform,
+        &search.scripts,
+        &search.workflows,
+        &search.extensions,
+    );
     let notifier = results_notifier(app);
     for plugin in &plugins {
         plugin.attach_notifier(Arc::clone(&notifier));
