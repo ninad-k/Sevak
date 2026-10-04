@@ -107,6 +107,7 @@ nav:
       - Keyboard shortcuts: keyboard.md
       - Settings window: settings.md
       - Themes: themes.md
+      - Backup and restore: backup-and-restore.md
   - Features:
       - features/index.md
       - Applications: features/apps.md

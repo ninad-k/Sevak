@@ -149,6 +149,14 @@ Sevak also includes:
   Appearance ([themes guide](docs/themes.md)).
 - **Settings and TOML** — use the settings window or a commented config file,
   which can live in a synced folder.
+- **Backup and restore** — save your settings, snippets, web searches, themes,
+  script plugins and workflows to one `.sevakbackup` file and restore it on
+  this or another computer (Settings → Backup & restore, `sevak --backup` /
+  `--restore`, or `backup settings` in the launcher). It previews what changes,
+  offers merge or replace, takes a safety copy so you can undo, and never holds
+  keys, tokens, clipboard or search history, or which scripts you allowed;
+  restored scripts ask for approval again. Automatic backups are off by default.
+  [Backup and restore →](docs/backup-and-restore.md)
 - **Tray access and launch at login** — keep Sevak available in the background.
 - **Optional update checks** — check at startup and daily; installation
   requires your agreement and verifies an update signature.
@@ -321,6 +329,7 @@ readable right here on GitHub:
 | Change settings in the app | [Settings window](docs/settings.md) |
 | Look up every option in `config.toml` | [Configuration file](docs/configuration.md) |
 | Use Sevak from the command line or scripts | [Command line](docs/cli.md) |
+| Back up your settings, or move them to another computer | [Backup and restore](docs/backup-and-restore.md) |
 | Find, back up or reset Sevak's data | [Files and data](docs/files-and-data.md) |
 | Restyle the launcher: theme editor, theme gallery or your own CSS | [Themes](docs/themes.md) |
 | Fix a shortcut, search or update problem | [Troubleshooting](docs/troubleshooting.md) and [FAQ](docs/faq.md) |

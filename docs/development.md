@@ -19,6 +19,9 @@ crates/sevak-plugins    built-in plugins: apps, calculator (+ units, currency), 
                         clipboard history, snippets, emoji picker (data/emoji.tsv), uuid example;
                         the file buffer (collect files, act on all); the script plugin host
                         (external plugins); workflows (graph engine, runtime, gallery)
+crates/sevak-backup     settings backup and restore: the .sevakbackup archive, the allowlist of what
+                        may go in, validation of hostile archives, merge / replace, safety snapshot
+                        and undo, automatic backups (no Tauri code; see docs/backup-and-restore.md)
 src-tauri               the Tauri shell: window, hotkeys (main, Universal Actions + [[hotkey]] entries,
                         takeover of Win+Space / Cmd+Space / Super+Space), tray, CLI,
                         --query / --run handling (direct.rs), script plugin approval, IPC

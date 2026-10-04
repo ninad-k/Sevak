@@ -138,7 +138,12 @@ Inside your config folder (see [Files and data locations](files-and-data.md)):
 | `plugins/` folder | Script plugins and their data | No, unless the plugin makes network requests |
 | `workflows/` folder | Workflows and their data | No, unless a workflow's script makes network requests |
 | `themes/` folder | Theme files | No |
+| `backup.toml`, `backup-state.json`, `backup-snapshots/` | The options of automatic [backups](backup-and-restore.md), when the last one was made, and the safety copies taken before a restore (settings, snippets, themes, plugins and workflows only) | No |
 | Logs | Diagnostic output for troubleshooting | No (you can share them manually, or use the [diagnostics report](#diagnostics-report), which has a redacted tail) |
+
+## Backups
+
+A [backup](backup-and-restore.md) is a file you ask for (or switch on) and Sevak writes on your computer; it is never uploaded. It holds your settings, snippets, web searches, themes, script plugins and workflows. It never holds API keys, tokens or passwords, clipboard or search history, anything from a password manager or 1Password, logs, or the record of which scripts you allowed: what can go in is an allowlist, and a test fails if something new could. The file is **not encrypted**, so keep it where only you can read it.
 
 ## Clipboard behavior
 
