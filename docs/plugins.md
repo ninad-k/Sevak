@@ -955,6 +955,7 @@ idle_timeout_secs = 300          # persistent: stop after this much inactivity (
 
 files       = ["lib/util.py"]    # optional: more files of this folder the approval covers
 inherit_env = ["MY_API_KEY"]     # optional: Sevak's own variables the script may see
+capabilities = ["launch"]        # optional: let results start applications
 ```
 
 - `id` is **stable forever**, like every plugin id: it is part of result ids and
@@ -1117,12 +1118,21 @@ keyed by result id.
 | `{"type":"copy_text","text":"..."}` | copies text |
 | `{"type":"open_url","url":"https://..."}` | opens a web or `mailto:` link (other schemes are refused by Sevak) |
 | `{"type":"open_path","path":"..."}` | opens a file or folder with its default program; a relative path is relative to the plugin folder |
-| `{"type":"launch","target":{...}}` | starts an application (the `LaunchTarget` shapes in `model.rs`) |
+| `{"type":"launch","target":{...}}` | starts an application (the `LaunchTarget` shapes in `model.rs`); **only if the manifest declares `capabilities = ["launch"]`**, otherwise the item is dropped. A relative `path` is relative to the plugin folder |
 | `{"type":"custom","payload":"..."}` | sends `execute` back to the script (persistent mode only) |
 
 Sevak itself performs every standard action; a script cannot make Sevak call
-anything beyond this list. A `custom` action is the way to do work in the
-script, such as saving a note.
+anything beyond this list, and any other `action` type (pasting into other
+apps, putting images or files on the clipboard, revealing in the file manager,
+elevating) is dropped with a message in the log. `open_url` links must be
+`http://`, `https://` or `mailto:` and contain no control characters; anything
+else is dropped. The check is done when the answer arrives and again when the
+row is picked. A custom action is the way to do work in the script, such as
+saving a note.
+
+`capabilities` lists the extra things a plugin's results may do. Today there is
+one, `"launch"`. It is shown in the Allow dialog and is part of what the
+approval covers.
 
 **Scores.** Scores are optional. Without one, an item keeps the order the script
 gave it (the gap between rows is wide enough that usage statistics do not
@@ -1325,9 +1335,11 @@ built-in plugins only the OS-index file searches use it.
   **Install** and still leaves it waiting for the approval above. What a
   script does on its own is outside Sevak's control and should be stated by its
   author.
-- Scripts cannot make Sevak do more than the fixed list of actions. `open_url`
-  still passes the platform allow-list (`http`, `https`, `mailto`), so a script
-  cannot open `file:` or custom schemes. Icons are restricted to the plugin folder.
+- Scripts cannot make Sevak do more than the fixed list of actions
+  (`copy_text`, `open_url`, `open_path`, `custom`, and `launch` only with the
+  `launch` capability). `open_url` is checked against the allow-list (`http`,
+  `https`, `mailto`) when the answer arrives, so a script cannot open `file:`
+  or custom schemes. Icons are restricted to the plugin folder.
 - Everything a script sends is validated: sizes are capped, scores clamped,
   malformed items skipped. A misbehaving script cannot crash Sevak or stall typing.
 - The settings window lists script plugins (waiting ones marked as such) so you

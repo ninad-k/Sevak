@@ -71,6 +71,9 @@ struct Raw {
     /// Names of Sevak's own environment variables the script wants.
     #[serde(default)]
     inherit_env: Vec<String>,
+    /// Extra things the script's results may do; see [`Capabilities`].
+    #[serde(default)]
+    capabilities: Vec<String>,
     #[serde(default)]
     mode: Mode,
     #[serde(default)]
@@ -78,6 +81,26 @@ struct Raw {
     timeout_ms: Option<u64>,
     hard_timeout_ms: Option<u64>,
     idle_timeout_secs: Option<u64>,
+}
+
+/// Things a script's results may do only when the manifest asks for them with
+/// `capabilities = [...]`. The Allow dialog lists them, and they are part of
+/// what the approval covers (they are in `plugin.toml`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Capabilities {
+    /// Results may start applications (`{"type":"launch"}`).
+    pub launch: bool,
+}
+
+impl Capabilities {
+    /// The capability names, for the Allow dialog.
+    pub fn names(&self) -> Vec<&'static str> {
+        let mut names = Vec::new();
+        if self.launch {
+            names.push("launch");
+        }
+        names
+    }
 }
 
 /// How the manifest says to start the script.
@@ -104,6 +127,9 @@ pub struct Manifest {
     /// Environment variables of Sevak's own that the script is given in
     /// addition to the small base set (shown in the Allow dialog).
     pub inherit_env: Vec<String>,
+    /// What the script's results may do beyond the basic actions (shown in
+    /// the Allow dialog).
+    pub capabilities: Capabilities,
     pub mode: Mode,
     pub format: Format,
     /// How long a query waits for the script before the list is shown without
@@ -209,6 +235,15 @@ impl Manifest {
         }
 
         let inherit_env = check_inherit_env(raw.inherit_env)?;
+        let mut capabilities = Capabilities::default();
+        for name in &raw.capabilities {
+            match name.trim() {
+                "launch" => capabilities.launch = true,
+                other => warnings.push(format!(
+                    "the capability \"{other}\" is not known to this Sevak and is ignored"
+                )),
+            }
+        }
 
         if raw.mode == Mode::Persistent && raw.format == Format::Alfred {
             return Err("`format = \"alfred\"` needs `mode = \"oneshot\"`".to_owned());
@@ -229,6 +264,7 @@ impl Manifest {
             launch,
             files,
             inherit_env,
+            capabilities,
             mode: raw.mode,
             format: raw.format,
             timeout: Duration::from_millis(
@@ -499,6 +535,23 @@ mod tests {
         let many: Vec<String> = (0..40).map(|n| format!("\"V{n}\"")).collect();
         let text = format!("{MINIMAL}inherit_env = [{}]\n", many.join(","));
         assert!(Manifest::parse(&text, "x").unwrap_err().contains("at most"));
+    }
+
+    #[test]
+    fn capabilities_are_opt_in_and_unknown_ones_are_ignored_with_a_warning() {
+        let m = Manifest::parse(MINIMAL, "x").unwrap();
+        assert!(!m.capabilities.launch);
+        assert!(m.capabilities.names().is_empty());
+
+        let text = format!("{MINIMAL}capabilities = [\"launch\"]\n");
+        let m = Manifest::parse(&text, "x").unwrap();
+        assert!(m.capabilities.launch);
+        assert_eq!(m.capabilities.names(), ["launch"]);
+
+        let text = format!("{MINIMAL}capabilities = [\"teleport\"]\n");
+        let m = Manifest::parse(&text, "x").unwrap();
+        assert!(!m.capabilities.launch);
+        assert!(m.warnings.iter().any(|w| w.contains("teleport")));
     }
 
     #[test]

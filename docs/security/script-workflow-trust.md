@@ -70,6 +70,18 @@ and macOS; a crash of Sevak does not end the group there. The process is
 assigned to its job a moment after it starts, so something it starts in that
 instant escapes on Windows.
 
+## Script results use a closed set of actions
+
+Script plugin results are checked against the actions scripts are documented to
+use: `copy_text`, `open_url`, `open_path`, `custom` (persistent plugins) and
+`launch`. Anything else (pasting into other apps, putting files or images on
+the clipboard, revealing in the file manager, elevating) is dropped. `open_url`
+links must be `http`, `https` or `mailto` and carry no control characters.
+`launch` now needs `capabilities = ["launch"]` in `plugin.toml`; the Allow
+dialog lists it. A plugin that uses `launch` without declaring it stops
+showing those rows until its manifest is updated (which asks for approval
+again).
+
 ## A script's error output is read with limits
 
 A persistent script's standard error is written to Sevak's log. A line without

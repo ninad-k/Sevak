@@ -91,6 +91,7 @@ impl Spec {
             plugin_id: &self.manifest.id,
             dir: &self.dir,
             allow_custom: self.manifest.mode == Mode::Persistent,
+            allow_launch: self.manifest.capabilities.launch,
         }
     }
 

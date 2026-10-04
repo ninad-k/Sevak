@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use serde_json::Value;
 use sevak_core::model::score;
-use sevak_core::{Action, IconSource, ResultItem, ViewHint};
+use sevak_core::{Action, IconSource, LaunchTarget, ResultItem, ViewHint};
 use sevak_platform::icon_file;
 
 use super::manifest::relative_inside;
@@ -35,6 +35,80 @@ pub struct ItemContext<'a> {
     /// Whether `custom` actions make sense (only a persistent process can be
     /// asked to `execute` them later).
     pub allow_custom: bool,
+    /// Whether results may start applications: the manifest asked for
+    /// `capabilities = ["launch"]`, which the user saw when allowing it.
+    pub allow_launch: bool,
+}
+
+/// Checks an action a script asked for against the closed set scripts may
+/// use, and returns it ready to run, or `None` when it is not allowed.
+///
+/// The set is `copy_text`, `open_url` (a web or mail link only), `open_path`
+/// (relative paths are anchored in the plugin folder), `custom` (persistent
+/// plugins) and, with the `launch` capability, `launch`. Everything else the
+/// built-in plugins use (pasting into other apps, putting files or images on
+/// the clipboard, revealing in the file manager, elevating) is not available
+/// to scripts.
+pub fn vet_action(ctx: &ItemContext<'_>, action: Action) -> Result<Action, &'static str> {
+    match action {
+        Action::CopyText { .. } => Ok(action),
+        Action::Custom { .. } if ctx.allow_custom => Ok(action),
+        Action::Custom { .. } => Err("custom actions are only handled by persistent plugins"),
+        Action::OpenUrl { url } => {
+            if is_web_or_mail_link(&url) {
+                Ok(Action::OpenUrl { url })
+            } else {
+                Err("only http://, https:// and mailto: links can be opened")
+            }
+        }
+        Action::OpenPath { .. } => Ok(absolutize(action, ctx.dir)),
+        Action::Launch { target } if ctx.allow_launch => Ok(Action::Launch {
+            target: anchor_target(target, ctx.dir),
+        }),
+        Action::Launch { .. } => {
+            Err("starting applications needs capabilities = [\"launch\"] in plugin.toml")
+        }
+        Action::PasteText { .. }
+        | Action::PasteClip { .. }
+        | Action::CopyClip { .. }
+        | Action::RevealPath { .. }
+        | Action::RunAsAdmin { .. } => Err("an action script plugins cannot use"),
+    }
+}
+
+/// A link Sevak hands to the system's browser or mail client: the same schemes
+/// the platform layer accepts, and no control characters.
+fn is_web_or_mail_link(url: &str) -> bool {
+    let url = url.trim();
+    let lower = url.to_ascii_lowercase();
+    ["http://", "https://", "mailto:"]
+        .iter()
+        .any(|scheme| lower.starts_with(scheme))
+        && !url.chars().any(char::is_control)
+}
+
+/// Relative paths of a launch target are relative to the plugin folder, like
+/// `open_path`.
+fn anchor_target(target: LaunchTarget, dir: &Path) -> LaunchTarget {
+    let anchor = |path: PathBuf| {
+        if path.is_relative() {
+            dir.join(path)
+        } else {
+            path
+        }
+    };
+    match target {
+        LaunchTarget::Executable {
+            path,
+            args,
+            working_dir,
+        } => LaunchTarget::Executable {
+            path: anchor(path),
+            args,
+            working_dir: working_dir.map(anchor),
+        },
+        other => other,
+    }
 }
 
 /// The score of the `index`-th item that gave none.
@@ -181,29 +255,18 @@ pub fn convert_items(ctx: ItemContext<'_>, values: &[Value]) -> Vec<ResultItem> 
                 },
             },
             Some(value) => match serde_json::from_value::<Action>(value) {
-                Ok(Action::Custom { .. }) if !ctx.allow_custom => {
-                    tracing::warn!(
-                        plugin = ctx.plugin_id,
-                        index,
-                        "skipping an item with a custom action: only persistent plugins can handle them"
-                    );
-                    continue;
-                }
-                // Not part of the script protocol: elevating, typing into
-                // another app and file-manager reveals stay with built-ins.
-                Ok(
-                    Action::RunAsAdmin { .. }
-                    | Action::PasteText { .. }
-                    | Action::RevealPath { .. },
-                ) => {
-                    tracing::warn!(
-                        plugin = ctx.plugin_id,
-                        index,
-                        "skipping an item with an action script plugins cannot use"
-                    );
-                    continue;
-                }
-                Ok(action) => absolutize(action, ctx.dir),
+                // The closed set of script actions; see `vet_action`.
+                Ok(action) => match vet_action(&ctx, action) {
+                    Ok(action) => action,
+                    Err(reason) => {
+                        tracing::warn!(
+                            plugin = ctx.plugin_id,
+                            index,
+                            "skipping an item with an action scripts cannot use: {reason}"
+                        );
+                        continue;
+                    }
+                },
                 Err(err) => {
                     tracing::warn!(plugin = ctx.plugin_id, index, %err, "skipping an item with an invalid action");
                     continue;
@@ -285,6 +348,7 @@ mod tests {
             plugin_id: "script:t",
             dir,
             allow_custom: true,
+            allow_launch: false,
         }
     }
 
@@ -324,10 +388,99 @@ mod tests {
             {"title": "admin", "action": {"type": "run_as_admin", "target": {"kind": "shortcut", "path": "x.lnk"}}},
             {"title": "paste", "action": {"type": "paste_text", "text": "x", "restore_clipboard": false}},
             {"title": "reveal", "action": {"type": "reveal_path", "path": "/tmp"}},
+            {"title": "paste clip", "action": {"type": "paste_clip", "content": {"kind": "image", "path": "x.png"}, "restore_clipboard": false}},
+            {"title": "copy clip", "action": {"type": "copy_clip", "content": {"kind": "files", "paths": ["a"]}}},
             {"title": "ok", "action": {"type": "copy_text", "text": "ok"}}
         ]));
         let titles: Vec<&str> = items.iter().map(|i| i.title.as_str()).collect();
         assert_eq!(titles, ["ok"]);
+    }
+
+    #[test]
+    fn open_url_keeps_to_web_and_mail_links() {
+        let items = convert(json!([
+            {"title": "web", "action": {"type": "open_url", "url": "https://example.com/a?b=c"}},
+            {"title": "WEB", "action": {"type": "open_url", "url": "HTTP://example.com"}},
+            {"title": "mail", "action": {"type": "open_url", "url": "mailto:me@example.com"}},
+            {"title": "file", "action": {"type": "open_url", "url": "file:///C:/Windows/System32/calc.exe"}},
+            {"title": "handler", "action": {"type": "open_url", "url": "ms-msdt:/id x"}},
+            {"title": "script", "action": {"type": "open_url", "url": "javascript:alert(1)"}},
+            {"title": "unc", "action": {"type": "open_url", "url": "\\\\host\\share\\x.exe"}},
+            {"title": "control", "action": {"type": "open_url", "url": "https://example.com/\u{1}\r\nx"}},
+            {"title": "empty", "action": {"type": "open_url", "url": ""}}
+        ]));
+        let titles: Vec<&str> = items.iter().map(|i| i.title.as_str()).collect();
+        assert_eq!(titles, ["web", "WEB", "mail"]);
+    }
+
+    #[test]
+    fn launch_needs_the_capability_and_anchors_relative_paths() {
+        let value = json!([
+            {"title": "run", "action": {"type": "launch", "target": {"kind": "executable", "path": "bin/tool", "args": ["-x"], "working_dir": "work"}}},
+            {"title": "shortcut", "action": {"type": "launch", "target": {"kind": "shortcut", "path": "C:\\x.lnk"}}},
+            {"title": "ok", "action": {"type": "copy_text", "text": "ok"}}
+        ]);
+        // Without the capability no row that starts a program survives.
+        let items = convert(value.clone());
+        let titles: Vec<&str> = items.iter().map(|i| i.title.as_str()).collect();
+        assert_eq!(titles, ["ok"]);
+
+        let allowed = ItemContext {
+            allow_launch: true,
+            ..ctx(Path::new("plugin"))
+        };
+        let items = convert_items(allowed, value.as_array().unwrap());
+        assert_eq!(items.len(), 3);
+        match &items[0].action {
+            Action::Launch {
+                target:
+                    sevak_core::LaunchTarget::Executable {
+                        path,
+                        args,
+                        working_dir,
+                    },
+            } => {
+                assert_eq!(path, &Path::new("plugin").join("bin/tool"));
+                assert_eq!(args, &["-x"]);
+                assert_eq!(
+                    working_dir.as_deref(),
+                    Some(Path::new("plugin").join("work").as_path())
+                );
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn vet_action_is_the_one_place_that_decides() {
+        let ctx = ctx(Path::new("p"));
+        let copy = Action::CopyText { text: "x".into() };
+        assert_eq!(vet_action(&ctx, copy.clone()), Ok(copy));
+        assert!(vet_action(
+            &ctx,
+            Action::Custom {
+                payload: "p".into()
+            }
+        )
+        .is_ok());
+        let no_custom = ItemContext {
+            allow_custom: false,
+            ..ctx
+        };
+        assert!(vet_action(
+            &no_custom,
+            Action::Custom {
+                payload: "p".into()
+            }
+        )
+        .is_err());
+        assert!(vet_action(
+            &ctx,
+            Action::OpenUrl {
+                url: "ftp://example.com".into()
+            }
+        )
+        .is_err());
     }
 
     #[test]
