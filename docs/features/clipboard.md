@@ -6,7 +6,7 @@ This feature is **opt-in**; nothing is watched or stored unless you turn it on.
 
 ## Turn it on
 
-1. Open **Settings** (tray or `sevak --settings`), go to **Plugins**, and enable **Clipboard history**.
+1. Open **Settings** (tray or `sevak --settings`), go to **Clipboard & paste**, switch on **Keep a clipboard history** and press **Save**. (The **Clipboard history** switch under **Plugins** must stay on too; it is on by default.)
 2. Or manually edit `config.toml` and set [`[clipboard] enabled = true`](../configuration.md#clipboard), then reload.
 
 The first time you enable it, Sevak starts watching the clipboard. Everything copied *after* that moment is remembered; what was on the clipboard before is not.
@@ -98,7 +98,7 @@ Images together are also kept under about 500 MB: the oldest go first.
 
 - **Location**: `clipboard-history.json` in Sevak's data folder holds the text and the paths of copied files; each image is a PNG file (plus a small thumbnail) in the `clipboard` folder next to it (see [Files and data](../files-and-data.md) for the path by platform). Everything is stored only while the history is on.
 - **Permissions**: On Linux and macOS, the file is readable only by your user (mode `0600`). On Windows, it inherits NTFS permissions from its folder.
-- **Clearing**: Type `cb clear` (any start of "clear clipboard history", at least 3 letters) to show a **Clear clipboard history** row, then press ++enter++ on it to delete the entire history, image files included. There is no further prompt, and it cannot be undone. Trimming the history (`max_items`) deletes the image files of the entries it drops too.
+- **Clearing**: Press **Clear history…** (then **Delete everything**) in **Settings → Clipboard & paste**, or type `cb clear` (any start of "clear clipboard history", at least 3 letters) to show a **Clear clipboard history** row, then press ++enter++ on it to delete the entire history, image files included. There is no further prompt, and it cannot be undone. Trimming the history (`max_items`) deletes the image files of the entries it drops too.
 - **On uninstall**: The `clipboard-history.json` file and the `clipboard` folder stay behind. Delete them manually if you want to remove the history.
 
 ## Pasting: platform notes

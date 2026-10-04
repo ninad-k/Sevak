@@ -49,6 +49,8 @@ Sevak also offers shortcuts to common operating system settings pages. Type the 
 
 ## Options
 
+Both are in **Settings → System & terminal**, where the hidden commands and settings pages are a checklist.
+
 | Setting | Default | What it does | Config section |
 |---|---|---|---|
 | Confirm | `true` | Ask before restart, shut down, log out, and empty trash | [`[system] confirm`](../configuration.md#system) |

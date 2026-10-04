@@ -153,8 +153,9 @@ Sevak also includes:
 ![Sevak's Settings interface showing shortcut, startup, hide-on-blur and update preferences.](docs/media/sevak-settings.png)
 
 Open **Settings** from the tray or run `sevak --settings`. Choose your shortcut,
-search folders, result limit, theme, web engines, and plugins. Click **Save**
-to apply your changes.
+search folders, result limit, theme, web engines, and plugins, plus each
+plugin's own options (clipboard history, contacts, 1Password, tasks, media and
+more). Click **Save** to apply your changes.
 
 ![The same Sevak app search shown in light and dark themes.](docs/media/sevak-themes.png)
 

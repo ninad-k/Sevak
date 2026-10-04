@@ -17,7 +17,7 @@ Open **Settings → General** and turn on **Launch at login**. Click **Save**.
 ### Why doesn't my search show any results?
 
 1. Check that the plugin is **enabled** in **Settings → Plugins** (e.g., Applications, Files)
-2. If searching files with `f `, make sure the folder is added in **Settings → Files → Folders to search**
+2. If searching files with `f `, make sure the folder is added in **Settings → Files & bookmarks → Folders to search**
 3. Reload the index: click the tray icon and select **Reload index**
 
 ### Why is a recent app or file missing?
@@ -75,7 +75,7 @@ To change the font size, adjust **Font size** under Appearance (affects the whol
 
 Type the keyword followed by a space and filename. Default keyword is `f `: `f project`.
 
-Change or disable the keyword in **Settings → Files → Keyword**.
+Change or disable the keyword in **Settings → Files & bookmarks → Keyword**.
 
 More: [File search](usage.md#files-and-folders).
 
@@ -85,7 +85,7 @@ Yes, through your operating system's own file index: type `in` and the words, fo
 
 ### The file index is incomplete or seems stuck.
 
-1. Check in **Settings → Files** that the folder is listed
+1. Check in **Settings → Files & bookmarks** that the folder is listed
 2. Check that **Folder depth** is enough for your nested folders
 3. Choose **Reload index** from the tray menu
 4. Wait for indexing to finish (check the launcher: it shows a status message if indexing is running)
@@ -198,7 +198,7 @@ More: [Troubleshooting](troubleshooting.md).
 
 ### Sevak takes a long time to start. Can I speed it up?
 
-1. Reduce the number of indexed folders in **Settings → Files → Folders to search**
+1. Reduce the number of indexed folders in **Settings → Files & bookmarks → Folders to search**
 2. Lower **Folder depth** to skip deep nested directories
 3. Disable plugins you don't use in **Settings → Plugins**
 4. If indexing is slow, exclude large generated directories (e.g., `node_modules`, `.git`) — they are usually pruned automatically, but check your index

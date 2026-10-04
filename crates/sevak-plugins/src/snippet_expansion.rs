@@ -935,7 +935,9 @@ mod tests {
         /// Waits for the worker to have handled everything sent so far, by
         /// sending a marker it replaces last.
         fn replaced(&self) -> Vec<(usize, String)> {
-            let deadline = Instant::now() + Duration::from_millis(400);
+            // Generous: the worker thread can be starved for a while when the
+            // whole workspace's tests run in parallel; a quiet worker ends the wait early.
+            let deadline = Instant::now() + Duration::from_secs(5);
             let mut last = self.replaced.lock().unwrap().len();
             // Give the worker time to drain; stop early once it has gone quiet.
             while Instant::now() < deadline {

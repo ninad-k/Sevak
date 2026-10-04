@@ -32,6 +32,9 @@ pub struct ConfigurableKeyword<'a> {
     pub keyword: &'a str,
     /// How a message names whatever answers it ("the files search").
     pub owner: &'static str,
+    /// The keyword cannot be turned off: an empty one means the default
+    /// (`Config::normalized` puts it back), so it counts as written there.
+    pub required: bool,
 }
 
 /// Every configurable built-in keyword, as the config has it (untrimmed, and
@@ -41,6 +44,11 @@ pub fn configurable_keywords(config: &Config) -> [ConfigurableKeyword<'_>; 10] {
         label,
         keyword,
         owner,
+        required: false,
+    };
+    let required = |label, keyword, owner| ConfigurableKeyword {
+        required: true,
+        ..entry(label, keyword, owner)
     };
     [
         entry("files", &config.files.keyword, "the files search"),
@@ -61,14 +69,14 @@ pub fn configurable_keywords(config: &Config) -> [ConfigurableKeyword<'_>; 10] {
             "automation tasks",
         ),
         entry("media controls", &config.media.keyword, "media controls"),
-        entry("contacts", &config.contacts.keyword, "contacts"),
-        entry("1Password", &config.onepassword.keyword, "1Password"),
-        entry(
+        required("contacts", &config.contacts.keyword, "contacts"),
+        required("1Password", &config.onepassword.keyword, "1Password"),
+        required(
             "dictionary",
             &config.dictionary.define_keyword,
             "the dictionary",
         ),
-        entry(
+        required(
             "spelling",
             &config.dictionary.spell_keyword,
             "the spelling checker",
