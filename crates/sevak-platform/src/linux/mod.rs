@@ -79,6 +79,10 @@ impl PlatformProvider for LinuxProvider {
         paste::foreground_app()
     }
 
+    fn identifies_apps(&self) -> bool {
+        paste::can_identify_apps()
+    }
+
     fn paste_support(&self) -> PasteSupport {
         paste::paste_support()
     }

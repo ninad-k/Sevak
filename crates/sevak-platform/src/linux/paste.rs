@@ -174,6 +174,12 @@ pub(crate) fn remember_foreground_app() {
         .unwrap_or_else(|poisoned| poisoned.into_inner()) = active;
 }
 
+/// Whether the app in front can be told at all: an X11 session (Wayland tells
+/// applications nothing about other windows).
+pub(crate) fn can_identify_apps() -> bool {
+    session_is_x11()
+}
+
 pub(crate) fn foreground_app() -> Option<ForegroundApp> {
     if !session_is_x11() {
         return None;

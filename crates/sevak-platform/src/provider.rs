@@ -204,6 +204,16 @@ pub trait PlatformProvider: Send + Sync {
         None
     }
 
+    /// Whether [`PlatformProvider::foreground_app`] works on this system at all
+    /// (not on Wayland, which tells apps nothing about other windows). When it
+    /// does and still answers `None` for a window, the app could not be told
+    /// (Windows: a process that cannot be opened; Linux: a window without
+    /// `WM_CLASS`; macOS: an app without a bundle id), and everything that
+    /// excludes apps by name treats that as "excluded".
+    fn identifies_apps(&self) -> bool {
+        false
+    }
+
     /// Whether [`PlatformProvider::paste_text`] can paste on this system right
     /// now (it can change at runtime: macOS needs a permission the user may
     /// grant later). Cheap enough to call on every keystroke.

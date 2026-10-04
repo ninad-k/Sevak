@@ -39,6 +39,8 @@ pub struct MockPlatform {
     /// What `clipboard_text` returns (the `{clipboard}` placeholder).
     pub clipboard_now: Mutex<Option<String>>,
     pub foreground: Mutex<Option<ForegroundApp>>,
+    /// What `identifies_apps` reports (a system that can tell the app in front).
+    pub identifies_apps: Mutex<bool>,
     /// What `history_sealer` returns; `None` is a system without encryption.
     pub sealer: Mutex<Option<Arc<dyn sevak_core::sealed::Sealer>>>,
     pub clipboard_sequence: Mutex<Option<u64>>,
@@ -245,6 +247,10 @@ impl PlatformProvider for MockPlatform {
             .unwrap()
             .push((request.files, request.image));
         self.clipboard_media.lock().unwrap().clone()
+    }
+
+    fn identifies_apps(&self) -> bool {
+        *self.identifies_apps.lock().unwrap()
     }
 
     fn history_sealer(&self) -> Option<Arc<dyn sevak_core::sealed::Sealer>> {

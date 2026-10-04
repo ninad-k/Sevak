@@ -91,6 +91,10 @@ impl PlatformProvider for MacProvider {
         paste::foreground_app()
     }
 
+    fn identifies_apps(&self) -> bool {
+        true
+    }
+
     fn paste_support(&self) -> PasteSupport {
         paste::paste_support()
     }

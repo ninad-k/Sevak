@@ -552,14 +552,28 @@ impl Worker {
     }
 }
 
+/// Says once, at debug level and without any typed text, that an app that could
+/// not be identified was skipped.
+fn note_unknown_app() {
+    static NOTED: AtomicBool = AtomicBool::new(false);
+    if !NOTED.swap(true, Ordering::Relaxed) {
+        tracing::debug!(
+            "the app being typed into could not be identified; snippets are not expanded there"
+        );
+    }
+}
+
 /// Whether typing into `target` may be watched and expanded.
 fn allowed(target: &TypingTarget, settings: &SnippetsConfig) -> bool {
     if target.own_window || target.private {
         return false;
     }
     let Some(app) = &target.app else {
-        // Not told which app: nothing to exclude it by.
-        return true;
+        // The app cannot be told (an elevated or protected process, a window
+        // without a class, an app without a bundle id): `ignore_apps` and the
+        // terminal rule cannot be applied, so nothing is watched or expanded.
+        note_unknown_app();
+        return false;
     };
     if app.matches_any(&settings.ignore_apps) {
         return false;
@@ -869,7 +883,8 @@ mod tests {
             ..TypingTarget::default()
         };
         assert!(allowed(&target(Some("Notepad")), &config));
-        assert!(allowed(&target(None), &config));
+        // An app that cannot be identified cannot be checked against the rules.
+        assert!(!allowed(&target(None), &config));
         assert!(!allowed(&target(Some("keepassxc")), &config));
         assert!(!allowed(&target(Some("WindowsTerminal")), &config));
         assert!(!allowed(&target(Some("gnome-terminal-server")), &config));
@@ -1156,6 +1171,27 @@ mod tests {
             fake.settle();
             assert!(fake.replaced.lock().unwrap().is_empty());
         }
+    }
+
+    #[test]
+    fn an_app_that_cannot_be_identified_is_not_watched_or_expanded() {
+        let fake = Fake::new();
+        *fake.target.lock().unwrap() = TypingTarget::default();
+        let cfg = config(vec![snippet("Sig", Some("sig"), "Regards")], immediate());
+        let _service = running(&fake, &cfg);
+        fake.type_text("sig");
+        fake.settle();
+        assert!(fake.replaced.lock().unwrap().is_empty());
+
+        // Once the app is known again, typing works as usual.
+        *fake.target.lock().unwrap() = TypingTarget {
+            app: Some(ForegroundApp::new("Notepad")),
+            ..TypingTarget::default()
+        };
+        fake.send(KeyEvent::Reset);
+        fake.type_text("sig");
+        fake.settle();
+        assert_eq!(fake.replaced.lock().unwrap().len(), 1);
     }
 
     #[test]

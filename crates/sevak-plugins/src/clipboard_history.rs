@@ -37,6 +37,9 @@
 //! - content the copying app marked secret (see
 //!   [`sevak_platform::ClipboardRead::sensitive`]: password managers set these
 //!   markers on Windows and macOS);
+//! - copies made while the app in front could not be identified (where the
+//!   system can normally tell, see [`PlatformProvider::identifies_apps`]): the
+//!   ignore list cannot be checked, so the copy is not kept;
 //! - copies made while an app from `[clipboard] ignore_apps` had focus, or one
 //!   of the built-in password managers and credential prompts
 //!   ([`DEFAULT_CLIPBOARD_IGNORE_APPS`], unless `default_ignore_apps` is off);
@@ -897,6 +900,15 @@ fn media_hash(media: &ClipboardMedia) -> Option<u64> {
     }
 }
 
+/// Says once, at debug level and without any copied text, that a copy from an
+/// app that could not be identified was skipped.
+fn note_unknown_app() {
+    static NOTED: AtomicBool = AtomicBool::new(false);
+    if !NOTED.swap(true, Ordering::Relaxed) {
+        tracing::debug!("the app that copied could not be identified; the copy was not recorded");
+    }
+}
+
 /// Applies the privacy rules to a clipboard change.
 fn accept(
     read: ClipboardRead,
@@ -930,11 +942,16 @@ fn accept(
         CapturedContent::Image(image)
     };
     let app = platform.foreground_app();
-    if app
-        .as_ref()
-        .is_some_and(|app| app.matches_any(&settings.ignore_apps))
-    {
-        return None;
+    match &app {
+        Some(app) if app.matches_any(&settings.ignore_apps) => return None,
+        // The system can tell apps apart but could not tell this one (an
+        // elevated or protected process, a window without a class): it cannot
+        // be checked against the ignore list, so its copy is not recorded.
+        None if platform.identifies_apps() && !settings.ignore_apps.is_empty() => {
+            note_unknown_app();
+            return None;
+        }
+        _ => {}
     }
     Some(Captured {
         content,
@@ -1845,6 +1862,59 @@ mod tests {
         assert_eq!(
             copied_from(ForegroundApp::new("Code")),
             Some("a secret value".to_owned())
+        );
+    }
+
+    #[test]
+    fn a_copy_from_an_app_that_cannot_be_identified_is_not_recorded() {
+        let platform = MockPlatform::empty();
+        let mut monitor = primed_monitor(&platform);
+        let settings = settings_for(&ClipboardConfig::default());
+
+        // A system that can tell apps apart, but not this one (say, an
+        // elevated process): the ignore list cannot be applied.
+        *platform.identifies_apps.lock().unwrap() = true;
+        *platform.foreground.lock().unwrap() = None;
+        copy(&platform, 2, "from who knows where");
+        assert_eq!(text_of(monitor.poll(platform.as_ref(), &settings)), None);
+
+        // Once it is known, the next copy is recorded.
+        *platform.foreground.lock().unwrap() = Some(ForegroundApp::new("Code"));
+        copy(&platform, 3, "from Code");
+        assert_eq!(
+            text_of(monitor.poll(platform.as_ref(), &settings)),
+            Some("from Code".to_owned())
+        );
+    }
+
+    #[test]
+    fn where_apps_cannot_be_told_apart_copies_are_recorded_as_before() {
+        // Wayland: nobody can tell, so the ignore list has nothing to act on.
+        let platform = MockPlatform::empty();
+        let mut monitor = primed_monitor(&platform);
+        copy(&platform, 2, "from a Wayland app");
+        assert_eq!(
+            text_of(monitor.poll(
+                platform.as_ref(),
+                &settings_for(&ClipboardConfig::default())
+            )),
+            Some("from a Wayland app".to_owned())
+        );
+    }
+
+    #[test]
+    fn with_no_ignore_list_at_all_an_unknown_app_is_recorded() {
+        let platform = MockPlatform::empty();
+        let mut monitor = primed_monitor(&platform);
+        *platform.identifies_apps.lock().unwrap() = true;
+        let config = ClipboardConfig {
+            default_ignore_apps: false,
+            ..ClipboardConfig::default()
+        };
+        copy(&platform, 2, "nothing to check against");
+        assert_eq!(
+            text_of(monitor.poll(platform.as_ref(), &settings_for(&config))),
+            Some("nothing to check against".to_owned())
         );
     }
 
