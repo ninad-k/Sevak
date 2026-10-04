@@ -18,7 +18,8 @@ use x11rb::rust_connection::RustConnection;
 
 use crate::error::{PlatformError, Result};
 use crate::paste::{
-    self, ForegroundApp, PasteContent, PasteDriver, PasteOutcome, PasteSupport, SystemClipboard,
+    self, ClipboardRead, ForegroundApp, PasteContent, PasteDriver, PasteOutcome, PasteSupport,
+    SystemClipboard,
 };
 use crate::session::DisplayServer;
 
@@ -180,6 +181,24 @@ pub(crate) fn foreground_app() -> Option<ForegroundApp> {
     let x = X::connect().ok()?;
     let window = x.active_window()?;
     x.app_of(window)
+}
+
+/// The clipboard for the history and for selection capture: the text, unless
+/// the app that copied it marked it secret (a password manager's
+/// `x-kde-passwordManagerHint`; see [`super::secret_hint`]). Best effort: it
+/// depends on the source app setting the hint.
+pub(crate) fn read_clipboard() -> Result<ClipboardRead> {
+    let text = crate::clipboard::read_text()?;
+    if super::secret_hint::clipboard_marked_secret(text.as_deref()) {
+        return Ok(ClipboardRead {
+            text: None,
+            sensitive: true,
+        });
+    }
+    Ok(ClipboardRead {
+        text,
+        sensitive: false,
+    })
 }
 
 pub(crate) fn paste_support() -> PasteSupport {
