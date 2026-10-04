@@ -18,6 +18,8 @@ Sevak stores configuration, themes, script plugins, workflows, logs, usage histo
 | **Script plugins** | `%APPDATA%\sevak\plugins\` | `~/Library/Application Support/sevak/plugins/` | `~/.config/sevak/plugins/` |
 | **Workflows** | `%APPDATA%\sevak\workflows\` | `~/Library/Application Support/sevak/workflows/` | `~/.config/sevak/workflows/` |
 | **Shortcut takeover record** | `%APPDATA%\sevak\hotkey-takeover.json` | `~/Library/Application Support/sevak/hotkey-takeover.json` | `~/.local/share/sevak/hotkey-takeover.json` |
+| **Backup options** | `%APPDATA%\sevakackup.toml` | `~/Library/Application Support/sevak/backup.toml` | `~/.config/sevak/backup.toml` |
+| **Backup bookkeeping and safety copies** | `%APPDATA%\sevakackup-state.json`, `backup-snapshots\` | `~/Library/Application Support/sevak/backup-state.json`, `backup-snapshots/` | `~/.local/share/sevak/backup-state.json`, `backup-snapshots/` |
 
 Theme files, script plugins and workflows sit next to `config.toml` in the config folder; clipboard images, approvals and the data folders of plugins and workflows are in the data folder. On Windows and macOS the two folders are the same.
 
@@ -124,6 +126,10 @@ Optional clipboard history (only if `[clipboard] enabled = true`). `clipboard-hi
 
 API keys for the optional [AI assistant](ai.md), only if you saved one in **Settings → AI assistant**. On Windows each key is encrypted with DPAPI for your user account; on macOS and Linux the file is readable by your user account only (mode `0600`) and **not encrypted**. It is never part of `config.toml`, a settings export or the diagnostics report. Delete a key with **Remove** in Settings, or delete the file.
 
+### backup.toml, backup-state.json and backup-snapshots/
+
+`backup.toml` holds the options of [automatic backups](backup-and-restore.md#automatic-backups) (off by default) and sits in the config folder. `backup-state.json` in the data folder records when the last backup was made and the Sevak version that last looked at the schedule. `backup-snapshots/` holds the safety copies Sevak takes just before a restore so that **Undo restore** works (the five newest are kept). A snapshot is an ordinary backup file of what the restore replaced, with the same exclusions. None of these three is part of a backup.
+
 ### currency-rates.json
 
 Cached European Central Bank exchange rates, only if currency conversion (`[calculator] currency`) is on.
@@ -146,7 +152,7 @@ Contacts and the list of 1Password logins are kept in memory only. The keystroke
 
 ## Back up your data
 
-Sevak's configuration and history are local, single files that are easy to back up:
+The easy way is **Settings → Backup & restore** (or `sevak --backup FILE`): one file with your settings, snippets, web searches, themes, script plugins and workflows, left out of which are keys, history and the list of scripts you allowed. See [Backup and restore](backup-and-restore.md). To copy *everything*, history included, copy the folders yourself:
 
 ```bash
 cp -r ~/.local/share/sevak ~/backups/sevak-backup

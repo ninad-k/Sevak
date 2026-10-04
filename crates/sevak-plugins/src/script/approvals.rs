@@ -123,8 +123,30 @@ impl ApprovalStore {
         let mut record = self.read();
         record.version = FORMAT;
         record.approved.insert(id.to_owned(), key.to_owned());
-        let text = serde_json::to_string_pretty(&record).map_err(io::Error::other)?;
-        // Owner-only on Unix (0600, in a 0700 folder it creates).
+        self.write(&record)
+    }
+
+    /// Forgets the approval of each of `ids`, so they ask again. A missing
+    /// record is left missing. Used when a restore brings back scripts that
+    /// must not inherit an old yes.
+    pub fn revoke(&self, ids: &[String]) -> io::Result<()> {
+        if !self.path.exists() {
+            return Ok(());
+        }
+        let mut record = self.read();
+        let before = record.approved.len();
+        for id in ids {
+            record.approved.remove(id);
+        }
+        if record.approved.len() == before {
+            return Ok(());
+        }
+        self.write(&record)
+    }
+
+    fn write(&self, record: &Record) -> io::Result<()> {
+        let text = serde_json::to_string_pretty(record).map_err(io::Error::other)?;
+        // Preserve owner-only, atomic storage for both approvals and revocations.
         sevak_platform::private_file::write_atomic(&self.path, text.as_bytes())
     }
 }
@@ -278,6 +300,24 @@ mod tests {
         fs::write(&path, text).unwrap();
         let store = ApprovalStore::new(path);
         assert!(!store.is_approved("script:a", "x"));
+    }
+
+    #[test]
+    fn revoking_forgets_only_the_named_plugins() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("approvals.json");
+        let store = ApprovalStore::new(path.clone());
+        // Nothing recorded yet: revoking is a no-op and creates no file.
+        store.revoke(&["script:a".to_owned()]).unwrap();
+        assert!(!path.exists());
+
+        store.approve("script:a", "python a.py").unwrap();
+        store.approve("script:b", "python b.py").unwrap();
+        store
+            .revoke(&["script:a".to_owned(), "script:unknown".to_owned()])
+            .unwrap();
+        assert!(!store.is_approved("script:a", "python a.py"));
+        assert!(store.is_approved("script:b", "python b.py"));
     }
 
     #[test]

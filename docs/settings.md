@@ -8,7 +8,7 @@ Configure Sevak through the Settings window.
   select **Settings** (on Linux, click the icon and select **Settings**)
 - Run `sevak --settings` from the command line
 
-The tabs run from General to Files, with Linux where it applies and **Help** last.
+The tabs run from General to Files, with Linux where it applies, then **Backup & restore** and **Help** last.
 
 ## Using Settings
 
@@ -24,7 +24,7 @@ Validation errors appear under each field and prevent saving until they are fixe
 
 Saving keeps your comments, the order of your keys and every `[[snippet]]` entry exactly as they are in `config.toml`; only the lines you changed are rewritten.
 
-Pages: [General](#general), [Hotkeys](#hotkeys), [Appearance](#appearance), [Search](#search), [Plugins](#plugins), [Workflows](#workflows), [Gallery](#gallery), [Web search](#web-search), [Files & bookmarks](#files-bookmarks), [Clipboard & paste](#clipboard-paste), [Tasks & media](#tasks-media), [Integrations](#integrations), [AI assistant](#ai-assistant), [System & terminal](#system-terminal) and, on Linux, [Linux](#linux).
+Pages: [General](#general), [Hotkeys](#hotkeys), [Appearance](#appearance), [Search](#search), [Plugins](#plugins), [Workflows](#workflows), [Gallery](#gallery), [Web search](#web-search), [Files & bookmarks](#files-bookmarks), [Clipboard & paste](#clipboard-paste), [Tasks & media](#tasks-media), [Integrations](#integrations), [AI assistant](#ai-assistant), [System & terminal](#system-terminal), on Linux [Linux](#linux), [Backup & restore](#backup-restore) and [Help](#help).
 
 ## General
 
@@ -554,6 +554,19 @@ Turn this off to use the native Wayland backend (experimental; you may need to p
 **Restart Sevak to apply.**
 
 Links to: `[linux] wayland_use_xwayland` in configuration.
+
+## Backup & restore
+
+Save your settings, snippets, web searches, themes, script plugins and workflows to one file, and restore them later or on another computer. This page is not part of the Save button: everything on it acts when you click its own button, and a restore reloads the other pages. The full guide is [Backup and restore](backup-and-restore.md).
+
+| Part | What it does |
+|---|---|
+| **Back up** | Tick the categories (all by default), see exactly what is included, then **Save backup as…** (a save dialog), **Back up now** (the backup folder, no dialog) or **Open backup folder**. Shows when and where the last backup was made. Says what is never included (keys, history, the list of allowed scripts) and that the file is not encrypted. |
+| **Restore** | **Choose a backup…**, tick the categories, pick **Merge** or **Replace**, read what would change (new, changed, same and removed counts with names and files) and click **Restore**. A safety copy is taken first and the restore is all or nothing. |
+| **Undo restore** | Puts back what the last restore replaced. |
+| **Automatic backups** | Off by default. Daily or weekly, and optionally when Sevak is updated; keeps the newest 1-50; the folder is yours to choose. Saved to `backup.toml`. |
+
+Scripts and workflows that a restore adds or changes ask for your approval again.
 
 ## Help
 

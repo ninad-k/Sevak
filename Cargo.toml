@@ -10,6 +10,7 @@ authors = ["Ninad Kulkarni"]
 rust-version = "1.90"
 
 [workspace.dependencies]
+sevak-backup = { path = "crates/sevak-backup" }
 sevak-core = { path = "crates/sevak-core" }
 sevak-platform = { path = "crates/sevak-platform" }
 sevak-plugins = { path = "crates/sevak-plugins" }

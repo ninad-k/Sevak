@@ -5,6 +5,7 @@ mod ai;
 mod app;
 mod autostart;
 mod backdrop;
+mod backup;
 mod cli;
 mod commands;
 mod diagnostics;
@@ -67,6 +68,18 @@ fn main() -> ExitCode {
         Invocation::Diagnostics => {
             process::attach_parent_console();
             diagnostics::run_cli(config.as_deref())
+        }
+        Invocation::Backup(path) => {
+            process::attach_parent_console();
+            backup::run_cli_backup(&path, config.as_deref())
+        }
+        Invocation::Restore { path, replace } => {
+            process::attach_parent_console();
+            backup::run_cli_restore(&path, replace, config.as_deref())
+        }
+        Invocation::UndoRestore => {
+            process::attach_parent_console();
+            backup::run_cli_undo(config.as_deref())
         }
         Invocation::Run(launch) => match run(launch, config.as_deref()) {
             Ok(()) => ExitCode::SUCCESS,
