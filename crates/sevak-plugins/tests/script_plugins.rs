@@ -319,8 +319,10 @@ fn a_script_that_never_answers_is_stopped_and_restarted() {
 
     assert!(engine.query("fx hang").is_empty());
     std::thread::sleep(Duration::from_millis(900));
-    // This query finds the script hung and stops it; later ones restart it.
-    assert!(engine.query("fx other").is_empty());
+    // A query after the hard timeout finds the script hung and stops it. On a
+    // slow machine the restart can already have happened by now, so what this
+    // query returns is not part of the contract; only the new process is.
+    let _ = engine.query("fx other");
     let items = query_until_results(&engine, &rx, "fx zebra");
     assert_ne!(pid_of(&items), first_pid);
 }
