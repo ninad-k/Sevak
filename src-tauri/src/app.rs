@@ -10,8 +10,8 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent};
 use crate::cli::{self, Launch};
 use crate::state::AppState;
 use crate::{
-    autostart, backdrop, commands, diagnostics, direct, expansion, file_buffer, hotkey, icons,
-    search, selection, settings, takeover, themes, tray, updater, window, workflows,
+    autostart, backdrop, backup, commands, diagnostics, direct, expansion, file_buffer, hotkey,
+    icons, search, selection, settings, takeover, themes, tray, updater, window, workflows,
 };
 
 pub fn run(
@@ -114,7 +114,17 @@ pub fn run(
             workflows::workflow_templates,
             workflows::open_workflows_folder,
             workflows::gallery_load,
-            workflows::gallery_install
+            workflows::gallery_install,
+            backup::backup_overview,
+            backup::backup_contents,
+            backup::backup_save_as,
+            backup::backup_now,
+            backup::backup_set_auto,
+            backup::backup_open_folder,
+            backup::restore_pick,
+            backup::restore_preview,
+            backup::restore_apply,
+            backup::restore_undo
         ])
         .on_window_event(window::on_window_event)
         .setup(move |app| {
@@ -132,6 +142,7 @@ pub fn run(
             search::start(handle);
             expansion::apply(handle);
             updater::start(handle);
+            backup::start(handle);
             tracing::info!(display = ?server, ?launch, "sevak is ready");
 
             match launch {

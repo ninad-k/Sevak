@@ -65,6 +65,10 @@ fn all_plugins(
     let mut plugins = builtin_plugins(config, platform.clone());
     plugins.extend(scripts.plugins(config, platform));
     plugins.extend(workflows.plugins(config, platform));
+    // The `backup settings` / `restore settings` commands (see `backup`).
+    if config.plugins.is_enabled("backup") {
+        plugins.push(Arc::new(crate::backup::BackupPlugin));
+    }
     // A keyword two plugins answer is not an error, but say so once.
     KeywordOwners::collect(config, scripts, workflows).log_shared();
     plugins
