@@ -81,6 +81,17 @@ requests that only touch Markdown, `docs/` or `LICENSE` don't trigger a release.
 - Don't add telemetry or network calls. Sevak works fully offline, apart from
   opening the web searches the user asks for.
 
+## Triage and priorities
+
+Issues are labeled with priority (P0–P3) to help contributors decide where to focus. Labels are synced from [.github/labels.json](.github/labels.json); the maintainer runs `scripts/sync-labels.sh` to keep them in sync. See [docs/development.md](docs/development.md) for more on managing the issue tracker.
+
+- **P0** (critical): blocks a release or core functionality; gets a reply within days.
+- **P1** (high): important feature or significant bug; best-effort response.
+- **P2** (medium): nice-to-have improvement or minor issue; no response time promised.
+- **P3** (low): ideas for later, low-impact issues; handled when there is time.
+
+There is no response-time SLA. The maintainer is a single person and works on this in spare time.
+
 ## License
 
 By contributing, you agree that your contributions are licensed under the
