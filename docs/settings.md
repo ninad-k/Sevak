@@ -404,7 +404,7 @@ Links to: `[bookmarks]` in [configuration](configuration.md#bookmarks) and [Book
 Off by default. When on, Sevak watches the clipboard and keeps what you copy so that `cb` can paste it back. Only what you copy after you turn it on is remembered.
 
 !!! warning "Privacy"
-    The history is stored on this computer, **unencrypted**: text and the paths of copied files in `clipboard-history.json`, images as PNG files in the `clipboard` folder, both in Sevak's data folder. Nothing is sent anywhere. Content that a password manager marks as secret is never recorded on Windows and macOS; Linux has no such marker, so list those apps under **Ignore apps**.
+    The history is stored on this computer, in Sevak's local data folder: text and the paths of copied files in `clipboard-history.json`, images as PNG files in the `clipboard` folder. On Windows the files are encrypted for your account (see **Encrypt the history** below); on macOS and Linux they are plain and readable only by you. Nothing is sent anywhere. Content that a password manager marks as secret is never recorded, and neither is anything copied in a well-known password manager (see **Skip password managers**); apps that set no marker belong under **Ignore apps**.
 
 If **Clipboard history** is switched off under **Plugins**, the page says so: `cb` then shows nothing whatever this switch says.
 
@@ -418,9 +418,11 @@ These apply while the history is on.
 |---|---|---|---|
 | **Number of items** | 1–5000 | 200 | Older entries are dropped with their image files. |
 | **Longest text** | up to 4096 KB | 64 KB | Longer text is not recorded. |
+| **Encrypt the history** (Windows) | on/off | on | Encrypts the history file and the images for your Windows account (DPAPI). |
 | **Record images** | on/off | on | Copied pictures, saved as PNG files. |
 | **Largest image** | up to 64 MB | 10 MB | A picture whose PNG is larger is not recorded. |
 | **Record files** | on/off | on | Only the paths of copied files and folders are kept. |
+| **Skip password managers** | on/off | on | Never record copies made in KeePass, 1Password, Bitwarden and similar apps, or in system credential and passphrase prompts. |
 | **Ignore apps** | list | empty | Copies made in these apps are never recorded (program or app names, any case). |
 
 The sizes are shown in KB and MB and written to `config.toml` in bytes.

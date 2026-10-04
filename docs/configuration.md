@@ -556,7 +556,9 @@ Some settings are files of their own in the config folder rather than keys in `c
 | `workflows/` | [Workflows](workflows.md), one folder each with a `workflow.toml`; the builder in **Settings → Workflows** writes them |
 | `themes/` | [Theme files](themes.md#theme-files-and-the-editor) made, imported or installed in **Settings → Appearance**; `[appearance] theme_file` picks one |
 
-See [Files and data](files-and-data.md) for the data folder.
+Everything Sevak writes itself is in the data folders, not here: the approvals file, usage history, logs, and the clipboard history with its images, which on Windows is in the *local* data folder (`%LOCALAPPDATA%\sevak\`) and encrypted for your account (`[clipboard] encrypt`).
+
+See [Files and data](files-and-data.md) for the data folders.
 
 ## Complete example
 

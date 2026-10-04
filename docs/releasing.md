@@ -106,6 +106,15 @@ published pre-release until you promote it: edit its notes before you run **Prom
 which copies them into `latest.json` as the update notes (editing later changes the
 release page but not what the updater shows).
 
+**Security hardening.** The first release that contains the security hardening
+changes (approvals bound to contents, scrubbed script environment, encrypted
+clipboard history in the local folder, tag-pinned galleries and the rest) changes
+behaviour you will want users to hear about: scripts and paste workflows ask for
+approval once more, remapped shortcuts need `accept_injected_hotkeys`, snippets
+stop expanding in browsers, and network paths are off. Paste the bullets of
+[Hardening: release notes](security/hardening-release-notes.md) into **Known
+issues and upgrade notes** for that release.
+
 ## Before promoting a beta
 
 Tick these before you run **Promote** (or, in the auto flow, before merging
