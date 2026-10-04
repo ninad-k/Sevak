@@ -64,6 +64,7 @@ Main hotkeys and startup behaviour.
 | `hide_on_blur` | boolean | `true` | Hide the launcher when it loses focus to another window. Press Esc or click elsewhere to close; this setting hides it automatically. |
 | `launch_at_login` | boolean | `false` | Start Sevak when you log in to your desktop. |
 | `check_for_updates` | boolean | `true` | Check GitHub for a new version shortly after startup, every six hours, and whenever you open Sevak (if the last check is over an hour old). Updates are only installed after you confirm. Apart from optional currency rates, this is the only automatic network request. |
+| `update_channel` | `"stable"` or `"beta"` | `"stable"` | Which releases the update check follows. `"beta"` also offers pre-release builds (`X.Y.Z-beta.N`), which arrive earlier and may be less tested; Sevak then reads `latest-beta.json` from GitHub Releases as well as `latest.json` and offers the newer of the two. Switching back to `"stable"` never downgrades: Sevak waits for a stable version newer than the one installed. Any other value means `"stable"`. |
 
 ```toml
 [general]
@@ -72,6 +73,7 @@ actions_hotkey = "Ctrl+Alt+Space"
 hide_on_blur = true
 launch_at_login = false
 check_for_updates = true
+update_channel = "stable"
 ```
 
 ### [window]
@@ -582,6 +584,12 @@ launch_at_login = false
 # installed after you agree. Apart from the optional currency rates (see
 # [calculator]), this is the only request Sevak makes on its own.
 check_for_updates = true
+
+# Which releases to follow: "stable" (the default) or "beta". Beta builds arrive
+# earlier and may be less tested; they come from the same GitHub releases page.
+# Switching back to "stable" never downgrades: Sevak waits for the next stable
+# version that is newer than the one you have.
+update_channel = "stable"
 
 [window]
 # Width of the search window in logical pixels (400-1600).

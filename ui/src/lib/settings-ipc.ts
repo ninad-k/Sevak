@@ -41,6 +41,8 @@ export interface Config {
     hide_on_blur: boolean;
     launch_at_login: boolean;
     check_for_updates: boolean;
+    /** Release channel: "stable" (default) or "beta" (earlier, less tested builds). */
+    update_channel: "stable" | "beta";
   };
   window: { width: number };
   linux: { wayland_use_xwayland: boolean };

@@ -18,6 +18,15 @@ package manager (Sevak's own update check is off there, and "Check for
 updates" in the tray names the command to run), while winget and Homebrew
 installs keep Sevak's own updater, which those package managers recognise.
 
+## Updates and the beta channel
+
+Sevak checks GitHub for new versions and asks before installing one. By default it follows
+the **stable** channel. To try new builds earlier, set **Update channel** to **Beta** in
+Settings, General (or `update_channel = "beta"` under `[general]`). Beta builds are named
+like `1.3.0-beta.2`, are published as pre-releases and may be less tested. Switching back
+to Stable never downgrades you; you get the next stable version that is newer than the
+one you have. See [Releasing](releasing.md) for how releases move from beta to stable.
+
 ## Windows 10 / 11
 
 1. Download the installer from [Releases](https://github.com/ninad-k/Sevak/releases):

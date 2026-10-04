@@ -57,6 +57,10 @@ Opt-in feature (on by default). When enabled via `[general] check_for_updates = 
 
 Disable with `[general] check_for_updates = false` to turn off the network request.
 
+#### Update channel
+
+With the default `[general] update_channel = "stable"`, only the URL above is requested. If you switch to `"beta"` (Settings, General, Update channel), Sevak also requests `https://github.com/ninad-k/Sevak/releases/download/channel-beta/latest-beta.json`. It is the same kind of request to the same GitHub release assets, just a different small JSON file, and it sends nothing about you beyond what any web request does. The signature check on the downloaded package is the same on both channels.
+
 ### Installing an update
 
 When an update is available and you agree to install it, its package is downloaded from GitHub Releases and its update signature is verified before it is installed. Windows installation may also download Microsoft's WebView2 runtime if it is missing.

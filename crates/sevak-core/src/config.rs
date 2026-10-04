@@ -45,6 +45,12 @@ launch_at_login = false
 # [calculator]), this is the only request Sevak makes on its own.
 check_for_updates = true
 
+# Which releases to follow: "stable" (the default) or "beta". Beta builds arrive
+# earlier and may be less tested; they come from the same GitHub releases page.
+# Switching back to "stable" never downgrades: Sevak waits for the next stable
+# version that is newer than the one you have.
+update_channel = "stable"
+
 [window]
 # Width of the search window in logical pixels (400-1600).
 width = 720
@@ -410,6 +416,40 @@ pub struct GeneralConfig {
     pub launch_at_login: bool,
     /// Look for a new release at startup and daily (asks before installing).
     pub check_for_updates: bool,
+    /// Which releases the update check follows. See [`UpdateChannel`].
+    pub update_channel: UpdateChannel,
+}
+
+/// The release channel the update check follows.
+///
+/// `stable` reads the manifest of the newest stable release; `beta` also
+/// follows pre-releases. A misspelt value in `config.toml` means `stable`, the
+/// safe choice, rather than costing the user the rest of the file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum UpdateChannel {
+    #[default]
+    Stable,
+    Beta,
+}
+
+impl UpdateChannel {
+    /// Parses a channel name (case-insensitive, surrounding spaces ignored);
+    /// anything unknown is [`UpdateChannel::Stable`].
+    #[must_use]
+    pub fn parse(text: &str) -> Self {
+        if text.trim().eq_ignore_ascii_case("beta") {
+            Self::Beta
+        } else {
+            Self::Stable
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for UpdateChannel {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        String::deserialize(deserializer).map(|text| Self::parse(&text))
+    }
 }
 
 impl Default for GeneralConfig {
@@ -420,6 +460,7 @@ impl Default for GeneralConfig {
             hide_on_blur: true,
             launch_at_login: false,
             check_for_updates: true,
+            update_channel: UpdateChannel::default(),
         }
     }
 }
@@ -1797,6 +1838,44 @@ expand_in_terminals = true
 
         let config = Config::from_toml_str("[window]\nwidth = 99999\n").unwrap();
         assert_eq!(config.window.width, MAX_WINDOW_WIDTH);
+    }
+
+    #[test]
+    fn update_channel_defaults_to_stable_and_reads_beta() {
+        assert_eq!(
+            Config::default().general.update_channel,
+            UpdateChannel::Stable
+        );
+        let parsed = Config::from_toml_str(DEFAULT_CONFIG_TOML).unwrap();
+        assert_eq!(parsed.general.update_channel, UpdateChannel::Stable);
+        assert!(DEFAULT_CONFIG_TOML.contains("update_channel = \"stable\""));
+
+        let beta = Config::from_toml_str("[general]\nupdate_channel = \"beta\"\n").unwrap();
+        assert_eq!(beta.general.update_channel, UpdateChannel::Beta);
+        // Names are forgiving about case and spaces.
+        assert_eq!(UpdateChannel::parse(" Beta "), UpdateChannel::Beta);
+    }
+
+    #[test]
+    fn an_unknown_update_channel_means_stable_and_keeps_the_rest_of_the_file() {
+        let text = "[general]\nhotkey = \"Alt+Space\"\nupdate_channel = \"nightly\"\n";
+        let config = Config::from_toml_str(text).unwrap();
+        assert_eq!(config.general.update_channel, UpdateChannel::Stable);
+        assert_eq!(config.general.hotkey, "Alt+Space");
+    }
+
+    #[test]
+    fn update_channel_is_saved_in_place() {
+        let mut config = Config::default();
+        config.general.update_channel = UpdateChannel::Beta;
+        let text = saved(Some(DEFAULT_CONFIG_TOML), &config);
+        assert!(text.contains("update_channel = \"beta\""));
+        // The comment above the key survives.
+        assert!(text.contains("Which releases to follow"));
+        assert_eq!(
+            Config::from_toml_str(&text).unwrap().general.update_channel,
+            UpdateChannel::Beta
+        );
     }
 
     #[test]

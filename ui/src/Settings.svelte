@@ -44,6 +44,7 @@
       hide_on_blur: true,
       launch_at_login: false,
       check_for_updates: true,
+      update_channel: "stable",
     },
     window: { width: 720 },
     linux: { wayland_use_xwayland: true },
@@ -646,6 +647,24 @@
                 <span class="hint">Looks for a new version at startup and daily, and asks before installing.</span>
               </div>
               <Toggle bind:checked={draft.general.check_for_updates} label="Check for updates" />
+            </div>
+
+            <div class="row">
+              <div class="label">
+                <label class="name" for="update-channel">Update channel</label>
+                <span class="hint">
+                  Beta builds arrive earlier and may be less tested. Going back to Stable never
+                  downgrades: you get the next stable version.
+                </span>
+              </div>
+              <select
+                id="update-channel"
+                class="input select"
+                bind:value={draft.general.update_channel}
+              >
+                <option value="stable">Stable</option>
+                <option value="beta">Beta</option>
+              </select>
             </div>
           </section>
         {:else if active === "hotkeys"}

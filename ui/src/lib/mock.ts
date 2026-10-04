@@ -361,6 +361,7 @@ export function mockSettings(): SettingsDto {
         hide_on_blur: true,
         launch_at_login: false,
         check_for_updates: true,
+        update_channel: "stable",
       },
       window: { width: 720 },
       linux: { wayland_use_xwayland: true },
