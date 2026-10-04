@@ -5,6 +5,7 @@
 //! matching and the search engine. It must never depend on Tauri or contain
 //! `#[cfg(target_os = ...)]` code.
 
+pub mod ai;
 pub mod checksum;
 pub mod config;
 pub mod diagnostics;
@@ -19,6 +20,7 @@ pub mod theme_file;
 pub mod theme_store;
 pub mod usage;
 
+pub use ai::{AiConfig, AiProvider};
 pub use config::{
     ActionsConfig, ClipboardConfig, Config, ConfigError, ConfigOrigin, ExpandOn, FileBufferConfig,
     GeneralConfig, HotkeyBinding, HotkeyTarget, LinuxConfig, PasteConfig, ShellConfig, Snippet,

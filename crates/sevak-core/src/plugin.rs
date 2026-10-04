@@ -91,6 +91,15 @@ pub trait Plugin: Send + Sync {
         true
     }
 
+    /// Whether running `item` should leave the launcher open instead of hiding
+    /// it, because the result of running it is shown in the launcher itself
+    /// (the AI assistant's "Thinking..." row turning into the answer). The shell
+    /// then re-runs the query when the plugin calls its [`ResultsNotifier`].
+    /// False by default: Enter normally ends the interaction.
+    fn keeps_open(&self, _item: &ResultItem) -> bool {
+        false
+    }
+
     /// Actions this plugin offers for what the user selected in another app
     /// (the Universal Actions hotkey), in the order they are listed. The
     /// engine collects them from every plugin. Each result must be handled by
