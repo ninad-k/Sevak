@@ -37,7 +37,9 @@
 //! - content the copying app marked secret (see
 //!   [`sevak_platform::ClipboardRead::sensitive`]: password managers set these
 //!   markers on Windows and macOS);
-//! - copies made while an app from `[clipboard] ignore_apps` had focus;
+//! - copies made while an app from `[clipboard] ignore_apps` had focus, or one
+//!   of the built-in password managers and credential prompts
+//!   ([`DEFAULT_CLIPBOARD_IGNORE_APPS`], unless `default_ignore_apps` is off);
 //! - text longer than `max_item_bytes`, images whose PNG is larger than
 //!   `max_image_bytes`, empty and whitespace-only text;
 //! - anything Sevak itself put on the clipboard (a paste or copy it made);
@@ -79,7 +81,7 @@ use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
-use sevak_core::config::{ClipboardConfig, PasteConfig};
+use sevak_core::config::{ClipboardConfig, PasteConfig, DEFAULT_CLIPBOARD_IGNORE_APPS};
 use sevak_core::model::score;
 use sevak_core::sealed::Sealer;
 use sevak_core::{
@@ -288,13 +290,27 @@ impl From<&ClipboardConfig> for Settings {
         Self {
             max_items: config.max_items,
             max_item_bytes: config.max_item_bytes,
-            ignore_apps: config.ignore_apps.clone(),
+            ignore_apps: effective_ignore_apps(config),
             images: config.images,
             files: config.files,
             max_image_bytes: config.max_image_bytes,
             encrypt: config.encrypt,
         }
     }
+}
+
+/// The apps whose copies are never recorded: the user's `ignore_apps`, and the
+/// built-in list of password managers unless it is switched off.
+fn effective_ignore_apps(config: &ClipboardConfig) -> Vec<String> {
+    let mut apps = config.ignore_apps.clone();
+    if config.default_ignore_apps {
+        apps.extend(
+            DEFAULT_CLIPBOARD_IGNORE_APPS
+                .iter()
+                .map(|app| (*app).to_owned()),
+        );
+    }
+    apps
 }
 
 /// Entries, newest first. `Arc`s so a query can take a cheap snapshot.
@@ -1788,6 +1804,71 @@ mod tests {
         assert_eq!(monitor.poll(&*platform, &settings()), None);
         set_files(&platform, 5, &[Path::new("/a/b.txt")]);
         assert_eq!(monitor.poll(&*platform, &settings()), None);
+    }
+
+    fn settings_for(config: &ClipboardConfig) -> Settings {
+        Settings::from(config)
+    }
+
+    #[test]
+    fn password_managers_are_ignored_by_default_in_addition_to_the_users_list() {
+        let platform = MockPlatform::empty();
+        let mut monitor = primed_monitor(&platform);
+        let config = ClipboardConfig {
+            ignore_apps: vec!["Notepad".into()],
+            ..ClipboardConfig::default()
+        };
+        let settings = settings_for(&config);
+
+        let mut sequence = 1;
+        let mut copied_from = |app: ForegroundApp| {
+            sequence += 1;
+            *platform.foreground.lock().unwrap() = Some(app);
+            copy(&platform, sequence, "a secret value");
+            text_of(monitor.poll(platform.as_ref(), &settings))
+        };
+        // Names as the three systems report them.
+        for app in [
+            ForegroundApp::new("KeePassXC").with_identifier("KeePassXC.exe"),
+            ForegroundApp::new("1Password").with_identifier("1Password.exe"),
+            ForegroundApp::new("Bitwarden").with_identifier("com.bitwarden.desktop"),
+            ForegroundApp::new("keepassxc").with_identifier("org.keepassxc.KeePassXC"),
+            ForegroundApp::new("pinentry-gnome3"),
+            ForegroundApp::new("CredentialUIBroker").with_identifier("CredentialUIBroker.exe"),
+            // The user's own entry still works.
+            ForegroundApp::new("Notepad"),
+        ] {
+            let name = app.name.clone();
+            assert_eq!(copied_from(app), None, "{name} must not be recorded");
+        }
+        // An ordinary app is recorded.
+        assert_eq!(
+            copied_from(ForegroundApp::new("Code")),
+            Some("a secret value".to_owned())
+        );
+    }
+
+    #[test]
+    fn the_built_in_list_can_be_switched_off() {
+        let config = ClipboardConfig {
+            default_ignore_apps: false,
+            ignore_apps: vec!["Notepad".into()],
+            ..ClipboardConfig::default()
+        };
+        assert_eq!(effective_ignore_apps(&config), ["Notepad"]);
+        let on = ClipboardConfig::default();
+        let apps = effective_ignore_apps(&on);
+        assert_eq!(apps.len(), DEFAULT_CLIPBOARD_IGNORE_APPS.len());
+        assert!(apps.iter().any(|app| app == "KeePassXC"));
+
+        let platform = MockPlatform::empty();
+        let mut monitor = primed_monitor(&platform);
+        *platform.foreground.lock().unwrap() = Some(ForegroundApp::new("KeePassXC"));
+        copy(&platform, 2, "from a password manager");
+        assert_eq!(
+            text_of(monitor.poll(platform.as_ref(), &settings_for(&config))),
+            Some("from a password manager".to_owned())
+        );
     }
 
     #[test]

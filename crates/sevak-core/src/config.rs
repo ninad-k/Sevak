@@ -229,9 +229,14 @@ max_image_bytes = 10485760
 # readable by you only. Files already stored plain are encrypted on the next
 # start.
 encrypt = true
-# Never record text copied from these apps, e.g. ["KeePassXC", "1Password"].
+# Never record text copied from these apps, e.g. ["Signal", "Messages"].
 # Matched case-insensitively against the program or app name.
 ignore_apps = []
+# Also skip password managers (KeePass, KeePassXC, 1Password, Bitwarden,
+# LastPass, Dashlane, Enpass, NordPass, RoboForm, Keeper, Proton Pass), the
+# system's credential prompts and ssh/gpg passphrase prompts, in addition to
+# ignore_apps. The full list is in the clipboard documentation. false turns it off.
+default_ignore_apps = true
 
 [contacts]
 # Search your contacts ("c <name>" or "@name"): copy an email or phone number,
@@ -770,6 +775,77 @@ pub struct FileBufferConfig {
     pub keep_between_shows: bool,
 }
 
+/// Apps whose copies the clipboard history never records, unless
+/// `[clipboard] default_ignore_apps = false`: password managers and the tools
+/// that ask for a password or passphrase (credential prompts, `ssh` askpass and
+/// `pinentry` programs, key agents).
+///
+/// Each entry is compared, ignoring case and a `.exe` / `.app` ending, with the
+/// name the system reports for the app in front: the program name on Windows
+/// (`KeePassXC.exe`), the app name or bundle id on macOS, the window class or
+/// program name on Linux. It is a best-effort list: an app that is not on it,
+/// or that reports another name, is not covered (add it to `ignore_apps`).
+pub const DEFAULT_CLIPBOARD_IGNORE_APPS: &[&str] = &[
+    // Password managers.
+    "KeePass",
+    "KeePassXC",
+    "org.keepassxc.KeePassXC",
+    "keepassx",
+    "1Password",
+    "1Password 7",
+    "com.1password.1password",
+    "com.agilebits.onepassword7",
+    "com.agilebits.onepassword-osx",
+    "Bitwarden",
+    "com.bitwarden.desktop",
+    "LastPass",
+    "com.lastpass.lastpass",
+    "Dashlane",
+    "com.dashlane.dashlanephonefinal",
+    "Enpass",
+    "in.sinew.Enpass-Desktop",
+    "NordPass",
+    "RoboForm",
+    "Keeper",
+    "KeeperPasswordManager",
+    "Proton Pass",
+    "ProtonPass",
+    "Authy Desktop",
+    "WinAuth",
+    "org.gnome.World.Secrets",
+    "seahorse",
+    "kwalletmanager",
+    "kwalletmanager5",
+    // The system's own credential prompts.
+    "CredentialUIBroker",
+    "consent",
+    "LogonUI",
+    "Keychain Access",
+    "com.apple.keychainaccess",
+    "com.apple.Passwords",
+    "SecurityAgent",
+    "com.apple.SecurityAgent",
+    "gcr-prompter",
+    // Passphrase prompts of ssh, gpg and their agents.
+    "ssh-askpass",
+    "x11-ssh-askpass",
+    "gnome-ssh-askpass",
+    "ssh-askpass-gnome",
+    "ksshaskpass",
+    "lxqt-openssh-askpass",
+    "pinentry",
+    "pinentry-gtk",
+    "pinentry-gtk-2",
+    "pinentry-gnome3",
+    "pinentry-qt",
+    "pinentry-x11",
+    "pinentry-mac",
+    "pinentry-curses",
+    "pinentry-tty",
+    "pageant",
+    "puttygen",
+];
+
 /// The clipboard history plugin (`cb`). Opt-in: nothing is watched or stored
 /// unless `enabled` is set.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -781,6 +857,9 @@ pub struct ClipboardConfig {
     pub max_item_bytes: usize,
     /// Apps whose copies are never recorded (program or app names).
     pub ignore_apps: Vec<String>,
+    /// Also never record copies from the password managers and secret-handling
+    /// tools in [`DEFAULT_CLIPBOARD_IGNORE_APPS`], in addition to `ignore_apps`.
+    pub default_ignore_apps: bool,
     /// Record copied images (as PNG files next to the history).
     pub images: bool,
     /// Record copied files and folders (their paths; the files stay where they are).
@@ -800,6 +879,7 @@ impl Default for ClipboardConfig {
             max_items: 200,
             max_item_bytes: 64 * 1024,
             ignore_apps: Vec::new(),
+            default_ignore_apps: true,
             images: true,
             files: true,
             max_image_bytes: 10 * 1024 * 1024,
@@ -1791,6 +1871,17 @@ expand_in_terminals = true
         assert!(!snippets.case_sensitive);
         assert_eq!(snippets.ignore_apps, ["KeePassXC"]);
         assert!(snippets.expand_in_terminals);
+    }
+
+    #[test]
+    fn the_default_ignore_list_has_no_blanks_or_duplicates() {
+        let mut seen = std::collections::HashSet::new();
+        for app in DEFAULT_CLIPBOARD_IGNORE_APPS {
+            assert!(!app.trim().is_empty());
+            assert_eq!(*app, app.trim());
+            assert!(seen.insert(app.to_lowercase()), "{app} is listed twice");
+        }
+        assert!(Config::default().clipboard.default_ignore_apps);
     }
 
     #[test]
