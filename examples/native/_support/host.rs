@@ -156,6 +156,23 @@ pub fn query_until_results(
     }
 }
 
+/// The extension's keyword is not taken by a built-in, a search engine or a
+/// workflow (the gallery requires a unique one).
+pub fn assert_keyword_is_free(manifest_dir: &str) {
+    let manifest = std::fs::read_to_string(Path::new(manifest_dir).join("plugin.toml")).unwrap();
+    let keyword = manifest
+        .lines()
+        .find_map(|line| line.strip_prefix("keyword"))
+        .and_then(|rest| rest.split('"').nth(1))
+        .expect("plugin.toml has a keyword")
+        .to_lowercase();
+    let owners = sevak_plugins::keywords::KeywordOwners::builtin(&Config::default());
+    assert!(
+        owners.owners_of(&keyword, None).is_empty(),
+        "{keyword:?} is taken"
+    );
+}
+
 pub fn titles(items: &[ResultItem]) -> Vec<&str> {
     items.iter().map(|item| item.title.as_str()).collect()
 }

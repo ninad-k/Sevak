@@ -320,6 +320,79 @@
         "needs-node",
         "developer"
       ]
+    },
+    {
+      "id": "jwt",
+      "kind": "native",
+      "name": "JWT decoder",
+      "description": "Type jwt and paste a token to read its header, claims and expiry. Decoded offline; the signature is not verified.",
+      "author": "Sevak",
+      "version": "0.1.0",
+      "license": "Apache-2.0",
+      "tags": [
+        "native",
+        "developer",
+        "offline",
+        "security"
+      ],
+      "min_sevak": "0.1.0",
+      "permissions": [],
+      "repository": "https://github.com/ninad-k/Sevak/tree/main/examples/native/jwt",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/native/jwt",
+      "platforms": {
+        "windows-x86_64": {
+          "source": "gallery/extensions/jwt/jwt-0.1.0-windows-x86_64.sevakext",
+          "sha256": "d6638cef38db8f998f9eceedeb7cc4cee8191e0f308988de374e385b5816fc79"
+        }
+      }
+    },
+    {
+      "id": "cron",
+      "kind": "native",
+      "name": "Cron explainer",
+      "description": "Type cron and an expression to read it in words and see the next five run times (UTC, or add an offset like +05:30).",
+      "author": "Sevak",
+      "version": "0.1.0",
+      "license": "Apache-2.0",
+      "tags": [
+        "native",
+        "developer",
+        "offline"
+      ],
+      "min_sevak": "0.1.0",
+      "permissions": [],
+      "repository": "https://github.com/ninad-k/Sevak/tree/main/examples/native/cron",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/native/cron",
+      "platforms": {
+        "windows-x86_64": {
+          "source": "gallery/extensions/cron/cron-0.1.0-windows-x86_64.sevakext",
+          "sha256": "04afb2b6fa2df8f63c921ac04c4811e160a8070927731207fb7fed73e99673c1"
+        }
+      }
+    },
+    {
+      "id": "regex",
+      "kind": "native",
+      "name": "Regex tester",
+      "description": "Type regex, a pattern, => and some text to see every match and capture group. Rust regex syntax, offline.",
+      "author": "Sevak",
+      "version": "0.1.0",
+      "license": "Apache-2.0",
+      "tags": [
+        "native",
+        "developer",
+        "offline"
+      ],
+      "min_sevak": "0.1.0",
+      "permissions": [],
+      "repository": "https://github.com/ninad-k/Sevak/tree/main/examples/native/regex",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/native/regex",
+      "platforms": {
+        "windows-x86_64": {
+          "source": "gallery/extensions/regex/regex-0.1.0-windows-x86_64.sevakext",
+          "sha256": "6868c1aee416a05386dfeb60125a935ed7057746d77cd69b3a8835c06eca4a1a"
+        }
+      }
     }
   ]
 }

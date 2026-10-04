@@ -62,3 +62,8 @@ fn a_changed_program_asks_again() {
     let prompt = world.assert_waits_for_approval();
     assert!(prompt.contains("review again"), "{prompt}");
 }
+
+#[test]
+fn the_keyword_is_free() {
+    host::assert_keyword_is_free(env!("CARGO_MANIFEST_DIR"));
+}
