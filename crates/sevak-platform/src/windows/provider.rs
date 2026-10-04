@@ -190,6 +190,15 @@ fn launch_with_verb(verb: &str, target: &LaunchTarget) -> Result<()> {
             args,
             working_dir,
         } => {
+            if let Some(bad) = unsafe_batch_arg(path, args) {
+                return Err(PlatformError::Os {
+                    operation: "launch",
+                    message: format!(
+                        "{bad:?} cannot be passed to a .bat or .cmd file safely: cmd would \
+                         read it as a command"
+                    ),
+                });
+            }
             let parameters = (!args.is_empty()).then(|| OsString::from(join_args(args)));
             shell_execute_in(
                 verb,
@@ -205,6 +214,26 @@ fn launch_with_verb(verb: &str, target: &LaunchTarget) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// The first argument that cmd.exe would act on when `path` is a batch file.
+///
+/// A `.bat` or `.cmd` file is run by `cmd.exe`, which re-parses the whole
+/// command line: `& | < > ^`, `%` and `!` expansion and line breaks are
+/// commands there even though `CommandLineToArgvW` quoting treats them as
+/// plain text. A quote cannot be escaped for it either, so none of them can be
+/// passed through; the caller refuses the launch instead.
+fn unsafe_batch_arg<'a>(path: &std::path::Path, args: &'a [String]) -> Option<&'a str> {
+    let batch = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("bat") || ext.eq_ignore_ascii_case("cmd"));
+    if !batch {
+        return None;
+    }
+    args.iter()
+        .map(String::as_str)
+        .find(|arg| arg.contains(['&', '|', '<', '>', '^', '%', '!', '"', '\r', '\n', '\0']))
 }
 
 /// Joins arguments into a single command-line string that
@@ -252,6 +281,30 @@ pub(crate) fn quote_arg(arg: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn batch_files_refuse_arguments_cmd_would_run() {
+        use std::path::Path;
+        let args = |a: &[&str]| a.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+        for bad in [
+            "x & calc", "a|b", "a>b", "^", "%PATH%", "!x!", "a\"b", "a\nb",
+        ] {
+            assert_eq!(
+                unsafe_batch_arg(Path::new(r"C:\t\tool.CMD"), &args(&[bad])),
+                Some(bad)
+            );
+            assert!(unsafe_batch_arg(Path::new("tool.bat"), &args(&["ok", bad])).is_some());
+            // Other programs get the ordinary quoting.
+            assert_eq!(unsafe_batch_arg(Path::new("tool.exe"), &args(&[bad])), None);
+        }
+        assert_eq!(
+            unsafe_batch_arg(
+                Path::new("tool.bat"),
+                &args(&["a b", "--flag=1", r"C:\x y"])
+            ),
+            None
+        );
+    }
 
     #[test]
     fn plain_arguments_are_left_alone() {
