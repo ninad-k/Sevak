@@ -179,6 +179,11 @@ impl KeywordOwners {
         }
     }
 
+    /// Every keyword in use, in the order they were added.
+    pub fn uses(&self) -> &[KeywordUse] {
+        &self.uses
+    }
+
     /// Who answers `keyword`, except the owner `own_key`; each owner once.
     pub fn owners_of(&self, keyword: &str, own_key: Option<&str>) -> Vec<&str> {
         let keyword = keyword.trim().to_lowercase();
