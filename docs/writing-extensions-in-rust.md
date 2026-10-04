@@ -186,7 +186,7 @@ linux-x86_64    = "bin/my-extension-linux-x86_64"
 | `extension.license` | an SPDX expression such as `Apache-2.0` or `MIT OR Apache-2.0`. |
 | `extension.min_sevak` | Sevak refuses to load the extension on an older version, and Settings does not offer it to one. |
 | `extension.repository` / `homepage` | `https://` addresses, shown as text; Sevak never opens or fetches them. |
-| `extension.permissions` | lower case words, at most 16. Known: `network` (connects to the internet or your network), `filesystem` (reads or writes files outside its own folders), `processes` (starts other programs), `clipboard` (reads or changes the clipboard itself), `system` (changes system settings). Others are shown as written, labelled as the author's own. An empty list says "needs none". **Declared, not enforced** (see below). |
+| `extension.permissions` | lower case words, at most 8, each at most 24 characters. Known: `network` (connects to the internet or your network), `filesystem` (reads or writes files outside its own folders), `processes` (starts other programs), `clipboard` (reads or changes the clipboard itself), `system` (changes system settings). Others are shown as written, labelled as the author's own. An empty list says "needs none". **Declared, not enforced** (see below). |
 | `extension.binaries` | platform to the program's path inside the folder. Platforms: `windows-x86_64`, `windows-aarch64`, `macos-x86_64`, `macos-aarch64`, `linux-x86_64`, `linux-aarch64`. Paths are plain relative paths (no `..`, no drive, no backslash); a Windows program ends in `.exe` and the others do not; two platforms cannot share a path. List only the platforms you build. |
 
 Do not set `command` or `script` as well: Sevak runs the program for the

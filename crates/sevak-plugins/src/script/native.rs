@@ -66,7 +66,10 @@ pub const KNOWN_PERMISSIONS: [(&str, &str); 5] = [
     ("system", "changes system settings"),
 ];
 
-const MAX_PERMISSIONS: usize = 16;
+/// The gallery index keeps at most this many permissions of an entry, each at
+/// most [`MAX_PERMISSION_CHARS`] characters, so a manifest stays within that.
+const MAX_PERMISSIONS: usize = 8;
+const MAX_PERMISSION_CHARS: usize = 24;
 const MAX_TEXT_CHARS: usize = 120;
 const MAX_URL_CHARS: usize = 300;
 
@@ -156,7 +159,7 @@ impl Native {
         for permission in raw.permissions {
             let permission = permission.trim().to_ascii_lowercase();
             let plain = !permission.is_empty()
-                && permission.len() <= 32
+                && permission.len() <= MAX_PERMISSION_CHARS
                 && permission.starts_with(|c: char| c.is_ascii_lowercase())
                 && permission
                     .chars()

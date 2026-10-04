@@ -5,7 +5,7 @@ use std::str::FromStr;
 /// The text after the extension's keyword (`hello Ada` with the keyword `hello`
 /// gives `Ada`; the keyword alone gives an empty query).
 ///
-/// ```
+/// ```no_run
 /// use sevak_extension_sdk::Query;
 ///
 /// let query = Query::new("convert 5 km  to miles");

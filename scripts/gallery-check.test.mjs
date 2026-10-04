@@ -113,7 +113,7 @@ test("the fields a native extension must have are required", () => {
     assert.match(check([e]).stderr, pattern, field);
   }
   assert.match(check([entry({ version: "latest" })]).stderr, /version must be like/);
-  assert.match(check([entry({ permissions: ["Network"] })]).stderr, /permissions must be a list of lower case words/);
+  assert.match(check([entry({ permissions: ["Network"] })]).stderr, /permissions must be at most 8 unique lower case words/);
   assert.match(check([entry({ source: "gallery/packages/x.zip" })]).stderr, /not `source` and `sha256`/);
   assert.match(check([entry({ platforms: {} })]).stderr, /at least one platform/);
   assert.match(check([entry({ folder: "other" })]).stderr, /no folder/);

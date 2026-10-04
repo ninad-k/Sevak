@@ -15,6 +15,11 @@ categories = ["development-tools"]
 # Publishing to crates.io is a maintainer decision (docs/writing-extensions-in-rust.md,
 # "Publishing the SDK"); nothing here stops it, and nothing publishes it by itself.
 
+# The examples in the documentation are compiled (`no_run`) but not run: on
+# Windows, `cargo test --workspace` hands the Tauri build script's stub
+# msvcrt.lib to rustdoc's linker, which cannot link any runnable doctest. What
+# the examples show is run by the unit tests in src/.
+
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true

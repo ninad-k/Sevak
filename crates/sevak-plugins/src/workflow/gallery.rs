@@ -326,7 +326,15 @@ fn check_native(entry: &mut Entry, pin: &Pin) -> Result<(), String> {
             return Err("`repository` must be an https:// address".to_owned());
         }
     }
+    // Not silently trimmed like tags: the page and the package must agree.
+    let listed = entry.permissions.len();
     clean_tags(&mut entry.permissions);
+    if entry.permissions.len() != listed {
+        return Err(
+            "permissions must be unique lower case words (a-z, 0-9, -), at most 8, each at most              24 characters"
+                .to_owned(),
+        );
+    }
     for (platform, artifact) in &mut entry.platforms {
         if !crate::script::PLATFORMS.contains(&platform.as_str()) {
             return Err(format!("the platform \"{platform}\" is not known"));
@@ -940,7 +948,7 @@ mod tests {
         serde_json::json!({
             "id": id, "kind": "native", "name": "Tool", "description": "d",
             "author": "Ada", "version": "1.2.3", "license": "MIT",
-            "min_sevak": "0.1.0", "permissions": ["network", "Bad Permission"],
+            "min_sevak": "0.1.0", "permissions": ["network"],
             "repository": "https://github.com/example/tool",
             "platforms": {
                 "linux-x86_64": {
@@ -963,7 +971,7 @@ mod tests {
         let entry = &index.entries[0];
         assert_eq!(entry.kind, Kind::Native);
         assert_eq!(entry.folder_name(), "tool");
-        assert_eq!(entry.permissions, ["network"], "invalid labels are dropped");
+        assert_eq!(entry.permissions, ["network"]);
         let linux = &entry.platforms["linux-x86_64"];
         assert_eq!(
             linux.source,
@@ -1000,6 +1008,12 @@ mod tests {
             with(&|e| e["min_sevak"] = "soon".into()),
             with(&|e| e["repository"] = "http://example.com".into()),
             with(&|e| e["folder"] = "elsewhere".into()),
+            // Permissions are never silently trimmed: the page and the package must agree.
+            with(&|e| e["permissions"] = serde_json::json!(["network", "Bad Permission"])),
+            with(&|e| e["permissions"] = serde_json::json!(["network", "network"])),
+            with(&|e| {
+                e["permissions"] = serde_json::json!(["a", "b", "c", "d", "e", "f", "g", "h", "i"])
+            }),
         ];
         let count = bad.len();
         let mut entries = bad;

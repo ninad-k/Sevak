@@ -166,7 +166,7 @@ impl fmt::Display for Problem {
 
 /// One row in the results list.
 ///
-/// ```
+/// ```no_run
 /// use sevak_extension_sdk::{Action, Icon, Item};
 ///
 /// let item = Item::new("Rust")

@@ -165,7 +165,7 @@ impl Extension {
     /// waiting, the stale ones can be skipped: only the newest is answered.
     /// Other messages are handled in the order they arrived.
     ///
-    /// ```
+    /// ```no_run
     /// use std::io::Cursor;
     /// use sevak_extension_sdk::{Extension, Item};
     ///

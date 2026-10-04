@@ -145,9 +145,12 @@ fn the_native_package_checks_pass_for_a_consistent_gallery() {
     check_native_entries(&entries, tmp.path());
 }
 
+/// What a test does to the entry (and the files) before the checks run.
+type Tamper = Box<dyn FnOnce(&mut serde_json::Value, &Path)>;
+
 #[test]
 fn the_native_package_checks_catch_each_kind_of_mismatch() {
-    let cases: Vec<(&str, Box<dyn FnOnce(&mut serde_json::Value, &Path)>)> = vec![
+    let cases: Vec<(&str, Tamper)> = vec![
         (
             "hash",
             Box::new(|entry, _| {
@@ -231,7 +234,7 @@ fn check_native_entries(entries: &[Entry], gallery: &Path) {
                 .unwrap_or_else(|err| panic!("{id} {platform}: {err}"));
             assert_eq!(
                 package.platforms(),
-                [platform.clone()],
+                std::slice::from_ref(platform),
                 "{id} {platform}: a gallery package carries exactly its own platform's program"
             );
             let native = &package.native;

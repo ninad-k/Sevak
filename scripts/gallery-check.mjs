@@ -85,8 +85,13 @@ function checkNative(where, entry, dirs) {
     problem(where, "min_sevak must be like 1.2.3");
   }
   const permissions = entry.permissions ?? [];
-  if (!Array.isArray(permissions) || !permissions.every((p) => /^[a-z][a-z0-9-]{0,23}$/.test(p))) {
-    problem(where, "permissions must be a list of lower case words (network, filesystem, ...)");
+  if (
+    !Array.isArray(permissions) ||
+    permissions.length > 8 ||
+    new Set(permissions).size !== permissions.length ||
+    !permissions.every((p) => /^[a-z][a-z0-9-]{0,23}$/.test(p))
+  ) {
+    problem(where, "permissions must be at most 8 unique lower case words (network, filesystem, ...)");
   }
   if (entry.folder !== undefined && entry.folder !== entry.id) problem(where, "a native extension has no folder");
   const platforms = entry.platforms;
