@@ -63,6 +63,7 @@ fn examples(kind: Kind) -> PathBuf {
     repo().join("examples").join(match kind {
         Kind::Workflow => "workflows",
         Kind::Plugin => "plugins",
+        Kind::Native => "extensions",
     })
 }
 

@@ -175,13 +175,24 @@ impl Manifest {
 
     /// Validates manifest `text`; `folder` is the plugin folder's name.
     pub fn parse(text: &str, folder: &str) -> Result<Self, String> {
-        Self::parse_for(text, folder, &current_platform())
+        Self::parse_with(text, folder, &current_platform(), true)
     }
 
     /// [`Manifest::parse`] as it reads on `platform` (`windows-x86_64`, ...):
     /// only a native extension's program depends on it. Packaging uses this to
-    /// check every platform an extension offers.
+    /// check every platform an extension offers, so unlike `parse` it does not
+    /// compare `min_sevak` with the running Sevak (that is a question for the
+    /// computer the extension is installed on).
     pub fn parse_for(text: &str, folder: &str, platform: &str) -> Result<Self, String> {
+        Self::parse_with(text, folder, platform, false)
+    }
+
+    fn parse_with(
+        text: &str,
+        folder: &str,
+        platform: &str,
+        check_sevak_version: bool,
+    ) -> Result<Self, String> {
         let raw: Raw = toml::from_str(text).map_err(|err| err.to_string())?;
         let mut warnings = Vec::new();
 
@@ -229,7 +240,9 @@ impl Manifest {
             }
             (None, None) => match &native {
                 Some(native) => {
-                    native.check_sevak_version(env!("CARGO_PKG_VERSION"))?;
+                    if check_sevak_version {
+                        native.check_sevak_version(env!("CARGO_PKG_VERSION"))?;
+                    }
                     Launch::Command(vec![native.binary_for(platform)?.to_owned()])
                 }
                 None => return Err("missing `command` (or `script`)".to_owned()),
@@ -584,13 +597,20 @@ mod tests {
 
     #[test]
     fn a_native_extension_needing_a_newer_sevak_is_not_loaded() {
-        let text = NATIVE.replace(
-            "[extension]",
-            "[extension]
-min_sevak = \"99.0.0\"",
+        let platform = current_platform();
+        let program = if platform.starts_with("windows") {
+            "bin/rh.exe"
+        } else {
+            "bin/rh"
+        };
+        let text = format!(
+            "protocol = 1\nkeyword = \"rh\"\n[extension]\nversion = \"1.0.0\"\nauthor = \"a\"\n\
+             license = \"MIT\"\nmin_sevak = \"99.0.0\"\n[extension.binaries]\n{platform} = \"{program}\"\n"
         );
-        let err = Manifest::parse_for(&text, "x", "linux-x86_64").unwrap_err();
+        let err = Manifest::parse(&text, "x").unwrap_err();
         assert!(err.contains("99.0.0"), "{err}");
+        // Packaging does not ask the packager's own Sevak.
+        assert!(Manifest::parse_for(&text, "x", &platform).is_ok());
     }
 
     #[test]

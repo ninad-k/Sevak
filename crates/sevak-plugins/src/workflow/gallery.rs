@@ -28,7 +28,7 @@
 //! is specific to workflows and script plugins, and entries of kinds this Sevak
 //! does not know are skipped rather than failing the index.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
@@ -57,6 +57,10 @@ const MAX_UNPACKED_BYTES: u64 = 10 * 1024 * 1024;
 const MAX_PATH_BYTES: usize = 200;
 
 /// What an entry installs as.
+///
+/// Older Sevaks do not know [`Kind::Native`]: an index entry of an unknown kind
+/// is skipped, so adding native extensions to the index does not change the
+/// index format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Kind {
@@ -64,6 +68,9 @@ pub enum Kind {
     Workflow,
     /// A script plugin folder for `<config dir>/plugins`.
     Plugin,
+    /// A native extension (a compiled program, one `.sevakext` package per
+    /// platform) for `<config dir>/plugins`; see [`crate::extensions`].
+    Native,
 }
 
 impl Kind {
@@ -71,9 +78,19 @@ impl Kind {
     pub fn manifest_file(self) -> &'static str {
         match self {
             Self::Workflow => WORKFLOW_FILE,
-            Self::Plugin => PLUGIN_FILE,
+            Self::Plugin | Self::Native => PLUGIN_FILE,
         }
     }
+}
+
+/// One platform's package of a native extension.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Artifact {
+    /// The `.sevakext` package: a path relative to the repository root at the
+    /// release in the index file; after parsing, the full `https://` address.
+    pub source: String,
+    /// SHA-256 of the package, as 64 hex digits.
+    pub sha256: String,
 }
 
 /// One installable thing in the index.
@@ -95,9 +112,12 @@ pub struct Entry {
     pub tags: Vec<String>,
     /// The zip package. In the index file a path relative to the repository
     /// root at the release (`gallery/packages/x.zip`); after parsing, the full
-    /// `https://` address at that release.
+    /// `https://` address at that release. Empty for native extensions, which
+    /// have one package per platform in [`Entry::platforms`].
+    #[serde(default)]
     pub source: String,
-    /// SHA-256 of the zip, as 64 hex digits.
+    /// SHA-256 of the zip, as 64 hex digits (empty for native extensions).
+    #[serde(default)]
     pub sha256: String,
     /// Where to read more (shown as text, never opened automatically).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -105,6 +125,24 @@ pub struct Entry {
     /// The folder the package installs to; the `id` when left out.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub folder: Option<String>,
+    /// Native extensions: platform (`windows-x86_64`, `macos-aarch64`,
+    /// `linux-x86_64`, ...) to that platform's package.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub platforms: BTreeMap<String, Artifact>,
+    /// Native extensions: the licence (SPDX), shown before installing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub license: Option<String>,
+    /// Native extensions: where the source code is (shown, never opened).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repository: Option<String>,
+    /// The oldest Sevak that can run it; the extensions page does not offer it
+    /// to older ones.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_sevak: Option<String>,
+    /// Native extensions: what the author says the program does beyond
+    /// answering queries (`network`, `filesystem`, ...). Not enforced.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub permissions: Vec<String>,
 }
 
 impl Entry {
@@ -233,11 +271,66 @@ fn check_entry(entry: &mut Entry, pin: &Pin) -> Result<(), String> {
     if is_reserved_device_name(entry.folder_name()) {
         return Err("the folder name is not valid".to_owned());
     }
+    if entry.kind == Kind::Native {
+        return check_native(entry, pin);
+    }
+    if !entry.platforms.is_empty() {
+        return Err("only native extensions have `platforms`".to_owned());
+    }
     entry.source = pin
         .resolve(&entry.source)
         .map_err(|why| format!("the source is refused: {why}"))?;
-    if entry.sha256.len() != 64 || !entry.sha256.chars().all(|c| c.is_ascii_hexdigit()) {
+    if !is_sha256(&entry.sha256) {
         return Err("sha256 must be 64 hex digits".to_owned());
+    }
+    Ok(())
+}
+
+fn is_sha256(text: &str) -> bool {
+    text.len() == 64 && text.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+/// The extra rules of a native extension's entry: one package per platform,
+/// each inside the release, and the facts the page shows before installing.
+fn check_native(entry: &mut Entry, pin: &Pin) -> Result<(), String> {
+    if entry.platforms.is_empty() {
+        return Err("a native extension needs `platforms`".to_owned());
+    }
+    if !entry.source.is_empty() || !entry.sha256.is_empty() {
+        return Err("a native extension has `platforms`, not `source` and `sha256`".to_owned());
+    }
+    if semver::Version::parse(entry.version.trim()).is_err() {
+        return Err("`version` must be like 1.2.3".to_owned());
+    }
+    entry.version = entry.version.trim().to_owned();
+    if entry.author.trim().is_empty() {
+        return Err("a native extension needs an `author` (the publisher)".to_owned());
+    }
+    if entry.license.as_deref().is_none_or(|l| l.trim().is_empty()) {
+        return Err("a native extension needs a `license`".to_owned());
+    }
+    if let Some(min) = &entry.min_sevak {
+        if semver::Version::parse(min.trim()).is_err() {
+            return Err("`min_sevak` must be like 1.2.3".to_owned());
+        }
+    }
+    if let Some(repository) = &entry.repository {
+        if !repository.to_ascii_lowercase().starts_with("https://") {
+            return Err("`repository` must be an https:// address".to_owned());
+        }
+    }
+    clean_tags(&mut entry.permissions);
+    for (platform, artifact) in &mut entry.platforms {
+        if !crate::script::PLATFORMS.contains(&platform.as_str()) {
+            return Err(format!("the platform \"{platform}\" is not known"));
+        }
+        artifact.source = pin
+            .resolve(&artifact.source)
+            .map_err(|why| format!("the source for {platform} is refused: {why}"))?;
+        artifact.sha256 = artifact.sha256.trim().to_ascii_lowercase();
+        if !is_sha256(&artifact.sha256) {
+            return Err(format!("sha256 for {platform} must be 64 hex digits"));
+        }
     }
     Ok(())
 }
@@ -266,10 +359,10 @@ pub struct Dirs<'a> {
 }
 
 impl Dirs<'_> {
-    fn root(&self, kind: Kind) -> &Path {
+    pub(crate) fn root(&self, kind: Kind) -> &Path {
         match kind {
             Kind::Workflow => self.workflows,
-            Kind::Plugin => self.plugins,
+            Kind::Plugin | Kind::Native => self.plugins,
         }
     }
 
@@ -288,8 +381,14 @@ pub struct Installed {
     pub files: usize,
 }
 
+const NATIVE_ELSEWHERE: &str =
+    "native extensions are installed from Settings > Extensions, which shows what they declare first";
+
 /// Downloads `entry` and installs it (see [`install_bytes`]).
 pub fn install(entry: &Entry, dirs: &Dirs<'_>) -> Result<Installed, String> {
+    if entry.kind == Kind::Native {
+        return Err(NATIVE_ELSEWHERE.to_owned());
+    }
     let bytes = fetch_https(&entry.source, MAX_PACKAGE_BYTES)?;
     install_bytes(entry, &bytes, dirs)
 }
@@ -298,6 +397,9 @@ pub fn install(entry: &Entry, dirs: &Dirs<'_>) -> Result<Installed, String> {
 /// unpacks it into a new folder below the workflows or plugins folder. An
 /// existing folder of that name is never touched.
 pub fn install_bytes(entry: &Entry, bytes: &[u8], dirs: &Dirs<'_>) -> Result<Installed, String> {
+    if entry.kind == Kind::Native {
+        return Err(NATIVE_ELSEWHERE.to_owned());
+    }
     verify_sha256(bytes, &entry.sha256)?;
     let folder = entry.folder_name();
     if !valid_folder_name(folder) {
@@ -436,7 +538,7 @@ impl Package {
 
 /// A path from a zip entry as forward-slash components, or why it is refused:
 /// no leading `/`, drive letter, `..`, empty or hidden-looking tricks.
-fn clean_path(raw: &str) -> Result<String, String> {
+pub(crate) fn clean_path(raw: &str) -> Result<String, String> {
     let name = raw.replace('\\', "/");
     if name.len() > MAX_PATH_BYTES {
         return Err("a path in the package is too long".to_owned());
@@ -481,7 +583,7 @@ fn check_content(package: &Package, kind: Kind, folder: &str) -> Result<(), Stri
                 return Err(format!("the package's workflow is not valid: {summary}"));
             }
         }
-        Kind::Plugin => {
+        Kind::Plugin | Kind::Native => {
             Manifest::parse(text, folder)
                 .map_err(|err| format!("the package's plugin is not valid: {err}"))?;
         }
@@ -490,7 +592,13 @@ fn check_content(package: &Package, kind: Kind, folder: &str) -> Result<(), Stri
 }
 
 fn write_package(package: &Package, dir: &Path) -> Result<(), String> {
-    for (name, data, executable) in &package.files {
+    write_files(&package.files, dir)
+}
+
+/// Writes `(relative path, contents, executable)` files below `dir`, creating
+/// folders as needed. Only the owner's execute bit survives on Unix.
+pub(crate) fn write_files(files: &[(String, Vec<u8>, bool)], dir: &Path) -> Result<(), String> {
+    for (name, data, executable) in files {
         let path = dir.join(name);
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(|err| format!("could not write a file: {err}"))?;
@@ -564,6 +672,11 @@ mod tests {
             sha256: sha256_hex(bytes),
             homepage: None,
             folder: None,
+            platforms: BTreeMap::new(),
+            license: None,
+            repository: None,
+            min_sevak: None,
+            permissions: Vec::new(),
         }
     }
 
@@ -1134,7 +1247,7 @@ mod tests {
         let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
         let text = fs::read_to_string(repo_gallery().join("index.json")).unwrap();
         let index = parse_index(&text, &pin()).unwrap();
-        for entry in &index.entries {
+        for entry in index.entries.iter().filter(|e| e.kind != Kind::Native) {
             let file = entry.source.rsplit('/').next().unwrap();
             let bytes = fs::read(repo_gallery().join("packages").join(file)).unwrap();
             let r = roots();
@@ -1148,6 +1261,7 @@ mod tests {
                     r.plugins.join(entry.folder_name()),
                     examples.join("plugins").join(entry.folder_name()),
                 ),
+                Kind::Native => unreachable!("filtered above"),
             };
             assert_same_files(&installed, &source);
         }

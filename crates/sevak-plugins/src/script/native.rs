@@ -113,6 +113,17 @@ pub(super) struct RawNative {
 }
 
 impl Native {
+    /// The `[extension]` table of manifest `text`, validated; `None` when the
+    /// manifest has no such table (an ordinary script plugin).
+    pub fn parse_text(text: &str) -> Result<Option<Self>, String> {
+        #[derive(Deserialize)]
+        struct Wrapper {
+            extension: Option<RawNative>,
+        }
+        let wrapper: Wrapper = toml::from_str(text).map_err(|err| err.to_string())?;
+        wrapper.extension.map(Self::from_raw).transpose()
+    }
+
     /// Validates the raw table.
     pub(super) fn from_raw(raw: RawNative) -> Result<Self, String> {
         let version = required(raw.version, "version")?;
