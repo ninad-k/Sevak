@@ -9,6 +9,7 @@
     "check": "svelte-check --tsconfig ui/tsconfig.json",
     "icons": "node scripts/generate-icons.mjs",
     "gallery:check": "node scripts/gallery-check.mjs",
+    "installer-images": "node scripts/generate-installer-images.mjs",
     "tauri": "tauri",
     "docs:pdf": "node scripts/docs-pdf.mjs",
     "test": "vitest run --config ui/vitest.config.ts",

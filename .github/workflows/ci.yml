@@ -54,12 +54,14 @@ jobs:
       - run: npm run gallery:check
       - run: npm run build
 
-      # Node-only guards; once is enough, so Linux only. A stale
-      # THIRD_PARTY_NOTICES.md (dependencies changed, notices not regenerated)
-      # fails here: run `node scripts/generate-third-party-notices.mjs`.
+      # Tests of the release, packaging and installer scripts, on every OS (the
+      # installer is built on Windows).
       - name: Script and installer tests
-        if: runner.os == 'Linux'
         run: npm run test:scripts
+
+      # Once is enough, so Linux only. A stale THIRD_PARTY_NOTICES.md
+      # (dependencies changed, notices not regenerated) fails here: run
+      # `node scripts/generate-third-party-notices.mjs`.
       - name: Third-party notices are up to date
         if: runner.os == 'Linux'
         run: node scripts/generate-third-party-notices.mjs --check

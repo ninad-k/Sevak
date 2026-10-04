@@ -93,6 +93,7 @@ npm run tauri dev        # shell + Vite dev server (hot reload on the UI)
 npm run check            # svelte-check
 npm run build            # build the UI into ui/dist
 npm run icons            # regenerate src-tauri/icons (scripts/generate-icons.mjs)
+npm run test:scripts     # checks on the Windows installer sources and package manifests
 ```
 
 A plain `cargo build --release -p sevak` needs `--features custom-protocol` to
@@ -109,6 +110,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 npm run check
 npm run build
+npm run test:scripts
 ```
 
 Further commands (what each layer covers, and the manual release checklist, are in
@@ -168,9 +170,11 @@ Bundle settings are the `bundle` object in `src-tauri/tauri.conf.json`:
     `rustup target add aarch64-apple-darwin x86_64-apple-darwin`)
   - Linux: `npx tauri build --bundles deb,rpm,appimage`
 - Output goes to `target/release/bundle/<format>/`.
-- Windows: NSIS installs per user (no admin). The first build downloads the NSIS
-  and WiX toolsets from their official GitHub releases. The MSI `upgradeCode`
-  must never change.
+- Windows: the NSIS installer is Sevak's own (a customised copy of Tauri's
+  template: it installs per user without administrator rights, or per PC after a
+  UAC prompt; see [The Windows installer](#the-windows-installer)). The first
+  build downloads the NSIS and WiX toolsets from their official GitHub releases.
+  The MSI `upgradeCode` must never change.
 - Linux: the `.desktop` file comes from `packaging/linux/sevak.desktop`
   (Categories, Keywords and a "Show or hide" action). Extra runtime dependencies
   (`libayatana-appindicator`, glib tools) are declared in `bundle.linux.deb.depends`
@@ -195,6 +199,109 @@ Bundle settings are the `bundle` object in `src-tauri/tauri.conf.json`:
   (`python scripts/build-dictionary.py <path to WordNet-3.0>`, Python 3, no
   dependencies). Regenerate it only to change what is kept; its licence notice is
   inside the file and in `THIRD_PARTY_NOTICES.md`.
+
+### The Windows installer
+
+Everything about the Windows installers is in `src-tauri/installer/`, wired up in
+`bundle.windows` of `src-tauri/tauri.conf.json`:
+
+| File | What it is |
+|---|---|
+| `installer.nsi` | Sevak's copy of Tauri's NSIS template (`nsis.template`): pages, install scope, upgrades, uninstall |
+| `upstream/installer.nsi` | The unmodified Tauri template it was copied from, kept to diff and merge against |
+| `English.nsh` | Every installer string (`nsis.customLanguageFiles`); the only language, no selector |
+| `upstream/English.nsh` | The unmodified Tauri strings, same purpose |
+| `hooks.nsh` | `NSIS_HOOK_PREINSTALL` and `NSIS_HOOK_PREUNINSTALL` (`nsis.installerHooks`): ask a running Sevak to quit before files change |
+| `sidebar.bmp`, `header.bmp` | NSIS Welcome/Finish artwork (164x314) and page header (150x57) |
+| `wix-banner.bmp`, `wix-dialog.bmp` | The same artwork for the MSI (493x58, 493x312) |
+
+**Why a template copy.** Tauri's `installMode: "both"` runs the installer
+elevated (`RequestExecutionLevel highest`), so administrators get a UAC prompt
+even for a per-user install, silent installs and the in-app updater default to
+per-machine for them, and the install-mode page is not shown to anyone else.
+Sevak wants per-user to need no administrator ever, silent installs and updates
+to stay in the scope they are in, and elevation only when "all users" is chosen.
+No option of Tauri's NSIS config does that. The branding itself (images, icon,
+text) uses only config options, the language file and the hooks.
+
+**How it behaves** (what users see is in [Installing Sevak](install.md#windows-10-11)):
+
+- The installer runs as the invoking user. The scope comes from `/ALLUSERS` or
+  `/CURRENTUSER`, otherwise from where Sevak is already installed
+  (`HKCU` and `HKLM` `Software\Microsoft\Windows\CurrentVersion\Uninstall\Sevak`),
+  otherwise per user. The in-app updater passes neither switch (`/P /UPDATE /R`),
+  which is why an update stays where it is.
+- Per-machine needs elevation. A wizard run asks on the scope page and then starts
+  itself again with `ShellExecute runas` (`RelaunchElevated`; the new copy carries
+  `/ELEVATED` and skips the pages already answered). Silent, passive and
+  `/ALLUSERS` runs elevate at start-up. A refused prompt exits with 1223.
+- The uninstaller does the same, since `uninstall.exe` has no administrator
+  manifest: for a per-machine copy, `un.onInit` starts it again elevated and quits.
+  Both register the scope in `UninstallString`
+  (`"...\uninstall.exe" /ALLUSERS` or `/CURRENTUSER`).
+- Nothing is uninstalled before an upgrade; the new files go over the old ones. A
+  copy in the other scope is removed only when asked (the page, or
+  `/UNINSTALLOTHER`), by running its uninstaller with `/S /MOVE`; `/MOVE` keeps the
+  autostart entry and all data while removing shortcuts. An earlier MSI install is
+  removed first, as in Tauri's template.
+- Switch names must not start with another switch's name: Tauri finds `/R` and `/P`
+  with a substring search.
+- Custom pages never show in silent or passive mode; their decisions are switches.
+
+**Regenerating the images.** `scripts/generate-installer-images.mjs` draws the
+four BMPs from `assets/sevak-icon.png` (the flame is cut out of it by its red
+channel, so the installer shows the real icon pixels). CI does not run it; the BMPs
+are committed. It needs `@napi-rs/canvas`, which is optional like the
+documentation media tooling (`docs/media/README.md`), and Segoe UI, so run it on
+Windows:
+
+```sh
+npm install --no-save --package-lock=false @napi-rs/canvas
+node scripts/generate-installer-images.mjs --preview   # PNG copies in target/installer-preview/
+```
+
+The images use the app's palette (`#2b2870` to `#17152b` indigo, `#f59e0b` amber, and
+`#fcfcfd`/`#1c1b2e` for the light header and pages: `MUI_BGCOLOR` and
+`MUI_TEXTCOLOR` in `installer.nsi`). Pages stay light on purpose: NSIS cannot
+recolour the text of its check boxes, so a dark page would make them unreadable.
+Edit the layout in the script. NSIS and WiX only take uncompressed 24-bit BMP, which
+`scripts/bmp.mjs` writes.
+
+**After a Tauri upgrade, re-sync the template.** `installer.nsi` and `English.nsh`
+are copies, so new Tauri behaviour (and fixes) reach Sevak only by merging them.
+`utils.nsh` and `FileAssociation.nsh` are not copies: Tauri writes its own next to
+the template at build time, so the macros the template calls (`CheckIfAppIsRunning`
+and friends) are always the current ones.
+
+1. Find the bundler's version: Tauri's `Cargo.toml` at the tag `tauri-cli-v<CLI version>`
+   (`npx tauri --version`) names `tauri-bundler`. The files are in
+   `crates/tauri-bundler/src/bundle/windows/nsis/` at that tag.
+2. Merge the upstream change into Sevak's copy (the pristine copy is the common
+   ancestor):
+
+   ```sh
+   V=2.13.0   # the new @tauri-apps/cli version
+   B=https://raw.githubusercontent.com/tauri-apps/tauri/tauri-cli-v$V/crates/tauri-bundler/src/bundle/windows/nsis
+   curl -fsSL $B/installer.nsi -o new-installer.nsi
+   curl -fsSL $B/languages/English.nsh -o new-English.nsh
+   git merge-file src-tauri/installer/installer.nsi src-tauri/installer/upstream/installer.nsi new-installer.nsi
+   git merge-file src-tauri/installer/English.nsh src-tauri/installer/upstream/English.nsh new-English.nsh
+   mv new-installer.nsi src-tauri/installer/upstream/installer.nsi
+   mv new-English.nsh src-tauri/installer/upstream/English.nsh
+   ```
+
+   Resolve any conflict markers. Every Sevak change sits between `SEVAK:` comments
+   (`diff src-tauri/installer/upstream/installer.nsi src-tauri/installer/installer.nsi`
+   lists them all). Update the version in the header comment of `installer.nsi`.
+3. Build (`npx tauri build --bundles nsis`; makensis must report no warning) and
+   run `npm run test:scripts`, which checks that every string the template uses is
+   defined and that every upstream string is still in `English.nsh`.
+4. Test by hand, since CI cannot run an installer, on a machine that is not your
+   daily one (or in a VM): a fresh per-user install; a fresh all-users install (UAC);
+   upgrading a per-user and an all-users install with Sevak running, from the wizard
+   and with `/S`; the in-app update path (`/P /UPDATE /R`); per-user over all-users
+   and the reverse (the move page, and `/UNINSTALLOTHER`); uninstalling from
+   Settings > Apps for both scopes; silent `/S` and `/S /ALLUSERS`.
 
 ## CI
 

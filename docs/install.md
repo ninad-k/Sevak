@@ -46,12 +46,13 @@ one you have. See [Releasing](releasing.md) for how releases move from beta to s
 ## Windows 10 / 11
 
 1. Download the installer from [Releases](https://github.com/ninad-k/Sevak/releases):
-   - **`Sevak_<version>_x64-setup.exe`** (recommended): Per-user install, no admin rights needed.
-   - **`Sevak_<version>_x64_en-US.msi`**: Per-machine install for enterprise deployments. Needs administrator rights; MSI updates are automatic.
+   - **`Sevak_<version>_x64-setup.exe`** (recommended): a guided installer that
+     installs for you alone (no admin rights) or for everyone on the PC.
+   - **`Sevak_<version>_x64_en-US.msi`**: per-machine MSI for enterprise deployments. Needs administrator rights; MSI updates are automatic.
 
-2. Run the installer and follow the prompts.
+2. Run the installer and follow the prompts (below).
 
-3. After installation, Sevak appears in your Start Menu and runs in the background at startup.
+3. After installation, Sevak appears in your Start Menu and runs in the tray. The finish page offers to start it, open Settings, and add a desktop shortcut.
 
 !!! warning "SmartScreen warning"
 
@@ -61,7 +62,79 @@ one you have. See [Releasing](releasing.md) for how releases move from beta to s
 
     Sevak uses Microsoft WebView2. On Windows 11 and recent Windows 10 versions it is already installed. If it is missing, the installer automatically downloads it from Microsoft (internet required).
 
-**Uninstall:** Open Settings → Apps → Installed apps, find Sevak, and click Uninstall. Your config and data in `%APPDATA%\sevak\` are preserved; see [Files and data](files-and-data.md) to delete them.
+### What the installer asks
+
+| Page | What it asks |
+|---|---|
+| Welcome, License | Nothing to decide: what Sevak is, and the Apache 2.0 licence. |
+| **Who is Sevak for?** | **Install for me only** (the default): no administrator permission, installs to `%LOCALAPPDATA%\Sevak`. Or **Install for all users on this PC**: Windows asks for administrator permission (UAC) and Sevak goes in `C:\Program Files\Sevak`. |
+| **Sevak is already installed** | Only shown when Sevak is already there; see [Upgrading](#upgrading-and-reinstalling). |
+| Install folder, Start Menu folder | The usual; the folder is not asked again when you upgrade in place. |
+| Finish | **Start Sevak now** (on by default), **Open Sevak Settings**, **Create a desktop shortcut**. |
+
+Per user and per PC differ in where Sevak is installed and who can run it:
+
+| | For me only | All users |
+|---|---|---|
+| Needs administrator permission | No | Yes, a UAC prompt |
+| Folder | `%LOCALAPPDATA%\Sevak` | `%ProgramFiles%\Sevak` |
+| Apps list entry | Current user's | Every user's (needs admin to uninstall) |
+| Start Menu | Your Start Menu | All users' Start Menu |
+
+Settings and data are the same either way: each user's own `%APPDATA%\sevak`.
+
+If you choose **all users** and are not an administrator, Windows asks for an administrator's credentials. If you decline the prompt, the installer returns to the choice so you can pick **for me only**.
+
+### Upgrading and reinstalling
+
+Run a newer installer over an existing installation and the **Sevak is already installed** page names the version you have and offers:
+
+- **Upgrade to Sevak X.Y.Z** (when yours is older; the default),
+- **Reinstall Sevak X.Y.Z** (same version),
+- **Downgrade to Sevak X.Y.Z (not recommended)** (when yours is newer; an older Sevak may not understand every setting a newer one saved),
+- **Uninstall Sevak**.
+
+Upgrading installs over the old files, in the same folder and the same scope, and keeps everything in `%APPDATA%\sevak`: your settings, themes, plugins, workflows, history. If Sevak is running, the installer asks before closing it (a clean quit, so nothing is cut off) and you can start it again from the finish page.
+
+**Sevak's own updates** (the notification and **Check for updates**) run the installer in a quiet "passive" mode and keep the installation where it is: a per-user copy is updated without any prompt, and a per-PC copy shows the Windows administrator prompt, because it is in Program Files.
+
+**Moving between per-user and per-PC.** If Sevak is installed for one scope and you pick the other, the installer warns that two copies would compete for the hotkey and offers to **replace** the existing copy (recommended: it is removed, your settings stay) or **keep both**. Removing a per-PC copy from a per-user install asks for administrator permission. If both copies already exist when you upgrade one, a check box offers to remove the other.
+
+### Silent and scripted installs
+
+The installer accepts these switches, so it can be deployed without a wizard:
+
+| Switch | Effect |
+|---|---|
+| `/S` | Silent: no windows at all. Without `/ALLUSERS`, a silent install is **per user**, or in the scope of the copy already installed. |
+| `/P` | Passive: a progress bar and no questions. This is what Sevak's own updater uses. |
+| `/CURRENTUSER` | Install for the current user. |
+| `/ALLUSERS` | Install for all users. Windows shows the administrator prompt unless the installer already runs elevated (an elevated command prompt, a deployment tool). If the prompt is refused the exit code is 1223. |
+| `/D=C:\Some\Folder` | Install folder. Must be the last argument, with no quotes, even if the path has spaces. |
+| `/NS` | Do not create shortcuts. Without it, a silent or passive first install creates the Start Menu and desktop shortcuts. |
+| `/UNINSTALLOTHER` | Also remove a copy installed in the other scope. Without it, a silent install leaves the other copy alone. |
+| `/R` | After a `/S` or `/P` install, start Sevak. |
+
+```powershell
+# For the current user, no prompts (what winget runs)
+.\Sevak_<version>_x64-setup.exe /S
+
+# For every user (run from an elevated prompt, or accept the UAC prompt)
+.\Sevak_<version>_x64-setup.exe /S /ALLUSERS
+
+# A specific folder
+.\Sevak_<version>_x64-setup.exe /S /CURRENTUSER /D=D:\Tools\Sevak
+```
+
+Silent installs never wait for an answer: if Sevak is running it is asked to quit and then closed by Windows' Restart Manager, and the installer carries on. A silent install over an existing copy upgrades it in place, whatever its version.
+
+### Uninstalling
+
+Open Settings → Apps → Installed apps, find Sevak, and click Uninstall (a per-PC copy asks for administrator permission first). You can also run the installer again and choose **Uninstall Sevak**, or run `winget uninstall NinadKulkarni.Sevak` once Sevak is on winget.
+
+The uninstaller offers **Also delete the web cache**, which removes only the web view's cache folders (`%LOCALAPPDATA%\com.ninad.sevak` and `%APPDATA%\com.ninad.sevak`). Your Sevak settings, history and plugins in `%APPDATA%\sevak\` are always preserved; see [Files and data](files-and-data.md) to delete them.
+
+For scripts: `"%LOCALAPPDATA%\Sevak\uninstall.exe" /CURRENTUSER /S` (per user) or `"%ProgramFiles%\Sevak\uninstall.exe" /ALLUSERS /S` (per PC, with the administrator prompt).
 
 ## macOS 11+
 
