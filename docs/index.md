@@ -81,6 +81,7 @@ flowchart TD
 | `> git status` | Runs a shell command in a terminal | [Shell commands](features/shell.md) |
 | `define word`, `spell word` | Looks up a word or fixes its spelling, offline | [Dictionary and spelling](features/dictionary.md) |
 | `c ada`, `1p github` | Finds a contact or a 1Password login (both opt-in) | [Contacts](features/contacts.md), [1Password](features/1password.md) |
+| `ai why is the sky blue` | Asks an AI service you chose; Enter on the answer copies it (opt-in, off by default) | [AI assistant](ai.md) |
 | ++shift++ (tap) | Previews the selected result | [Preview, Text View and Grid View](usage.md#preview-text-view-and-grid-view) |
 | Your own keyword | Runs a workflow built in Settings → Workflows | [Workflows](workflows.md) |
 

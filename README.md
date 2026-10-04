@@ -99,6 +99,7 @@ And more once you know the keys: preview a result, pick emoji from a grid, open 
 | Look up a person | `c ada` or `@ada` | Copies the e-mail; the action panel writes, calls or opens the card (opt-in) |
 | Find a 1Password login | `1p github` | Opens its website; never reads passwords (opt-in, needs `op`) |
 | Define or spell-check a word | `define serendipity`, `spell recieve` | Copies the definition / pastes the right spelling, offline |
+| Ask an AI assistant | `ai why is the sky blue` | Sends the question to the provider you chose (Ollama, OpenAI-compatible or Anthropic) and shows the answer; Enter copies it (opt-in, off by default) |
 | Pick an emoji | `:heart` or `emoji thumbs up` | Pastes the selected emoji from a grid |
 | Generate a UUID | `uuid ` or `uuid 5` | Copies a UUID when the plugin is enabled |
 
@@ -266,6 +267,10 @@ These features stay on your computer and make no network request:
   words you look up are not saved.
 - The emoji picker, themes (built-in, edited, imported or exported) and the
   notifications and Large Type of workflows are local.
+- The optional AI assistant (off by default, `[ai] enabled`) sends a question
+  only when you press Enter on it; see the list below. Its questions and answers
+  stay in memory and out of the logs, history and diagnostics, and API keys are
+  never in `config.toml`.
 
 Every network request Sevak itself makes is in this list:
 
@@ -280,6 +285,16 @@ Every network request Sevak itself makes is in this list:
 - **Currency rates.** If you turn currency conversion on (`[calculator]
   currency`, off by default), the European Central Bank's daily reference rates
   are downloaded at most once a day. Unit conversion is always offline.
+- **AI assistant.** Only if you turn it on (`[ai] enabled`, off by default) and
+  press Enter on an `ai <question>` row: one HTTPS request to the provider you
+  chose, containing the question (or the selection you chose to ask about), the
+  system prompt, the model name and your API key. The default provider, Ollama,
+  is on your own computer (`localhost:11434`), so nothing leaves it. With
+  OpenAI-compatible or Anthropic the question goes to that service
+  (`api.openai.com`, `api.anthropic.com` or your base URL), whose privacy terms
+  apply. Never your clipboard, files or search history, and nothing in the
+  background. **Test connection** in Settings lists the provider's models
+  without sending a question. [Details →](docs/ai.md)
 - **Theme gallery.** Only when you click **Browse online themes** (Settings →
   Appearance → Theme editor): one request for
   `https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes.json`.

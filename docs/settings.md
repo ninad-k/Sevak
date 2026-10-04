@@ -24,7 +24,7 @@ Validation errors appear under each field and prevent saving until they are fixe
 
 Saving keeps your comments, the order of your keys and every `[[snippet]]` entry exactly as they are in `config.toml`; only the lines you changed are rewritten.
 
-Pages: [General](#general), [Hotkeys](#hotkeys), [Appearance](#appearance), [Search](#search), [Plugins](#plugins), [Workflows](#workflows), [Gallery](#gallery), [Web search](#web-search), [Files & bookmarks](#files-bookmarks), [Clipboard & paste](#clipboard-paste), [Tasks & media](#tasks-media), [Integrations](#integrations), [System & terminal](#system-terminal) and, on Linux, [Linux](#linux).
+Pages: [General](#general), [Hotkeys](#hotkeys), [Appearance](#appearance), [Search](#search), [Plugins](#plugins), [Workflows](#workflows), [Gallery](#gallery), [Web search](#web-search), [Files & bookmarks](#files-bookmarks), [Clipboard & paste](#clipboard-paste), [Tasks & media](#tasks-media), [Integrations](#integrations), [AI assistant](#ai-assistant), [System & terminal](#system-terminal) and, on Linux, [Linux](#linux).
 
 ## General
 
@@ -245,6 +245,7 @@ Enable or disable built-in result sources:
 - **Selection** (Universal Actions)
 - **Contacts** and **1Password** (also need their own switch on the [Integrations](#integrations) page)
 - **Dictionary** (`define`, `spell`; options under [Integrations](#integrations))
+- **AI assistant** (`ai <question>`; also needs its own switch on the [AI assistant](#ai-assistant) page)
 - **Script plugins** and **workflows** you installed
 - **Web search engines** (see Web search tab)
 
@@ -487,6 +488,20 @@ On by default (switch it off under **Plugins**). Everything is offline.
 - **Prefer the system dictionary**: use the macOS Dictionary and the Windows spell checker where there is one. Linux has none Sevak can ask, so it always uses the bundled English dictionary. Off always uses the bundled one.
 
 Links to: `[dictionary]` in [configuration](configuration.md#dictionary) and [Dictionary](features/dictionary.md).
+
+## AI assistant
+
+Off by default. Type `ai ` and a question; Enter sends it to the service you chose and shows the answer. The page begins with a plain statement of **what is sent and to which host**, which follows the settings as you edit them.
+
+- **Use the AI assistant**: the on switch. Nothing is sent while it is off.
+- **Keyword**: default `ai`. It cannot be empty.
+- **Provider**: Ollama (a model on this computer, the default), OpenAI-compatible (ChatGPT / OpenAI, or any server with the same API) or Anthropic.
+- **Model** and **Base URL**: empty uses the defaults shown in grey. Changing the provider carries over only values you typed yourself.
+- **API key**: write-only. Paste it and press **Save key**; it is stored at once (it is not part of **Save**) and never shown again. **Remove** deletes it. The line under the field says where the key in use comes from. Keys are never written to `config.toml`.
+- **System prompt**, **Longest answer** (tokens) and **Timeout** (seconds).
+- **Test connection**: checks the address, the key and the model with the values on the page, saved or not. It lists the provider's models and sends no question.
+
+Links to: `[ai]` in [configuration](configuration.md#ai) and [AI assistant](ai.md).
 
 ## System & terminal
 

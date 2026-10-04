@@ -66,6 +66,7 @@ Select any text:
 | **Base64 decode** | Transform: `aGVsbG8=` → `hello` (only if valid) |
 | **Pretty-print JSON** | Format minified JSON with indentation |
 | **Minify JSON** | Remove whitespace from JSON |
+| **Ask AI about selection** | Only when the [AI assistant](../ai.md) is on: puts `ai Explain this: <selection>` in the search box. **Nothing is sent until you press Enter there** |
 
 Transformations **replace the selection** in the app (Sevak pastes over it) where pasting works. `Ctrl+Enter` copies the result instead of pasting. If pasting is not available (Wayland, or macOS without permission), they copy.
 

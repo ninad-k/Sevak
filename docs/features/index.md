@@ -23,6 +23,7 @@ Sevak includes built-in result sources (plugins) for applications, calculations,
 | Contacts (opt-in) | `c <name>` or `@<name>` | c, @ | Copy the e-mail address | [Contacts →](contacts.md) |
 | 1Password (opt-in) | `1p <login>` | 1p | Open the login's website | [1Password →](1password.md) |
 | Dictionary and spelling | `define <word>`, `spell <word>` | define, spell | Copy the definition / paste the spelling | [Dictionary →](dictionary.md) |
+| AI assistant (opt-in) | `ai <question>` | ai | Send the question to the provider you chose; Enter on the answer copies it | [AI assistant →](../ai.md) |
 | Universal Actions | Press hotkey on selection | (hotkey) | Open action menu | [Selection →](selection.md) |
 | Script plugins | Your plugin's keyword | (yours) | What the script says | [Script plugins →](script-plugins.md) |
 | Workflows | Your workflow's keyword, hotkey or trigger | (yours) | Run the workflow | [Workflows →](../workflows.md) |
