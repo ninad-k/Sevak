@@ -9,9 +9,95 @@
       "description": "Type ddg and some words to search DuckDuckGo; ddg alone opens its home page. Runs no code.",
       "author": "Sevak",
       "version": "1.0",
+      "tags": [
+        "search",
+        "web",
+        "no-code"
+      ],
       "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/duckduckgo.zip",
-      "sha256": "dbb2901b3023ba0a876e7fd02d510f800154a79c7b496ca77bb37c0a52eb1e9c",
+      "sha256": "15b9f3726c402ec97fe731952a651ad5054af2977636c36884b2186e5413e09f",
       "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/workflows/duckduckgo"
+    },
+    {
+      "id": "dev-search",
+      "kind": "workflow",
+      "name": "Developer search",
+      "description": "Keywords so, mdn, crate, docsrs, npm and pypi search Stack Overflow, MDN, crates.io, docs.rs, npm and PyPI in your browser. Runs no code.",
+      "author": "Sevak",
+      "version": "1.0",
+      "tags": [
+        "search",
+        "developer",
+        "no-code"
+      ],
+      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/dev-search.zip",
+      "sha256": "d5f868e5138418ececb587ebd5f88ff1becdf4596f5c33f45f664bec9a30c43c",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/workflows/dev-search"
+    },
+    {
+      "id": "github-search",
+      "kind": "workflow",
+      "name": "GitHub search",
+      "description": "ghr, ghi and ghu search GitHub repositories, issues and pull requests, and people in your browser. Runs no code.",
+      "author": "Sevak",
+      "version": "1.0",
+      "tags": [
+        "search",
+        "developer",
+        "github",
+        "no-code"
+      ],
+      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/github-search.zip",
+      "sha256": "d4e11447218bf1c7309a3876fc35bc807837c9e11fe83ece22e404205cade43b",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/workflows/github-search"
+    },
+    {
+      "id": "wikipedia-search",
+      "kind": "workflow",
+      "name": "Wikipedia search",
+      "description": "Type wiki and some words to search Wikipedia; the language is a variable you can change. Runs no code.",
+      "author": "Sevak",
+      "version": "1.0",
+      "tags": [
+        "search",
+        "reference",
+        "no-code"
+      ],
+      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/wikipedia-search.zip",
+      "sha256": "c1a00920d27afefbb958ac0d853800c8f7eedfd0948fbaf42a9df0510b3f7799",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/workflows/wikipedia-search"
+    },
+    {
+      "id": "maps-search",
+      "kind": "workflow",
+      "name": "Maps search",
+      "description": "map opens a place search on OpenStreetMap, gmap on Google Maps. Runs no code.",
+      "author": "Sevak",
+      "version": "1.0",
+      "tags": [
+        "search",
+        "maps",
+        "no-code"
+      ],
+      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/maps-search.zip",
+      "sha256": "7fef1252156bff10c816ffcadd84293a69ef2ba5207aaf7a7f7b75d90f3cbcab",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/workflows/maps-search"
+    },
+    {
+      "id": "open-selected-link",
+      "kind": "workflow",
+      "name": "Open selection as a link",
+      "description": "Universal Actions: select a web address in any app and open it; bare addresses get https, anything else is refused. Runs no code.",
+      "author": "Sevak",
+      "version": "1.0",
+      "tags": [
+        "universal-actions",
+        "links",
+        "no-code"
+      ],
+      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/open-selected-link.zip",
+      "sha256": "2de3337d38504a9eadf6e28cd3610a4db6df437223547f92b86823722fe2ec1c",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/workflows/open-selected-link"
     },
     {
       "id": "tidy-text",
@@ -20,9 +106,65 @@
       "description": "Universal Actions: select text in any app, collapse its spaces and line breaks, and paste it back. Runs no code.",
       "author": "Sevak",
       "version": "1.0",
+      "tags": [
+        "universal-actions",
+        "text",
+        "no-code"
+      ],
       "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/tidy-text.zip",
-      "sha256": "48f4c149b0a2863b33cdd79ab3094fed937b2aa6da006061b00b1de008e16501",
+      "sha256": "d6fe5291f8afde7ff59cdc244a414444068ad1a8d5ae642435543a0580732940",
       "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/workflows/tidy-text"
+    },
+    {
+      "id": "markdown-tools",
+      "kind": "workflow",
+      "name": "Markdown helpers",
+      "description": "Universal Actions: turn the selection into a Markdown link, bold, code, a quote or a bullet list. Runs no code.",
+      "author": "Sevak",
+      "version": "1.0",
+      "tags": [
+        "universal-actions",
+        "text",
+        "markdown",
+        "no-code"
+      ],
+      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/markdown-tools.zip",
+      "sha256": "809613191f7bee9f500964bdb84a63bfb266b8bd5719be7813d3cf717b616c28",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/workflows/markdown-tools"
+    },
+    {
+      "id": "decode-tools",
+      "kind": "workflow",
+      "name": "Decode and encode",
+      "description": "Universal Actions: decode Base64 or URL-encoded text in a text view, or encode the selection and copy it. Runs no code.",
+      "author": "Sevak",
+      "version": "1.0",
+      "tags": [
+        "universal-actions",
+        "text",
+        "encoding",
+        "no-code"
+      ],
+      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/decode-tools.zip",
+      "sha256": "bfc6d6920608da85bcc4ff9011ac8be4df38957de93ccf18aaa52966b49ffaf6",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/workflows/decode-tools"
+    },
+    {
+      "id": "selection-toolkit",
+      "kind": "workflow",
+      "name": "Selection toolkit (Python)",
+      "description": "Universal Actions: count words, pretty-print or minify JSON, convert timestamps and dates. Runs a short offline Python 3 script after you allow it.",
+      "author": "Sevak",
+      "version": "1.0",
+      "tags": [
+        "universal-actions",
+        "text",
+        "json",
+        "needs-python"
+      ],
+      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/selection-toolkit.zip",
+      "sha256": "53f8d9e92505310143db5a3a689920f6a2d70754efce9e8b2dc0166a40acf693",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/workflows/selection-toolkit"
     },
     {
       "id": "case-converter-node",
@@ -31,9 +173,93 @@
       "description": "Type case and some words to get camelCase, snake_case, kebab-case and more. A script plugin that needs Node.js.",
       "author": "Sevak",
       "version": "1.0",
+      "tags": [
+        "text",
+        "needs-node"
+      ],
       "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/case-converter-node.zip",
-      "sha256": "a2b1605fdf4c817ac9558cb89e1a21aded4868bb20cf97f6c98208b5e6a0f801",
+      "sha256": "92cb978a846d0e9c7f28fc8049ae3fe8a159c447259a0278cdab9302ae3d6ee5",
       "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/case-converter-node"
+    },
+    {
+      "id": "password-generator",
+      "kind": "plugin",
+      "name": "Password generator (Python)",
+      "description": "pw gives random passwords, PINs and tokens, pw 24 sets the length. Offline; needs Python 3.",
+      "author": "Sevak",
+      "version": "1.0",
+      "tags": [
+        "security",
+        "generator",
+        "needs-python"
+      ],
+      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/password-generator.zip",
+      "sha256": "51e2c75efea114a9a529e05fe4ed61d792c7ba6a65dfdd38b5e6d93b44ebaf0a",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/password-generator"
+    },
+    {
+      "id": "id-generator",
+      "kind": "plugin",
+      "name": "ID generator (Python)",
+      "description": "id gives a UUID v4, a time-sortable UUID v7, a ULID and a NanoID. Offline; needs Python 3.",
+      "author": "Sevak",
+      "version": "1.0",
+      "tags": [
+        "developer",
+        "generator",
+        "needs-python"
+      ],
+      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/id-generator.zip",
+      "sha256": "0494d7cbf72271868cb8be476b23b27809842028fc20660771f715d4ea5a5518",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/id-generator"
+    },
+    {
+      "id": "color-converter",
+      "kind": "plugin",
+      "name": "Color converter (Python)",
+      "description": "color #ff8800 shows HEX, RGB, HSL, HSV and WCAG contrast; also takes rgb(), hsl() and names. Offline; needs Python 3.",
+      "author": "Sevak",
+      "version": "1.0",
+      "tags": [
+        "design",
+        "converter",
+        "needs-python"
+      ],
+      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/color-converter.zip",
+      "sha256": "e06674b14d047372e786871959500aaf9122e66bb823f9ab540938b163325e66",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/color-converter"
+    },
+    {
+      "id": "lorem-ipsum",
+      "kind": "plugin",
+      "name": "Lorem ipsum (Python)",
+      "description": "lorem 3 paragraphs or lorem 40 words gives placeholder text to copy. Offline; needs Python 3.",
+      "author": "Sevak",
+      "version": "1.0",
+      "tags": [
+        "design",
+        "generator",
+        "needs-python"
+      ],
+      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/lorem-ipsum.zip",
+      "sha256": "ba047e1756104ebea235cd9f9e542607cdbd0186d84296f7fb80d91aeb40765d",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/lorem-ipsum"
+    },
+    {
+      "id": "hash-calculator",
+      "kind": "plugin",
+      "name": "Hash calculator (Python)",
+      "description": "hash some text, or the full path of a file, for MD5, SHA-1, SHA-256, SHA-512 and more. Offline; needs Python 3.",
+      "author": "Sevak",
+      "version": "1.0",
+      "tags": [
+        "developer",
+        "security",
+        "needs-python"
+      ],
+      "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/hash-calculator.zip",
+      "sha256": "2a3913114ab33667633d0320b793aabbc7b5cc24fa8e0f1585cb576c583e96ec",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/hash-calculator"
     }
   ]
 }

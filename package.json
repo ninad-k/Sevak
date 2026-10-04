@@ -8,6 +8,7 @@
     "build": "vite build --config ui/vite.config.ts",
     "check": "svelte-check --tsconfig ui/tsconfig.json",
     "icons": "node scripts/generate-icons.mjs",
+    "gallery:check": "node scripts/gallery-check.mjs",
     "tauri": "tauri",
     "docs:pdf": "node scripts/docs-pdf.mjs"
   },

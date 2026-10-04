@@ -1,0 +1,36 @@
+# Palette: Ayu Mirage, MIT licence (https://github.com/ayu-theme/ayu-colors). Subtext lightened for AA contrast.
+name = "Ayu Mirage"
+author = "Sevak"
+description = "A soft, desaturated dark theme with an orange accent, after Ayu Mirage."
+
+[font]
+size = 15
+
+[layout]
+radius = 14
+opacity = 100
+row_height = 48
+search_size = 22
+icon_size = 32
+window_width = 720
+
+[dark]
+background = "#1f2430"
+text = "#cccac2"
+subtext = "#9aa0ab"
+border = "rgba(204, 202, 194, 0.12)"
+accent = "#ffad66"
+accent_strong = "#d18e54"
+on_accent = "#1f2430"
+selection = "rgba(255, 173, 102, 0.2)"
+tile = "rgba(204, 202, 194, 0.08)"
+kbd_background = "rgba(204, 202, 194, 0.08)"
+kbd_border = "rgba(204, 202, 194, 0.16)"
+shadow = "0 8px 28px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.4)"
+surface = "rgba(204, 202, 194, 0.05)"
+input_background = "rgba(204, 202, 194, 0.06)"
+input_border = "rgba(204, 202, 194, 0.24)"
+switch_off = "rgba(204, 202, 194, 0.28)"
+warn = "#ffcc66"
+error = "#f28779"
+ok = "#d5ff80"

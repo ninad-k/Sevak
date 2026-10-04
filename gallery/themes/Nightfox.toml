@@ -1,0 +1,36 @@
+# Palette: Nightfox, MIT licence (https://github.com/EdenEast/nightfox.nvim). Error color lightened for AA contrast.
+name = "Nightfox"
+author = "Sevak"
+description = "A cool, blue-slate dark theme after Nightfox."
+
+[font]
+size = 15
+
+[layout]
+radius = 14
+opacity = 100
+row_height = 48
+search_size = 22
+icon_size = 32
+window_width = 720
+
+[dark]
+background = "#192330"
+text = "#cdcecf"
+subtext = "#aeafb0"
+border = "rgba(205, 206, 207, 0.12)"
+accent = "#719cd6"
+accent_strong = "#5d80af"
+on_accent = "#192330"
+selection = "rgba(113, 156, 214, 0.2)"
+tile = "rgba(205, 206, 207, 0.08)"
+kbd_background = "rgba(205, 206, 207, 0.08)"
+kbd_border = "rgba(205, 206, 207, 0.16)"
+shadow = "0 8px 28px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.4)"
+surface = "rgba(205, 206, 207, 0.05)"
+input_background = "rgba(205, 206, 207, 0.06)"
+input_border = "rgba(205, 206, 207, 0.24)"
+switch_off = "rgba(205, 206, 207, 0.28)"
+warn = "#dbc074"
+error = "#e8789a"
+ok = "#81b29a"

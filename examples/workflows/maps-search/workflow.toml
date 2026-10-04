@@ -1,0 +1,52 @@
+# Maps: "map <place or address>" searches OpenStreetMap, "gmap <place or address>"
+# searches Google Maps, both in your browser. Remove either trigger in the builder
+# if you only want one. It runs no code, so Sevak does not ask for approval.
+format = 1
+name = "Maps search"
+description = "map and a place opens OpenStreetMap; gmap opens Google Maps. Runs no code."
+author = "Sevak"
+version = "1.0"
+
+[[node]]
+id = "kw-osm"
+type = "keyword"
+title = "Find {query} on OpenStreetMap"
+x = 40.0
+y = 40.0
+keyword = "map"
+argument = "required"
+subtitle = "Opens the results in your browser"
+
+[[node]]
+id = "open-osm"
+type = "open_url"
+title = "Open osm"
+x = 400.0
+y = 40.0
+url = "https://www.openstreetmap.org/search?query={query}"
+
+[[node]]
+id = "kw-google"
+type = "keyword"
+title = "Find {query} on Google Maps"
+x = 40.0
+y = 160.0
+keyword = "gmap"
+argument = "required"
+subtitle = "Opens the results in your browser"
+
+[[node]]
+id = "open-google"
+type = "open_url"
+title = "Open google"
+x = 400.0
+y = 160.0
+url = "https://www.google.com/maps/search/?api=1&query={query}"
+
+[[connection]]
+from = "kw-osm"
+to = "open-osm"
+
+[[connection]]
+from = "kw-google"
+to = "open-google"

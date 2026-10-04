@@ -1,0 +1,36 @@
+# Palette: Catppuccin Latte, MIT licence (https://github.com/catppuccin/catppuccin). Warn, ok and error darkened and text on accent set to white for AA contrast.
+name = "Catppuccin Latte"
+author = "Sevak"
+description = "The light Catppuccin flavor, with a clear blue accent."
+
+[font]
+size = 15
+
+[layout]
+radius = 14
+opacity = 100
+row_height = 48
+search_size = 22
+icon_size = 32
+window_width = 720
+
+[light]
+background = "#eff1f5"
+text = "#4c4f69"
+subtext = "#5c5f77"
+border = "rgba(76, 79, 105, 0.12)"
+accent = "#1e66f5"
+accent_strong = "#1954c9"
+on_accent = "#ffffff"
+selection = "rgba(30, 102, 245, 0.1)"
+tile = "rgba(76, 79, 105, 0.06)"
+kbd_background = "rgba(76, 79, 105, 0.06)"
+kbd_border = "rgba(76, 79, 105, 0.14)"
+shadow = "0 8px 28px rgba(76, 79, 105, 0.22), 0 1px 3px rgba(76, 79, 105, 0.12)"
+surface = "rgba(76, 79, 105, 0.035)"
+input_background = "#ffffff"
+input_border = "rgba(76, 79, 105, 0.22)"
+switch_off = "rgba(76, 79, 105, 0.26)"
+warn = "#8f5600"
+error = "#c00d33"
+ok = "#2f7d1f"

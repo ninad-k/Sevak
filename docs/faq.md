@@ -150,7 +150,7 @@ A script plugin adds a keyword whose results come from your script. A [workflow]
 
 Script plugins let you add custom keywords without rebuilding Sevak. Put a folder with a `plugin.toml` and a script in the `plugins` folder next to `config.toml`.
 
-See [Script plugins](usage.md#script-plugins) and the [Plugins guide](plugins.md#external-plugins). Three examples are in `examples/plugins/`.
+See [Script plugins](usage.md#script-plugins) and the [Plugins guide](plugins.md#external-plugins). Eight examples are in `examples/plugins/` (the three above and five more offline Python plugins), and the opt-in gallery offers them as one-click installs.
 
 ## Privacy and data
 

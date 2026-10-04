@@ -25,7 +25,7 @@ src-tauri               the Tauri shell: window, hotkeys (main, Universal Action
                         commands, bundling config
 ui                      Svelte 5 + Vite frontend (builds to ui/dist)
 packaging/linux         desktop-entry template used by the .deb and .rpm
-scripts                 icon generator, emoji list generator, WSL Linux test runner
+scripts                 icon generator, emoji list generator, gallery-check.mjs (gallery hashes), WSL Linux test runner
 docs                    plugins, install, development
 examples/plugins        example script plugins (Python, PowerShell, Node)
 examples/workflows      example workflows (also packaged for the gallery)
