@@ -4,10 +4,17 @@
 //! |---------|---------------------------------|--------------------------------------------------|--------------------------------|
 //! | config  | `%APPDATA%\sevak\config.toml`   | `~/Library/Application Support/sevak/config.toml` | `~/.config/sevak/config.toml`  |
 //! | data    | `%APPDATA%\sevak\`              | `~/Library/Application Support/sevak/`            | `~/.local/share/sevak/`        |
+//! | local   | `%LOCALAPPDATA%\sevak\`        | same as data                                     | same as data                   |
 //! | logs    | `<data>\logs\`                  | `<data>/logs/`                                   | `<data>/logs/`                 |
 //!
 //! The config directory can be replaced with `--config <path>` or
 //! `SEVAK_CONFIG_DIR`, the data directory with `SEVAK_DATA_DIR`.
+//!
+//! The *local* directory is for data that must stay on this machine: on Windows
+//! the data directory is in the roaming profile, which domain setups, folder
+//! redirection and backup tools copy to other machines, so the clipboard
+//! history lives in the local directory instead. Everywhere else, and when
+//! `SEVAK_DATA_DIR` is set, it is the data directory.
 
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
@@ -27,6 +34,9 @@ pub struct AppPaths {
     pub config_dir: PathBuf,
     pub config_file: PathBuf,
     pub data_dir: PathBuf,
+    /// Data that must not roam between machines (the clipboard history). See
+    /// the module documentation.
+    pub local_data_dir: PathBuf,
     pub log_dir: PathBuf,
     pub usage_file: PathBuf,
 }
@@ -60,29 +70,49 @@ impl AppPaths {
                 (dir, file)
             }
         };
-        let data_dir = match data {
-            Some(path) => absolute(&path, &base, home.as_deref()),
-            None => dirs::data_dir()
-                .ok_or(PlatformError::MissingDirectory("data"))?
-                .join(APP_DIR),
+        let (data_dir, local_data_dir) = match data {
+            Some(path) => {
+                let dir = absolute(&path, &base, home.as_deref());
+                (dir.clone(), dir)
+            }
+            None => {
+                let data_dir = dirs::data_dir()
+                    .ok_or(PlatformError::MissingDirectory("data"))?
+                    .join(APP_DIR);
+                let local = dirs::data_local_dir()
+                    .map_or_else(|| data_dir.clone(), |dir| dir.join(APP_DIR));
+                (data_dir, local)
+            }
         };
-        Ok(Self::from_parts(config_dir, config_file, data_dir))
+        Ok(Self::from_parts(
+            config_dir,
+            config_file,
+            data_dir,
+            local_data_dir,
+        ))
     }
 
     /// Builds the layout below explicit roots (used by tests and portable setups).
     pub fn with_roots(config_root: PathBuf, data_root: PathBuf) -> Self {
         let config_dir = config_root.join(APP_DIR);
         let config_file = config_dir.join(CONFIG_FILE);
-        Self::from_parts(config_dir, config_file, data_root.join(APP_DIR))
+        let data_dir = data_root.join(APP_DIR);
+        Self::from_parts(config_dir, config_file, data_dir.clone(), data_dir)
     }
 
-    fn from_parts(config_dir: PathBuf, config_file: PathBuf, data_dir: PathBuf) -> Self {
+    fn from_parts(
+        config_dir: PathBuf,
+        config_file: PathBuf,
+        data_dir: PathBuf,
+        local_data_dir: PathBuf,
+    ) -> Self {
         Self {
             config_file,
             config_dir,
             log_dir: data_dir.join("logs"),
             usage_file: data_dir.join("usage.json"),
             data_dir,
+            local_data_dir,
         }
     }
 
@@ -210,6 +240,20 @@ mod tests {
         assert_ne!(paths.data_dir, dir);
         assert_eq!(paths.usage_file, paths.data_dir.join("usage.json"));
         assert_eq!(paths.log_dir, paths.data_dir.join("logs"));
+    }
+
+    #[test]
+    fn the_local_directory_is_the_data_directory_except_on_windows() {
+        let paths = AppPaths::resolve().unwrap();
+        if cfg!(windows) && std::env::var_os(DATA_DIR_ENV).is_none() {
+            let local = dirs::data_local_dir().unwrap().join(APP_DIR);
+            assert_eq!(paths.local_data_dir, local);
+        } else {
+            assert_eq!(paths.local_data_dir, paths.data_dir);
+        }
+        // Explicit roots (portable setups, tests) keep everything together.
+        let rooted = AppPaths::with_roots(PathBuf::from("cfg"), PathBuf::from("data"));
+        assert_eq!(rooted.local_data_dir, rooted.data_dir);
     }
 
     #[test]

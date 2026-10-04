@@ -14,13 +14,30 @@ use std::fs;
 use std::io;
 use std::path::PathBuf;
 
-use sevak_platform::private_file::write_atomic;
+use sevak_platform::private_file::{read_capped, write_atomic};
 
 /// The folder inside Sevak's data folder.
 pub const DIR_NAME: &str = "clipboard";
 
+/// The largest image file Sevak reads or moves: what `max_image_bytes` allows
+/// at most (64 MiB), with room for the thumbnail's format overhead.
+pub const MAX_IMAGE_FILE_BYTES: u64 = 65 * 1024 * 1024;
+
 const FULL_SUFFIX: &str = ".png";
 const THUMB_SUFFIX: &str = ".thumb.png";
+
+/// What [`MediaStore::adopt_from`] did.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct Adopted {
+    /// Files now in this store (and gone from the old one).
+    pub moved: usize,
+    /// Files that could not be moved this time (disk trouble); the old copy is
+    /// left, so the next start tries again.
+    pub retry: usize,
+    /// Files that were not moved and were deleted instead (larger than any
+    /// image Sevak records).
+    pub dropped: usize,
+}
 
 /// The files of the images in one history.
 #[derive(Debug, Clone)]
@@ -85,6 +102,53 @@ impl MediaStore {
             }
         }
         deleted
+    }
+
+    /// Moves Sevak's image files out of `old` (another folder, where an older
+    /// version kept them) into this store, one at a time: a file is deleted
+    /// from `old` only after its copy is written here. Files not named like
+    /// Sevak's are left alone, and the old folder is removed if that empties it.
+    pub fn adopt_from(&self, old: &MediaStore) -> Adopted {
+        let mut report = Adopted::default();
+        let Ok(entries) = fs::read_dir(&old.dir) else {
+            return report;
+        };
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else { continue };
+            let from = entry.path();
+            if is_leftover_temp(name) {
+                let _ = fs::remove_file(&from);
+                continue;
+            }
+            if image_hash(name).is_none() {
+                continue;
+            }
+            let moved = read_capped(&from, MAX_IMAGE_FILE_BYTES).and_then(|bytes| {
+                self.ensure_dir()?;
+                write_atomic(&self.dir.join(name), &bytes)
+            });
+            match moved {
+                Ok(()) => {
+                    if fs::remove_file(&from).is_ok() {
+                        report.moved += 1;
+                    } else {
+                        report.retry += 1;
+                    }
+                }
+                Err(err) if err.kind() == io::ErrorKind::FileTooLarge => {
+                    report.dropped += 1;
+                    let _ = fs::remove_file(&from);
+                }
+                Err(err) => {
+                    tracing::warn!("could not move a clipboard image: {}", err.kind());
+                    report.retry += 1;
+                }
+            }
+        }
+        // Succeeds only when nothing is left in it.
+        let _ = fs::remove_dir(&old.dir);
+        report
     }
 
     fn ensure_dir(&self) -> io::Result<()> {
@@ -211,6 +275,44 @@ mod tests {
             MediaStore::new(PathBuf::from("/definitely/not/here")).prune(&HashSet::new()),
             0
         );
+    }
+
+    #[test]
+    fn images_move_between_folders_and_the_old_ones_go() {
+        let (_dir, new) = store();
+        let old_dir = tempfile::tempdir().unwrap();
+        let old = MediaStore::new(old_dir.path().join(DIR_NAME));
+        old.write(1, b"full", b"thumb").unwrap();
+        fs::write(old.dir().join("holiday.png"), b"mine").unwrap();
+        fs::write(old.dir().join("0000000000000009.png.tmp"), b"half").unwrap();
+
+        let report = new.adopt_from(&old);
+        assert_eq!(report.moved, 2);
+        assert_eq!((report.retry, report.dropped), (0, 0));
+        assert_eq!(fs::read(new.png_path(1)).unwrap(), b"full");
+        assert_eq!(fs::read(new.thumb_path(1)).unwrap(), b"thumb");
+        // Only the user's own file is left behind, and so is its folder.
+        assert_eq!(names(&old), ["holiday.png"]);
+        // Nothing to move from a folder that does not exist.
+        let none = MediaStore::new(old_dir.path().join("nowhere"));
+        assert_eq!(new.adopt_from(&none), Adopted::default());
+    }
+
+    #[test]
+    fn an_image_that_cannot_be_written_stays_in_the_old_folder() {
+        let (dir, _) = store();
+        // The new "folder" is a file, so nothing can be written into it.
+        let blocked = dir.path().join("blocked");
+        fs::write(&blocked, b"file").unwrap();
+        let new = MediaStore::new(blocked);
+        let old_dir = tempfile::tempdir().unwrap();
+        let old = MediaStore::new(old_dir.path().join(DIR_NAME));
+        old.write(5, b"full", b"thumb").unwrap();
+
+        let report = new.adopt_from(&old);
+        assert_eq!(report.moved, 0);
+        assert_eq!(report.retry, 2);
+        assert!(old.contains(5), "the old copy is kept for the next try");
     }
 
     #[cfg(unix)]

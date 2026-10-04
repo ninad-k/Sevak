@@ -8,8 +8,10 @@
 //! thread runs and no file is read or written.
 //!
 //! When on, a background thread notices clipboard changes and keeps them in
-//! `clipboard-history.json` in Sevak's data folder (readable by the user only
-//! on Unix). It records three kinds of entry:
+//! `clipboard-history.json` in Sevak's *local* data folder (readable by the user
+//! only on Unix; on Windows `%LOCALAPPDATA%\sevak`, which does not roam with the
+//! user's profile). Earlier versions kept it in the roaming data folder; the
+//! first load moves it (see [`migrate_legacy`]). It records three kinds of entry:
 //!
 //! - **text**;
 //! - **images** (`[clipboard] images`): the picture is saved as a PNG file in
@@ -74,6 +76,7 @@ use sevak_core::{
     PreviewHint, ResultItem,
 };
 use sevak_platform::clip_media::{self, files_hash, ClipboardImage};
+use sevak_platform::private_file::{read_capped, write_atomic};
 use sevak_platform::{
     AppPaths, ClipboardMedia, ClipboardRead, MediaRequest, PasteSupport, PlatformProvider,
 };
@@ -117,11 +120,24 @@ const PAYLOAD_NOTHING: &str = "nothing";
 const PAYLOAD_SAVE_IMAGE: &str = "save-image:";
 const ENABLE_SNIPPET: &str = "[clipboard]\nenabled = true";
 
-/// Where the history is stored by default.
+/// The largest history file Sevak reads. `max_items` and `max_item_bytes` are
+/// capped by the configuration, and no history within them gets near this; a
+/// file over it was not written by Sevak and is left alone, unread.
+const MAX_HISTORY_FILE_BYTES: u64 = 256 * 1024 * 1024;
+
+/// Where the history is stored by default: the local, non-roaming data folder.
 pub fn default_history_path() -> Option<PathBuf> {
     AppPaths::resolve()
         .ok()
-        .map(|paths| paths.data_dir.join(FILE_NAME))
+        .map(|paths| paths.local_data_dir.join(FILE_NAME))
+}
+
+/// Where earlier versions stored the history (the roaming data folder), if
+/// that is a different place from [`default_history_path`]. Only Windows
+/// has two.
+pub fn legacy_history_path() -> Option<PathBuf> {
+    let paths = AppPaths::resolve().ok()?;
+    (paths.data_dir != paths.local_data_dir).then(|| paths.data_dir.join(FILE_NAME))
 }
 
 /// An image the history keeps: the hash of its pixels names its files in the
@@ -352,6 +368,8 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 /// The history plus the monitor thread's life cycle.
 struct Shared {
     path: Option<PathBuf>,
+    /// Where an earlier version kept the history, to be moved on first load.
+    legacy: Option<PathBuf>,
     /// Where the images live; `None` for a history kept in memory only (which
     /// therefore records no images).
     store: Option<MediaStore>,
@@ -368,9 +386,13 @@ type Live = Vec<(PathBuf, Weak<Shared>)>;
 static LIVE: Mutex<Live> = Mutex::new(Vec::new());
 
 impl Shared {
-    fn acquire(path: Option<PathBuf>, platform: Arc<dyn PlatformProvider>) -> Arc<Self> {
+    fn acquire(
+        path: Option<PathBuf>,
+        legacy: Option<PathBuf>,
+        platform: Arc<dyn PlatformProvider>,
+    ) -> Arc<Self> {
         let Some(file) = path.clone() else {
-            return Arc::new(Self::new(None, platform));
+            return Arc::new(Self::new(None, None, platform));
         };
         let mut live = lock(&LIVE);
         live.retain(|(_, shared)| shared.strong_count() > 0);
@@ -381,18 +403,23 @@ impl Shared {
         {
             return existing;
         }
-        let shared = Arc::new(Self::new(path, platform));
+        let shared = Arc::new(Self::new(path, legacy, platform));
         live.push((file, Arc::downgrade(&shared)));
         shared
     }
 
-    fn new(path: Option<PathBuf>, platform: Arc<dyn PlatformProvider>) -> Self {
+    fn new(
+        path: Option<PathBuf>,
+        legacy: Option<PathBuf>,
+        platform: Arc<dyn PlatformProvider>,
+    ) -> Self {
         let store = path
             .as_deref()
             .and_then(Path::parent)
             .map(|dir| MediaStore::new(dir.join(clipboard_store::DIR_NAME)));
         Self {
             path,
+            legacy,
             store,
             platform,
             state: Mutex::new(State::default()),
@@ -430,6 +457,9 @@ impl Shared {
             }
             state.loaded = true;
             let Some(path) = &self.path else { return };
+            if let Some(legacy) = &self.legacy {
+                migrate_legacy(legacy, path, self.store.as_ref(), MAX_HISTORY_FILE_BYTES);
+            }
             let max_items = state.settings.as_ref().map_or(usize::MAX, |s| s.max_items);
             let read = read_history_checked(path);
             let readable = read.is_some();
@@ -477,6 +507,10 @@ impl Shared {
         }
         if let Some(store) = &self.store {
             store.prune(&HashSet::new());
+        }
+        // Nothing of an earlier version's history is left behind either.
+        if let Some(legacy) = &self.legacy {
+            remove_legacy(legacy);
         }
     }
 
@@ -801,7 +835,7 @@ fn read_history(path: &Path) -> Vec<Entry> {
 /// Like [`read_history`], but `None` when the file exists and could not be
 /// used.
 fn read_history_checked(path: &Path) -> Option<Vec<Entry>> {
-    let bytes = match fs::read(path) {
+    let bytes = match read_capped(path, MAX_HISTORY_FILE_BYTES) {
         Ok(bytes) => bytes,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Some(Vec::new()),
         Err(err) => {
@@ -827,6 +861,88 @@ fn read_history_checked(path: &Path) -> Option<Vec<Entry>> {
             let _ = fs::rename(path, aside);
             None
         }
+    }
+}
+
+/// Moves the history from where an earlier version kept it (`old_file` and the
+/// `clipboard` folder beside it) to `new_file` and `new_store`, then deletes the
+/// old copies, so the history stops sitting in the roaming profile.
+///
+/// Safe to run again after any failure: images are moved first, one file at a
+/// time and only deleted from the old folder once written to the new one; the
+/// history file is copied after that and deleted last. If anything cannot be
+/// moved nothing that could still be needed is deleted, and the next start
+/// tries again. A history already present at `new_file` is never overwritten;
+/// an old file next to it is a leftover and goes. A file over `cap` bytes is
+/// not read.
+fn migrate_legacy(old_file: &Path, new_file: &Path, new_store: Option<&MediaStore>, cap: u64) {
+    if old_file == new_file {
+        return;
+    }
+    let old_store = old_file
+        .parent()
+        .map(|dir| MediaStore::new(dir.join(clipboard_store::DIR_NAME)));
+    if let (Some(new_store), Some(old_store)) = (new_store, &old_store) {
+        let moved = new_store.adopt_from(old_store);
+        if moved.retry > 0 {
+            tracing::warn!(
+                files = moved.retry,
+                "some clipboard images could not be moved yet; trying again next start"
+            );
+            return;
+        }
+        if moved.moved + moved.dropped > 0 {
+            tracing::info!(
+                files = moved.moved,
+                "moved clipboard images to the local data folder"
+            );
+        }
+    }
+
+    if !old_file.exists() {
+        return;
+    }
+    if new_file.exists() {
+        // A history is already here: what is left over is not needed.
+        remove_legacy(old_file);
+        return;
+    }
+    match read_capped(old_file, cap) {
+        Ok(bytes) => {
+            if serde_json::from_slice::<StoredHistory>(&bytes).is_ok() {
+                if let Err(err) = write_atomic(new_file, &bytes) {
+                    tracing::warn!("could not move the clipboard history: {err}");
+                    return;
+                }
+                tracing::info!("moved the clipboard history to the local data folder");
+            } else {
+                // Not a history: nothing worth keeping in the roaming profile.
+                tracing::warn!("the old clipboard history file is not valid; deleting it");
+            }
+            remove_legacy(old_file);
+        }
+        Err(err) => {
+            tracing::warn!(
+                "could not move the old clipboard history ({}); it stays where it is",
+                err.kind()
+            );
+        }
+    }
+}
+
+/// Deletes the history file of an earlier version, its plaintext leftovers and
+/// its image folder (only Sevak's own files in it).
+fn remove_legacy(old_file: &Path) {
+    for suffix in ["", ".corrupt", ".tmp"] {
+        let mut file = old_file.as_os_str().to_owned();
+        file.push(suffix);
+        let _ = fs::remove_file(file);
+    }
+    if let Some(dir) = old_file.parent() {
+        let folder = dir.join(clipboard_store::DIR_NAME);
+        MediaStore::new(folder.clone()).prune(&HashSet::new());
+        // Succeeds only if nothing of the user's own is in it.
+        let _ = fs::remove_dir(folder);
     }
 }
 
@@ -946,9 +1062,22 @@ impl ClipboardPlugin {
         platform: Arc<dyn PlatformProvider>,
         history_file: Option<PathBuf>,
     ) -> Self {
+        Self::new_migrating(config, paste, platform, history_file, None)
+    }
+
+    /// Like [`ClipboardPlugin::new`], and the first load moves a history that
+    /// an earlier version kept in `legacy_file` (see [`legacy_history_path`])
+    /// to `history_file`.
+    pub fn new_migrating(
+        config: &ClipboardConfig,
+        paste: &PasteConfig,
+        platform: Arc<dyn PlatformProvider>,
+        history_file: Option<PathBuf>,
+        legacy_file: Option<PathBuf>,
+    ) -> Self {
         let shared = config
             .enabled
-            .then(|| Shared::acquire(history_file, platform.clone()));
+            .then(|| Shared::acquire(history_file, legacy_file, platform.clone()));
         Self {
             settings: Settings::from(config),
             restore_clipboard: paste.restore_clipboard,
@@ -2134,6 +2263,159 @@ mod tests {
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].text, "kept");
         assert_eq!(items[0].source.as_deref(), Some("Code"));
+    }
+
+    /// An earlier version's data folder with a history, an image and the
+    /// user's own file next to them.
+    fn old_install(dir: &Path) -> (PathBuf, MediaStore) {
+        let old_file = dir.join("roaming").join(FILE_NAME);
+        let old_store = MediaStore::new(dir.join("roaming").join(clipboard_store::DIR_NAME));
+        let image = ImageRef {
+            hash: 7,
+            width: 2,
+            height: 2,
+            bytes: 4,
+        };
+        let entries = [
+            Entry::new_text("from the old place".into(), 5, None),
+            Entry::new_image(image, 6, None),
+        ];
+        let stored = StoredHistoryRef {
+            version: HISTORY_VERSION,
+            items: entries.iter().collect(),
+        };
+        write_atomic(&old_file, &serde_json::to_vec(&stored).unwrap()).unwrap();
+        old_store.write(7, b"full", b"thumb").unwrap();
+        (old_file, old_store)
+    }
+
+    fn migrating_plugin(
+        platform: &Arc<MockPlatform>,
+        file: &Path,
+        legacy: &Path,
+    ) -> ClipboardPlugin {
+        ClipboardPlugin::new_migrating(
+            &ClipboardConfig {
+                enabled: true,
+                ..ClipboardConfig::default()
+            },
+            &PasteConfig::default(),
+            platform.clone(),
+            Some(file.to_path_buf()),
+            Some(legacy.to_path_buf()),
+        )
+    }
+
+    #[test]
+    fn an_earlier_versions_history_moves_to_the_new_folder_and_the_old_one_goes() {
+        let dir = tempfile::tempdir().unwrap();
+        let (old_file, old_store) = old_install(dir.path());
+        let file = dir.path().join("local").join(FILE_NAME);
+
+        let plugin = migrating_plugin(&MockPlatform::empty(), &file, &old_file);
+        open(&plugin);
+
+        let shared = plugin.shared.as_ref().unwrap();
+        let texts: Vec<String> = shared.snapshot().iter().map(|e| e.text.clone()).collect();
+        assert_eq!(texts, ["from the old place", ""]);
+        assert!(shared.store.as_ref().unwrap().contains(7));
+        // Nothing is left in the old place, not even its folder.
+        assert!(!old_file.exists());
+        assert!(!old_store.contains(7));
+        assert!(!dir.path().join("roaming").join("clipboard").exists());
+        // And it was written to the new one, so a restart finds it there.
+        assert!(file.is_file());
+    }
+
+    #[test]
+    fn a_history_already_in_the_new_folder_is_not_overwritten() {
+        let dir = tempfile::tempdir().unwrap();
+        let (old_file, _) = old_install(dir.path());
+        let file = dir.path().join("local").join(FILE_NAME);
+        let entry = Entry::new_text("already here".into(), 1, None);
+        let stored = StoredHistoryRef {
+            version: HISTORY_VERSION,
+            items: vec![&entry],
+        };
+        write_atomic(&file, &serde_json::to_vec(&stored).unwrap()).unwrap();
+
+        migrate_legacy(&old_file, &file, None, MAX_HISTORY_FILE_BYTES);
+
+        assert_eq!(read_history(&file)[0].text, "already here");
+        assert!(!old_file.exists(), "the old copy is only a leftover");
+    }
+
+    #[test]
+    fn a_history_that_cannot_be_written_stays_in_the_old_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        let (old_file, _) = old_install(dir.path());
+        // The new folder is a file, so nothing can be created in it.
+        let blocker = dir.path().join("local");
+        fs::write(&blocker, b"not a folder").unwrap();
+        let file = blocker.join(FILE_NAME);
+
+        migrate_legacy(&old_file, &file, None, MAX_HISTORY_FILE_BYTES);
+
+        assert!(old_file.is_file(), "nothing is deleted before it is safe");
+        assert!(!file.exists());
+    }
+
+    #[test]
+    fn images_that_cannot_be_moved_keep_the_old_history_for_the_next_try() {
+        let dir = tempfile::tempdir().unwrap();
+        let (old_file, old_store) = old_install(dir.path());
+        let blocked = dir.path().join("blocked");
+        fs::write(&blocked, b"not a folder").unwrap();
+        let store = MediaStore::new(blocked);
+        let file = dir.path().join("local").join(FILE_NAME);
+
+        migrate_legacy(&old_file, &file, Some(&store), MAX_HISTORY_FILE_BYTES);
+
+        assert!(old_file.is_file());
+        assert!(old_store.contains(7));
+        assert!(!file.exists());
+    }
+
+    #[test]
+    fn a_history_over_the_size_cap_is_not_read_or_moved() {
+        let dir = tempfile::tempdir().unwrap();
+        let (old_file, _) = old_install(dir.path());
+        let file = dir.path().join("local").join(FILE_NAME);
+
+        migrate_legacy(&old_file, &file, None, 16);
+
+        assert!(old_file.is_file(), "left where it is");
+        assert!(!file.exists());
+        // The same cap applies to the history in its usual place.
+        assert_eq!(
+            read_history_checked(&old_file).map(|items| items.len()),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn an_old_file_that_is_not_a_history_is_deleted_not_kept() {
+        let dir = tempfile::tempdir().unwrap();
+        let old_file = dir.path().join("roaming").join(FILE_NAME);
+        write_atomic(&old_file, b"{not json").unwrap();
+        let file = dir.path().join("local").join(FILE_NAME);
+
+        migrate_legacy(&old_file, &file, None, MAX_HISTORY_FILE_BYTES);
+
+        assert!(!old_file.exists());
+        assert!(!file.exists());
+    }
+
+    #[test]
+    fn clearing_also_clears_the_old_place() {
+        let dir = tempfile::tempdir().unwrap();
+        let (old_file, old_store) = old_install(dir.path());
+        // A migration that has not happened yet (the user clears first).
+        let file = dir.path().join("local").join(FILE_NAME);
+        let plugin = migrating_plugin(&MockPlatform::empty(), &file, &old_file);
+        plugin.shared.as_ref().unwrap().clear();
+        assert!(!old_file.exists());
+        assert!(!old_store.contains(7));
     }
 
     #[test]
