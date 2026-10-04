@@ -130,7 +130,8 @@ content_keyword = "in"
 [bookmarks]
 # Browsers whose bookmarks are searchable; [] means every browser found.
 # Names: "chrome", "edge", "brave", "vivaldi", "chromium", "opera", "opera-gx",
-# "firefox", "librewolf", "zen". All profiles of each browser are read.
+# "firefox", "librewolf", "zen", and "safari" (macOS; needs Full Disk Access).
+# All profiles of each browser are read.
 browsers = []
 # Type "<keyword> <text>" to search only bookmarks.
 keyword = "b"

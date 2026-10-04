@@ -67,4 +67,5 @@ export const BROWSER_KEYS: KeyOption[] = [
   { key: "firefox", label: "Firefox" },
   { key: "librewolf", label: "LibreWolf" },
   { key: "zen", label: "Zen" },
+  { key: "safari", label: "Safari (macOS)" },
 ];

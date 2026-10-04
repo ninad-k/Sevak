@@ -60,7 +60,7 @@
       <span class="sp-name">Browsers</span>
       <span class="sp-hint">
         Tick the browsers to read, with all their profiles. None ticked reads every browser Sevak
-        finds.
+        finds. Safari exists on macOS only, and Sevak needs Full Disk Access there to read it.
       </span>
       <KeySet
         id="bookmark-browsers"
