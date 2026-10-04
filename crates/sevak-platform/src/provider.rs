@@ -25,6 +25,12 @@ use crate::tasks::{Drive, ProcessInfo, RunningApp, Task, TaskKind};
 /// entries). Obtain the one for the
 /// current OS with [`crate::native_provider`].
 pub trait PlatformProvider: Send + Sync {
+    /// What the OS calls itself (name, version, build), for the diagnostics
+    /// report. Cheap; reads the registry, `/etc/os-release` or runs `sw_vers`.
+    fn os_info(&self) -> sevak_core::diagnostics::OsInfo {
+        crate::os_info::detect()
+    }
+
     /// Enumerates installed, user-visible applications. Slow (file system and
     /// shell enumeration); call it from a background thread.
     fn list_applications(&self) -> Result<Vec<AppEntry>>;

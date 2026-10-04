@@ -23,6 +23,7 @@ pub mod icon_theme;
 pub mod keyboard;
 pub mod media;
 pub mod open;
+pub mod os_info;
 pub mod os_search;
 pub mod paste;
 pub mod paths;

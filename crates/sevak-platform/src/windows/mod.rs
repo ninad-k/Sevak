@@ -9,6 +9,7 @@ mod keyhook_expand;
 mod keyhook_hotkey;
 pub(crate) mod media;
 pub(crate) mod os_search;
+pub(crate) mod os_version;
 mod packaged;
 mod paste;
 mod people;
