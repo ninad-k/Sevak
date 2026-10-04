@@ -16,6 +16,8 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use sevak_platform::process_tree::ProcessTree;
+
 use super::runner::{parse_oneshot, Runner};
 
 /// Wait this long before starting a process, in case the user types on.
@@ -57,6 +59,7 @@ fn run(runner: &Runner, id: u64, input: &str) {
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    ProcessTree::prepare(&mut command);
     let mut child = match command.spawn() {
         Ok(child) => child,
         Err(err) => {
@@ -66,6 +69,7 @@ fn run(runner: &Runner, id: u64, input: &str) {
             return;
         }
     };
+    let tree = ProcessTree::adopt(&child);
     let stdout = collect(child.stdout.take(), MAX_OUTPUT_BYTES);
     let stderr = collect(child.stderr.take(), MAX_STDERR_BYTES);
 
@@ -81,7 +85,7 @@ fn run(runner: &Runner, id: u64, input: &str) {
         }
         if !runner.delivery.is_current(id) {
             // Superseded: nobody wants this answer any more.
-            reap(&mut child);
+            reap(&mut child, &tree);
             return;
         }
         if started.elapsed() > manifest.hard_timeout {
@@ -90,14 +94,17 @@ fn run(runner: &Runner, id: u64, input: &str) {
                 timeout_ms = manifest.hard_timeout.as_millis() as u64,
                 "the script took too long; stopped it"
             );
-            reap(&mut child);
+            reap(&mut child, &tree);
             runner.delivery.deliver(id, Vec::new());
             return;
         }
         thread::sleep(POLL);
     };
-    if !finished {
-        reap(&mut child);
+    if finished {
+        // It ended by itself (and is reaped): leave anything it started alone.
+        tree.release();
+    } else {
+        reap(&mut child, &tree);
     }
 
     let output = String::from_utf8_lossy(&join(stdout)).into_owned();
@@ -118,7 +125,10 @@ fn run(runner: &Runner, id: u64, input: &str) {
     }
 }
 
-fn reap(child: &mut Child) {
+/// Ends the script and everything it started. The child must not have been
+/// reaped yet (see `ProcessTree::kill`).
+fn reap(child: &mut Child, tree: &ProcessTree) {
+    tree.kill();
     let _ = child.kill();
     let _ = child.wait();
 }

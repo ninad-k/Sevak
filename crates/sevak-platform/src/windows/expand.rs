@@ -17,7 +17,7 @@ use crate::keyboard::TypingTarget;
 use super::capture::wait_for_modifier_release;
 use super::keyhook::OWN_EXTRA_INFO;
 use super::paste::{
-    app_of, foreground_window, is_own_window, key_input, send_inputs, window_owner,
+    app_of, foreground_window, hwnd_to_int, is_own_window, key_input, send_inputs, window_owner,
 };
 
 /// `ES_PASSWORD`: the edit control shows dots for what is typed.
@@ -57,6 +57,10 @@ struct WindowsExpand;
 impl ExpandDriver for WindowsExpand {
     fn release_modifiers(&self) {
         wait_for_modifier_release();
+    }
+
+    fn foreground_token(&self) -> Option<u64> {
+        foreground_window().map(|hwnd| hwnd_to_int(hwnd) as u64)
     }
 
     fn press_backspaces(&self, count: usize) -> Result<()> {
@@ -105,14 +109,21 @@ pub(crate) fn typing_target() -> TypingTarget {
     TypingTarget {
         app: app_of(foreground),
         own_window: is_own_window(foreground),
-        private: focus_is_password_box(foreground),
+        private: focus_is_password_box(foreground) || uia_says_password(foreground),
     }
+}
+
+/// UI Automation's answer for the focused control of `foreground`: within a 50 ms
+/// budget, reused for 300 ms per window, and "no" when it cannot say (see
+/// [`super::uia`]). Called from the expansion worker, never from the hook.
+fn uia_says_password(foreground: HWND) -> bool {
+    super::uia::detector().is_password(hwnd_to_int(foreground), super::keyhook_hotkey::clock_ms())
 }
 
 /// True if the control with the keyboard focus in `foreground`'s thread is an
 /// edit control in password mode. This sees classic and most framework edit
-/// controls; it cannot see inside a web page (a browser's password field), which
-/// would need UI Automation.
+/// controls; web pages, WPF, UWP and similar need UI Automation
+/// ([`uia_says_password`]).
 fn focus_is_password_box(foreground: HWND) -> bool {
     let Some((_, thread)) = window_owner(foreground) else {
         return false;
@@ -172,7 +183,11 @@ mod tests {
         assert_eq!((vk, scan, up, extended), (VK_BACK, 0x0E, true, false));
     }
 
+    /// Asks the real desktop, and so UI Automation, about the window in front:
+    /// not run with the unit tests, which never touch the real UI.
+    /// `cargo test -p sevak-platform the_typing_target -- --ignored`
     #[test]
+    #[ignore = "queries the real desktop and UI Automation"]
     fn the_typing_target_can_be_described() {
         // Nothing to assert about which window is in front (a headless CI
         // session may have none); it must just work.

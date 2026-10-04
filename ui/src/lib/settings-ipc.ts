@@ -40,6 +40,8 @@ export interface Config {
     hotkey: string;
     /** Shortcut for Universal Actions; empty turns it off. */
     actions_hotkey: string;
+    /** Windows: honour shortcuts other programs send (AutoHotkey, PowerToys remaps). */
+    accept_injected_hotkeys: boolean;
     hide_on_blur: boolean;
     launch_at_login: boolean;
     check_for_updates: boolean;
@@ -70,6 +72,8 @@ export interface Config {
     use_os_index: boolean;
     index_keyword: string;
     content_keyword: string;
+    /** Windows: use paths on other computers (off: they are never contacted). */
+    allow_network_paths: boolean;
   };
   bookmarks: { browsers: string[]; keyword: string; global: boolean };
   /** The file buffer: files collected from the results to act on together. */
@@ -80,9 +84,13 @@ export interface Config {
     max_items: number;
     max_item_bytes: number;
     ignore_apps: string[];
+    /** Also skip password managers and credential prompts (a built-in list). */
+    default_ignore_apps: boolean;
     images: boolean;
     files: boolean;
     max_image_bytes: number;
+    /** Encrypt the history at rest for this Windows account (DPAPI); other systems keep owner-only files. */
+    encrypt: boolean;
   };
   contacts: { enabled: boolean; keyword: string; use_system: boolean; vcard_files: string[] };
   onepassword: {
@@ -100,6 +108,14 @@ export interface Config {
   /** Automation tasks (dark mode, volume, kill, ...). */
   tasks: { confirm: boolean; disabled: string[]; keyword: string; global: boolean };
   media: { keyword: string; global: boolean; now_playing: boolean };
+  /** Snapping and switching windows (`win left`, `w code`). `gap` is in pixels. */
+  window_management: {
+    enabled: boolean;
+    keyword: string;
+    switcher_keyword: string;
+    gap: number;
+    global: boolean;
+  };
   /** Expanding `[[snippet]]` keywords as you type in other apps (off by default). */
   snippets: {
     auto_expand: boolean;
@@ -108,6 +124,7 @@ export interface Config {
     case_sensitive: boolean;
     ignore_apps: string[];
     expand_in_terminals: boolean;
+    expand_in_browsers: boolean;
   };
   /** The `>` command: which terminal and shell run it. */
   shell: { terminal: string; shell: string; keep_open: boolean };

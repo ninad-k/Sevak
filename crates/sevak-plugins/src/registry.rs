@@ -27,12 +27,13 @@ use serde::Serialize;
 use sevak_core::{Config, Plugin};
 use sevak_platform::PlatformProvider;
 
-use crate::clipboard_history::default_history_path;
+use crate::clipboard_history::{default_history_path, legacy_history_path};
 use crate::emoji::Trigger;
 use crate::{
     files_family, AiPlugin, AppsPlugin, BookmarksPlugin, CalculatorPlugin, ClipboardPlugin,
     ContactsPlugin, DictionaryPlugin, EmojiPlugin, MediaPlugin, OnePasswordPlugin, SelectionPlugin,
     ShellPlugin, SnippetsPlugin, SystemPlugin, TasksPlugin, UuidPlugin, WebSearchPlugin,
+    WindowManagerPlugin,
 };
 
 /// Builds the instances of one plugin family.
@@ -110,8 +111,8 @@ impl PluginRegistry {
     }
 
     /// Apps, calculator, web search, files, bookmarks, system commands,
-    /// automation tasks, media controls, shell, clipboard history, snippets,
-    /// emoji, Universal Actions, contacts, 1Password, the dictionary, the
+    /// automation tasks, media controls, window management, shell, clipboard history,
+    /// snippets, emoji, Universal Actions, contacts, 1Password, the dictionary, the
     /// example UUID plugin and the AI assistant, in that order.
     /// Order matters only for tie-breaking and logging.
     pub fn builtin() -> Self {
@@ -193,6 +194,14 @@ impl PluginRegistry {
             },
         ));
         registry.register(PluginDescriptor::new(
+            "windows",
+            "Window management",
+            "Snap, resize and move the window you were using (`win left`, `win max`, `win next display`) and switch windows (`w <name>`).",
+            |config, platform| {
+                WindowManagerPlugin::instances(&config.window_management, platform.clone())
+            },
+        ));
+        registry.register(PluginDescriptor::new(
             "shell",
             "Terminal commands",
             "Type `> command` to run it in a terminal; recent commands are offered again.",
@@ -208,11 +217,12 @@ impl PluginRegistry {
             "Clipboard history",
             "Type `cb` to paste text, images and files you copied earlier. Off until [clipboard] enabled = true.",
             |config, platform| {
-                vec![Arc::new(ClipboardPlugin::new(
+                vec![Arc::new(ClipboardPlugin::new_migrating(
                     &config.clipboard,
                     &config.paste,
                     platform.clone(),
                     default_history_path(),
+                    legacy_history_path(),
                 ))]
             },
         ));
@@ -406,6 +416,7 @@ mod tests {
                 "system",
                 "tasks",
                 "media",
+                "windows",
                 "shell",
                 "clipboard",
                 "snippets",
@@ -437,6 +448,8 @@ mod tests {
                 "system",
                 "tasks",
                 "media",
+                "windows",
+                "windows:switch",
                 "shell",
                 "clipboard",
                 "snippets",
@@ -469,6 +482,8 @@ mod tests {
                 "system",
                 "tasks",
                 "media",
+                "windows",
+                "windows:switch",
                 "shell",
                 "clipboard",
                 "snippets",
@@ -502,6 +517,8 @@ mod tests {
                 "bookmarks",
                 "tasks",
                 "media",
+                "windows",
+                "windows:switch",
                 "shell",
                 "clipboard",
                 "snippets",
@@ -548,6 +565,8 @@ mod tests {
                 ("system", true),
                 ("tasks", true),
                 ("media", true),
+                ("windows", true),
+                ("windows:switch", true),
                 ("shell", true),
                 ("clipboard", true),
                 ("snippets", true),

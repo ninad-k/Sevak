@@ -17,8 +17,8 @@ use std::sync::{Arc, Mutex};
 use sevak_core::{Config, Plugin};
 use sevak_platform::PlatformProvider;
 
-use super::approvals::ApprovalStore;
-use super::manifest::{Manifest, ID_PREFIX, MANIFEST_FILE};
+use super::approvals::{script_approval_key, ApprovalStore};
+use super::manifest::{Launch, Manifest, ID_PREFIX, MANIFEST_FILE};
 use super::plugin::ScriptPlugin;
 use super::runner::Spec;
 use crate::keywords::{KeywordOwners, KeywordUse, OwnerKind};
@@ -27,6 +27,11 @@ use crate::PluginInfo;
 /// The family id: `[plugins] disabled = ["script"]` turns every script plugin off.
 pub const FAMILY: &str = "script";
 
+/// What "not now" remembers: this plugin in this state, so a change asks again.
+fn decline_key(candidate: &Candidate) -> String {
+    format!("{} {}", candidate.manifest.id, candidate.key)
+}
+
 /// A valid plugin folder.
 #[derive(Debug, Clone)]
 pub struct Candidate {
@@ -34,8 +39,34 @@ pub struct Candidate {
     pub folder: String,
     pub dir: PathBuf,
     pub manifest: Manifest,
-    /// The user has allowed exactly this command to run.
+    /// What the approval is bound to: a hash over the folder's location, the
+    /// manifest and the script files (see `script_approval_key`).
+    pub key: String,
+    /// The user has allowed exactly this (these files, in this folder).
     pub approved: bool,
+    /// The user allowed a plugin with this id before, but not this: its files
+    /// changed, it moved, or the allowance dates from before approvals were
+    /// bound to contents. The Allow dialog says so.
+    pub reviewed_before: bool,
+    /// A native extension: the SHA-256 of its program file (what the Allow
+    /// dialog shows next to the publisher's). `None` for scripts.
+    pub binary_sha256: Option<String>,
+}
+
+impl Candidate {
+    /// The text of the Allow dialog (see `dialog::script_prompt`): the folder,
+    /// what runs, what it is given, with everything the author wrote made safe
+    /// to show.
+    pub fn prompt(&self) -> String {
+        super::dialog::script_prompt_with_binary(
+            &self.manifest,
+            &self.folder,
+            &self.dir.display().to_string(),
+            &self.key,
+            self.reviewed_before,
+            self.binary_sha256.as_deref(),
+        )
+    }
 }
 
 /// One folder found under the plugins directory.
@@ -94,18 +125,44 @@ impl ScriptPluginHost {
             .collect();
         folders.sort();
 
+        // Read every folder first: when two claim the same id, the one the
+        // user has already allowed keeps it, so a look-alike folder cannot
+        // take the id (and the approval) away from the original.
+        type Read = Result<(Manifest, String), String>;
+        let loaded: Vec<(String, PathBuf, Read)> = folders
+            .into_iter()
+            .map(|(folder, dir)| {
+                let result = script_approval_key(&dir);
+                (folder, dir, result)
+            })
+            .collect();
+        let approvals = self.approvals.snapshot();
+        let approved_now =
+            |manifest: &Manifest, key: &str| approvals.is_approved(&manifest.id, key);
         let mut claimed: HashMap<String, String> = HashMap::new();
+        for want_approved in [true, false] {
+            for (folder, _, result) in &loaded {
+                if let Ok((manifest, key)) = result {
+                    if approved_now(manifest, key) == want_approved {
+                        claimed
+                            .entry(manifest.id.clone())
+                            .or_insert_with(|| folder.clone());
+                    }
+                }
+            }
+        }
+
         let mut scanned = Vec::new();
-        for (folder, dir) in folders {
-            let manifest = match Manifest::load(&dir) {
-                Ok(manifest) => manifest,
+        for (folder, dir, result) in loaded {
+            let (manifest, key) = match result {
+                Ok(loaded) => loaded,
                 Err(error) => {
                     tracing::warn!(plugin = folder, "not loading this script plugin: {error}");
                     scanned.push(Scanned::Broken { folder, error });
                     continue;
                 }
             };
-            if let Some(first) = claimed.get(&manifest.id) {
+            if let Some(first) = claimed.get(&manifest.id).filter(|first| **first != folder) {
                 let error = format!(
                     "the id {} is already used by the folder {first}",
                     manifest.id
@@ -114,18 +171,25 @@ impl ScriptPluginHost {
                 scanned.push(Scanned::Broken { folder, error });
                 continue;
             }
-            claimed.insert(manifest.id.clone(), folder.clone());
             for warning in &manifest.warnings {
                 tracing::warn!(plugin = manifest.id, "{warning}");
             }
-            let approved = self
-                .approvals
-                .is_approved(&manifest.id, &manifest.approval_key());
+            let approved = approved_now(&manifest, &key);
+            let reviewed_before = !approved && approvals.has_record(&manifest.id);
+            let binary_sha256 = match (&manifest.native, &manifest.launch) {
+                (Some(_), Launch::Command(argv)) => argv
+                    .first()
+                    .and_then(|program| super::native::binary_sha256(&dir, program)),
+                _ => None,
+            };
             scanned.push(Scanned::Plugin(Box::new(Candidate {
                 folder,
                 dir,
                 manifest,
+                key,
                 approved,
+                reviewed_before,
+                binary_sha256,
             })));
         }
         scanned
@@ -165,6 +229,7 @@ impl ScriptPluginHost {
                 dir: candidate.dir,
                 manifest: candidate.manifest,
                 env: Vec::new(),
+                expected_key: Some(candidate.key),
             };
             plugins.push(Arc::new(ScriptPlugin::new(spec, Arc::clone(platform))));
         }
@@ -184,15 +249,14 @@ impl ScriptPluginHost {
                 Scanned::Broken { .. } => None,
             })
             .filter(|c| !c.approved && Self::enabled(config, &c.manifest.id))
-            .filter(|c| !declined.contains(&c.manifest.approval_key_with_id()))
+            .filter(|c| !declined.contains(&decline_key(c)))
             .collect()
     }
 
     /// Remembers that the user allowed `candidate` to run.
     pub fn approve(&self, candidate: &Candidate) -> Result<(), String> {
-        let manifest = &candidate.manifest;
         self.approvals
-            .approve(&manifest.id, &manifest.approval_key())
+            .approve(&candidate.manifest.id, &candidate.key)
             .map_err(|err| format!("could not save the approval: {err}"))
     }
 
@@ -201,7 +265,7 @@ impl ScriptPluginHost {
         self.declined
             .lock()
             .unwrap_or_else(|p| p.into_inner())
-            .insert(candidate.manifest.approval_key_with_id());
+            .insert(decline_key(candidate));
     }
 
     /// The keywords of the enabled script plugins (approved or not: they
@@ -233,6 +297,9 @@ impl ScriptPluginHost {
                 Scanned::Plugin(c) => {
                     let id = c.manifest.id.clone();
                     let mut description = c.manifest.description.clone();
+                    if c.manifest.native.is_some() {
+                        description = format!("Native extension. {description}");
+                    }
                     if !c.approved {
                         description = format!(
                             "Waiting for your approval (restart Sevak or choose Reload index \
@@ -422,6 +489,250 @@ mod tests {
         // Disabled plugins are not asked about either.
         fs::remove_file(f._root.path().join("data").join("approvals.json")).unwrap();
         assert!(f.host.pending(&config).is_empty());
+    }
+
+    fn script_manifest(id: &str) -> String {
+        format!(
+            "protocol = 1\nid = \"{id}\"\nkeyword = \"k\"\ncommand = [\"python\", \"main.py\"]\n"
+        )
+    }
+
+    fn add_script(f: &Fixture, folder: &str, id: &str, code: &str) {
+        add(f, folder, &script_manifest(id));
+        fs::write(f.plugins.join(folder).join("main.py"), code).unwrap();
+    }
+
+    fn allow_all(f: &Fixture) {
+        for c in f.host.pending(&Config::default()) {
+            f.host.approve(&c).unwrap();
+        }
+        assert!(f.host.pending(&Config::default()).is_empty());
+    }
+
+    fn native_manifest(platform: &str) -> String {
+        let program = if platform.starts_with("windows") {
+            "bin/tool.exe"
+        } else {
+            "bin/tool"
+        };
+        format!(
+            "protocol = 1
+keyword = \"nat\"
+name = \"Native tool\"
+             [extension]
+version = \"1.0.0\"
+author = \"Ada\"
+license = \"MIT\"
+             permissions = [\"network\"]
+[extension.binaries]
+{platform} = \"{program}\"
+"
+        )
+    }
+
+    fn add_native(f: &Fixture, folder: &str, bytes: &[u8]) {
+        let platform = crate::script::current_platform();
+        add(f, folder, &native_manifest(&platform));
+        let program = if platform.starts_with("windows") {
+            "bin/tool.exe"
+        } else {
+            "bin/tool"
+        };
+        let path = f.plugins.join(folder).join(program);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, bytes).unwrap();
+    }
+
+    #[test]
+    fn a_native_extension_waits_for_approval_bound_to_its_binary() {
+        let f = fixture();
+        add_native(&f, "tool", b"ELF first build");
+        let config = Config::default();
+        assert!(f.host.plugins(&config, &platform()).is_empty());
+
+        let pending = f.host.pending(&config);
+        assert_eq!(pending.len(), 1, "never runs before it is allowed");
+        let candidate = &pending[0];
+        assert!(candidate.manifest.native.is_some());
+        let hash = candidate
+            .binary_sha256
+            .clone()
+            .expect("the binary is hashed");
+        assert_eq!(hash, sevak_core::checksum::sha256_hex(b"ELF first build"));
+        let prompt = candidate.prompt();
+        assert!(prompt.contains("NATIVE EXTENSION"), "{prompt}");
+        assert!(
+            prompt.contains(&hash),
+            "the full checksum is shown: {prompt}"
+        );
+        assert!(prompt.contains("Publisher: Ada"), "{prompt}");
+        assert!(prompt.contains("network: connects"), "{prompt}");
+        assert!(prompt.contains("NOT sandboxed"), "{prompt}");
+        f.host.approve(candidate).unwrap();
+        assert_eq!(ids(&f.host.plugins(&config, &platform())), ["script:tool"]);
+
+        // A different binary is a different thing: it asks again.
+        add_native(&f, "tool", b"ELF second build");
+        assert!(f.host.plugins(&config, &platform()).is_empty());
+        let again = f.host.pending(&config);
+        assert_eq!(again.len(), 1);
+        assert!(again[0].reviewed_before);
+        assert!(again[0].prompt().contains("review again"));
+        assert_ne!(again[0].binary_sha256.as_deref(), Some(hash.as_str()));
+    }
+
+    #[test]
+    fn a_native_extension_is_labelled_in_the_plugin_list() {
+        let f = fixture();
+        add_native(&f, "tool", b"bin");
+        let rows = f
+            .host
+            .catalog(&Config::default(), &KeywordOwners::default());
+        assert!(
+            rows[0].description.contains("Native extension."),
+            "{rows:?}"
+        );
+    }
+
+    #[test]
+    fn an_unchanged_plugin_stays_approved_across_scans_and_restarts() {
+        let f = fixture();
+        add_script(&f, "hello", "script:hello", "print(1)");
+        allow_all(&f);
+        assert!(candidates(&f.host)[0].approved);
+        let restarted = ScriptPluginHost::new(
+            f.plugins.clone(),
+            f._root.path().join("data").join("plugins"),
+            f._root.path().join("data").join("approvals.json"),
+        );
+        assert!(restarted.pending(&Config::default()).is_empty());
+        assert_eq!(restarted.plugins(&Config::default(), &platform()).len(), 1);
+    }
+
+    #[test]
+    fn replacing_the_script_asks_again() {
+        let f = fixture();
+        add_script(&f, "hello", "script:hello", "print(1)");
+        allow_all(&f);
+
+        fs::write(f.plugins.join("hello").join("main.py"), "print(2)").unwrap();
+        let pending = f.host.pending(&Config::default());
+        assert_eq!(pending.len(), 1);
+        assert!(
+            pending[0].reviewed_before,
+            "the dialog says it was allowed before"
+        );
+        assert!(f.host.plugins(&Config::default(), &platform()).is_empty());
+
+        // Allowing the new contents makes them current; going back asks again.
+        f.host.approve(&pending[0]).unwrap();
+        assert!(f.host.pending(&Config::default()).is_empty());
+        fs::write(f.plugins.join("hello").join("main.py"), "print(1)").unwrap();
+        assert_eq!(f.host.pending(&Config::default()).len(), 1);
+    }
+
+    #[test]
+    fn a_support_file_named_in_the_manifest_is_covered_too() {
+        let f = fixture();
+        add(
+            &f,
+            "hello",
+            &format!(
+                "{}files = [\"helper.py\"]\n",
+                script_manifest("script:hello")
+            ),
+        );
+        fs::write(f.plugins.join("hello").join("main.py"), "import helper").unwrap();
+        fs::write(f.plugins.join("hello").join("helper.py"), "A = 1").unwrap();
+        allow_all(&f);
+        fs::write(f.plugins.join("hello").join("helper.py"), "A = 2").unwrap();
+        assert_eq!(f.host.pending(&Config::default()).len(), 1);
+    }
+
+    #[test]
+    fn a_second_folder_claiming_the_same_id_and_command_is_not_approved() {
+        let f = fixture();
+        add_script(&f, "b-original", "script:notes", "print(1)");
+        allow_all(&f);
+
+        // Sorts first, same id, same command, even the same script text.
+        add_script(&f, "a-lookalike", "script:notes", "print(1)");
+        let scanned = f.host.scan();
+        let by_folder = |name: &str| {
+            scanned
+                .iter()
+                .find(|s| match s {
+                    Scanned::Plugin(c) => c.folder == name,
+                    Scanned::Broken { folder, .. } => folder == name,
+                })
+                .unwrap()
+        };
+        assert!(
+            matches!(by_folder("b-original"), Scanned::Plugin(c) if c.approved),
+            "the allowed folder keeps the id and keeps running"
+        );
+        assert!(
+            matches!(by_folder("a-lookalike"), Scanned::Broken { error, .. } if error.contains("already used"))
+        );
+        let ids = ids(&f.host.plugins(&Config::default(), &platform()));
+        assert_eq!(ids, ["script:notes"]);
+
+        // Without the original, the look-alike is just a new plugin to review.
+        fs::remove_dir_all(f.plugins.join("b-original")).unwrap();
+        let only = candidates(&f.host);
+        assert_eq!(only.len(), 1);
+        assert!(!only[0].approved);
+        assert!(only[0].reviewed_before);
+    }
+
+    #[test]
+    fn a_moved_folder_asks_again() {
+        let f = fixture();
+        add_script(&f, "old-place", "script:notes", "print(1)");
+        allow_all(&f);
+        fs::rename(f.plugins.join("old-place"), f.plugins.join("new-place")).unwrap();
+        let pending = f.host.pending(&Config::default());
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].folder, "new-place");
+    }
+
+    #[test]
+    fn an_approval_from_before_contents_were_bound_asks_once() {
+        let f = fixture();
+        add_script(&f, "hello", "script:hello", "print(1)");
+        // What the previous version stored: the command line, no version field.
+        let path = f._root.path().join("data").join("approvals.json");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(
+            &path,
+            r#"{"approved":{"script:hello":"Persistent/Sevak: python main.py"}}"#,
+        )
+        .unwrap();
+        let pending = f.host.pending(&Config::default());
+        assert_eq!(pending.len(), 1);
+        assert!(pending[0].reviewed_before);
+        f.host.approve(&pending[0]).unwrap();
+        assert!(f.host.pending(&Config::default()).is_empty());
+    }
+
+    #[test]
+    fn a_script_replaced_after_loading_is_not_started() {
+        let f = fixture();
+        add_script(&f, "hello", "script:hello", "print(1)");
+        allow_all(&f);
+        let candidate = candidates(&f.host).remove(0);
+        let spec = Spec {
+            data_dir: f._root.path().join("data").join("plugins").join("hello"),
+            dir: candidate.dir.clone(),
+            expected_key: Some(candidate.key.clone()),
+            manifest: candidate.manifest,
+            env: Vec::new(),
+        };
+        // `python` may not exist where the tests run; only the approval check matters.
+        let check = |spec: &Spec| spec.command(None).err().unwrap_or_default();
+        assert!(!check(&spec).contains("changed after"));
+        fs::write(candidate.dir.join("main.py"), "print('other')").unwrap();
+        assert!(check(&spec).contains("changed after"), "{}", check(&spec));
     }
 
     #[test]

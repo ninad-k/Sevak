@@ -8,7 +8,7 @@ Configure Sevak through the Settings window.
   select **Settings** (on Linux, click the icon and select **Settings**)
 - Run `sevak --settings` from the command line
 
-The tabs run from General to Files, with Linux where it applies and **Help** last.
+The tabs run from General to Files, with Linux where it applies, then **Backup & restore** and **Help** last.
 
 ## Using Settings
 
@@ -24,7 +24,7 @@ Validation errors appear under each field and prevent saving until they are fixe
 
 Saving keeps your comments, the order of your keys and every `[[snippet]]` entry exactly as they are in `config.toml`; only the lines you changed are rewritten.
 
-Pages: [General](#general), [Hotkeys](#hotkeys), [Appearance](#appearance), [Search](#search), [Plugins](#plugins), [Workflows](#workflows), [Gallery](#gallery), [Web search](#web-search), [Files & bookmarks](#files-bookmarks), [Clipboard & paste](#clipboard-paste), [Tasks & media](#tasks-media), [Integrations](#integrations), [AI assistant](#ai-assistant), [System & terminal](#system-terminal) and, on Linux, [Linux](#linux).
+Pages: [General](#general), [Hotkeys](#hotkeys), [Appearance](#appearance), [Search](#search), [Plugins](#plugins), [Workflows](#workflows), [Gallery](#gallery), [Web search](#web-search), [Files & bookmarks](#files-bookmarks), [Clipboard & paste](#clipboard-paste), [Tasks & media](#tasks-media), [Integrations](#integrations), [AI assistant](#ai-assistant), [System & terminal](#system-terminal), on Linux [Linux](#linux), [Backup & restore](#backup-restore) and [Help](#help).
 
 ## General
 
@@ -57,6 +57,12 @@ Leave **empty** to turn off Universal Actions.
 On **Wayland**, use the same **Set up GNOME shortcut** button.
 
 Links to: `[general] actions_hotkey` in configuration.
+
+### Accept shortcuts sent by other programs
+
+Windows only. Off by default: Sevak's keyboard hook then ignores key presses that another program sends, so nothing else on your desktop can open Sevak or trigger Universal Actions by pressing the shortcut for you. Turn it on if AutoHotkey, PowerToys Keyboard Manager or a similar remapper is meant to type the shortcut. The change applies when you save.
+
+Links to: `[general] accept_injected_hotkeys` in configuration.
 
 ### Use the clipboard if the selection can't be read
 
@@ -265,6 +271,7 @@ Off by default. When on, typing a snippet's keyword in any app replaces it with 
 
 - **Keyword prefix**: typed before every keyword, such as `;`, so that `;sig` expands and a plain `sig` does not.
 - **Expand**: as soon as the keyword is typed, or after a space or punctuation mark.
+- **Expand in web browsers**: off by default, because a password field in a web page cannot be told from other text boxes.
 
 A warning under the switch says what is missing (macOS Input Monitoring permission, Wayland). Three more fields appear:
 
@@ -283,6 +290,10 @@ Workflows are saved as files in the `workflows` folder next to `config.toml`, no
 ## Gallery
 
 Lists ready-made workflows and script plugins. Opening the page requests nothing: **Load gallery** downloads the list, **Install** downloads one package and checks its checksum, and the installed folder asks for permission before anything in it runs. See [The gallery](workflows.md#the-gallery).
+
+## Extensions
+
+Browse the gallery (workflows, script plugins, native extensions written in Rust, and themes), install, update, switch off and remove, with an indicator on **Installed** when an update is available. Opening the page requests nothing: **Load the list** downloads the two lists once, **Install** downloads one package and checks its checksum, and a new workflow, plugin or native extension asks for permission before anything in it runs. Works from the launcher too: `ext <name>` or `store <name>`. See [Extensions](features/extensions.md).
 
 ## Web search
 
@@ -340,6 +351,14 @@ Default: off.
 
 Links to: `[files] include_hidden` in configuration.
 
+### Allow network paths
+
+Windows only. Use paths on other computers (`\\server\share`) and mapped network drives. Off, Sevak shows "Network paths are turned off" instead of looking at them, because Windows signs in to a computer as soon as anything looks at its path. Folders in the list above that are on a share are skipped while this is off.
+
+Default: off.
+
+Links to: `[files] allow_network_paths` in configuration.
+
 ### Keyword
 
 Type "keyword filename" to search only files. Leave empty to disable.
@@ -390,7 +409,7 @@ Links to: `[bookmarks]` in [configuration](configuration.md#bookmarks) and [Book
 Off by default. When on, Sevak watches the clipboard and keeps what you copy so that `cb` can paste it back. Only what you copy after you turn it on is remembered.
 
 !!! warning "Privacy"
-    The history is stored on this computer, **unencrypted**: text and the paths of copied files in `clipboard-history.json`, images as PNG files in the `clipboard` folder, both in Sevak's data folder. Nothing is sent anywhere. Content that a password manager marks as secret is never recorded on Windows and macOS; Linux has no such marker, so list those apps under **Ignore apps**.
+    The history is stored on this computer, in Sevak's local data folder: text and the paths of copied files in `clipboard-history.json`, images as PNG files in the `clipboard` folder. On Windows the files are encrypted for your account (see **Encrypt the history** below); on macOS and Linux they are plain and readable only by you. Nothing is sent anywhere. Content that a password manager marks as secret is never recorded, and neither is anything copied in a well-known password manager (see **Skip password managers**); apps that set no marker belong under **Ignore apps**.
 
 If **Clipboard history** is switched off under **Plugins**, the page says so: `cb` then shows nothing whatever this switch says.
 
@@ -404,9 +423,11 @@ These apply while the history is on.
 |---|---|---|---|
 | **Number of items** | 1–5000 | 200 | Older entries are dropped with their image files. |
 | **Longest text** | up to 4096 KB | 64 KB | Longer text is not recorded. |
+| **Encrypt the history** (Windows) | on/off | on | Encrypts the history file and the images for your Windows account (DPAPI). |
 | **Record images** | on/off | on | Copied pictures, saved as PNG files. |
 | **Largest image** | up to 64 MB | 10 MB | A picture whose PNG is larger is not recorded. |
 | **Record files** | on/off | on | Only the paths of copied files and folders are kept. |
+| **Skip password managers** | on/off | on | Never record copies made in KeePass, 1Password, Bitwarden and similar apps, or in system credential and passphrase prompts. |
 | **Ignore apps** | list | empty | Copies made in these apps are never recorded (program or app names, any case). |
 
 The sizes are shown in KB and MB and written to `config.toml` in bytes.
@@ -537,6 +558,19 @@ Turn this off to use the native Wayland backend (experimental; you may need to p
 **Restart Sevak to apply.**
 
 Links to: `[linux] wayland_use_xwayland` in configuration.
+
+## Backup & restore
+
+Save your settings, snippets, web searches, themes, script plugins and workflows to one file, and restore them later or on another computer. This page is not part of the Save button: everything on it acts when you click its own button, and a restore reloads the other pages. The full guide is [Backup and restore](backup-and-restore.md).
+
+| Part | What it does |
+|---|---|
+| **Back up** | Tick the categories (all by default), see exactly what is included, then **Save backup as…** (a save dialog), **Back up now** (the backup folder, no dialog) or **Open backup folder**. Shows when and where the last backup was made. Says what is never included (keys, history, the list of allowed scripts) and that the file is not encrypted. |
+| **Restore** | **Choose a backup…**, tick the categories, pick **Merge** or **Replace**, read what would change (new, changed, same and removed counts with names and files) and click **Restore**. A safety copy is taken first and the restore is all or nothing. |
+| **Undo restore** | Puts back what the last restore replaced. |
+| **Automatic backups** | Off by default. Daily or weekly, and optionally when Sevak is updated; keeps the newest 1-50; the folder is yours to choose. Saved to `backup.toml`. |
+
+Scripts and workflows that a restore adds or changes ask for your approval again.
 
 ## Help
 

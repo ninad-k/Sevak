@@ -3,10 +3,14 @@
 //! A [`Selection`] is the text and/or the files and folders that were selected
 //! when the Universal Actions hotkey was pressed. It only ever lives in memory:
 //! it has no serializer, and its `Debug` output leaves the content out, so it
-//! cannot reach a log or a file by accident.
+//! cannot reach a log or a file by accident. The text is overwritten in memory
+//! when the selection is dropped (best effort: copies made while it was used,
+//! such as a transformed result, are not covered).
 
 use std::fmt;
 use std::path::PathBuf;
+
+use zeroize::Zeroize;
 
 /// Text longer than this many bytes is not acted on: pasting a transformed
 /// copy of megabytes back over a selection is more likely a mistake than a wish.
@@ -22,6 +26,12 @@ pub struct Selection {
     text: Option<String>,
     /// Selected files and folders (a file manager's selection). Wins over text.
     files: Vec<PathBuf>,
+}
+
+impl Drop for Selection {
+    fn drop(&mut self) {
+        self.wipe();
+    }
 }
 
 // By hand: the content stays out of anything that formats a Selection.
@@ -63,7 +73,23 @@ impl Selection {
     /// Files win over text: a file manager that also offers the names as text
     /// is still showing files.
     pub fn from_parts(text: Option<String>, files: Vec<PathBuf>) -> Option<Self> {
-        Self::from_files(files).or_else(|| text.and_then(Self::from_text))
+        match Self::from_files(files) {
+            Some(files) => {
+                // The text is not kept: wipe it rather than just free it.
+                if let Some(mut unused) = text {
+                    unused.zeroize();
+                }
+                Some(files)
+            }
+            None => text.and_then(Self::from_text),
+        }
+    }
+
+    /// Overwrites the text in memory.
+    fn wipe(&mut self) {
+        if let Some(text) = &mut self.text {
+            text.zeroize();
+        }
     }
 
     pub fn text(&self) -> Option<&str> {
@@ -240,6 +266,21 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
         assert_eq!(text(&many).kind(), SelectionKind::Text);
+    }
+
+    #[test]
+    fn the_text_is_overwritten_when_the_selection_is_let_go() {
+        let mut selection = text("my secret password");
+        let (pointer, capacity) = {
+            let text = selection.text.as_ref().unwrap();
+            (text.as_ptr(), text.capacity())
+        };
+        selection.wipe();
+        assert_eq!(selection.text(), Some(""));
+        // SAFETY: the String is alive (wipe keeps its allocation), and every
+        // byte of the first `len` that was written is inside its capacity.
+        let bytes = unsafe { std::slice::from_raw_parts(pointer, capacity.min(18)) };
+        assert!(bytes.iter().all(|byte| *byte == 0), "{bytes:?}");
     }
 
     #[test]

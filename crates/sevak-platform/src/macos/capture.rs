@@ -41,6 +41,7 @@ pub(crate) fn capture_selection(_options: &CaptureOptions) -> SelectionCapture {
         return SelectionCapture::Unavailable(NEEDS_ACCESSIBILITY.to_owned());
     }
     let clipboard = SystemClipboardCapture {
+        text_units: || None,
         sequence: paste::clipboard_sequence,
         read: paste::read_clipboard,
     };

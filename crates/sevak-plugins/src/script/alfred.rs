@@ -428,6 +428,7 @@ mod tests {
             plugin_id: "script:a",
             dir,
             allow_custom: false,
+            allow_launch: false,
         };
         parse(ctx, &doc.to_string()).unwrap()
     }
@@ -437,6 +438,7 @@ mod tests {
             plugin_id: "workflow:w:f",
             dir: Path::new("p"),
             allow_custom: false,
+            allow_launch: false,
         };
         parse_workflow(ctx, &doc.to_string()).unwrap()
     }
@@ -590,6 +592,7 @@ mod tests {
             plugin_id: "script:a",
             dir: Path::new("p"),
             allow_custom: false,
+            allow_launch: false,
         };
         assert!(parse(ctx, "Traceback (most recent call last):").is_err());
         // A byte-order mark and surrounding whitespace are fine; no items is fine.

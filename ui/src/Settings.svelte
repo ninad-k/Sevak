@@ -8,12 +8,16 @@
   import ListEditor from "./lib/settings-pages/ListEditor.svelte";
   import SystemPage from "./lib/settings-pages/SystemPage.svelte";
   import TasksMediaPage from "./lib/settings-pages/TasksMediaPage.svelte";
+  import WindowsPage from "./lib/settings/WindowsPage.svelte";
   import { tidyPluginSettings } from "./lib/settings-pages/tidy";
   import HotkeyField from "./lib/HotkeyField.svelte";
   import HelpPage from "./lib/HelpPage.svelte";
+  import BackupPage from "./lib/settings/BackupPage.svelte";
   import HotkeyList from "./lib/HotkeyList.svelte";
   import ThemeEditor from "./lib/ThemeEditor.svelte";
   import Toggle from "./lib/Toggle.svelte";
+  import ExtensionsPage from "./lib/extensions/ExtensionsPage.svelte";
+  import { onSettingsPage } from "./lib/extensions/extensions-ipc";
   import GalleryPage from "./lib/workflows/GalleryPage.svelte";
   import WorkflowsPage from "./lib/workflows/WorkflowsPage.svelte";
   import { getStatus, onStatus, type Status } from "./lib/ipc";
@@ -50,6 +54,7 @@
     general: {
       hotkey: "",
       actions_hotkey: "",
+      accept_injected_hotkeys: false,
       hide_on_blur: true,
       launch_at_login: false,
       check_for_updates: true,
@@ -82,6 +87,7 @@
       use_os_index: true,
       index_keyword: "ff",
       content_keyword: "in",
+      allow_network_paths: false,
     },
     snippets: {
       auto_expand: false,
@@ -90,6 +96,7 @@
       case_sensitive: true,
       ignore_apps: [],
       expand_in_terminals: false,
+      expand_in_browsers: false,
     },
     bookmarks: { browsers: [], keyword: "", global: true },
     file_buffer: { keep_between_shows: false },
@@ -98,9 +105,11 @@
       max_items: 200,
       max_item_bytes: 64 * 1024,
       ignore_apps: [],
+      default_ignore_apps: true,
       images: true,
       files: true,
       max_image_bytes: 10 * 1024 * 1024,
+      encrypt: true,
     },
     contacts: { enabled: false, keyword: "c", use_system: true, vcard_files: [] },
     onepassword: { enabled: false, keyword: "1p", op_path: "", account: "", cache_minutes: 10 },
@@ -118,6 +127,7 @@
     system: { confirm: true, disabled: [] },
     tasks: { confirm: true, disabled: [], keyword: "t", global: true },
     media: { keyword: "play", global: true, now_playing: true },
+    window_management: { enabled: true, keyword: "win", switcher_keyword: "w", gap: 0, global: false },
     shell: { terminal: "", shell: "", keep_open: true },
     web_search: [],
     hotkey: [],
@@ -137,7 +147,7 @@
   let hotkeyParseProblems = $state(0);
 
   /** The workflow pages keep their own files and are not part of the config form. */
-  type PageId = SectionId | "workflows" | "gallery" | "help";
+  type PageId = SectionId | "workflows" | "gallery" | "extensions" | "backup" | "help";
   let active = $state<PageId>("general");
   let hotkeyError = $state<string | null>(null);
   let actionsHotkeyError = $state<string | null>(null);
@@ -176,14 +186,17 @@
         { id: "plugins", label: "Plugins" },
         { id: "workflows", label: "Workflows" },
         { id: "gallery", label: "Gallery" },
+        { id: "extensions", label: "Extensions" },
         { id: "web", label: "Web search" },
         { id: "files", label: "Files & bookmarks" },
         { id: "clipboard", label: "Clipboard & paste" },
         { id: "tasks", label: "Tasks & media" },
+        { id: "windows", label: "Windows" },
         { id: "integrations", label: "Integrations" },
         { id: "ai", label: "AI assistant" },
         { id: "system", label: "System & terminal" },
         ...(showLinux ? [{ id: "linux", label: "Linux" }] : []),
+        { id: "backup", label: "Backup & restore" },
         { id: "help", label: "Help" },
       ] as { id: PageId; label: string }[]
     ).map((section) => ({
@@ -509,7 +522,12 @@
     void load();
     void getStatus().then((s) => (status = s));
     const unlisten = onStatus((s) => (status = s));
+    // The launcher's `ext` rows open this window on the Extensions page.
+    const stopPage = onSettingsPage((page) => {
+      if (page === "extensions") active = "extensions";
+    });
     return () => {
+      stopPage();
       void unlisten.then((fn) => fn());
       clearTimeout(toastTimer);
     };
@@ -655,6 +673,23 @@
                 </p>
               {/if}
             </div>
+
+            {#if platform === "windows"}
+              <div class="row">
+                <div class="label">
+                  <span class="name">Accept shortcuts sent by other programs</span>
+                  <span class="hint">
+                    Off: only keys you press count, so no other program can open Sevak by sending
+                    its shortcut. Turn on if AutoHotkey, PowerToys or another remapper types the
+                    shortcut for you.
+                  </span>
+                </div>
+                <Toggle
+                  bind:checked={draft.general.accept_injected_hotkeys}
+                  label="Accept shortcuts sent by other programs"
+                />
+              </div>
+            {/if}
 
             <div class="row">
               <div class="label">
@@ -963,6 +998,20 @@
                 />
               </div>
 
+              <div class="row">
+                <div class="label">
+                  <span class="name">Expand in web browsers</span>
+                  <span class="hint">
+                    Off by default: a password field in a web page cannot be told from other text
+                    boxes, so a keyword typed inside a password would expand there.
+                  </span>
+                </div>
+                <Toggle
+                  bind:checked={draft.snippets.expand_in_browsers}
+                  label="Expand snippets in web browsers"
+                />
+              </div>
+
               <ListEditor
                 id="snippets-ignore-apps"
                 bind:items={draft.snippets.ignore_apps}
@@ -981,6 +1030,10 @@
           <WorkflowsPage />
         {:else if active === "gallery"}
           <GalleryPage />
+        {:else if active === "extensions"}
+          <ExtensionsPage />
+        {:else if active === "backup"}
+          <BackupPage onrestored={load} />
         {:else if active === "help"}
           <HelpPage />
         {:else if active === "web"}
@@ -1117,6 +1170,17 @@
 
             <div class="row">
               <div class="label">
+                <span class="name">Allow network paths</span>
+                <span class="hint">
+                  Windows: use <code>\\server\share</code> paths and mapped network drives. Off, Sevak never
+                  contacts them, because Windows signs in to a computer just from looking at its path.
+                </span>
+              </div>
+              <Toggle bind:checked={draft.files.allow_network_paths} label="Allow network paths" />
+            </div>
+
+            <div class="row">
+              <div class="label">
                 <label class="name" for="files-keyword">Keyword</label>
                 <span class="hint">Type “keyword name” to search only files.</span>
                 {#if problems.keywords["files.keyword"]}
@@ -1209,6 +1273,8 @@
           />
         {:else if active === "tasks"}
           <TasksMediaPage bind:config={draft} {problems} {platform} {pluginOff} />
+        {:else if active === "windows"}
+          <WindowsPage bind:config={draft} {problems} {platform} {pluginOff} />
         {:else if active === "integrations"}
           <IntegrationsPage bind:config={draft} {problems} {platform} {pluginOff} />
         {:else if active === "ai"}

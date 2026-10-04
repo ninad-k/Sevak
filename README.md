@@ -92,6 +92,7 @@ And more once you know the keys: preview a result, pick emoji from a grid, open 
 | Quit or kill an app | `quit`, `kill chrome` | Lists running apps or processes (force quit and kill ask first) |
 | Eject a drive, stay awake | `eject`, `awake 45` | Ejects the drive; keeps the computer awake for 45 minutes |
 | Control music and video | `pause`, `next`, `play ` | Presses the media button; `play ` also shows [what is playing](docs/features/media.md) |
+| Snap or move the window you were using | `win left`, `win max`, `win next display` | Arranges it ([window management](docs/window-management.md)); `w <title>` switches to any open window |
 | Run a terminal command | `> git status` | Opens your terminal and runs it |
 | Paste earlier clipboard text, images or files | `cb invoice` | Pastes into the app you were using (opt-in) |
 | Paste a snippet | `s sig` | Pastes the snippet with `{date}` etc. filled in |
@@ -141,6 +142,14 @@ Sevak also includes:
   Markdown, Base64 and JSON helpers) and offline script plugins (passwords,
   IDs, colors, lorem ipsum, hashes), fetched only when you press **Load
   gallery**, installed only when you press **Install**, checksum-verified.
+- **Extensions** — Settings → Extensions (and `ext` in the launcher) browses
+  that gallery and the theme gallery, shows who published each item and what
+  it declares, and installs, updates, switches off and removes them. Developers
+  can write **native extensions in Rust** with a small SDK, pack them with
+  `sevak-ext` and submit them to the gallery. A native extension is a compiled
+  program: it never runs before you allow it, and Sevak cannot sandbox it.
+  [Browse and install →](docs/features/extensions.md) ·
+  [Write one →](docs/writing-extensions-in-rust.md)
 - **Custom hotkeys** — extra global keys that open Sevak with text typed in
   (`> `, `g `) or run a result directly.
 - **Themes** — light, dark or system, plus accent color, font, radius, opacity
@@ -150,6 +159,14 @@ Sevak also includes:
   Appearance ([themes guide](docs/themes.md)).
 - **Settings and TOML** — use the settings window or a commented config file,
   which can live in a synced folder.
+- **Backup and restore** — save your settings, snippets, web searches, themes,
+  script plugins and workflows to one `.sevakbackup` file and restore it on
+  this or another computer (Settings → Backup & restore, `sevak --backup` /
+  `--restore`, or `backup settings` in the launcher). It previews what changes,
+  offers merge or replace, takes a safety copy so you can undo, and never holds
+  keys, tokens, clipboard or search history, or which scripts you allowed;
+  restored scripts ask for approval again. Automatic backups are off by default.
+  [Backup and restore →](docs/backup-and-restore.md)
 - **Tray access and launch at login** — keep Sevak available in the background.
 - **Optional update checks** — check at startup and daily; installation
   requires your agreement and verifies an update signature.
@@ -297,7 +314,8 @@ Every network request Sevak itself makes is in this list:
   without sending a question. [Details →](docs/ai.md)
 - **Theme gallery.** Only when you click **Browse online themes** (Settings →
   Appearance → Theme editor): one request for
-  `https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes.json`.
+  `gallery/themes.json` from Sevak's repository, at the tag of your Sevak version
+  (`https://raw.githubusercontent.com/ninad-k/Sevak/v<version>/gallery/themes.json`).
   Clicking **Install** on a theme downloads that one theme file, saved only if
   its SHA-256 matches the one in the list.
 - **Workflow gallery.** Only when you press **Load gallery** (Settings →
@@ -306,7 +324,15 @@ Every network request Sevak itself makes is in this list:
   package, checked against the checksum in the index before anything is
   written, and an installed folder still has to be allowed before it runs.
 
-Both galleries send nothing but the request itself (no cookies or identifiers
+- **Extensions page and `ext`.** Only when you press **Load the list**
+  (Settings → Extensions) or choose **Load the extension list** after typing
+  `ext`: two requests, `gallery/index.json` and `gallery/themes.json`, from
+  Sevak's repository at the tag of your Sevak version. **Install** downloads
+  that one package, checked against its checksum, and anything that can run
+  code still has to be allowed first. The list is saved locally so the page
+  works offline.
+
+All the galleries send nothing but the request itself (no cookies or identifiers
 beyond a `Sevak/<version> (gallery)` user agent). Script plugins and workflows
 you install and allow run with your permissions; what they do on the network
 is up to them. Workflows send nothing themselves and keep what you type or
@@ -336,6 +362,7 @@ readable right here on GitHub:
 | Change settings in the app | [Settings window](docs/settings.md) |
 | Look up every option in `config.toml` | [Configuration file](docs/configuration.md) |
 | Use Sevak from the command line or scripts | [Command line](docs/cli.md) |
+| Back up your settings, or move them to another computer | [Backup and restore](docs/backup-and-restore.md) |
 | Find, back up or reset Sevak's data | [Files and data](docs/files-and-data.md) |
 | Restyle the launcher: theme editor, theme gallery or your own CSS | [Themes](docs/themes.md) |
 | Fix a shortcut, search or update problem | [Troubleshooting](docs/troubleshooting.md) and [FAQ](docs/faq.md) |

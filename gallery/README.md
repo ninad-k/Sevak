@@ -1,14 +1,25 @@
 # Sevak galleries
 
 This folder holds the two opt-in online galleries. Sevak reads them from
-`https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/` only when you
-ask: nothing is fetched at startup or in the background. Both use the same
-download code (HTTPS only, a size limit, a timeout, a `Sevak/<version> (gallery)`
-user agent) and install a file only if its SHA-256 matches the one in the index.
+`https://raw.githubusercontent.com/ninad-k/Sevak/v<version>/gallery/` (the tag
+of the running build, not `main`) only when you ask: nothing is fetched at
+startup or in the background. Both use the same download code (HTTPS only,
+addresses in this repository only, a size limit, a timeout, a
+`Sevak/<version> (gallery)` user agent) and install a file only if its SHA-256
+matches the one in the index. See
+[docs/security/gallery-trust.md](../docs/security/gallery-trust.md).
+
+Index entries name files by a **path relative to the repository root**
+(`gallery/packages/<id>.zip`, `gallery/themes/<Name>.toml`), never by an
+absolute address; Sevak joins the path to the tag it is reading. A change you
+merge here reaches users with the next release, not at once. `index.json` has
+`"format": 2` and `themes.json` has `"version": 2`; builds older than that show
+"update Sevak".
 
 | Gallery | Index | Files | Opened from | What the app does |
 |---|---|---|---|---|
 | Workflows and script plugins | `index.json` | `packages/*.zip` | Settings → Gallery → **Load gallery** | [docs/workflows.md](../docs/workflows.md#the-gallery) |
+| Native extensions (programs written in Rust) | `index.json` (kind `native`) | `extensions/<id>/*.sevakext` | Settings → Extensions, or `ext` in the launcher | [docs/writing-extensions-in-rust.md](../docs/writing-extensions-in-rust.md) |
 | Themes | `themes.json` | `themes/*.toml` | Settings → Appearance → Theme editor → **Browse online themes** | [docs/themes.md](../docs/themes.md#theme-gallery) |
 
 Everything here is written by the Sevak project and licensed under Apache-2.0
@@ -17,8 +28,10 @@ like the rest of the repository (palettes of third-party themes: see
 
 ## What is in it
 
-**Workflows** (source in `examples/workflows/<id>/`). The first group runs no
-code at all, so Sevak does not even ask for permission:
+**Workflows** (source in `examples/workflows/<id>/`). Most run no code. Those
+that only open a link or show a result need no permission; a workflow that pastes
+into another app (`tidy-text`, `markdown-tools`, `selection-toolkit`) or runs a
+script asks for your permission once, because it types into whatever app is in front:
 
 | Id | What it does |
 |---|---|
@@ -70,6 +83,8 @@ and `cargo test` enforces most of it (see [Checking your change](#checking-your-
   System command, Terminal command, Open file or Hotkey.
 - **Small and readable.** A script is under 20 KiB, a package under 5 MiB, and
   both can be read in a few minutes. No minified, bundled or binary files.
+  The one exception is a [native extension](#adding-a-native-extension): a
+  compiled program (a package under 10 MiB), reviewed against its public source.
 - **No secrets, no accounts, no telemetry.**
 - **Cross-platform or honest about it.** Say in the description what a package
   needs (`needs-python`, `needs-node` tags) and give it a unique keyword that no
@@ -105,21 +120,51 @@ and `cargo test` enforces most of it (see [Checking your change](#checking-your-
      "author": "you",
      "version": "1.0",
      "tags": ["search", "no-code"],
-     "source": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/my-workflow.zip",
+     "source": "gallery/packages/my-workflow.zip",
      "sha256": "<the SHA-256 of the zip>",
      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/workflows/my-workflow"
    }
    ```
 
    `kind` is `workflow` or `plugin`; `tags` are one to eight lower case labels
-   (`a-z`, `0-9`, `-`); `folder` is optional and defaults to the `id`. You can
-   leave `sha256` as 64 zeros and let the next step fill it in.
+   (`a-z`, `0-9`, `-`); `folder` is optional and defaults to the `id`. `source`
+   is the **path** of the zip below the repository root, never a web address:
+   Sevak joins it to the release it is reading. You can leave `sha256` as 64
+   zeros and let the next step fill it in.
 4. Run `node scripts/gallery-check.mjs --update` (also `npm run gallery:check`
    to only check). It copies the real hashes into `index.json` and `themes.json`
-   and fails on a wrong address, a missing file, a file the index does not list
+   and fails on a wrong path, a missing file, a file the index does not list
    or a stale hash.
 
 An installed package still has to be allowed before anything in it runs.
+
+## Adding a native extension
+
+A native extension is a compiled program, so it is held to more than the rules
+above. Read [Writing extensions in Rust](../docs/writing-extensions-in-rust.md)
+first (the manifest, what Sevak does and does not protect, versioning); then:
+
+1. Build the program for each platform you support and pack one package per
+   platform: `sevak-ext pack . --split --binary <platform>=<program> ...`. The
+   files are named `<id>-<version>-<platform>.sevakext`.
+2. Put them in `gallery/extensions/<id>/` (at most 10 MiB each; nothing else in
+   that folder).
+3. Add the entry to `index.json`: `sevak-ext entry gallery/extensions/<id>/*.sevakext`
+   prints it. `kind` is `native`; it has `platforms` (each a `source` path and
+   a `sha256`) instead of `source` and `sha256`; `author`, `license`,
+   `repository` and `version` (like `1.2.3`) are required; `min_sevak` and
+   `permissions` say what it needs and what its author declares it does. They
+   must equal what the package's `plugin.toml` says: Sevak refuses an install
+   where they differ, and a test checks it.
+4. `node scripts/gallery-check.mjs` (`--update` fills in the hashes) and
+   `cargo test -p sevak-plugins --test gallery_content`.
+
+A reviewer checks that the source is public and builds the committed binaries,
+that the declared permissions match the code, the licence, and that nothing is
+obfuscated or downloads more code. An entry reaches users with the next release
+(builds read the list at their own tag, see
+[Gallery trust](../docs/security/gallery-trust.md)). Index format 2 is unchanged:
+older Sevaks skip entries of a kind they do not know.
 
 ## Adding a theme
 
@@ -141,7 +186,7 @@ An installed package still has to be allowed before anything in it runs.
      "author": "you",
      "description": "One sentence.",
      "mode": "dark",
-     "url": "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes/My-Theme.toml",
+     "url": "gallery/themes/My-Theme.toml",
      "sha256": "<the SHA-256 of the file>"
    }
    ```
@@ -153,13 +198,14 @@ An installed package still has to be allowed before anything in it runs.
    committed (the repository stores it with LF line endings), and it must be
    changed whenever the file is.
 
-Only `https://` URLs are accepted by either gallery, and `id`s must be unique
-within an index.
+Only paths inside this release are accepted by either gallery (an absolute
+address must lie below the same tag), and `id`s must be unique within an index
+and may not be a Windows device name such as `con` or `nul`.
 
 ## Checking your change
 
 ```sh
-node scripts/gallery-check.mjs                       # hashes, addresses, orphans; no build needed
+node scripts/gallery-check.mjs                       # hashes, paths, orphans; no build needed
 cargo test -p sevak-core -p sevak-plugins            # the full checks, below
 ```
 

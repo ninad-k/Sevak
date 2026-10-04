@@ -12,6 +12,7 @@ publish = false
 tauri-build.workspace = true
 
 [dependencies]
+sevak-backup.workspace = true
 sevak-core.workspace = true
 sevak-platform.workspace = true
 sevak-plugins.workspace = true

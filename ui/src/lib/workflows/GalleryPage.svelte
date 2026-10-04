@@ -86,6 +86,9 @@
   {#if error}
     <p class="wf-msg error" role="alert">{error}</p>
   {/if}
+  {#if gallery?.note}
+    <p class="wf-msg" role="status">{gallery.note}</p>
+  {/if}
 
   {#if gallery}
     <ul class="rows" aria-label="Gallery entries">

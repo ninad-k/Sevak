@@ -11,16 +11,26 @@ Sevak stores configuration, themes, script plugins, workflows, logs, usage histo
 | **Data folder** | `%APPDATA%\sevak\` | `~/Library/Application Support/sevak/` | `~/.local/share/sevak/` |
 | **Logs** | `%APPDATA%\sevak\logs\` | `~/Library/Application Support/sevak/logs/` | `~/.local/share/sevak/logs/` |
 | **Usage history** | `%APPDATA%\sevak\usage.json` | `~/Library/Application Support/sevak/usage.json` | `~/.local/share/sevak/usage.json` |
-| **Clipboard history** | `%APPDATA%\sevak\clipboard-history.json` | `~/Library/Application Support/sevak/clipboard-history.json` | `~/.local/share/sevak/clipboard-history.json` |
-| **Clipboard images** | `%APPDATA%\sevak\clipboard\` | `~/Library/Application Support/sevak/clipboard/` | `~/.local/share/sevak/clipboard/` |
+| **Local data folder** | `%LOCALAPPDATA%\sevak\` | same as the data folder | same as the data folder |
+| **Clipboard history** | `%LOCALAPPDATA%\sevak\clipboard-history.json` | `~/Library/Application Support/sevak/clipboard-history.json` | `~/.local/share/sevak/clipboard-history.json` |
+| **Clipboard images** | `%LOCALAPPDATA%\sevak\clipboard\` | `~/Library/Application Support/sevak/clipboard/` | `~/.local/share/sevak/clipboard/` |
 | **Theme files** | `%APPDATA%\sevak\themes\` | `~/Library/Application Support/sevak/themes/` | `~/.config/sevak/themes/` |
 | **Script plugins** | `%APPDATA%\sevak\plugins\` | `~/Library/Application Support/sevak/plugins/` | `~/.config/sevak/plugins/` |
 | **Workflows** | `%APPDATA%\sevak\workflows\` | `~/Library/Application Support/sevak/workflows/` | `~/.config/sevak/workflows/` |
 | **Shortcut takeover record** | `%APPDATA%\sevak\hotkey-takeover.json` | `~/Library/Application Support/sevak/hotkey-takeover.json` | `~/.local/share/sevak/hotkey-takeover.json` |
+| **Backup options** | `%APPDATA%\sevakackup.toml` | `~/Library/Application Support/sevak/backup.toml` | `~/.config/sevak/backup.toml` |
+| **Backup bookkeeping and safety copies** | `%APPDATA%\sevakackup-state.json`, `backup-snapshots\` | `~/Library/Application Support/sevak/backup-state.json`, `backup-snapshots/` | `~/.local/share/sevak/backup-state.json`, `backup-snapshots/` |
 
 Theme files, script plugins and workflows sit next to `config.toml` in the config folder; clipboard images, approvals and the data folders of plugins and workflows are in the data folder. On Windows and macOS the two folders are the same.
 
-Expand `~` to your home directory and `%APPDATA%` to your roaming app data folder.
+The *local* data folder holds what must not leave this computer: on Windows `%LOCALAPPDATA%\sevak\`, because `%APPDATA%` is the roaming profile that domain setups, folder redirection and backup tools copy to other machines. Only the clipboard history lives there; versions before the change kept it in `%APPDATA%\sevak\`, and the first start moves it (and deletes the old copy). On macOS and Linux, and when `SEVAK_DATA_DIR` is set, the local data folder is the data folder.
+
+Expand `~` to your home directory, `%APPDATA%` to your roaming app data folder and `%LOCALAPPDATA%` to your local one.
+
+### Who can read these files
+
+- **Linux and macOS.** The data folder (`~/.local/share/sevak/` on Linux, the `sevak` folder in Application Support on macOS) and its `logs` folder are created readable by your user only (mode `0700`), and a folder an earlier version created wider is tightened when Sevak starts. The files Sevak writes there (usage history, script and workflow approvals, the shortcut takeover record, clipboard history) are `0600`. The config folder follows your own umask, so `config.toml`, themes, plugins and workflows can be shared or kept in a dotfiles repository.
+- **Windows.** Nothing is changed: the folders under `%APPDATA%\sevak` inherit the access control of your profile (readable by you, administrators and the system). Anything that runs as you can read them. See the [threat model](security/threat-model.md).
 
 ## Override locations
 
@@ -106,7 +116,7 @@ Records searches and actions you perform: what you typed, which results you ran,
 
 ### clipboard-history.json and clipboard/
 
-Optional clipboard history (only if `[clipboard] enabled = true`). `clipboard-history.json` records the text you copy and the paths of files you copy, with timestamps. The `clipboard/` folder next to it holds each copied image as a PNG file plus a small thumbnail (only if `[clipboard] images = true`, the default once the history is on). Both are unencrypted.
+Optional clipboard history (only if `[clipboard] enabled = true`). `clipboard-history.json` records the text you copy and the paths of files you copy, with timestamps. The `clipboard/` folder next to it holds each copied image as a PNG file plus a small thumbnail (only if `[clipboard] images = true`, the default once the history is on). On Windows both are encrypted for your account (DPAPI; `[clipboard] encrypt`), so a copy of the files on another computer or account is unreadable; on macOS and Linux they are plain files readable by your user only (mode `0600`).
 
 **Edited by:** Sevak (when you copy, and when you type `cb clear` and run **Clear clipboard history**, which deletes the entries and the image files).
 
@@ -116,13 +126,17 @@ Optional clipboard history (only if `[clipboard] enabled = true`). `clipboard-hi
 
 API keys for the optional [AI assistant](ai.md), only if you saved one in **Settings → AI assistant**. On Windows each key is encrypted with DPAPI for your user account; on macOS and Linux the file is readable by your user account only (mode `0600`) and **not encrypted**. It is never part of `config.toml`, a settings export or the diagnostics report. Delete a key with **Remove** in Settings, or delete the file.
 
+### backup.toml, backup-state.json and backup-snapshots/
+
+`backup.toml` holds the options of [automatic backups](backup-and-restore.md#automatic-backups) (off by default) and sits in the config folder. `backup-state.json` in the data folder records when the last backup was made and the Sevak version that last looked at the schedule. `backup-snapshots/` holds the safety copies Sevak takes just before a restore so that **Undo restore** works (the five newest are kept). A snapshot is an ordinary backup file of what the restore replaced, with the same exclusions. None of these three is part of a backup.
+
 ### currency-rates.json
 
 Cached European Central Bank exchange rates, only if currency conversion (`[calculator] currency`) is on.
 
 ### script-plugin-approvals.json
 
-The script plugins and workflows you allowed to run. Delete it to be asked again for each of them.
+The script plugins and workflows you allowed to run, each with a hash of what you allowed (a script plugin's manifest, script files and folder; a workflow's code-running nodes and script files). Delete it to be asked again for each of them. Files written by older versions are read but never match, so each script plugin asks once after an upgrade.
 
 ### plugins/ and workflows/ (data folder)
 
@@ -138,7 +152,7 @@ Contacts and the list of 1Password logins are kept in memory only. The keystroke
 
 ## Back up your data
 
-Sevak's configuration and history are local, single files that are easy to back up:
+The easy way is **Settings → Backup & restore** (or `sevak --backup FILE`): one file with your settings, snippets, web searches, themes, script plugins and workflows, left out of which are keys, history and the list of scripts you allowed. See [Backup and restore](backup-and-restore.md). To copy *everything*, history included, copy the folders yourself:
 
 ```bash
 cp -r ~/.local/share/sevak ~/backups/sevak-backup
@@ -197,7 +211,7 @@ rm -r ~/.local/share/sevak/clipboard-history.json ~/.local/share/sevak/clipboard
 On Windows:
 
 ```powershell
-Remove-Item "$env:APPDATA\sevak\clipboard-history.json", "$env:APPDATA\sevak\clipboard" -Recurse
+Remove-Item "$env:LOCALAPPDATA\sevak\clipboard-history.json", "$env:LOCALAPPDATA\sevak\clipboard" -Recurse
 ```
 
 Sevak will create a fresh file on next use.

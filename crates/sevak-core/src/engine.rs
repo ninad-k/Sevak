@@ -44,8 +44,11 @@
 //! 8. Query time is logged at `debug`; a query over [`LATENCY_BUDGET`] logs a
 //!    `warn` naming the slowest plugin.
 //!
-//! Plugin panics are not caught: the release profile uses `panic = "abort"`, so
-//! a panicking plugin takes the whole process down. Plugins must not panic.
+//! A panic in a plugin is caught where the engine calls it ([`guarded`]): the
+//! plugin contributes nothing to that query and the panic is logged. This relies
+//! on panics unwinding, which they do: neither Cargo profile sets
+//! `panic = "abort"`. A panic on a thread the plugin started itself (a refresh
+//! or a background reader) is not seen by the engine and ends only that thread.
 
 use std::cmp::Ordering;
 use std::collections::HashMap;

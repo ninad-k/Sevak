@@ -385,6 +385,11 @@ pub(crate) fn replace_typed_text(
 struct X11Expand;
 
 impl ExpandDriver for X11Expand {
+    fn foreground_token(&self) -> Option<u64> {
+        let x = X::connect().ok()?;
+        x.active_window().map(u64::from)
+    }
+
     fn release_modifiers(&self) {
         wait_for_modifier_release();
     }

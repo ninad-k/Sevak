@@ -27,8 +27,10 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use sevak_platform::process::configure_helper_command;
+use sevak_platform::process::{configure_helper_command, scrub_environment};
+use sevak_platform::process_tree::ProcessTree;
 
+use super::approvals::script_approval_key;
 use super::delivery::Delivery;
 use super::items::{convert_items, ItemContext};
 use super::manifest::{Format, Manifest, Mode, PROTOCOL};
@@ -43,8 +45,6 @@ const MAX_BACKOFF: Duration = Duration::from_secs(60);
 const TICK: Duration = Duration::from_millis(500);
 /// After `shutdown` the script gets this long to exit before it is killed.
 const GRACE: Duration = Duration::from_millis(500);
-/// Stderr lines logged per process before the rest is dropped.
-const MAX_STDERR_LINES: usize = 200;
 /// Non-protocol stdout lines logged per process.
 const MAX_BAD_LINES: usize = 5;
 
@@ -64,22 +64,46 @@ pub struct Spec {
     pub data_dir: PathBuf,
     /// Extra environment for the script: a workflow's variables.
     pub env: Vec<(String, String)>,
+    /// The approval key this plugin was allowed under. It is checked again
+    /// every time a process starts, so a script replaced after Sevak loaded
+    /// the plugin does not run until the user has reviewed it (a reload asks).
+    /// `None` for workflow script nodes, which have their own approval.
+    pub expected_key: Option<String>,
 }
 
 impl Spec {
+    /// Fails when the plugin's files no longer match what was allowed.
+    fn check_approval(&self) -> Result<(), String> {
+        let Some(expected) = &self.expected_key else {
+            return Ok(());
+        };
+        match script_approval_key(&self.dir) {
+            Ok((_, key)) if key == *expected => Ok(()),
+            _ => Err(
+                "the plugin changed after it was allowed; choose Reload index to review it"
+                    .to_owned(),
+            ),
+        }
+    }
+
     pub fn item_context(&self) -> ItemContext<'_> {
         ItemContext {
             plugin_id: &self.manifest.id,
             dir: &self.dir,
             allow_custom: self.manifest.mode == Mode::Persistent,
+            allow_launch: self.manifest.capabilities.launch,
         }
     }
 
     /// The command to start the script; `query` is appended as the last
     /// argument (one-shot mode).
     pub fn command(&self, query: Option<&str>) -> Result<Command, String> {
+        self.check_approval()?;
         let argv = self.manifest.resolve_argv(&self.dir)?;
         let mut command = Command::new(&argv[0]);
+        // A scrubbed environment: only the base set and what the manifest
+        // asks for (`inherit_env`), then the plugin's own variables below.
+        scrub_environment(&mut command, &self.manifest.inherit_env);
         command.args(&argv[1..]);
         if let Some(query) = query {
             command.arg(query);
@@ -121,6 +145,9 @@ pub struct Link {
     generation: u64,
     tx: Sender<Outgoing>,
     child: Mutex<Child>,
+    /// The process and what it started, until the child is reaped (the group
+    /// id must not be used after that). Lock order: `child`, then `tree`.
+    tree: Mutex<Option<ProcessTree>>,
     alive: AtomicBool,
     /// We asked it to stop: its exit is not a failure.
     stopping: AtomicBool,
@@ -138,9 +165,35 @@ impl Link {
         self.tx.send(Outgoing::Line(line)).is_ok()
     }
 
+    /// Ends the script and everything it started.
     fn kill(&self) {
+        let mut child = lock(&self.child);
+        self.kill_locked(&mut child);
+    }
+
+    fn kill_locked(&self, child: &mut Child) {
+        if let Some(tree) = lock(&self.tree).as_ref() {
+            tree.kill();
+        }
         // Already exited is fine.
-        let _ = lock(&self.child).kill();
+        let _ = child.kill();
+    }
+
+    /// Whether the child has exited (reaping it); the tree is then no longer
+    /// tracked, so nothing is signalled after the child's pid is free.
+    fn try_reap(&self) -> bool {
+        let mut child = lock(&self.child);
+        let exited = matches!(child.try_wait(), Ok(Some(_)));
+        if exited {
+            self.forget_tree();
+        }
+        exited
+    }
+
+    fn forget_tree(&self) {
+        if let Some(tree) = lock(&self.tree).take() {
+            tree.release();
+        }
     }
 
     fn touch(&self) {
@@ -391,13 +444,17 @@ impl Runner {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        ProcessTree::prepare(&mut command);
         let mut child = command
             .spawn()
             .map_err(|err| format!("{}: {err}", self.spec.manifest.command_line()))?;
+        let tree = ProcessTree::adopt(&child);
         let (Some(stdin), Some(stdout), Some(stderr)) =
             (child.stdin.take(), child.stdout.take(), child.stderr.take())
         else {
+            tree.kill();
             let _ = child.kill();
+            let _ = child.wait();
             return Err("the script's pipes are unavailable".to_owned());
         };
 
@@ -406,6 +463,7 @@ impl Runner {
             generation: self.generation.fetch_add(1, Ordering::SeqCst) + 1,
             tx,
             child: Mutex::new(child),
+            tree: Mutex::new(Some(tree)),
             alive: AtomicBool::new(true),
             stopping: AtomicBool::new(false),
             last_activity: Mutex::new(Instant::now()),
@@ -563,8 +621,14 @@ impl Runner {
         }
         // EOF (or a violation): make sure it is gone and reap it.
         link.alive.store(false, Ordering::SeqCst);
-        link.kill();
-        let _ = lock(&link.child).wait();
+        {
+            // One critical section: nothing signals the group between the
+            // reaping and forgetting it.
+            let mut child = lock(&link.child);
+            link.kill_locked(&mut child);
+            let _ = child.wait();
+            link.forget_tree();
+        }
         self.on_exit(link);
     }
 }
@@ -580,7 +644,7 @@ fn stop_child(link: &Link, mut stdin: ChildStdin) {
     drop(stdin);
     let deadline = Instant::now() + GRACE;
     while Instant::now() < deadline {
-        if matches!(lock(&link.child).try_wait(), Ok(Some(_))) {
+        if link.try_reap() {
             return;
         }
         thread::sleep(Duration::from_millis(10));
@@ -589,17 +653,12 @@ fn stop_child(link: &Link, mut stdin: ChildStdin) {
 }
 
 /// Forwards the script's stderr to the log, tagged with the plugin id.
+///
+/// Bounded: a line is cut at 1 KiB, at most 200 lines and 32 KiB are kept per
+/// process, and the rest is read and dropped so the script never blocks on a
+/// full pipe (see `stderr.rs`).
 fn log_stderr(plugin: &str, stderr: impl Read) {
-    let lines = BufReader::new(stderr).lines().map_while(Result::ok);
-    for (logged, line) in lines.enumerate() {
-        if logged == MAX_STDERR_LINES {
-            tracing::info!(plugin, "further stderr output is not logged");
-        }
-        if logged < MAX_STDERR_LINES {
-            let shown: String = line.chars().take(500).collect();
-            tracing::info!(plugin, "stderr: {shown}");
-        }
-    }
+    super::stderr::forward(stderr, |line| tracing::info!(plugin, "stderr: {line}"));
 }
 
 /// Parses one-shot output into items according to the manifest's format.
@@ -655,6 +714,7 @@ mod tests {
             dir: PathBuf::from("plugin"),
             data_dir: PathBuf::from("data"),
             env: Vec::new(),
+            expected_key: None,
         }
     }
 
@@ -693,8 +753,10 @@ mod tests {
     #[test]
     fn query_is_passed_as_the_last_argument_with_the_plugin_environment() {
         let mut spec = spec("mode = \"oneshot\"\nformat = \"alfred\"");
+        // A program PATH has: Unix pins bare names to the file found there.
+        let program = if cfg!(unix) { "sh" } else { "prog" };
         spec.manifest.launch =
-            super::super::manifest::Launch::Command(vec!["prog".into(), "a".into()]);
+            super::super::manifest::Launch::Command(vec![program.into(), "a".into()]);
         let command = spec.command(Some("hello world")).unwrap();
         let args: Vec<_> = command
             .get_args()

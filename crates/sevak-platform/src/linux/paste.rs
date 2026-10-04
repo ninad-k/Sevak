@@ -18,7 +18,8 @@ use x11rb::rust_connection::RustConnection;
 
 use crate::error::{PlatformError, Result};
 use crate::paste::{
-    self, ForegroundApp, PasteContent, PasteDriver, PasteOutcome, PasteSupport, SystemClipboard,
+    self, ClipboardRead, ForegroundApp, PasteContent, PasteDriver, PasteOutcome, PasteSupport,
+    SystemClipboard,
 };
 use crate::session::DisplayServer;
 
@@ -54,7 +55,7 @@ impl X {
         Ok(Self { conn, root })
     }
 
-    fn atom(&self, name: &str) -> Result<Atom> {
+    pub(super) fn atom(&self, name: &str) -> Result<Atom> {
         self.conn
             .intern_atom(false, name.as_bytes())
             .map_err(|e| x_error("X11", e))?
@@ -75,7 +76,7 @@ impl X {
         window.filter(|window| *window != 0)
     }
 
-    fn window_pid(&self, window: Window) -> Option<u32> {
+    pub(super) fn window_pid(&self, window: Window) -> Option<u32> {
         let atom = self.atom("_NET_WM_PID").ok()?;
         let reply = self
             .conn
@@ -173,6 +174,20 @@ pub(crate) fn remember_foreground_app() {
         .unwrap_or_else(|poisoned| poisoned.into_inner()) = active;
 }
 
+/// Whether the app in front can be told at all: an X11 session (Wayland tells
+/// applications nothing about other windows).
+pub(crate) fn can_identify_apps() -> bool {
+    session_is_x11()
+}
+
+/// The window that was active when Sevak was last shown (window management
+/// acts on it).
+pub(super) fn remembered_window() -> Option<Window> {
+    *REMEMBERED
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 pub(crate) fn foreground_app() -> Option<ForegroundApp> {
     if !session_is_x11() {
         return None;
@@ -180,6 +195,24 @@ pub(crate) fn foreground_app() -> Option<ForegroundApp> {
     let x = X::connect().ok()?;
     let window = x.active_window()?;
     x.app_of(window)
+}
+
+/// The clipboard for the history and for selection capture: the text, unless
+/// the app that copied it marked it secret (a password manager's
+/// `x-kde-passwordManagerHint`; see [`super::secret_hint`]). Best effort: it
+/// depends on the source app setting the hint.
+pub(crate) fn read_clipboard() -> Result<ClipboardRead> {
+    let text = crate::clipboard::read_text()?;
+    if super::secret_hint::clipboard_marked_secret(text.as_deref()) {
+        return Ok(ClipboardRead {
+            text: None,
+            sensitive: true,
+        });
+    }
+    Ok(ClipboardRead {
+        text,
+        sensitive: false,
+    })
 }
 
 pub(crate) fn paste_support() -> PasteSupport {
@@ -262,6 +295,16 @@ impl PasteDriver for X11Driver {
             sleep(Duration::from_millis(10));
         }
         Ok(())
+    }
+
+    fn target_unchanged(&self) -> bool {
+        let Some(target) = *REMEMBERED
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+        else {
+            return false;
+        };
+        X::connect().is_ok_and(|x| x.active_window() == Some(target))
     }
 
     fn press_paste(&self) -> Result<()> {

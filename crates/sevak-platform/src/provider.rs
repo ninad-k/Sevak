@@ -3,6 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use sevak_core::preview::{RenderKind, Rendered};
+use sevak_core::window_layout::{Monitor, Rect};
 use sevak_core::{AppEntry, ClipContent, IconData, IconSource, LaunchTarget, ShellConfig};
 
 use crate::browsers::BrowserRoot;
@@ -18,6 +19,7 @@ use crate::os_search::{OsHit, OsSearchError, OsSearchRequest};
 use crate::paste::{ClipboardRead, ForegroundApp, PasteOutcome, PasteSupport, UNSUPPORTED_REASON};
 use crate::system::{SettingsPage, SystemCommand};
 use crate::tasks::{Drive, ProcessInfo, RunningApp, Task, TaskKind};
+use crate::window_manager::{WindowId, WindowInfo, WindowState, WindowSupport};
 
 /// Everything Sevak needs from the operating system to find and start things.
 ///
@@ -40,13 +42,18 @@ pub trait PlatformProvider: Send + Sync {
     fn launch(&self, target: &LaunchTarget) -> Result<()>;
 
     /// Opens a file or folder with its default handler.
+    ///
+    /// A network path is refused unless `[files] allow_network_paths` is on
+    /// ([`crate::netpath`]).
     fn open_path(&self, path: &Path) -> Result<()> {
+        crate::netpath::guard(path)?;
         crate::open::open_path(path)
     }
 
     /// Shows `path` selected in the system file manager (its parent folder
     /// opens with the item highlighted where the file manager supports it).
     fn reveal_path(&self, path: &Path) -> Result<()> {
+        crate::netpath::guard(path)?;
         crate::open::reveal_path(path)
     }
 
@@ -90,6 +97,7 @@ pub trait PlatformProvider: Send + Sync {
     /// Opens a terminal window in `dir`, at a shell prompt (it stays open even
     /// if `[shell] keep_open` is off). `dir` must be an absolute path.
     fn open_terminal_in(&self, dir: &Path, config: &ShellConfig) -> Result<()> {
+        crate::netpath::guard(dir)?;
         crate::terminal::open_terminal_in(dir, config)
     }
 
@@ -107,6 +115,7 @@ pub trait PlatformProvider: Send + Sync {
     /// Moves a file or folder to the system trash (never deletes it for good;
     /// it fails where the item cannot be trashed). `path` must be absolute.
     fn move_to_trash(&self, path: &Path) -> Result<()> {
+        crate::netpath::guard(path)?;
         crate::trash::move_to_trash(path)
     }
 
@@ -219,6 +228,16 @@ pub trait PlatformProvider: Send + Sync {
         None
     }
 
+    /// Whether [`PlatformProvider::foreground_app`] works on this system at all
+    /// (not on Wayland, which tells apps nothing about other windows). When it
+    /// does and still answers `None` for a window, the app could not be told
+    /// (Windows: a process that cannot be opened; Linux: a window without
+    /// `WM_CLASS`; macOS: an app without a bundle id), and everything that
+    /// excludes apps by name treats that as "excluded".
+    fn identifies_apps(&self) -> bool {
+        false
+    }
+
     /// Whether [`PlatformProvider::paste_text`] can paste on this system right
     /// now (it can change at runtime: macOS needs a permission the user may
     /// grant later). Cheap enough to call on every keystroke.
@@ -318,6 +337,13 @@ pub trait PlatformProvider: Send + Sync {
         crate::os_search::search(request)
     }
 
+    /// What encrypts files for the current user on this system (Windows:
+    /// DPAPI), used for the clipboard history. `None` where there is nothing
+    /// of the kind: the files are then plain, readable by their owner only.
+    fn history_sealer(&self) -> Option<std::sync::Arc<dyn sevak_core::sealed::Sealer>> {
+        None
+    }
+
     /// A counter that changes whenever the clipboard does, where the OS has one
     /// (Windows sequence number, macOS change count). `None` means the history
     /// must compare the text itself.
@@ -390,5 +416,60 @@ pub trait PlatformProvider: Send + Sync {
     /// dictionary plugin then uses its own word list.
     fn system_spelling(&self, _word: &str) -> Option<Spelling> {
         None
+    }
+
+    /// Whether window management (snapping the previous window, the window
+    /// switcher) can work on this system right now, and if not, why in words
+    /// for the user: a Wayland session, a macOS permission the user has yet to
+    /// give. Cheap.
+    fn window_support(&self) -> WindowSupport {
+        WindowSupport::Unavailable(crate::window_manager::UNSUPPORTED_REASON.to_owned())
+    }
+
+    /// The open top-level windows, most recently used first (as far as the OS
+    /// tells), without Sevak's own and without tool windows, panels and
+    /// hidden helper windows. Can take a moment; call it from a background
+    /// thread.
+    fn list_windows(&self) -> Result<Vec<WindowInfo>> {
+        Err(crate::error::PlatformError::Unsupported("listing windows"))
+    }
+
+    /// Brings a window of [`PlatformProvider::list_windows`] to the front
+    /// (restoring it first if it is minimized).
+    fn focus_window(&self, _window: &WindowId) -> Result<()> {
+        Err(crate::error::PlatformError::Unsupported(
+            "switching windows",
+        ))
+    }
+
+    /// The window that had focus when the launcher was shown, remembered by
+    /// [`PlatformProvider::remember_foreground_app`]: the one the layouts act
+    /// on. Fails with an explanation when there is none (or it is the desktop).
+    fn target_window(&self) -> Result<WindowState> {
+        Err(crate::error::PlatformError::Unsupported(
+            "finding the previous window",
+        ))
+    }
+
+    /// Where a window is now (visible rectangle, state). Fails when it has
+    /// closed.
+    fn window_state(&self, _window: &WindowId) -> Result<WindowState> {
+        Err(crate::error::PlatformError::Unsupported(
+            "reading a window's position",
+        ))
+    }
+
+    /// Moves and resizes a window so that its *visible* rectangle is `rect`
+    /// (the OS code compensates invisible borders, restores a maximized or
+    /// minimized window first, and fails with an explanation when the window
+    /// belongs to a more privileged process).
+    fn set_window_rect(&self, _window: &WindowId, _rect: Rect) -> Result<()> {
+        Err(crate::error::PlatformError::Unsupported("moving windows"))
+    }
+
+    /// The displays with their work areas (bounds minus taskbar, dock and menu
+    /// bar) and scale factors.
+    fn list_monitors(&self) -> Result<Vec<Monitor>> {
+        Err(crate::error::PlatformError::Unsupported("listing displays"))
     }
 }

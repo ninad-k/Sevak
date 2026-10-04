@@ -327,6 +327,65 @@ fn a_script_that_never_answers_is_stopped_and_restarted() {
     assert_ne!(pid_of(&items), first_pid);
 }
 
+/// Waits until the fixture's grandchild has stopped writing its heartbeat,
+/// i.e. it is gone. Polls with a deadline; the heartbeat is every 20 ms, so
+/// half a second of silence means it ended.
+fn wait_until_the_grandchild_is_gone(dir: &Path) {
+    let beat = dir.join("beat");
+    wait_for_file(&beat);
+    let deadline = Instant::now() + WAIT;
+    let mut last = std::fs::read_to_string(&beat).unwrap_or_default();
+    let mut changed = Instant::now();
+    while changed.elapsed() < Duration::from_millis(500) {
+        assert!(
+            Instant::now() < deadline,
+            "the script's child is still running"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+        let now = std::fs::read_to_string(&beat).unwrap_or_default();
+        if now != last {
+            last = now;
+            changed = Instant::now();
+        }
+    }
+}
+
+#[test]
+fn a_hung_script_takes_the_processes_it_started_with_it() {
+    let world = World::new();
+    world.add("fx", "fx", &[], "hard_timeout_ms = 600");
+    world.approve_all();
+    let (engine, rx) = world.engine();
+    let _ = query_until_results(&engine, &rx, "fx hello");
+
+    let dir = world.root.path().join("beat");
+    std::fs::create_dir_all(&dir).unwrap();
+    assert!(engine
+        .query(&format!("fx tree:{}", dir.display()))
+        .is_empty());
+    // No further query is needed: the writer thread notices the hung script.
+    wait_until_the_grandchild_is_gone(&dir);
+}
+
+#[test]
+fn a_one_shot_script_that_times_out_takes_the_processes_it_started_with_it() {
+    let world = World::new();
+    // Long enough that the fixture has started its child before the timeout.
+    world.add(
+        "shot",
+        "ot",
+        &["oneshot-tree"],
+        "mode = \"oneshot\"\nhard_timeout_ms = 4000",
+    );
+    world.approve_all();
+    let (engine, _rx) = world.engine();
+
+    let dir = world.root.path().join("beat");
+    std::fs::create_dir_all(&dir).unwrap();
+    let _ = engine.query(&format!("ot {}", dir.display()));
+    wait_until_the_grandchild_is_gone(&dir);
+}
+
 #[test]
 fn an_idle_script_is_stopped_and_started_again_on_demand() {
     let world = World::new();
@@ -374,6 +433,47 @@ fn oneshot_scripts_run_per_query_with_the_query_as_an_argument() {
     assert!(items
         .iter()
         .all(|item| !matches!(item.action, Action::Custom { .. })));
+}
+
+#[test]
+fn script_plugins_get_a_scrubbed_environment_plus_what_the_manifest_inherits() {
+    // Names nothing else uses, so setting them cannot disturb other tests.
+    std::env::set_var("SEVAK_TEST_PLUGIN_SECRET", "leaked");
+    std::env::set_var("SEVAK_TEST_PLUGIN_WANTED", "shared");
+    let world = World::new();
+    world.add("plain", "pe", &["oneshot-env"], "mode = \"oneshot\"");
+    world.add(
+        "wants",
+        "we",
+        &["oneshot-env"],
+        "mode = \"oneshot\"\ninherit_env = [\"SEVAK_TEST_PLUGIN_WANTED\"]",
+    );
+    world.approve_all();
+    let (engine, rx) = world.engine();
+
+    let title = |query: &str| query_until_results(&engine, &rx, query)[0].title.clone();
+    assert_eq!(
+        title("pe SEVAK_TEST_PLUGIN_SECRET"),
+        "SEVAK_TEST_PLUGIN_SECRET=<unset>"
+    );
+    assert_eq!(
+        title("pe SEVAK_TEST_PLUGIN_WANTED"),
+        "SEVAK_TEST_PLUGIN_WANTED=<unset>"
+    );
+    assert_eq!(
+        title("we SEVAK_TEST_PLUGIN_WANTED"),
+        "SEVAK_TEST_PLUGIN_WANTED=shared"
+    );
+    assert_eq!(
+        title("we SEVAK_TEST_PLUGIN_SECRET"),
+        "SEVAK_TEST_PLUGIN_SECRET=<unset>",
+        "only the names the manifest lists"
+    );
+    assert!(
+        !title("pe PATH").ends_with("=<unset>"),
+        "the base set is still there"
+    );
+    assert_eq!(title("pe SEVAK_PLUGIN_ID"), "SEVAK_PLUGIN_ID=script:plain");
 }
 
 #[test]

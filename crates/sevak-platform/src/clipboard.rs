@@ -213,6 +213,11 @@ fn image_data(image: &ClipboardImage) -> arboard::ImageData<'_> {
 /// The image on the clipboard; `None` if it holds something else, or an image
 /// too large to hold (see [`crate::clip_media::MAX_IMAGE_RAW_BYTES`]).
 pub fn get_image() -> Result<Option<ClipboardImage>> {
+    // The clipboard library converts the whole picture before Sevak sees it;
+    // an enormous one is turned away on its header (Windows) first.
+    if crate::clip_media::clipboard_image_is_oversized() {
+        return Ok(None);
+    }
     let data = read_with(|clipboard| clipboard.get_image())?;
     Ok(data.and_then(|data| {
         ClipboardImage::new(
@@ -297,7 +302,12 @@ fn load_png_file(path: &Path) -> Result<ClipboardImage> {
             message: format!("{} is too large to copy", path.display()),
         });
     }
-    ClipboardImage::decode_png(&std::fs::read(path)?)
+    // An image of the clipboard history may be encrypted.
+    let bytes = sevak_core::sealed::open_global(sevak_core::bounded_read::read_capped(
+        path,
+        MAX_PNG_FILE_BYTES,
+    )?)?;
+    ClipboardImage::decode_png(&bytes)
 }
 
 /// A setter that asks the OS to keep what it writes out of its own history.
@@ -383,6 +393,44 @@ fn clipboard_error(err: arboard::Error) -> PlatformError {
         operation: "clipboard",
         message: err.to_string(),
     }
+}
+
+/// The OS's counter of clipboard changes (Windows sequence number, macOS change
+/// count); `None` on systems without one (Linux), where a change can only be
+/// told by comparing what the clipboard holds.
+pub fn sequence() -> Option<u64> {
+    #[cfg(windows)]
+    {
+        crate::windows::clipboard_sequence()
+    }
+    #[cfg(target_os = "macos")]
+    {
+        crate::macos::clipboard_sequence()
+    }
+    #[cfg(target_os = "linux")]
+    {
+        None
+    }
+}
+
+/// Whether the clipboard still holds what Sevak itself put there, so that
+/// putting the user's old contents back does not overwrite something newer.
+///
+/// `written` is the change counter right after Sevak's write and `now` the
+/// counter right before the restore: any difference means somebody copied in
+/// between. Without a counter the text decides: it must still be
+/// `expected_text` (`None`: the clipboard must hold no text, as after an image
+/// or a file list was put there).
+pub(crate) fn still_ours(
+    written: Option<u64>,
+    now: Option<u64>,
+    text_now: impl FnOnce() -> Option<String>,
+    expected_text: Option<&str>,
+) -> bool {
+    if let (Some(written), Some(now)) = (written, now) {
+        return written == now;
+    }
+    text_now().as_deref() == expected_text
 }
 
 /// Texts, images and file lists Sevak itself put on the clipboard recently, as
@@ -503,6 +551,37 @@ mod tests {
             ..ClipboardSnapshot::default()
         };
         assert!(!text.is_empty());
+    }
+
+    #[test]
+    fn a_newer_copy_is_told_by_the_counter_or_else_by_the_text() {
+        // With a counter, any change is a newer copy.
+        assert!(still_ours(
+            Some(5),
+            Some(5),
+            || panic!("not asked"),
+            Some("x")
+        ));
+        assert!(!still_ours(
+            Some(5),
+            Some(6),
+            || panic!("not asked"),
+            Some("x")
+        ));
+        // Without one, the text must be what Sevak put there.
+        assert!(still_ours(None, None, || Some("x".into()), Some("x")));
+        assert!(!still_ours(None, None, || Some("newer".into()), Some("x")));
+        assert!(!still_ours(None, None, || None, Some("x")));
+        // After an image or files: no text may have appeared.
+        assert!(still_ours(None, None, || None, None));
+        assert!(!still_ours(None, None, || Some("newer".into()), None));
+        // A counter that went missing falls back to the text.
+        assert!(!still_ours(
+            Some(5),
+            None,
+            || Some("newer".into()),
+            Some("x")
+        ));
     }
 
     #[test]

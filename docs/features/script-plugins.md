@@ -31,9 +31,10 @@ This page covers installing and using script plugins. For writing one, see [Writ
 
 4. **Approve the plugin** (first time only):
    - Restart Sevak or choose **Reload index** from the tray menu.
-   - Sevak finds the new plugin and shows a warning dialog, **Sevak: new script plugin**, with its name, keyword, folder and the exact command it runs.
+   - Sevak finds the new plugin and shows a warning dialog, **Sevak: new script plugin**, with its name, keyword, folder (and a short contents id), the exact command it runs, the files covered, any extra environment variables it asks for and whether its results may start applications. Text written by the plugin's author is shown with control and direction-changing characters removed and long text cut.
    - Click **Allow** only if you trust where the plugin came from: it runs with your account's permissions. **Not now** leaves it off and asks again the next time Sevak starts.
-   - Sevak remembers the answer per plugin and command. If a plugin's command changes, you are asked again.
+   - Sevak remembers the answer for that plugin's *contents*: its `plugin.toml`, the script files its command names, and the folder it lives in. If any of them changes (you edit the script, update it with `git pull`, or move or copy the folder) you are asked again, and the dialog says the plugin's contents changed. If a script that is already running changes on disk, Sevak refuses to start it again until you review it: choose **Reload index**.
+   - After upgrading to a Sevak that binds approvals to contents, every script plugin asks once more. That is expected.
 
 The plugin is now active. Type its keyword (defined in `plugin.toml`) to search it.
 
@@ -127,6 +128,7 @@ The gallery (Settings → Gallery) also offers offline Python 3 plugins, none of
 - A script can ask for its rows to be shown as a **grid of tiles** (pictures, icons) or mark a row whose long text opens in the **Text View**; see [Views: text and grid](../plugins.md#views-text-and-grid). The [preview pane](../usage.md#preview-text-view-and-grid-view) works for script results too.
 - Alfred's `mods` (secondary actions on ++ctrl+enter++, ++alt+enter++, ++shift+enter++) are supported; see [Modifiers](../plugins.md#modifiers-mods).
 - **Settings → Gallery** can install ready-made script plugins, but only after you press **Load gallery** and **Install**; see [The gallery](../workflows.md#the-gallery). An installed plugin still asks for permission before it runs.
+- **Settings → Extensions** (and `ext` in the launcher) is the newer place to browse, install, update and remove gallery items, including [native extensions](../writing-extensions-in-rust.md) written in Rust; see [Extensions](extensions.md).
 - To chain a script with other steps (open a link, paste, show a notification), use a [workflow](../workflows.md) with a script filter.
 
 ## Enable and disable plugins

@@ -8,7 +8,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use sevak_plugins::script::Candidate;
+use sevak_plugins::script::{Candidate, Scanned};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
@@ -16,6 +16,8 @@ use crate::app;
 use crate::state::AppState;
 
 const TITLE: &str = "Sevak: new script plugin";
+/// A native extension is a compiled program, so the dialog says so in its title.
+const NATIVE_TITLE: &str = "Sevak: new native extension";
 
 /// One round of questions at a time.
 static ASKING: AtomicBool = AtomicBool::new(false);
@@ -54,24 +56,16 @@ pub fn review_new(app: &AppHandle) {
 /// Shows the question for one plugin; true when it was allowed and saved.
 fn ask(app: &AppHandle, candidate: &Candidate) -> bool {
     let manifest = &candidate.manifest;
-    let prompt = format!(
-        "Sevak found a script plugin it has not run before.\n\n\
-         Name: {name}\n\
-         Keyword: {keyword}\n\
-         Folder: {folder}\n\
-         Runs: {command}\n\n\
-         A script plugin runs with your account's permissions, like any program you start. \
-         Allow it only if you trust where it came from. You can switch it off any time in \
-         Settings.",
-        name = manifest.name,
-        keyword = manifest.keyword,
-        folder = candidate.dir.display(),
-        command = manifest.command_line(),
-    );
+    // Built (and made safe to show) by sevak-plugins, where it is tested.
+    let prompt = candidate.prompt();
     let allowed = app
         .dialog()
         .message(prompt)
-        .title(TITLE)
+        .title(if manifest.native.is_some() {
+            NATIVE_TITLE
+        } else {
+            TITLE
+        })
         .kind(MessageDialogKind::Warning)
         .buttons(MessageDialogButtons::OkCancelCustom(
             "Allow".to_owned(),
@@ -105,4 +99,29 @@ fn ask(app: &AppHandle, candidate: &Candidate) -> bool {
             false
         }
     }
+}
+
+/// Asks about one plugin again (Settings > Extensions, "Review"), even if the
+/// user said "Not now" earlier. Blocks; call it off the main thread. Resolves to
+/// whether it was allowed (and Sevak reloaded to start it).
+pub fn review_folder(app: &AppHandle, folder: &str) -> Result<bool, String> {
+    let candidate = app
+        .state::<AppState>()
+        .search
+        .scripts
+        .scan()
+        .into_iter()
+        .find_map(|scanned| match scanned {
+            Scanned::Plugin(c) if c.folder == folder => Some(*c),
+            _ => None,
+        })
+        .ok_or_else(|| "That plugin cannot be loaded.".to_owned())?;
+    if candidate.approved {
+        return Ok(true);
+    }
+    let allowed = ask(app, &candidate);
+    if allowed {
+        app::reload(app);
+    }
+    Ok(allowed)
 }

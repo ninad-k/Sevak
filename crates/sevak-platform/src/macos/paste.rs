@@ -78,6 +78,14 @@ pub(crate) fn remember_foreground_app() {
         .unwrap_or_else(|poisoned| poisoned.into_inner()) = pid;
 }
 
+/// Process id of the app that was frontmost when Sevak was last shown (window
+/// management acts on its windows).
+pub(super) fn remembered_pid() -> Option<i32> {
+    *REMEMBERED
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 pub(crate) fn foreground_app() -> Option<ForegroundApp> {
     frontmost().and_then(|app| app_of(&app))
 }
@@ -140,6 +148,16 @@ impl PasteDriver for MacDriver {
             sleep(Duration::from_millis(10));
         }
         Ok(())
+    }
+
+    fn target_unchanged(&self) -> bool {
+        let remembered = *REMEMBERED
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        match remembered {
+            Some(pid) => frontmost().is_some_and(|app| app.processIdentifier() == pid),
+            None => false,
+        }
     }
 
     fn press_paste(&self) -> Result<()> {

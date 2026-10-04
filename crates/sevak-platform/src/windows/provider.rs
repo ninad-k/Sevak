@@ -13,11 +13,13 @@ use crate::error::{PlatformError, Result};
 use crate::keyboard::{KeyListener, KeyListenerSupport, KeySink, TypingTarget};
 use crate::paste::{ClipboardRead, ForegroundApp, PasteContent, PasteOutcome, PasteSupport};
 use crate::provider::PlatformProvider;
+use crate::window_manager::{WindowId, WindowInfo, WindowState, WindowSupport};
+use sevak_core::window_layout::{Monitor, Rect};
 
 use super::com::ComGuard;
 use super::{
     allow_foreground_handoff, capture, expand, icons, keyhook_expand, packaged, paste, people,
-    shell_execute_in, shortcuts, spell,
+    shell_execute_in, shortcuts, spell, wm,
 };
 
 pub(crate) struct WindowsProvider;
@@ -149,6 +151,14 @@ impl PlatformProvider for WindowsProvider {
         capture::capture_selection(options)
     }
 
+    fn identifies_apps(&self) -> bool {
+        true
+    }
+
+    fn history_sealer(&self) -> Option<std::sync::Arc<dyn sevak_core::sealed::Sealer>> {
+        Some(std::sync::Arc::new(super::dpapi::Dpapi))
+    }
+
     fn clipboard_sequence(&self) -> Option<u64> {
         paste::clipboard_sequence()
     }
@@ -170,6 +180,34 @@ impl PlatformProvider for WindowsProvider {
     fn system_spelling(&self, word: &str) -> Option<Spelling> {
         spell::check(word)
     }
+
+    fn window_support(&self) -> WindowSupport {
+        wm::window_support()
+    }
+
+    fn list_windows(&self) -> Result<Vec<WindowInfo>> {
+        wm::list_windows()
+    }
+
+    fn focus_window(&self, window: &WindowId) -> Result<()> {
+        wm::focus_window(window)
+    }
+
+    fn target_window(&self) -> Result<WindowState> {
+        wm::target_window()
+    }
+
+    fn window_state(&self, window: &WindowId) -> Result<WindowState> {
+        wm::window_state(window)
+    }
+
+    fn set_window_rect(&self, window: &WindowId, rect: Rect) -> Result<()> {
+        wm::set_window_rect(window, rect)
+    }
+
+    fn list_monitors(&self) -> Result<Vec<Monitor>> {
+        wm::list_monitors()
+    }
 }
 
 /// Starts `target` through the shell with `verb`: `open`, or `runas` to ask
@@ -190,6 +228,8 @@ fn launch_with_verb(verb: &str, target: &LaunchTarget) -> Result<()> {
             args,
             working_dir,
         } => {
+            // A program on a network share is only started when allowed.
+            crate::netpath::guard(path)?;
             if let Some(bad) = unsafe_batch_arg(path, args) {
                 return Err(PlatformError::Os {
                     operation: "launch",

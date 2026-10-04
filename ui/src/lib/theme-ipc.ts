@@ -4,7 +4,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { hasTauri } from "./ipc";
-import type { GalleryItem, StoredTheme, ThemeSpec, ThemesDto } from "./themes";
+import type { StoredTheme, ThemeGallery, ThemeSpec, ThemesDto } from "./themes";
 
 const preview = () => import.meta.env.DEV && !hasTauri();
 
@@ -60,13 +60,16 @@ export async function openThemesDir(): Promise<string | null> {
 }
 
 /** **The one request the editor makes**: the gallery index. Only call it on a click. */
-export async function fetchThemeGallery(): Promise<Result<GalleryItem[]>> {
+export async function fetchThemeGallery(): Promise<Result<ThemeGallery>> {
   if (preview()) return (await import("./mock-themes")).mockGallery();
-  return call<GalleryItem[]>("fetch_theme_gallery");
+  return call<ThemeGallery>("fetch_theme_gallery");
 }
 
-/** Downloads, verifies the SHA-256 and installs gallery theme `id`. */
-export async function installGalleryTheme(id: string): Promise<Result<StoredTheme>> {
-  if (preview()) return (await import("./mock-themes")).mockInstallGallery(id);
-  return call<StoredTheme>("install_gallery_theme", { id });
+/**
+ * Downloads, verifies the SHA-256 and installs gallery theme `id`. A theme of the
+ * same name is replaced only when `replace` is true ("Reinstall").
+ */
+export async function installGalleryTheme(id: string, replace = false): Promise<Result<StoredTheme>> {
+  if (preview()) return (await import("./mock-themes")).mockInstallGallery(id, replace);
+  return call<StoredTheme>("install_gallery_theme", { id, replace });
 }

@@ -33,7 +33,7 @@ A minimal config works: missing fields use their defaults, so a nearly empty fil
 
 ### Keywords
 
-Every keyword is one word, and no two searches may share one: the configurable keywords (`[files]` `keyword` / `index_keyword` / `content_keyword`, `[bookmarks]`, `[tasks]`, `[media]`, `[contacts]`, `[onepassword]`, `[dictionary]` `define_keyword` / `spell_keyword`, `[ai]`), the fixed ones (`>`, `cb`, `s`, `emoji`, `:`, `@`, `uuid`) and your web search keywords. Settings refuses to save a clash; in a hand-edited file a clashing keyword is ignored and logged. An empty keyword turns that keyword off.
+Every keyword is one word, and no two searches may share one: the configurable keywords (`[files]` `keyword` / `index_keyword` / `content_keyword`, `[bookmarks]`, `[tasks]`, `[media]`, `[window_management]` `keyword` / `switcher_keyword`, `[contacts]`, `[onepassword]`, `[dictionary]` `define_keyword` / `spell_keyword`, `[ai]`), the fixed ones (`>`, `cb`, `s`, `emoji`, `:`, `@`, `uuid`) and your web search keywords. Settings refuses to save a clash; in a hand-edited file a clashing keyword is ignored and logged. An empty keyword turns that keyword off.
 
 Keywords of [workflows](workflows.md) and [script plugins](features/script-plugins.md) are checked the same way but only produce a warning (in Settings and in the log), because both plugins then answer the keyword and show their results.
 
@@ -61,6 +61,7 @@ Main hotkeys and startup behaviour.
 |---|---|---|---|
 | `hotkey` | string | `"Super+Space"` | Global keyboard shortcut to show/hide Sevak. `Super` is the Windows key (Cmd on macOS; `Win`, `Windows` and `Meta` are accepted spellings). Examples: `"Alt+Space"`, `"Ctrl+Space"`, `"Ctrl+Shift+K"`. On macOS, `Alt` is the Option key. Super+Space is used by the system too; Sevak takes it over (a keyboard hook on Windows; a question on macOS and GNOME) - see [Troubleshooting](troubleshooting.md#super-space). Existing config files keep the key they have. On Linux Wayland, run `sevak --setup-hotkey` to bind this in GNOME instead. |
 | `actions_hotkey` | string | `"Ctrl+Alt+Space"` | Hotkey for Universal Actions: capture the selection in the foreground app and offer actions on it. Empty string `""` turns Universal Actions off. On Wayland, run `sevak --setup-hotkey` to bind this in GNOME. |
+| `accept_injected_hotkeys` | boolean | `false` | Windows keyboard hook only. By default the hook ignores key events that another program sends (`SendInput`), so no program on your desktop can open Sevak or make Universal Actions copy the foreground app's selection by pressing the shortcut for you. Turn it on if **AutoHotkey, PowerToys Keyboard Manager** or another remapper is meant to type Sevak's shortcut. Shortcuts that Windows itself registers (not Win-key combinations or keys another app owns) are still delivered by the system whoever sends them. |
 | `hide_on_blur` | boolean | `true` | Hide the launcher when it loses focus to another window. Press Esc or click elsewhere to close; this setting hides it automatically. |
 | `launch_at_login` | boolean | `false` | Start Sevak when you log in to your desktop. |
 | `check_for_updates` | boolean | `true` | Check GitHub for a new version shortly after startup, every six hours, and whenever you open Sevak (if the last check is over an hour old). Updates are only installed after you confirm. Apart from optional currency rates, this is the only automatic network request. |
@@ -70,6 +71,7 @@ Main hotkeys and startup behaviour.
 [general]
 hotkey = "Super+Space"
 actions_hotkey = "Ctrl+Alt+Space"
+accept_injected_hotkeys = false
 hide_on_blur = true
 launch_at_login = false
 check_for_updates = true
@@ -153,7 +155,7 @@ Which plugins are active. Each built-in plugin can be disabled.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `disabled` | array of strings | `[]` | Plugin ids to turn off. Available ids: `"apps"`, `"calculator"`, `"web"` (all engines) or `"web:<keyword>"` (one engine), `"files"` (its instances `"files:names"` and `"files:content"` are the `ff` and `in` searches), `"bookmarks"`, `"system"`, `"tasks"` (automation tasks), `"media"` (media controls), `"shell"`, `"clipboard"`, `"snippets"`, `"emoji"` (the emoji picker; `"emoji:word"` and `"emoji:colon"` are its two keywords), `"selection"` (Universal Actions), `"contacts"`, `"1password"`, `"dict"` (`define` and `spell`), `"uuid"`, `"script"` or `"script:<name>"` (script plugins) and `"workflow"` or `"workflow:<folder>"` ([workflows](workflows.md); each also has its own switch in **Settings → Workflows**). Example: `disabled = ["files", "web:yt"]` turns off file search and YouTube search. Unknown ids are ignored. |
+| `disabled` | array of strings | `[]` | Plugin ids to turn off. Available ids: `"apps"`, `"calculator"`, `"web"` (all engines) or `"web:<keyword>"` (one engine), `"files"` (its instances `"files:names"` and `"files:content"` are the `ff` and `in` searches), `"bookmarks"`, `"system"`, `"tasks"` (automation tasks), `"media"` (media controls), `"windows"` (window layouts; `"windows:switch"` is the window switcher), `"shell"`, `"clipboard"`, `"snippets"`, `"emoji"` (the emoji picker; `"emoji:word"` and `"emoji:colon"` are its two keywords), `"selection"` (Universal Actions), `"contacts"`, `"1password"`, `"dict"` (`define` and `spell`), `"uuid"`, `"backup"` (the `backup settings` and `restore settings` [launcher commands](backup-and-restore.md#from-the-command-line-and-the-launcher)), `"script"` or `"script:<name>"` (script plugins) and `"workflow"` or `"workflow:<folder>"` ([workflows](workflows.md); each also has its own switch in **Settings → Workflows**). Example: `disabled = ["files", "web:yt"]` turns off file search and YouTube search. Unknown ids are ignored. |
 
 ```toml
 [plugins]
@@ -187,6 +189,7 @@ Indexed file search settings.
 | `use_os_index` | boolean | `true` | Whole-disk (`ff`) and content (`in`) search through the operating system's own file index (Windows Search, Spotlight, `locate`, Tracker or Baloo). Queries go only to that local index, never over the network. `false` turns both off. See [what each OS needs](features/files.md#whole-disk-and-content-search). |
 | `index_keyword` | string | `"ff"` | Keyword for file names anywhere on the disk: `ff report`. `""` turns off just this search. |
 | `content_keyword` | string | `"in"` | Keyword for words inside files: `in invoice 2026`. `""` turns off just this search. |
+| `allow_network_paths` | boolean | `false` | Windows only. Use paths on other computers (`\\server\share`, `//server/share`) and mapped network drives. While `false`, such a path is refused before anything touches it (Windows signs in to a computer as soon as it looks at its path), a typed one shows "Network paths are turned off", and `directories` on a share are skipped. Device paths (`\\.\pipe\...`) are refused either way. Turn on only for servers you trust. |
 
 ```toml
 [files]
@@ -198,6 +201,7 @@ global = true
 use_os_index = true
 index_keyword = "ff"
 content_keyword = "in"
+allow_network_paths = false
 ```
 
 ### [bookmarks]
@@ -270,6 +274,29 @@ global = true
 now_playing = true
 ```
 
+### [window_management]
+
+[Window management](window-management.md): snap, resize and move the window you were using (`win left`, `win max`, `win next display`) and switch between open windows (`w code`).
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | boolean | `true` | Turns the layouts and the window switcher on or off together. |
+| `keyword` | string | `"win"` | `win ` lists the layouts. `""` removes the keyword. |
+| `switcher_keyword` | string | `"w"` | `w ` lists the open windows; type part of a title or app to filter. `""` turns the switcher off. |
+| `gap` | integer | `0` | Space between snapped windows and the screen edge, in logical pixels (0 to 200; clamped when loaded, refused by Settings outside the range). |
+| `global` | boolean | `false` | Also match layout names in ordinary searches (`snap left`, `maximize`). |
+
+To turn the plugin off, add `"windows"` to `[plugins] disabled` (the layouts are `windows`, the switcher is `windows:switch`).
+
+```toml
+[window_management]
+enabled = true
+keyword = "win"
+switcher_keyword = "w"
+gap = 8
+global = false
+```
+
 ### [shell]
 
 Shell command execution settings (type `> <command>` to run a command).
@@ -321,13 +348,15 @@ Clipboard history settings (opt-in feature).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `enabled` | boolean | `false` | Enable clipboard history (`cb <text>` to search). Off by default: turning it on makes Sevak watch your clipboard and keep what you copy in its data folder, unencrypted: text and the paths of copied files in `clipboard-history.json`, images as PNG files in the `clipboard` folder. Content marked as secret by apps (password managers) is never recorded. |
+| `enabled` | boolean | `false` | Enable clipboard history (`cb <text>` to search). Off by default: turning it on makes Sevak watch your clipboard and keep what you copy in its local data folder (on Windows `%LOCALAPPDATA%\sevak\`, which does not roam): text and the paths of copied files in `clipboard-history.json`, images as PNG files in the `clipboard` folder. Encrypted for your account on Windows (see `encrypt`), plain but owner-only elsewhere. Content marked as secret by apps (password managers) is never recorded. |
 | `max_items` | integer | `200` | How many clipboard items to keep, of all kinds together. Older items are dropped (with their image files). Range: 1–5000. |
 | `max_item_bytes` | integer | `65536` (64 KiB) | Maximum size of a clipboard item in bytes. Longer text is not recorded. Range: 1–4,194,304 (4 MiB). |
 | `images` | boolean | `true` | Also record copied images (as PNG files with thumbnails). |
 | `files` | boolean | `true` | Also record copied files and folders (their paths only). |
 | `max_image_bytes` | integer | `10485760` (10 MiB) | An image whose PNG is larger is not recorded. Range: 1–67,108,864 (64 MiB). |
-| `ignore_apps` | array of strings | `[]` | Apps whose copies are never recorded, e.g. `["KeePassXC", "1Password"]`. Matched case-insensitively against the program or app name. |
+| `ignore_apps` | array of strings | `[]` | Apps whose copies are never recorded, e.g. `["Signal", "Messages"]`. Matched case-insensitively against the program or app name. |
+| `default_ignore_apps` | boolean | `true` | Also never record copies from the built-in list of password managers (KeePass, KeePassXC, 1Password, Bitwarden, LastPass, Dashlane, Enpass, NordPass, RoboForm, Keeper, Proton Pass and others), system credential prompts and ssh/gpg passphrase prompts, in addition to `ignore_apps`. The [full list](features/clipboard.md#password-managers-and-other-apps-skipped-by-default) is in the clipboard documentation. `false` turns it off. |
+| `encrypt` | boolean | `true` | Encrypt the history file and the image files for the current user where the system can: Windows (DPAPI). macOS and Linux have no such encryption here; their files are plain, readable by your user only. A history stored plain is encrypted at the next start. |
 
 ```toml
 [clipboard]
@@ -338,6 +367,8 @@ images = true
 files = true
 max_image_bytes = 10485760
 ignore_apps = []
+default_ignore_apps = true
+encrypt = true
 ```
 
 ### [file_buffer]
@@ -452,6 +483,7 @@ timeout_secs = 60
 | `case_sensitive` | boolean | `true` | `false`: `SIG` and `sig` both expand. |
 | `ignore_apps` | array of strings | `[]` | Never watch or expand in these apps, e.g. `["KeePassXC", "Firefox"]`. Matched case-insensitively against the program or app name, like `[clipboard] ignore_apps`. |
 | `expand_in_terminals` | boolean | `false` | Terminal windows are skipped unless this is on. |
+| `expand_in_browsers` | boolean | `false` | Web browsers (Chrome, Edge, Firefox, Brave, Vivaldi, Opera, Safari, Arc, Zen, LibreWolf, Chromium) are skipped unless this is on: a password field in a web page cannot be reliably told from other text boxes, so a keyword typed inside a password would expand there. Also in **Settings → Plugins**. |
 
 ```toml
 [snippets]
@@ -461,6 +493,7 @@ expand_on = "immediate"
 case_sensitive = true
 ignore_apps = []
 expand_in_terminals = false
+expand_in_browsers = false
 ```
 
 ## [[snippet]]
@@ -546,6 +579,7 @@ Result ids:
 - Snippets: `snippets:<name>`
 - Shell commands: `shell:<command>`
 - Automation tasks: `tasks:dark_mode`, `tasks:volume:30`, `tasks:keep_awake:45`, `tasks:kill:chrome.exe` (see [Automation tasks](features/tasks.md#bind-a-task-to-a-hotkey))
+- Window layouts: `windows:left`, `windows:maximize`, `windows:next_display` and so on (see [Window management](window-management.md#global-shortcuts-for-layouts)); they act on the window that has focus when the key is pressed
 - Workflows: `workflow:<folder>:run:<node id>`, the result a workflow's hotkey trigger runs; usually it is simpler to give the workflow its own hotkey trigger in the builder (see [Triggers](workflows.md#triggers))
 
 Calculator, web search and clipboard history results have no stable id and cannot be bound.
@@ -575,8 +609,11 @@ Some settings are files of their own in the config folder rather than keys in `c
 | `plugins/` | [Script plugins](features/script-plugins.md), one folder each with a `plugin.toml` |
 | `workflows/` | [Workflows](workflows.md), one folder each with a `workflow.toml`; the builder in **Settings → Workflows** writes them |
 | `themes/` | [Theme files](themes.md#theme-files-and-the-editor) made, imported or installed in **Settings → Appearance**; `[appearance] theme_file` picks one |
+| `backup.toml` | The options of [automatic backups](backup-and-restore.md#automatic-backups) (`schedule`, `on_update`, `keep`, `folder`); off unless you turn it on, and never part of a backup itself |
 
-See [Files and data](files-and-data.md) for the data folder.
+Everything Sevak writes itself is in the data folders, not here: the approvals file, usage history, logs, and the clipboard history with its images, which on Windows is in the *local* data folder (`%LOCALAPPDATA%\sevak\`) and encrypted for your account (`[clipboard] encrypt`).
+
+[Settings → Backup & restore](backup-and-restore.md) saves `config.toml` (without its `[onepassword]` section and anything that looks like a key or token), these folders and the stylesheet as one file. See [Files and data](files-and-data.md) for the data folder.
 
 ## Complete example
 
@@ -603,6 +640,12 @@ hotkey = "Super+Space"
 # you are using (text, a URL, files) and offers actions for it. "" turns it off.
 # On Wayland run `sevak --setup-hotkey` to bind it to `sevak --actions`. See [actions].
 actions_hotkey = "Ctrl+Alt+Space"
+
+# Windows: also react to shortcuts that another program types for you (AutoHotkey,
+# PowerToys Keyboard Manager and other remappers send "injected" keys). Off by
+# default so that a program on your desktop cannot open Sevak or trigger Universal
+# Actions by sending the shortcut itself; turn it on if a remapper is meant to.
+accept_injected_hotkeys = false
 
 # Hide the window when it loses focus.
 hide_on_blur = true
@@ -668,7 +711,7 @@ custom_css = ""
 # Ids of built-in plugins to turn off: "apps", "calculator", "files",
 # "bookmarks", "system", "tasks", "media", "shell", "clipboard", "snippets",
 # "emoji", "selection" (Universal Actions), "contacts", "1password", "dict",
-# "web:<keyword>".
+# "windows" (window management), "web:<keyword>".
 disabled = []
 
 [calculator]
@@ -696,6 +739,12 @@ global = true
 use_os_index = true
 index_keyword = "ff"
 content_keyword = "in"
+# Windows only. Use paths on other computers (\\server\share, or a mapped
+# network drive). Off by default: merely looking at such a path makes Windows
+# connect to that computer and sign in to it, which can hand your Windows
+# credentials to whoever runs it. Turn on if you keep files on a file server
+# you trust; folders listed in "directories" on a share are skipped while off.
+allow_network_paths = false
 
 [bookmarks]
 # Browsers whose bookmarks are searchable; [] means every browser found.
@@ -749,6 +798,23 @@ global = true
 # from the system's media player on request; nothing is stored or sent anywhere.
 now_playing = true
 
+[window_management]
+# Arrange the window you were using: snap it to a half, quarter or third of the
+# screen, maximize, center, move it to another display, and undo ("win left",
+# "win max", "win next display"). A second search, "w <name>", lists the open
+# windows and brings the one you pick to the front. On macOS this needs the
+# Accessibility permission; on Linux it works on X11 sessions only.
+enabled = true
+# Type "<keyword> <layout>" to list the layouts. Empty turns the layouts off.
+keyword = "win"
+# Type "<keyword> <name>" to find an open window by its title or app. Empty
+# turns the window switcher off.
+switcher_keyword = "w"
+# Space in pixels between snapped windows and the screen edge (0-200).
+gap = 0
+# Also match layout names in plain searches ("snap left", "maximize window").
+global = false
+
 [shell]
 # Type "> <command>" (or ">command") to run a command in a terminal window. It
 # only runs when you press Enter; recent commands are offered again.
@@ -787,9 +853,10 @@ keep_between_shows = false
 [clipboard]
 # Clipboard history ("cb <text>"). Off by default: turning it on makes Sevak
 # watch the clipboard and keep what you copy in clipboard-history.json in its
-# data folder: text, images (as PNG files in a "clipboard" folder next to it)
-# and the paths of copied files. All of it is stored unencrypted. Content that
-# apps mark as secret (password managers) is never recorded.
+# local data folder (on Windows %LOCALAPPDATA%\sevak, which does not roam with your
+# profile): text, images (as PNG files in a "clipboard" folder next to it) and
+# the paths of copied files. Content that apps mark as secret (password
+# managers) is never recorded.
 enabled = false
 # Items kept, of all kinds together (the oldest are dropped).
 max_items = 200
@@ -800,9 +867,19 @@ images = true
 files = true
 # An image whose PNG is larger than this is not recorded.
 max_image_bytes = 10485760
-# Never record text copied from these apps, e.g. ["KeePassXC", "1Password"].
+# Never record text copied from these apps, e.g. ["Signal", "Messages"].
 # Matched case-insensitively against the program or app name.
 ignore_apps = []
+# Also skip password managers (KeePass, KeePassXC, 1Password, Bitwarden,
+# LastPass, Dashlane, Enpass, NordPass, RoboForm, Keeper, Proton Pass), the
+# system's credential prompts and ssh/gpg passphrase prompts, in addition to
+# ignore_apps. The full list is in the clipboard documentation. false turns it off.
+default_ignore_apps = true
+# Encrypt the history file and the image files for your Windows account
+# (DPAPI). macOS and Linux have no such encryption here: the files are plain,
+# readable by you only. Files already stored plain are encrypted on the next
+# start.
+encrypt = true
 
 [contacts]
 # Search your contacts ("c <name>" or "@name"): copy an email or phone number,
@@ -897,6 +974,11 @@ case_sensitive = true
 ignore_apps = []
 # Terminal windows are skipped unless this is on.
 expand_in_terminals = false
+# Web browsers are skipped unless this is on: a password field in a web page
+# cannot be reliably told from other text boxes, so a keyword typed inside a
+# password would expand there. Chrome, Edge, Firefox, Brave, Vivaldi, Opera,
+# Safari, Arc, Zen, LibreWolf and Chromium count as browsers.
+expand_in_browsers = false
 
 # Web search engines: type "<keyword> <terms>". "{query}" is replaced by the
 # URL-encoded terms. Defining any [[web_search]] entry replaces this list.

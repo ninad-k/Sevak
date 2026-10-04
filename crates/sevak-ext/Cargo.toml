@@ -1,0 +1,23 @@
+[package]
+name = "sevak-ext"
+description = "Command-line tool for Sevak extension authors: scaffold a native extension, validate its manifest, pack it into a .sevakext package and print its gallery entry."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+publish = false
+
+[[bin]]
+name = "sevak-ext"
+path = "src/main.rs"
+
+[dependencies]
+# The package format, the manifest checks and the checksums are the app's own:
+# what `validate` accepts is what Sevak installs.
+sevak-plugins.workspace = true
+sevak-core.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

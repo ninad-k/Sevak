@@ -201,7 +201,7 @@ impl Inner {
                 vec![status_row(&reason)]
             }
             Err(OsSearchError::TimedOut) => {
-                tracing::debug!(input, "OS file index timed out");
+                tracing::debug!("OS file index timed out");
                 Vec::new()
             }
             Err(OsSearchError::Failed(reason)) => {

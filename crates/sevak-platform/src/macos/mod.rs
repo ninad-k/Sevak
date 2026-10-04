@@ -8,6 +8,7 @@ mod expand;
 pub(crate) mod media;
 mod paste;
 pub(crate) mod trash;
+mod wm;
 
 use std::collections::HashSet;
 use std::fs;
@@ -15,6 +16,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Instant;
 
+use sevak_core::bounded_read::{read_capped, MAX_DESCRIPTION_BYTES};
 use sevak_core::{AppEntry, ClipContent, IconData, IconSource, LaunchTarget};
 
 use crate::capture::{CaptureOptions, SelectionCapture};
@@ -25,6 +27,8 @@ use crate::keyboard::{KeyListener, KeyListenerSupport, KeySink, TypingTarget};
 use crate::paste::{ClipboardRead, ForegroundApp, PasteContent, PasteOutcome, PasteSupport};
 use crate::process::spawn_detached_in;
 use crate::provider::PlatformProvider;
+use crate::window_manager::{WindowId, WindowInfo, WindowState, WindowSupport};
+use sevak_core::window_layout::{Monitor, Rect};
 
 /// `open(1)`: launches bundles and opens files/URLs with their default handler.
 pub(crate) const OPEN: &str = "/usr/bin/open";
@@ -32,6 +36,8 @@ pub(crate) const OPEN: &str = "/usr/bin/open";
 /// `sips(1)`, which ships with macOS and converts `.icns` (including the
 /// JPEG 2000 variants) to PNG.
 const SIPS: &str = "/usr/bin/sips";
+
+pub(crate) use paste::clipboard_sequence;
 
 pub(crate) struct MacProvider;
 
@@ -89,6 +95,10 @@ impl PlatformProvider for MacProvider {
 
     fn foreground_app(&self) -> Option<ForegroundApp> {
         paste::foreground_app()
+    }
+
+    fn identifies_apps(&self) -> bool {
+        true
     }
 
     fn paste_support(&self) -> PasteSupport {
@@ -154,6 +164,34 @@ impl PlatformProvider for MacProvider {
 
     fn system_definition(&self, word: &str) -> Option<String> {
         dictionary::definition(word)
+    }
+
+    fn window_support(&self) -> WindowSupport {
+        wm::window_support()
+    }
+
+    fn list_windows(&self) -> Result<Vec<WindowInfo>> {
+        wm::list_windows()
+    }
+
+    fn focus_window(&self, window: &WindowId) -> Result<()> {
+        wm::focus_window(window)
+    }
+
+    fn target_window(&self) -> Result<WindowState> {
+        wm::target_window()
+    }
+
+    fn window_state(&self, window: &WindowId) -> Result<WindowState> {
+        wm::window_state(window)
+    }
+
+    fn set_window_rect(&self, window: &WindowId, rect: Rect) -> Result<()> {
+        wm::set_window_rect(window, rect)
+    }
+
+    fn list_monitors(&self) -> Result<Vec<Monitor>> {
+        wm::list_monitors()
     }
 }
 
@@ -229,7 +267,11 @@ fn is_icns(path: &Path) -> bool {
 /// no window to bring up.
 fn read_bundle(bundle: &Path) -> Option<AppEntry> {
     let info = bundle.join("Contents").join("Info.plist");
-    let plist = match plist::Value::from_file(&info) {
+    let plist = match read_capped(&info, MAX_DESCRIPTION_BYTES)
+        .map_err(|err| err.to_string())
+        .and_then(|bytes| {
+            plist::Value::from_reader(std::io::Cursor::new(bytes)).map_err(|err| err.to_string())
+        }) {
         Ok(plist) => Some(plist),
         Err(err) => {
             tracing::debug!(path = %info.display(), %err, "unreadable Info.plist");
@@ -292,12 +334,13 @@ fn read_bundle(bundle: &Path) -> Option<AppEntry> {
 
 /// Renders an `.icns` file as a PNG of at most `size` pixels with `sips`.
 fn icns_to_png(path: &Path, size: u32) -> Result<IconData> {
-    let out = tempfile_path();
+    let scratch = scratch_png()?;
+    let out = scratch.path();
     let status = Command::new(SIPS)
         .args(["-s", "format", "png", "-Z", &size.max(16).to_string()])
         .arg(path)
         .arg("--out")
-        .arg(&out)
+        .arg(out)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -306,8 +349,8 @@ fn icns_to_png(path: &Path, size: u32) -> Result<IconData> {
             command: SIPS.to_owned(),
             message: err.to_string(),
         })?;
-    let bytes = fs::read(&out);
-    let _ = fs::remove_file(&out);
+    // The scratch file is removed when `scratch` goes out of scope.
+    let bytes = fs::read(out);
     if !status.success() {
         return Err(PlatformError::CommandFailed {
             command: SIPS.to_owned(),
@@ -320,17 +363,44 @@ fn icns_to_png(path: &Path, size: u32) -> Result<IconData> {
     })
 }
 
-/// A unique scratch file for one `sips` conversion (icons load concurrently).
-fn tempfile_path() -> PathBuf {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static NEXT: AtomicU64 = AtomicU64::new(0);
-    let n = NEXT.fetch_add(1, Ordering::Relaxed);
-    std::env::temp_dir().join(format!("sevak-icon-{}-{n}.png", std::process::id()))
+/// A scratch file for one `sips` conversion (icons load concurrently): created
+/// exclusively with an unpredictable name and mode 0600, so another user's
+/// process cannot plant a file or link at a name Sevak is about to write to.
+/// It is deleted when the returned handle is dropped.
+fn scratch_png() -> Result<tempfile::NamedTempFile> {
+    tempfile::Builder::new()
+        .prefix("sevak-icon-")
+        .suffix(".png")
+        .tempfile()
+        .map_err(PlatformError::from)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn icon_scratch_files_are_exclusive_unpredictable_and_private() {
+        use std::os::unix::fs::PermissionsExt;
+        let a = scratch_png().unwrap();
+        let b = scratch_png().unwrap();
+        assert_ne!(a.path(), b.path());
+        for scratch in [&a, &b] {
+            let name = scratch.path().file_name().unwrap().to_string_lossy();
+            assert!(
+                name.starts_with("sevak-icon-") && name.ends_with(".png"),
+                "{name}"
+            );
+            // Not the old `sevak-icon-<pid>-<n>.png` pattern.
+            let middle = &name["sevak-icon-".len()..name.len() - ".png".len()];
+            assert!(middle.len() >= 6 && !middle.contains('-'), "{name}");
+            let mode = fs::metadata(scratch.path()).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600);
+        }
+        let gone = a.path().to_path_buf();
+        drop(a);
+        assert!(!gone.exists(), "removed when dropped");
+    }
 
     fn write_bundle(root: &Path, name: &str, plist: &str) -> PathBuf {
         let bundle = root.join(format!("{name}.app"));

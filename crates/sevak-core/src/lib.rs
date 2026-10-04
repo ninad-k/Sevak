@@ -6,25 +6,32 @@
 //! `#[cfg(target_os = ...)]` code.
 
 pub mod ai;
+pub mod bounded_read;
 pub mod checksum;
 pub mod config;
 pub mod diagnostics;
 pub mod engine;
 pub mod fuzzy;
+pub mod gallery_source;
 pub mod model;
+pub mod netpath;
 pub mod plugin;
 pub mod preview;
+pub mod safe_names;
+pub mod sealed;
 pub mod selection;
 pub mod theme;
 pub mod theme_file;
 pub mod theme_store;
+pub mod url_check;
 pub mod usage;
+pub mod window_layout;
 
 pub use ai::{AiConfig, AiProvider};
 pub use config::{
     ActionsConfig, ClipboardConfig, Config, ConfigError, ConfigOrigin, ExpandOn, FileBufferConfig,
     GeneralConfig, HotkeyBinding, HotkeyTarget, LinuxConfig, PasteConfig, ShellConfig, Snippet,
-    SnippetsConfig, UpdateChannel, WindowConfig,
+    SnippetsConfig, UpdateChannel, WindowConfig, WindowManagementConfig,
 };
 pub use engine::{EngineOptions, SearchEngine};
 pub use fuzzy::FuzzyQuery;

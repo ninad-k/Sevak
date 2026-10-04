@@ -9,14 +9,25 @@ use std::time::Duration;
 
 use crate::error::{PlatformError, Result};
 
+/// The most of a child's stderr that is read to report a failure.
+const MAX_STDERR_BYTES: u64 = 64 * 1024;
+
 /// Returns the first executable named `program` on `PATH`.
 ///
 /// On Windows a bare name without an extension also matches `<name>.exe`, since
 /// users type `notepad` rather than `notepad.exe`.
 pub fn find_in_path(program: &str) -> Option<PathBuf> {
     let path = env::var_os("PATH")?;
+    find_in_dirs(env::split_paths(&path), program)
+}
+
+/// [`find_in_path`] over an explicit list of folders. An empty entry (a stray
+/// `::` or a trailing `:`) or a relative one would mean "the working
+/// directory" to a shell; here it is skipped, so a file that happens to sit
+/// next to the process can never stand in for a program.
+fn find_in_dirs(dirs: impl Iterator<Item = PathBuf>, program: &str) -> Option<PathBuf> {
     let try_exe = cfg!(windows) && !program.contains('.');
-    env::split_paths(&path).find_map(|dir| {
+    dirs.filter(|dir| dir.is_absolute()).find_map(|dir| {
         let candidate = dir.join(program);
         if candidate.is_file() {
             return Some(candidate);
@@ -42,6 +53,246 @@ fn apply_child_env(command: &mut Command, xwayland_forced: bool) {
     if xwayland_forced {
         command.env_remove("GDK_BACKEND");
     }
+}
+
+/// Variables a script process always inherits from Sevak (compared
+/// case-insensitively on Windows, where names have no case). Everything else in
+/// Sevak's own environment (tokens, cloud credentials, proxy settings, version
+/// manager roots) stays behind unless a plugin's manifest asks for it by name
+/// with `inherit_env`.
+const BASE_ENV: &[&str] = &[
+    "PATH",
+    "PATHEXT",
+    "HOME",
+    "USERPROFILE",
+    "HOMEDRIVE",
+    "HOMEPATH",
+    "USER",
+    "USERNAME",
+    "USERDOMAIN",
+    "LOGNAME",
+    "SHELL",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "TZ",
+    "LANG",
+    "LANGUAGE",
+    "TERM",
+    "DISPLAY",
+    "WAYLAND_DISPLAY",
+    "XAUTHORITY",
+    "DBUS_SESSION_BUS_ADDRESS",
+    "__CF_USER_TEXT_ENCODING",
+    // Windows: programs and the C runtime need these to start at all.
+    "SYSTEMROOT",
+    "SYSTEMDRIVE",
+    "WINDIR",
+    "COMSPEC",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "PROGRAMDATA",
+    "PROGRAMFILES",
+    "PROGRAMFILES(X86)",
+    "PROGRAMW6432",
+    "COMMONPROGRAMFILES",
+    "COMMONPROGRAMFILES(X86)",
+    "COMMONPROGRAMW6432",
+    "ALLUSERSPROFILE",
+    "PUBLIC",
+    "COMPUTERNAME",
+    "OS",
+    "PROCESSOR_ARCHITECTURE",
+    "NUMBER_OF_PROCESSORS",
+];
+
+/// Prefixes of the base set: locale and XDG directories.
+const BASE_ENV_PREFIXES: &[&str] = &["LC_", "XDG_", "SEVAK_PLUGIN_"];
+
+/// Variables that make an interpreter or loader run something else: startup
+/// files, module and library search paths, option strings. Nobody may hand
+/// these to a script process, not a workflow and not a manifest's
+/// `inherit_env`.
+const INTERPRETER_VARS: &[&str] = &[
+    "BASH_ENV",
+    "ENV",
+    "BASHOPTS",
+    "SHELLOPTS",
+    "PS4",
+    "PROMPT_COMMAND",
+    "CDPATH",
+    "IFS",
+    "GLOBIGNORE",
+    "ZDOTDIR",
+    "PATH",
+    "PATHEXT",
+    "COMSPEC",
+    "PSMODULEPATH",
+    "NODE_OPTIONS",
+    "NODE_PATH",
+    "NODE_EXTRA_CA_CERTS",
+    "NODE_V8_COVERAGE",
+    "NODE_TLS_REJECT_UNAUTHORIZED",
+    "PERLLIB",
+    "RUBYOPT",
+    "RUBYLIB",
+    "JAVA_TOOL_OPTIONS",
+    "_JAVA_OPTIONS",
+    "JDK_JAVA_OPTIONS",
+    "CLASSPATH",
+    "LUA_PATH",
+    "LUA_CPATH",
+    "LUA_INIT",
+    "PHPRC",
+    "PHP_INI_SCAN_DIR",
+    "MAVEN_OPTS",
+    "GRADLE_OPTS",
+    "RUSTC",
+    "RUSTFLAGS",
+    "GOFLAGS",
+];
+
+const INTERPRETER_PREFIXES: &[&str] = &[
+    "LD_",
+    "DYLD_",
+    "PYTHON",
+    "GIT_",
+    "DOTNET_",
+    "COREHOST_",
+    "COMPLUS_",
+    "CORECLR_",
+    "PERL5",
+    "PERL_",
+    "RUBY",
+];
+
+/// Variables that point a program at other places than the real ones
+/// (profile and temp folders, proxies, certificate stores, the display) or that
+/// belong to Sevak. A workflow may not set these; a plugin may still ask to
+/// *inherit* Sevak's own value of the proxy and certificate ones.
+const REDIRECT_VARS: &[&str] = &[
+    "HOME",
+    "USERPROFILE",
+    "HOMEDRIVE",
+    "HOMEPATH",
+    "USER",
+    "USERNAME",
+    "USERDOMAIN",
+    "LOGNAME",
+    "SHELL",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "SYSTEMROOT",
+    "SYSTEMDRIVE",
+    "WINDIR",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "PROGRAMDATA",
+    "PROGRAMFILES",
+    "DISPLAY",
+    "WAYLAND_DISPLAY",
+    "XAUTHORITY",
+    "DBUS_SESSION_BUS_ADDRESS",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "FTP_PROXY",
+    "NO_PROXY",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+    "REQUESTS_CA_BUNDLE",
+    "CURL_CA_BUNDLE",
+];
+
+const REDIRECT_PREFIXES: &[&str] = &[
+    "XDG_",
+    "SEVAK_",
+    "ALFRED_",
+    "NODE_",
+    "JAVA_",
+    "GEM_",
+    "BUNDLE_",
+    "NPM_CONFIG_",
+    "PIP_",
+    "CARGO_",
+    "RUSTC_",
+];
+
+fn listed(name: &str, exact: &[&str], prefixes: &[&str]) -> bool {
+    // Names are compared without case on every platform: the rejecting lists
+    // err on the strict side, and Windows has no case in names anyway.
+    let upper = name.to_ascii_uppercase();
+    exact.contains(&upper.as_str()) || prefixes.iter().any(|p| upper.starts_with(p))
+}
+
+/// Whether `name` makes an interpreter or the loader run something else (see
+/// the module notes on `inherit_env`). Case-insensitive.
+pub fn is_interpreter_variable(name: &str) -> bool {
+    listed(name, INTERPRETER_VARS, INTERPRETER_PREFIXES)
+}
+
+/// Whether a workflow or script may not set `name` for a child process: the
+/// [interpreter variables](is_interpreter_variable), plus the ones that move a
+/// program's profile, temp folder, proxy, certificates or display, and
+/// `SEVAK_*`. Case-insensitive.
+pub fn is_reserved_variable(name: &str) -> bool {
+    is_interpreter_variable(name) || listed(name, REDIRECT_VARS, REDIRECT_PREFIXES)
+}
+
+fn in_base_set(name: &str, case_insensitive: bool) -> bool {
+    let eq = |a: &str, b: &str| {
+        if case_insensitive {
+            a.eq_ignore_ascii_case(b)
+        } else {
+            a == b
+        }
+    };
+    BASE_ENV.iter().any(|allowed| eq(name, allowed))
+        || BASE_ENV_PREFIXES.iter().any(|prefix| {
+            name.len() >= prefix.len()
+                && name.is_char_boundary(prefix.len())
+                && eq(&name[..prefix.len()], prefix)
+        })
+}
+
+/// The part of `vars` a script process starts with: the base set, plus the
+/// names in `inherit`. Interpreter variables are never passed on, even from
+/// Sevak's own environment.
+fn scrubbed_environment(
+    vars: impl IntoIterator<Item = (std::ffi::OsString, std::ffi::OsString)>,
+    inherit: &[String],
+    case_insensitive: bool,
+) -> Vec<(std::ffi::OsString, std::ffi::OsString)> {
+    vars.into_iter()
+        .filter(|(name, _)| {
+            let Some(name) = name.to_str() else {
+                return false;
+            };
+            // PATH, PATHEXT and COMSPEC are in the base set and are also on the
+            // interpreter list (a workflow may not *set* them), so the base
+            // set is checked first.
+            in_base_set(name, case_insensitive)
+                || (!is_interpreter_variable(name)
+                    && inherit.iter().any(|extra| {
+                        if case_insensitive {
+                            extra.eq_ignore_ascii_case(name)
+                        } else {
+                            extra == name
+                        }
+                    }))
+        })
+        .collect()
+}
+
+/// Makes `command` start with a scrubbed environment: Sevak's own variables
+/// that programs need to run (see `BASE_ENV`), the extra names in `inherit`
+/// (a plugin's `inherit_env`), and nothing else. Call it **before** setting
+/// any variable of your own on the command: it clears them.
+pub fn scrub_environment(command: &mut Command, inherit: &[String]) {
+    let kept = scrubbed_environment(env::vars_os(), inherit, cfg!(windows));
+    command.env_clear();
+    command.envs(kept);
 }
 
 /// Prepares a long-lived helper child that Sevak talks to over pipes (a script
@@ -117,8 +368,42 @@ fn interpreter_candidates(extension: &str, windows: bool) -> Vec<Vec<&'static st
     }
 }
 
-fn detached_command<S: AsRef<OsStr>>(program: &str, args: &[S], cwd: Option<&Path>) -> Command {
-    let mut command = Command::new(program);
+/// The program to give [`Command::new`].
+///
+/// On Unix a bare name (no `/`) is replaced by the file [`find_in_path`] finds,
+/// and is `NotFound` when `PATH` has none: handed to `exec` as it is, an empty
+/// `PATH` entry would make it look in the working directory, where a file of
+/// that name could be waiting. A name with a separator is returned as given,
+/// and so is everything on Windows (where Rust's own lookup never searches the
+/// working directory).
+pub fn pin_program(program: &str) -> std::io::Result<String> {
+    pin_with(program, cfg!(unix), &find_in_path)
+}
+
+fn pin_with(
+    program: &str,
+    unix: bool,
+    find: &dyn Fn(&str) -> Option<PathBuf>,
+) -> std::io::Result<String> {
+    if !unix || program.contains(['/', '\\']) {
+        return Ok(program.to_owned());
+    }
+    find(program)
+        .map(|path| path.to_string_lossy().into_owned())
+        .ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("`{program}` was not found on PATH"),
+            )
+        })
+}
+
+fn detached_command<S: AsRef<OsStr>>(
+    program: &str,
+    args: &[S],
+    cwd: Option<&Path>,
+) -> Result<Command> {
+    let mut command = Command::new(pin_program(program).map_err(|err| spawn_error(program, err))?);
     command
         .args(args)
         .stdin(Stdio::null())
@@ -128,7 +413,7 @@ fn detached_command<S: AsRef<OsStr>>(program: &str, args: &[S], cwd: Option<&Pat
         command.current_dir(cwd);
     }
     apply_child_env(&mut command, crate::session::xwayland_forced());
-    command
+    Ok(command)
 }
 
 fn spawn_error(program: &str, err: std::io::Error) -> PlatformError {
@@ -155,22 +440,21 @@ pub fn spawn_detached_in<S: AsRef<OsStr>>(
 ) -> Result<()> {
     use std::os::unix::process::CommandExt;
 
-    let mut child = detached_command(program, args, cwd)
+    let mut child = detached_command(program, args, cwd)?
         .process_group(0)
         .spawn()
         .map_err(|err| spawn_error(program, err))?;
 
-    let name = program.to_owned();
     let reaper = std::thread::Builder::new()
         .name("sevak-reaper".into())
         .spawn(move || match child.wait() {
             Ok(status) if status.success() => {}
-            Ok(status) => tracing::debug!(program = %name, %status, "detached child exited"),
-            Err(err) => tracing::debug!(program = %name, %err, "waiting on detached child failed"),
+            Ok(status) => tracing::debug!(%status, "detached child exited"),
+            Err(err) => tracing::debug!(%err, "waiting on detached child failed"),
         });
     if let Err(err) = reaper {
         // The child is already running; losing the reaper only risks a zombie.
-        tracing::debug!(program, %err, "could not start reaper thread");
+        tracing::debug!(%err, "could not start reaper thread");
     }
     Ok(())
 }
@@ -189,7 +473,7 @@ pub fn spawn_detached_in<S: AsRef<OsStr>>(
     const DETACHED_PROCESS: u32 = 0x0000_0008;
     const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
 
-    detached_command(program, args, cwd)
+    detached_command(program, args, cwd)?
         .creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
         .spawn()
         .map(drop)
@@ -206,7 +490,7 @@ pub fn run_checked<S: AsRef<OsStr>>(program: &str, args: &[S], grace: Duration) 
     use std::io::Read;
     use std::sync::mpsc;
 
-    let mut command = Command::new(program);
+    let mut command = Command::new(pin_program(program).map_err(|err| spawn_error(program, err))?);
     command
         .args(args)
         .stdin(Stdio::null())
@@ -225,22 +509,21 @@ pub fn run_checked<S: AsRef<OsStr>>(program: &str, args: &[S], grace: Duration) 
     // A thread owns the child so a slow program never blocks the caller and is
     // still reaped; it reports the exit through the channel if anyone listens.
     let (tx, rx) = mpsc::channel();
-    let name = program.to_owned();
     let waiter = std::thread::Builder::new()
         .name("sevak-run".into())
         .spawn(move || {
             let mut stderr = String::new();
-            if let Some(mut pipe) = child.stderr.take() {
-                let _ = pipe.read_to_string(&mut stderr);
+            if let Some(pipe) = child.stderr.take() {
+                let _ = pipe.take(MAX_STDERR_BYTES).read_to_string(&mut stderr);
             }
             let status = child.wait();
             if let Err(err) = &status {
-                tracing::debug!(program = %name, %err, "waiting on child failed");
+                tracing::debug!(%err, "waiting on child failed");
             }
             let _ = tx.send((status, stderr));
         });
     if let Err(err) = waiter {
-        tracing::debug!(program, %err, "could not start waiter thread");
+        tracing::debug!(%err, "could not start waiter thread");
         return Ok(());
     }
 
@@ -323,6 +606,39 @@ mod tests {
         assert!(find_in_path("sevak-definitely-not-a-real-program").is_none());
     }
 
+    #[test]
+    fn bare_program_names_are_pinned_to_the_file_found_on_path_on_unix() {
+        let found = |name: &str| (name == "tool").then(|| PathBuf::from("/usr/bin/tool"));
+        // Unix: a bare name becomes the file PATH found; none found is an error.
+        assert_eq!(pin_with("tool", true, &found).unwrap(), "/usr/bin/tool");
+        let err = pin_with("other", true, &found).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+        // A path is the caller's own choice, and Windows keeps Rust's lookup.
+        assert_eq!(
+            pin_with("/opt/x/tool", true, &found).unwrap(),
+            "/opt/x/tool"
+        );
+        assert_eq!(pin_with("./tool", true, &found).unwrap(), "./tool");
+        assert_eq!(pin_with("other", false, &found).unwrap(), "other");
+    }
+
+    #[test]
+    fn empty_and_relative_path_entries_never_match() {
+        // `cargo test` runs in the crate folder, so `Cargo.toml` is a file that
+        // an empty or relative entry would find.
+        assert!(Path::new("Cargo.toml").is_file());
+        let relative = [PathBuf::new(), PathBuf::from("."), PathBuf::from("./")];
+        assert_eq!(find_in_dirs(relative.into_iter(), "Cargo.toml"), None);
+        // An absolute entry still works, wherever the empty one sits.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("sevak-probe"), b"x").unwrap();
+        let found = find_in_dirs(
+            [PathBuf::new(), dir.path().to_path_buf()].into_iter(),
+            "sevak-probe",
+        );
+        assert_eq!(found, Some(dir.path().join("sevak-probe")));
+    }
+
     #[cfg(windows)]
     #[test]
     fn finds_cmd_without_extension() {
@@ -333,6 +649,158 @@ mod tests {
     #[test]
     fn finds_sh() {
         assert!(find_in_path("sh").is_some());
+    }
+
+    fn os(pairs: &[(&str, &str)]) -> Vec<(std::ffi::OsString, std::ffi::OsString)> {
+        pairs
+            .iter()
+            .map(|(k, v)| ((*k).into(), (*v).into()))
+            .collect()
+    }
+
+    fn names(kept: &[(std::ffi::OsString, std::ffi::OsString)]) -> Vec<String> {
+        let mut names: Vec<String> = kept
+            .iter()
+            .map(|(k, _)| k.to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        names
+    }
+
+    #[test]
+    fn a_script_starts_with_the_base_environment_and_nothing_else() {
+        let vars = os(&[
+            ("PATH", "/bin"),
+            ("HOME", "/home/me"),
+            ("LANG", "en_US.UTF-8"),
+            ("LC_ALL", "C"),
+            ("XDG_CONFIG_HOME", "/c"),
+            ("DISPLAY", ":0"),
+            ("TEMP", "/tmp"),
+            ("AWS_SECRET_ACCESS_KEY", "s"),
+            ("GITHUB_TOKEN", "t"),
+            ("HTTPS_PROXY", "http://p"),
+            ("BASH_ENV", "/x"),
+            ("PYTHONSTARTUP", "/x"),
+            ("LD_PRELOAD", "/x"),
+        ]);
+        let kept = scrubbed_environment(vars, &[], false);
+        assert_eq!(
+            names(&kept),
+            [
+                "DISPLAY",
+                "HOME",
+                "LANG",
+                "LC_ALL",
+                "PATH",
+                "TEMP",
+                "XDG_CONFIG_HOME"
+            ]
+        );
+    }
+
+    #[test]
+    fn inherit_env_adds_names_but_never_interpreter_variables() {
+        let vars = os(&[
+            ("PATH", "/bin"),
+            ("OPENAI_API_KEY", "k"),
+            ("HTTPS_PROXY", "http://p"),
+            ("BASH_ENV", "/x"),
+            ("NODE_OPTIONS", "--require x"),
+            ("OTHER", "o"),
+        ]);
+        let inherit: Vec<String> = ["OPENAI_API_KEY", "HTTPS_PROXY", "BASH_ENV", "NODE_OPTIONS"]
+            .map(String::from)
+            .into();
+        let kept = scrubbed_environment(vars, &inherit, false);
+        assert_eq!(names(&kept), ["HTTPS_PROXY", "OPENAI_API_KEY", "PATH"]);
+    }
+
+    #[test]
+    fn names_have_no_case_on_windows_only() {
+        let vars = || {
+            os(&[
+                ("Path", "C:\\bin"),
+                ("SystemRoot", "C:\\Windows"),
+                ("Secret", "s"),
+            ])
+        };
+        assert_eq!(
+            names(&scrubbed_environment(vars(), &[], true)),
+            ["Path", "SystemRoot"]
+        );
+        assert!(
+            scrubbed_environment(vars(), &[], false).is_empty(),
+            "on Unix `Path` is not `PATH`"
+        );
+        let inherit = ["SECRET".to_owned()];
+        assert_eq!(
+            names(&scrubbed_environment(vars(), &inherit, true)),
+            ["Path", "Secret", "SystemRoot"]
+        );
+    }
+
+    #[test]
+    fn scrubbing_a_command_removes_what_it_was_given_before() {
+        let mut command = Command::new("x");
+        command.env("LEFTOVER", "1");
+        scrub_environment(&mut command, &[]);
+        assert!(!command.get_envs().any(|(k, _)| k == "LEFTOVER"));
+        assert!(command
+            .get_envs()
+            .any(|(k, _)| k.eq_ignore_ascii_case("PATH")));
+    }
+
+    #[test]
+    fn variables_that_change_how_programs_start_are_refused() {
+        for name in [
+            "BASH_ENV",
+            "bash_env",
+            "ENV",
+            "PYTHONSTARTUP",
+            "PythonPath",
+            "PYTHONHOME",
+            "NODE_OPTIONS",
+            "NODE_PATH",
+            "PERL5OPT",
+            "PERL5LIB",
+            "RUBYOPT",
+            "RUBYLIB",
+            "JAVA_TOOL_OPTIONS",
+            "_JAVA_OPTIONS",
+            "LD_PRELOAD",
+            "LD_LIBRARY_PATH",
+            "DYLD_INSERT_LIBRARIES",
+            "PATH",
+            "Path",
+            "PATHEXT",
+            "COMSPEC",
+            "ComSpec",
+            "PSModulePath",
+            "GIT_SSH_COMMAND",
+            "DOTNET_STARTUP_HOOKS",
+        ] {
+            assert!(is_interpreter_variable(name), "{name}");
+            assert!(is_reserved_variable(name), "{name}");
+        }
+        for name in [
+            "HTTPS_PROXY",
+            "SSL_CERT_FILE",
+            "TMPDIR",
+            "HOME",
+            "userprofile",
+            "SEVAK_QUERY",
+            "XDG_DATA_HOME",
+            "NODE_ENV",
+        ] {
+            assert!(is_reserved_variable(name), "{name}");
+        }
+        for name in ["greeting", "API_KEY", "LANG", "my_var", "OPENAI_API_KEY"] {
+            assert!(!is_reserved_variable(name), "{name}");
+        }
+        // Reserved but not an interpreter hook: a manifest may inherit these.
+        assert!(!is_interpreter_variable("HTTPS_PROXY"));
+        assert!(!is_interpreter_variable("NODE_ENV"));
     }
 
     #[test]

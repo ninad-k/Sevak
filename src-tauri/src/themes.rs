@@ -8,8 +8,11 @@
 use std::sync::Mutex;
 
 use serde::Serialize;
+use sevak_core::gallery_source::{self, Pin};
 use sevak_core::theme_file;
-use sevak_core::theme_store::{self, GalleryEntry, StoredTheme, MAX_INDEX_BYTES, MAX_THEME_BYTES};
+use sevak_core::theme_store::{
+    self, Existing, GalleryEntry, StoredTheme, MAX_INDEX_BYTES, MAX_THEME_BYTES,
+};
 use sevak_platform::open;
 use sevak_plugins::net;
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
@@ -114,7 +117,8 @@ pub async fn import_theme(
             .and_then(|stem| stem.to_str())
             .unwrap_or("Imported theme");
         let config_dir = app.state::<AppState>().paths.config_dir.clone();
-        let stored = theme_store::install_text(&config_dir, &text, hint)?;
+        // A file the user picked: replacing a theme of that name is expected.
+        let stored = theme_store::install_text(&config_dir, &text, hint, &Existing::Replace)?;
         refresh_if_active(app, &stored.file);
         Ok(Some(stored))
     })
@@ -178,39 +182,65 @@ pub struct GalleryItem {
     installed: bool,
 }
 
+/// The gallery as the editor shows it.
+#[derive(Debug, Serialize)]
+pub struct ThemeGallery {
+    items: Vec<GalleryItem>,
+    /// Where the list was read from.
+    source: String,
+    /// Set when the list is not from this build's own release, and why.
+    note: Option<String>,
+}
+
 /// **The only network request of the theme editor**, made when the user clicks
-/// "Browse online themes": one `GET` of the gallery index
-/// ([`theme_store::GALLERY_INDEX_URL`]) with no cookies, no query string and no
-/// identifying headers. Nothing is installed by it.
+/// "Browse online themes": one `GET` of the gallery index at the tag of this
+/// build (`.../ninad-k/Sevak/v<version>/gallery/themes.json`, or the latest
+/// release's when this build has no tag), with no cookies, no query string and
+/// no identifying headers. Nothing is installed by it.
 #[tauri::command]
-pub async fn fetch_theme_gallery(app: AppHandle) -> Result<Vec<GalleryItem>, String> {
+pub async fn fetch_theme_gallery(app: AppHandle) -> Result<ThemeGallery, String> {
     blocking(app, |app| {
-        let bytes = download(theme_store::GALLERY_INDEX_URL, MAX_INDEX_BYTES)?;
-        let text = String::from_utf8(bytes)
+        let pinned = net::fetch_pinned(
+            &net::Https,
+            Pin::for_build().as_ref(),
+            theme_store::GALLERY_INDEX_FILE,
+            MAX_INDEX_BYTES as usize,
+        )?;
+        let text = String::from_utf8(pinned.body)
             .map_err(|_| "The gallery index is not UTF-8 text.".to_owned())?;
-        let entries = theme_store::parse_index(&text)?;
+        let entries = theme_store::parse_index(&text, &pinned.pin)?;
         *GALLERY
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner()) = entries.clone();
 
         let config_dir = app.state::<AppState>().paths.config_dir.clone();
-        Ok(entries
-            .into_iter()
-            .map(|entry| GalleryItem {
-                installed: config_dir
-                    .join(theme_store::file_for(&entry.name))
-                    .is_file(),
-                entry,
-            })
-            .collect())
+        Ok(ThemeGallery {
+            source: pinned.pin.index_url(theme_store::GALLERY_INDEX_FILE),
+            note: pinned.note,
+            items: entries
+                .into_iter()
+                .map(|entry| GalleryItem {
+                    installed: config_dir
+                        .join(theme_store::file_for(&entry.name))
+                        .is_file(),
+                    entry,
+                })
+                .collect(),
+        })
     })
     .await
 }
 
 /// Downloads gallery theme `id` (from the index fetched above), checks its
 /// SHA-256 against the index and only then writes it to the themes folder.
+/// A theme of the same name that is already there is not replaced, unless
+/// `replace` says the user pressed "Reinstall" for exactly that theme.
 #[tauri::command]
-pub async fn install_gallery_theme(app: AppHandle, id: String) -> Result<StoredTheme, String> {
+pub async fn install_gallery_theme(
+    app: AppHandle,
+    id: String,
+    replace: Option<bool>,
+) -> Result<StoredTheme, String> {
     blocking(app, move |app| {
         let entry = GALLERY
             .lock()
@@ -221,8 +251,13 @@ pub async fn install_gallery_theme(app: AppHandle, id: String) -> Result<StoredT
             .ok_or("Open the gallery again; that theme is no longer in the list.")?;
         let bytes = download(&entry.url, MAX_THEME_BYTES)?;
         let text = theme_store::verify_download(&bytes, &entry.sha256)?;
+        let existing = if replace == Some(true) {
+            Existing::ReplaceOnly(theme_store::file_for(&entry.name))
+        } else {
+            Existing::Refuse
+        };
         let config_dir = app.state::<AppState>().paths.config_dir.clone();
-        let stored = theme_store::install_text(&config_dir, &text, &entry.name)?;
+        let stored = theme_store::install_text(&config_dir, &text, &entry.name, &existing)?;
         tracing::info!(theme = %entry.name, file = %stored.file, "installed a gallery theme");
         refresh_if_active(app, &stored.file);
         Ok(stored)
@@ -241,12 +276,12 @@ async fn blocking<T: Send + 'static>(
 }
 
 /// A downloaded file of at most `limit` bytes, through the download the
-/// workflow gallery uses too (`sevak_plugins::net::fetch_https`: https only,
-/// redirects only to https, a timeout, nothing sent but the request itself).
-/// The address must also pass the theme index's own URL rules.
+/// workflow gallery uses too (`sevak_plugins::net::fetch_https`: only the Sevak
+/// repository's https addresses, at the first request and at every redirect, a
+/// timeout, nothing sent but the request itself).
 fn download(url: &str, limit: u64) -> Result<Vec<u8>, String> {
-    if !theme_store::is_https_url(url) {
-        return Err("Only https:// downloads are allowed.".to_owned());
+    if !gallery_source::is_allowed(url) {
+        return Err("Only https:// files in Sevak's own repository are downloaded.".to_owned());
     }
     let limit = usize::try_from(limit).unwrap_or(usize::MAX);
     net::fetch_https(url, limit).map_err(|err| format!("Cannot download it: {err}."))
@@ -290,9 +325,11 @@ mod tests {
     }
 
     #[test]
-    fn only_https_downloads_are_attempted() {
+    fn only_the_repositorys_https_files_are_downloaded() {
         for url in [
             "http://example.com/a.toml",
+            "https://example.com/a.toml",
+            "https://raw.githubusercontent.com/other/repo/main/a.toml",
             "file:///etc/passwd",
             "ftp://x/y",
             "",

@@ -23,8 +23,10 @@
 //! - Nothing is observed while `[snippets] auto_expand` is off: the key listener
 //!   is not even started.
 //! - Characters typed in Sevak's own windows, in a terminal (unless
-//!   `expand_in_terminals`), in an app listed in `ignore_apps`, or in a password
-//!   box the platform can recognise never reach the buffer.
+//!   `expand_in_terminals`), in a web browser (unless `expand_in_browsers`: a
+//!   password field in a page cannot be told from other text boxes), in an app
+//!   listed in `ignore_apps`, in an app that cannot be identified, or in a
+//!   password box the platform can recognise never reach the buffer.
 //!
 //! # Matching
 //!
@@ -47,8 +49,9 @@ use std::time::{Duration, Instant};
 use chrono::Local;
 use sevak_core::config::{ExpandOn, Snippet, SnippetsConfig};
 use sevak_core::Config;
-use sevak_platform::capture::is_terminal;
+use sevak_platform::capture::{is_browser, is_terminal};
 use sevak_platform::{KeyEvent, KeyListener, KeyListenerSupport, PlatformProvider, TypingTarget};
+use zeroize::Zeroize;
 
 use crate::example_uuid::random_uuid_v4;
 use crate::snippets::{expand, Env};
@@ -63,8 +66,10 @@ const TARGET_CACHE: Duration = Duration::from_millis(250);
 /// How often the worker looks at its stop flag when nothing is typed.
 const IDLE_POLL: Duration = Duration::from_millis(250);
 
-/// The last few typed characters. Wiped, not just emptied, when cleared or
-/// dropped.
+/// The last few typed characters. Overwritten (not just emptied) when cleared or
+/// dropped, with the `zeroize` crate, which the compiler may not optimise away.
+/// Best effort: copies the OS made on the way here (key events, a channel slot)
+/// are not in its reach.
 struct Buffer {
     chars: Vec<char>,
 }
@@ -72,25 +77,35 @@ struct Buffer {
 impl Buffer {
     fn new() -> Self {
         Self {
+            // The full size up front: it never grows, so no old copy is left
+            // behind in a freed allocation.
             chars: Vec::with_capacity(BUFFER_CHARS),
         }
     }
 
     fn push(&mut self, c: char) {
         if self.chars.len() == BUFFER_CHARS {
-            self.chars.remove(0);
+            // The oldest character is overwritten in place; nothing is left
+            // behind in the slot after the last one.
+            self.chars.rotate_left(1);
+            if let Some(last) = self.chars.last_mut() {
+                *last = c;
+            }
+        } else {
+            self.chars.push(c);
         }
-        self.chars.push(c);
     }
 
     fn pop(&mut self) {
-        self.chars.pop();
+        if let Some(last) = self.chars.last_mut() {
+            last.zeroize();
+            self.chars.pop();
+        }
     }
 
     /// Overwrites every remembered character before forgetting it.
     fn wipe(&mut self) {
-        self.chars.fill('\0');
-        self.chars.clear();
+        self.chars.zeroize();
     }
 }
 
@@ -552,16 +567,35 @@ impl Worker {
     }
 }
 
+/// Says once, at debug level and without any typed text, that an app that could
+/// not be identified was skipped.
+fn note_unknown_app() {
+    static NOTED: AtomicBool = AtomicBool::new(false);
+    if !NOTED.swap(true, Ordering::Relaxed) {
+        tracing::debug!(
+            "the app being typed into could not be identified; snippets are not expanded there"
+        );
+    }
+}
+
 /// Whether typing into `target` may be watched and expanded.
 fn allowed(target: &TypingTarget, settings: &SnippetsConfig) -> bool {
     if target.own_window || target.private {
         return false;
     }
     let Some(app) = &target.app else {
-        // Not told which app: nothing to exclude it by.
-        return true;
+        // The app cannot be told (an elevated or protected process, a window
+        // without a class, an app without a bundle id): `ignore_apps` and the
+        // terminal rule cannot be applied, so nothing is watched or expanded.
+        note_unknown_app();
+        return false;
     };
     if app.matches_any(&settings.ignore_apps) {
+        return false;
+    }
+    // A password field in a web page cannot be told from any other text box,
+    // so browsers are skipped unless the user has said otherwise.
+    if is_browser(app) && !settings.expand_in_browsers {
         return false;
     }
     settings.expand_in_terminals || !is_terminal(app)
@@ -627,6 +661,45 @@ mod tests {
         assert_eq!(found.snippet, 0);
         assert_eq!(found.delete, 3);
         assert_eq!(found.delimiter, None);
+    }
+
+    #[test]
+    fn wiping_and_popping_leave_no_copy_of_what_was_typed() {
+        let mut buffer = Buffer::new();
+        for c in "hunter2".chars() {
+            buffer.push(c);
+        }
+        let pointer = buffer.chars.as_ptr();
+        let capacity = buffer.chars.capacity();
+        assert!(capacity >= 7);
+
+        // SAFETY (both reads): the allocation lives as long as `buffer`, is
+        // never reallocated (the capacity is reserved up front) and the slots
+        // read were written by `push`.
+        buffer.pop();
+        let slots = unsafe { std::slice::from_raw_parts(pointer, 7) };
+        assert_eq!(slots[6], '\0', "the popped character is gone");
+        assert_eq!(slots[5], 'r');
+
+        buffer.wipe();
+        assert!(buffer.chars.is_empty());
+        let slots = unsafe { std::slice::from_raw_parts(pointer, 7) };
+        assert!(slots.iter().all(|c| *c == '\0'), "{slots:?}");
+    }
+
+    #[test]
+    fn a_full_buffer_forgets_its_oldest_character_in_place() {
+        let mut buffer = Buffer::new();
+        buffer.push('a');
+        let pointer = buffer.chars.as_ptr();
+        for c in std::iter::repeat_n('a', BUFFER_CHARS) {
+            buffer.push(c);
+        }
+        buffer.push('z');
+        assert_eq!(buffer.chars.len(), BUFFER_CHARS);
+        assert_eq!(buffer.chars.last(), Some(&'z'));
+        // Never reallocated, so no old copy is left in a freed allocation.
+        assert_eq!(buffer.chars.as_ptr(), pointer);
     }
 
     #[test]
@@ -869,10 +942,21 @@ mod tests {
             ..TypingTarget::default()
         };
         assert!(allowed(&target(Some("Notepad")), &config));
-        assert!(allowed(&target(None), &config));
+        // An app that cannot be identified cannot be checked against the rules.
+        assert!(!allowed(&target(None), &config));
         assert!(!allowed(&target(Some("keepassxc")), &config));
         assert!(!allowed(&target(Some("WindowsTerminal")), &config));
         assert!(!allowed(&target(Some("gnome-terminal-server")), &config));
+        // Browsers are skipped unless allowed, whatever they call themselves.
+        for browser in [
+            "chrome", "msedge", "Firefox", "Safari", "brave", "Arc", "zen",
+        ] {
+            assert!(!allowed(&target(Some(browser)), &config), "{browser}");
+        }
+        config.expand_in_browsers = true;
+        assert!(allowed(&target(Some("chrome")), &config));
+        assert!(!allowed(&target(Some("keepassxc")), &config));
+        config.expand_in_browsers = false;
         config.expand_in_terminals = true;
         assert!(allowed(&target(Some("WindowsTerminal")), &config));
         assert!(!allowed(&target(Some("KeePassXC")), &config));
@@ -1084,7 +1168,9 @@ mod tests {
         // The keyword is complete, and before Sevak gets to press Backspace the
         // user types another character: deleting now would eat the wrong text.
         let fake = Arc::new(Fake {
-            latency: Duration::from_millis(200),
+            // Long enough that a loaded CI runner still types the next
+            // character inside the window.
+            latency: Duration::from_millis(800),
             ..Arc::into_inner(Fake::new()).unwrap()
         });
         let cfg = config(vec![snippet("Sig", Some("sig"), "Regards")], immediate());
@@ -1093,7 +1179,7 @@ mod tests {
         std::thread::sleep(Duration::from_millis(60));
         fake.type_text("x");
         fake.settle();
-        std::thread::sleep(Duration::from_millis(300));
+        std::thread::sleep(Duration::from_millis(1000));
         assert!(fake.replaced.lock().unwrap().is_empty());
 
         // And the next keyword still works: the buffer was wiped, not wedged.
@@ -1158,6 +1244,27 @@ mod tests {
             fake.settle();
             assert!(fake.replaced.lock().unwrap().is_empty());
         }
+    }
+
+    #[test]
+    fn an_app_that_cannot_be_identified_is_not_watched_or_expanded() {
+        let fake = Fake::new();
+        *fake.target.lock().unwrap() = TypingTarget::default();
+        let cfg = config(vec![snippet("Sig", Some("sig"), "Regards")], immediate());
+        let _service = running(&fake, &cfg);
+        fake.type_text("sig");
+        fake.settle();
+        assert!(fake.replaced.lock().unwrap().is_empty());
+
+        // Once the app is known again, typing works as usual.
+        *fake.target.lock().unwrap() = TypingTarget {
+            app: Some(ForegroundApp::new("Notepad")),
+            ..TypingTarget::default()
+        };
+        fake.send(KeyEvent::Reset);
+        fake.type_text("sig");
+        fake.settle();
+        assert_eq!(fake.replaced.lock().unwrap().len(), 1);
     }
 
     #[test]

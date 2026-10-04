@@ -21,10 +21,12 @@ pub const FIXED_KEYWORDS: &[(&str, &str)] = &[
     (":", "the emoji picker"),
     ("@", "contacts"),
     ("uuid", "the UUID generator"),
+    ("ext", "the extension store"),
+    ("store", "the extension store"),
 ];
 
 /// A keyword the user can change in `[files]`, `[bookmarks]`, `[tasks]`,
-/// `[media]`, `[contacts]`, `[onepassword]`, `[dictionary]` or `[ai]`.
+/// `[media]`, `[window_management]`, `[contacts]`, `[onepassword]`, `[dictionary]` or `[ai]`.
 #[derive(Debug, Clone, Copy)]
 pub struct ConfigurableKeyword<'a> {
     /// How an error message names the setting ("files", "dictionary").
@@ -39,7 +41,7 @@ pub struct ConfigurableKeyword<'a> {
 
 /// Every configurable built-in keyword, as the config has it (untrimmed, and
 /// empty when the search is off).
-pub fn configurable_keywords(config: &Config) -> [ConfigurableKeyword<'_>; 11] {
+pub fn configurable_keywords(config: &Config) -> [ConfigurableKeyword<'_>; 13] {
     let entry = |label, keyword, owner| ConfigurableKeyword {
         label,
         keyword,
@@ -69,6 +71,16 @@ pub fn configurable_keywords(config: &Config) -> [ConfigurableKeyword<'_>; 11] {
             "automation tasks",
         ),
         entry("media controls", &config.media.keyword, "media controls"),
+        entry(
+            "window layouts",
+            &config.window_management.keyword,
+            "window layouts",
+        ),
+        entry(
+            "window switcher",
+            &config.window_management.switcher_keyword,
+            "the window switcher",
+        ),
         required("contacts", &config.contacts.keyword, "contacts"),
         required("1Password", &config.onepassword.keyword, "1Password"),
         required(

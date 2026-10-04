@@ -7,6 +7,7 @@
   let { oninstalled }: { oninstalled: (theme: StoredTheme) => void } = $props();
 
   let items = $state<GalleryItem[] | null>(null);
+  let galleryNote = $state<string | null>(null);
   let loading = $state(false);
   let error = $state<string | null>(null);
   let installing = $state<string | null>(null);
@@ -18,15 +19,18 @@
     notice = null;
     const result = await fetchThemeGallery();
     loading = false;
-    if (result.ok) items = result.value;
-    else error = result.error;
+    if (result.ok) {
+      items = result.value.items;
+      galleryNote = result.value.note;
+    } else error = result.error;
   }
 
   async function install(item: GalleryItem) {
     installing = item.id;
     error = null;
     notice = null;
-    const result = await installGalleryTheme(item.id);
+    // "Reinstall" is the user's yes to replacing the theme that is already there.
+    const result = await installGalleryTheme(item.id, item.installed);
     installing = null;
     if (!result.ok) {
       error = `${item.name}: ${result.error}`;
@@ -56,6 +60,7 @@
 
   {#if error}<p class="msg error" role="alert">{error}</p>{/if}
   {#if notice}<p class="msg ok" role="status">{notice}</p>{/if}
+  {#if galleryNote}<p class="msg" role="status">{galleryNote}</p>{/if}
 
   {#if items}
     {#if items.length === 0}

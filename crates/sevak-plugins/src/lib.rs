@@ -12,6 +12,8 @@
 //! | `system`         | [`SystemPlugin`]                        | none    | yes    |
 //! | `tasks`          | [`TasksPlugin`] (automation tasks)      | `t`     | config |
 //! | `media`          | [`MediaPlugin`] (play/pause, now playing) | `play` | config |
+//! | `windows`        | [`WindowManagerPlugin`] (layouts)       | `win`   | config |
+//! | `windows:switch` | [`WindowManagerPlugin`] (window switcher) | `w`   | no     |
 //! | `shell`          | [`ShellPlugin`]                         | `>`     | no     |
 //! | `clipboard`      | [`ClipboardPlugin`] (opt-in history)    | `cb`    | no     |
 //! | `snippets`       | [`SnippetsPlugin`]                      | `s`     | no     |
@@ -48,6 +50,7 @@ pub mod currency;
 pub mod dictionary;
 pub mod emoji;
 pub mod example_uuid;
+pub mod extensions;
 pub mod file_buffer;
 pub mod files;
 pub mod keywords;
@@ -67,6 +70,7 @@ pub mod system;
 pub mod tasks;
 pub mod units;
 pub mod web_search;
+pub mod window_manager;
 pub mod workflow;
 
 #[cfg(test)]
@@ -95,6 +99,7 @@ pub use snippets::SnippetsPlugin;
 pub use system::SystemPlugin;
 pub use tasks::TasksPlugin;
 pub use web_search::WebSearchPlugin;
+pub use window_manager::WindowManagerPlugin;
 pub use workflow::WorkflowHost;
 
 /// Instantiates every enabled built-in plugin (`apps`, `calculator`, one
@@ -142,6 +147,8 @@ mod tests {
                 "system",
                 "tasks",
                 "media",
+                "windows",
+                "windows:switch",
                 "shell",
                 "clipboard",
                 "snippets",
@@ -173,6 +180,8 @@ mod tests {
                 "system",
                 "tasks",
                 "media",
+                "windows",
+                "windows:switch",
                 "shell",
                 "clipboard",
                 "snippets",

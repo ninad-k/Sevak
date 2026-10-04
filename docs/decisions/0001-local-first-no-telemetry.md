@@ -33,8 +33,9 @@ Sevak keeps everything on the machine and collects nothing about its users.
   prioritisation relies on issues and direct feedback.
 - Features that would need a server (sync, cloud history, galleries with
   accounts) are out of scope by design.
-- Clipboard history is stored unencrypted on disk (in a file only the current
-  user can read where the platform allows it), and the 1Password list is held
+- Clipboard history is kept on this computer only (the local, non-roaming data
+  folder on Windows) and is encrypted for the current user on Windows; elsewhere
+  it is a plain file only the current user can read. The 1Password list is held
   in memory only. Protection against other software running as the same user is
   the operating system's, not Sevak's; see the
   [threat model](../security/threat-model.md).

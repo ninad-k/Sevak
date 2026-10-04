@@ -9,7 +9,7 @@ Sevak is local-first. Your data stays on your machine except when you explicitly
 - The preview pane: it reads the selected file or folder from your disk, only while it is open; links are shown as addresses and never fetched. For a PDF, an Office file or a video it asks your operating system to draw a picture (Windows' PDF engine and thumbnails, macOS Quick Look, or `pdftoppm` on Linux), which may start a short-lived helper process with a time limit; the picture goes to the window in memory, and any temporary file the helper makes is deleted straight away
 - Safari bookmarks (macOS): the bookmarks file is read only after you give Sevak Full Disk Access, only to search it, and nothing from it is stored or sent anywhere
 - Search history (if enabled)
-- Clipboard history (if enabled), including copied images (PNG files) and the paths of copied files, unencrypted
+- Clipboard history (if enabled), including copied images (PNG files) and the paths of copied files, in the local (non-roaming) data folder, encrypted for your account on Windows
 - Snippet library, and snippet expansion as you type (if enabled): the last 64 typed characters are kept in memory only, never stored, logged or sent
 - Contacts (if enabled) and the 1Password list of logins (if enabled): in memory only, and kept out of the search history and usage statistics
 - The dictionary and spelling checker (bundled WordNet data or the system's own), the emoji picker, automation tasks and media controls
@@ -87,8 +87,9 @@ When an update is available and you agree to install it, its package is download
 
 Only when you click **Browse online themes** (**Settings → Appearance → Theme editor**):
 
-- One request for `https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/themes.json`, the list of community themes
-- **Install** on a theme downloads that one theme file, saved only if its SHA-256 matches the one in the list
+- One request for `https://raw.githubusercontent.com/ninad-k/Sevak/v<your version>/gallery/themes.json`, the list of community themes, read from the release of your Sevak version (a build without a published release uses the latest release and says so)
+- **Install** on a theme downloads that one theme file, saved only if its SHA-256 matches the one in the list; a theme of the same name is never replaced silently
+- Files are requested only from Sevak's own repository on GitHub, also when a request is redirected
 - Nothing is requested in the background or on startup
 
 See [Theme gallery](themes.md#theme-gallery).
@@ -97,13 +98,23 @@ See [Theme gallery](themes.md#theme-gallery).
 
 Only when you press **Load gallery** (**Settings → Gallery**):
 
-- One request for `gallery/index.json` from `raw.githubusercontent.com`, the list of ready-made workflows and script plugins
+- One request for `gallery/index.json` from `raw.githubusercontent.com/ninad-k/Sevak`, at the tag of your Sevak version, the list of ready-made workflows and script plugins (a build without a published release uses the latest release and says so)
 - **Install** on an entry downloads that one package, checked against the checksum in the index before anything is written; the installed folder still has to be allowed before it runs
 - Nothing is requested in the background or on startup
 
 See [The gallery](workflows.md#the-gallery).
 
-Both galleries send nothing but the request itself (no cookies or identifiers beyond a `Sevak/<version> (gallery)` user agent). Sevak never downloads plugins or workflows on its own.
+### Extensions page and `ext`
+
+Only when you press **Load the list** on **Settings → Extensions**, or press Enter on **Load the extension list** after typing `ext` or `store`:
+
+- Two requests from `raw.githubusercontent.com/ninad-k/Sevak`, at the tag of your Sevak version: `gallery/index.json` (workflows, script plugins, native extensions) and `gallery/themes.json`. The lists are saved in the data folder (`extensions-catalog.json`) so the page works offline; opening the page reads that file and requests nothing
+- **Install** and **Update** download that one package (for a native extension, the one build for your computer), checked against its checksum before anything is written; nothing runs until you allow it
+- Nothing is requested in the background or on startup
+
+See [Extensions](features/extensions.md).
+
+All these galleries send nothing but the request itself (no cookies or identifiers beyond a `Sevak/<version> (gallery)` user agent). A build without a published release makes one more request, to GitHub's "latest release" link, to find out which release to read. Sevak never downloads plugins or workflows on its own.
 
 ## What is NOT collected
 
@@ -155,7 +166,12 @@ Inside your config folder (see [Files and data locations](files-and-data.md)):
 | `plugins/` folder | Script plugins and their data | No, unless the plugin makes network requests |
 | `workflows/` folder | Workflows and their data | No, unless a workflow's script makes network requests |
 | `themes/` folder | Theme files | No |
+| `backup.toml`, `backup-state.json`, `backup-snapshots/` | The options of automatic [backups](backup-and-restore.md), when the last one was made, and the safety copies taken before a restore (settings, snippets, themes, plugins and workflows only) | No |
 | Logs | Diagnostic output for troubleshooting | No (you can share them manually, or use the [diagnostics report](#diagnostics-report), which has a redacted tail) |
+
+## Backups
+
+A [backup](backup-and-restore.md) is a file you ask for (or switch on) and Sevak writes on your computer; it is never uploaded. It holds your settings, snippets, web searches, themes, script plugins and workflows. It never holds API keys, tokens or passwords, clipboard or search history, anything from a password manager or 1Password, logs, or the record of which scripts you allowed: what can go in is an allowlist, and a test fails if something new could. The file is **not encrypted**, so keep it where only you can read it.
 
 ## Clipboard behavior
 
@@ -179,7 +195,7 @@ Off by default (`[snippets] auto_expand`). While it is on, Sevak watches your ke
 
 - Only the last 64 characters you typed are kept, in memory, and they are wiped whenever the text could have changed and after every expansion. They are never written to disk, logged or sent anywhere.
 - Nothing is observed while the setting is off: expansion does not listen to the keyboard. (The Windows hook for the launcher shortcut, above, only compares key presses with your shortcuts.)
-- Sevak's own windows, terminals, apps listed in `[snippets] ignore_apps` and password boxes the system can detect are skipped.
+- Sevak's own windows, terminals, web browsers (unless `[snippets] expand_in_browsers = true`: a password field in a web page cannot be told from other text), apps listed in `[snippets] ignore_apps`, apps Sevak cannot identify, and password boxes the system can detect are skipped. On Windows that includes password fields reported by UI Automation (with browsers, only when their accessibility support is on).
 
 See [Expand snippets as you type](features/snippets.md#expand-snippets-as-you-type).
 

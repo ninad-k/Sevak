@@ -1,8 +1,8 @@
 //! Loading icons that already exist as image files.
 
-use std::fs;
 use std::path::Path;
 
+use sevak_core::bounded_read::{read_capped, MAX_ICON_BYTES};
 use sevak_core::IconData;
 
 use crate::error::{PlatformError, Result};
@@ -14,10 +14,9 @@ pub fn load(path: &Path) -> Result<IconData> {
         operation: "load_icon",
         message: format!("unsupported icon format: {}", path.display()),
     })?;
-    Ok(IconData {
-        mime,
-        bytes: fs::read(path)?,
-    })
+    // A thumbnail of the clipboard history may be encrypted.
+    let bytes = sevak_core::sealed::open_global(read_capped(path, MAX_ICON_BYTES)?)?;
+    Ok(IconData { mime, bytes })
 }
 
 /// MIME type for the image formats web views render, by file extension.

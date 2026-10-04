@@ -6,7 +6,9 @@ mod expand;
 mod launch;
 mod paste;
 mod scan;
+mod secret_hint;
 pub(crate) mod tasks;
+mod wm;
 mod xdg;
 
 use std::io::Read;
@@ -21,9 +23,11 @@ use crate::error::{PlatformError, Result};
 use crate::icon_file;
 use crate::icon_theme::{self, IconResolver};
 use crate::keyboard::{KeyListener, KeyListenerSupport, KeySink, TypingTarget};
-use crate::paste::{ForegroundApp, PasteContent, PasteOutcome, PasteSupport};
+use crate::paste::{ClipboardRead, ForegroundApp, PasteContent, PasteOutcome, PasteSupport};
 use crate::provider::PlatformProvider;
 use crate::session;
+use crate::window_manager::{WindowId, WindowInfo, WindowState, WindowSupport};
+use sevak_core::window_layout::{Monitor, Rect};
 
 pub(crate) struct LinuxProvider;
 
@@ -78,6 +82,10 @@ impl PlatformProvider for LinuxProvider {
         paste::foreground_app()
     }
 
+    fn identifies_apps(&self) -> bool {
+        paste::can_identify_apps()
+    }
+
     fn paste_support(&self) -> PasteSupport {
         paste::paste_support()
     }
@@ -88,6 +96,10 @@ impl PlatformProvider for LinuxProvider {
 
     fn paste_clip(&self, content: &ClipContent, restore_clipboard: bool) -> Result<PasteOutcome> {
         paste::paste_content(PasteContent::Clip(content), restore_clipboard)
+    }
+
+    fn read_clipboard(&self) -> Result<ClipboardRead> {
+        paste::read_clipboard()
     }
 
     fn key_listener_support(&self) -> KeyListenerSupport {
@@ -113,6 +125,34 @@ impl PlatformProvider for LinuxProvider {
 
     fn capture_selection(&self, options: &CaptureOptions) -> SelectionCapture {
         capture::capture_selection(options)
+    }
+
+    fn window_support(&self) -> WindowSupport {
+        wm::window_support()
+    }
+
+    fn list_windows(&self) -> Result<Vec<WindowInfo>> {
+        wm::list_windows()
+    }
+
+    fn focus_window(&self, window: &WindowId) -> Result<()> {
+        wm::focus_window(window)
+    }
+
+    fn target_window(&self) -> Result<WindowState> {
+        wm::target_window()
+    }
+
+    fn window_state(&self, window: &WindowId) -> Result<WindowState> {
+        wm::window_state(window)
+    }
+
+    fn set_window_rect(&self, window: &WindowId, rect: Rect) -> Result<()> {
+        wm::set_window_rect(window, rect)
+    }
+
+    fn list_monitors(&self) -> Result<Vec<Monitor>> {
+        wm::list_monitors()
     }
 }
 
@@ -144,7 +184,12 @@ fn gsettings_icon_theme() -> Option<String> {
     }
 
     let mut output = String::new();
-    child.stdout.take()?.read_to_string(&mut output).ok()?;
+    child
+        .stdout
+        .take()?
+        .take(64 * 1024)
+        .read_to_string(&mut output)
+        .ok()?;
     icon_theme::parse_gsettings_string(&output)
 }
 

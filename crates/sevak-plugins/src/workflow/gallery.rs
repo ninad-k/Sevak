@@ -9,13 +9,16 @@
 //! into the workflows or plugins folder as a *new, unapproved* folder: the
 //! normal Allow dialog still decides whether it may run.
 //!
-//! The index is a JSON file, `gallery/index.json` in the Sevak repository:
+//! The index is a JSON file, `gallery/index.json` in the Sevak repository,
+//! read from the tag of the running build (see [`sevak_core::gallery_source`]
+//! and `docs/security/gallery-trust.md`). Entries name their package by a path
+//! relative to the repository root at that tag:
 //!
 //! ```json
-//! {"format": 1, "name": "Sevak gallery", "entries": [
+//! {"format": 2, "name": "Sevak gallery", "entries": [
 //!   {"id": "search-docs", "kind": "workflow", "name": "Search docs",
 //!    "description": "...", "author": "...", "version": "1.0",
-//!    "source": "https://raw.githubusercontent.com/.../search-docs.zip",
+//!    "source": "gallery/packages/search-docs.zip",
 //!    "sha256": "<64 hex digits>"}
 //! ]}
 //! ```
@@ -25,7 +28,7 @@
 //! is specific to workflows and script plugins, and entries of kinds this Sevak
 //! does not know are skipped rather than failing the index.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
@@ -34,14 +37,17 @@ use serde::{Deserialize, Serialize};
 
 use super::model::{valid_folder_name, Workflow, FILE as WORKFLOW_FILE};
 use super::validate::error_summary;
-use crate::net::{fetch_https, verify_sha256};
+use crate::net::{fetch_https, fetch_pinned, verify_sha256, Https, Transport};
 use crate::script::{Manifest, MANIFEST_FILE as PLUGIN_FILE};
+use sevak_core::gallery_source::Pin;
+use sevak_core::safe_names::is_reserved_device_name;
 
-/// Where the index lives. The settings window fetches it only on request.
-pub const INDEX_URL: &str =
-    "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/index.json";
-/// The index format this Sevak reads.
-pub const INDEX_FORMAT: u32 = 1;
+/// The index file inside the repository's `gallery` folder. The settings window
+/// fetches it only on request.
+pub const INDEX_FILE: &str = "index.json";
+/// The index format this Sevak reads. Format 2 names packages by a path
+/// relative to the release (format 1 used absolute `main` addresses).
+pub const INDEX_FORMAT: u32 = 2;
 
 pub const MAX_INDEX_BYTES: usize = 512 * 1024;
 pub const MAX_PACKAGE_BYTES: usize = 5 * 1024 * 1024;
@@ -51,6 +57,10 @@ const MAX_UNPACKED_BYTES: u64 = 10 * 1024 * 1024;
 const MAX_PATH_BYTES: usize = 200;
 
 /// What an entry installs as.
+///
+/// Older Sevaks do not know [`Kind::Native`]: an index entry of an unknown kind
+/// is skipped, so adding native extensions to the index does not change the
+/// index format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Kind {
@@ -58,6 +68,9 @@ pub enum Kind {
     Workflow,
     /// A script plugin folder for `<config dir>/plugins`.
     Plugin,
+    /// A native extension (a compiled program, one `.sevakext` package per
+    /// platform) for `<config dir>/plugins`; see [`crate::extensions`].
+    Native,
 }
 
 impl Kind {
@@ -65,9 +78,19 @@ impl Kind {
     pub fn manifest_file(self) -> &'static str {
         match self {
             Self::Workflow => WORKFLOW_FILE,
-            Self::Plugin => PLUGIN_FILE,
+            Self::Plugin | Self::Native => PLUGIN_FILE,
         }
     }
+}
+
+/// One platform's package of a native extension.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Artifact {
+    /// The `.sevakext` package: a path relative to the repository root at the
+    /// release in the index file; after parsing, the full `https://` address.
+    pub source: String,
+    /// SHA-256 of the package, as 64 hex digits.
+    pub sha256: String,
 }
 
 /// One installable thing in the index.
@@ -87,9 +110,14 @@ pub struct Entry {
     /// Only informational; invalid ones are dropped when the index is parsed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<String>,
-    /// The zip package: an `https://` URL.
+    /// The zip package. In the index file a path relative to the repository
+    /// root at the release (`gallery/packages/x.zip`); after parsing, the full
+    /// `https://` address at that release. Empty for native extensions, which
+    /// have one package per platform in [`Entry::platforms`].
+    #[serde(default)]
     pub source: String,
-    /// SHA-256 of the zip, as 64 hex digits.
+    /// SHA-256 of the zip, as 64 hex digits (empty for native extensions).
+    #[serde(default)]
     pub sha256: String,
     /// Where to read more (shown as text, never opened automatically).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -97,6 +125,24 @@ pub struct Entry {
     /// The folder the package installs to; the `id` when left out.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub folder: Option<String>,
+    /// Native extensions: platform (`windows-x86_64`, `macos-aarch64`,
+    /// `linux-x86_64`, ...) to that platform's package.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub platforms: BTreeMap<String, Artifact>,
+    /// Native extensions: the licence (SPDX), shown before installing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub license: Option<String>,
+    /// Native extensions: where the source code is (shown, never opened).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repository: Option<String>,
+    /// The oldest Sevak that can run it; the extensions page does not offer it
+    /// to older ones.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_sevak: Option<String>,
+    /// Native extensions: what the author says the program does beyond
+    /// answering queries (`network`, `filesystem`, ...). Not enforced.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub permissions: Vec<String>,
 }
 
 impl Entry {
@@ -110,6 +156,12 @@ impl Entry {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Index {
     pub name: String,
+    /// Where the index was read from (shown, so the request is no secret).
+    pub source: String,
+    /// The release the index and its packages belong to.
+    pub tag: String,
+    /// Set when that is not this build's own release, and why.
+    pub note: Option<String>,
     pub entries: Vec<Entry>,
     /// Entries that were left out (unknown kind, invalid), with the reason.
     pub skipped: Vec<String>,
@@ -126,7 +178,11 @@ struct RawIndex {
 
 /// Parses the index file. A bad entry is skipped, not fatal: one typo should
 /// not take the whole gallery away.
-pub fn parse_index(text: &str) -> Result<Index, String> {
+///
+/// Each entry's `source` is resolved against `pin` (the release the index was
+/// read from) and must lie inside it: an entry that names another host, branch
+/// or release is skipped.
+pub fn parse_index(text: &str, pin: &Pin) -> Result<Index, String> {
     let raw: RawIndex = serde_json::from_str(text.trim_start_matches('\u{feff}'))
         .map_err(|err| format!("the gallery index is not valid: {err}"))?;
     if raw.format != INDEX_FORMAT {
@@ -153,7 +209,7 @@ pub fn parse_index(text: &str) -> Result<Index, String> {
         };
         entry.sha256 = entry.sha256.trim().to_ascii_lowercase();
         clean_tags(&mut entry.tags);
-        if let Err(reason) = check_entry(&entry) {
+        if let Err(reason) = check_entry(&mut entry, pin) {
             skipped.push(format!("{label}: {reason}"));
             continue;
         }
@@ -165,6 +221,9 @@ pub fn parse_index(text: &str) -> Result<Index, String> {
     }
     Ok(Index {
         name: raw.name,
+        source: pin.index_url(INDEX_FILE),
+        tag: pin.tag().to_owned(),
+        note: None,
         entries,
         skipped,
     })
@@ -188,13 +247,14 @@ fn clean_tags(tags: &mut Vec<String>) {
     tags.truncate(MAX_TAGS);
 }
 
-fn check_entry(entry: &Entry) -> Result<(), String> {
+fn check_entry(entry: &mut Entry, pin: &Pin) -> Result<(), String> {
     let valid_id = |id: &str| {
         !id.is_empty()
             && id.len() <= 48
             && id
                 .chars()
                 .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+            && !is_reserved_device_name(id)
     };
     if !valid_id(&entry.id) {
         return Err("the id may only use a-z, 0-9 and -".to_owned());
@@ -207,20 +267,103 @@ fn check_entry(entry: &Entry) -> Result<(), String> {
     if entry.name.trim().is_empty() {
         return Err("the name is empty".to_owned());
     }
-    if !entry.source.to_ascii_lowercase().starts_with("https://") {
-        return Err("the source must be an https:// address".to_owned());
+    // Windows device names cannot be a folder, whatever the package says.
+    if is_reserved_device_name(entry.folder_name()) {
+        return Err("the folder name is not valid".to_owned());
     }
-    if entry.sha256.len() != 64 || !entry.sha256.chars().all(|c| c.is_ascii_hexdigit()) {
+    if entry.kind == Kind::Native {
+        return check_native(entry, pin);
+    }
+    if !entry.platforms.is_empty() {
+        return Err("only native extensions have `platforms`".to_owned());
+    }
+    entry.source = pin
+        .resolve(&entry.source)
+        .map_err(|why| format!("the source is refused: {why}"))?;
+    if !is_sha256(&entry.sha256) {
         return Err("sha256 must be 64 hex digits".to_owned());
     }
     Ok(())
 }
 
-/// Fetches and parses the index at [`INDEX_URL`].
+fn is_sha256(text: &str) -> bool {
+    text.len() == 64 && text.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+/// The extra rules of a native extension's entry: one package per platform,
+/// each inside the release, and the facts the page shows before installing.
+fn check_native(entry: &mut Entry, pin: &Pin) -> Result<(), String> {
+    if entry.platforms.is_empty() {
+        return Err("a native extension needs `platforms`".to_owned());
+    }
+    if !entry.source.is_empty() || !entry.sha256.is_empty() {
+        return Err("a native extension has `platforms`, not `source` and `sha256`".to_owned());
+    }
+    if entry
+        .folder
+        .as_deref()
+        .is_some_and(|folder| folder != entry.id)
+    {
+        return Err("a native extension installs under its id, so it has no `folder`".to_owned());
+    }
+    if semver::Version::parse(entry.version.trim()).is_err() {
+        return Err("`version` must be like 1.2.3".to_owned());
+    }
+    entry.version = entry.version.trim().to_owned();
+    if entry.author.trim().is_empty() {
+        return Err("a native extension needs an `author` (the publisher)".to_owned());
+    }
+    if entry.license.as_deref().is_none_or(|l| l.trim().is_empty()) {
+        return Err("a native extension needs a `license`".to_owned());
+    }
+    if let Some(min) = &entry.min_sevak {
+        if semver::Version::parse(min.trim()).is_err() {
+            return Err("`min_sevak` must be like 1.2.3".to_owned());
+        }
+    }
+    if let Some(repository) = &entry.repository {
+        if !repository.to_ascii_lowercase().starts_with("https://") {
+            return Err("`repository` must be an https:// address".to_owned());
+        }
+    }
+    // Not silently trimmed like tags: the page and the package must agree.
+    let listed = entry.permissions.len();
+    clean_tags(&mut entry.permissions);
+    if entry.permissions.len() != listed {
+        return Err(
+            "permissions must be unique lower case words (a-z, 0-9, -), at most 8, each at most              24 characters"
+                .to_owned(),
+        );
+    }
+    for (platform, artifact) in &mut entry.platforms {
+        if !crate::script::PLATFORMS.contains(&platform.as_str()) {
+            return Err(format!("the platform \"{platform}\" is not known"));
+        }
+        artifact.source = pin
+            .resolve(&artifact.source)
+            .map_err(|why| format!("the source for {platform} is refused: {why}"))?;
+        artifact.sha256 = artifact.sha256.trim().to_ascii_lowercase();
+        if !is_sha256(&artifact.sha256) {
+            return Err(format!("sha256 for {platform} must be 64 hex digits"));
+        }
+    }
+    Ok(())
+}
+
+/// Fetches and parses the index of this build's release (or, for a build
+/// without one, of the latest stable release, which [`Index::note`] then says).
 pub fn fetch_index() -> Result<Index, String> {
-    let body = fetch_https(INDEX_URL, MAX_INDEX_BYTES)?;
-    let text = String::from_utf8(body).map_err(|_| "the gallery index is not text".to_owned())?;
-    parse_index(&text)
+    fetch_index_with(&Https, Pin::for_build().as_ref())
+}
+
+/// [`fetch_index`] over `transport`, for a build that is `build`'s release.
+pub fn fetch_index_with(transport: &dyn Transport, build: Option<&Pin>) -> Result<Index, String> {
+    let pinned = fetch_pinned(transport, build, INDEX_FILE, MAX_INDEX_BYTES)?;
+    let text =
+        String::from_utf8(pinned.body).map_err(|_| "the gallery index is not text".to_owned())?;
+    let mut index = parse_index(&text, &pinned.pin)?;
+    index.note = pinned.note;
+    Ok(index)
 }
 
 /// Where installs go.
@@ -231,10 +374,10 @@ pub struct Dirs<'a> {
 }
 
 impl Dirs<'_> {
-    fn root(&self, kind: Kind) -> &Path {
+    pub(crate) fn root(&self, kind: Kind) -> &Path {
         match kind {
             Kind::Workflow => self.workflows,
-            Kind::Plugin => self.plugins,
+            Kind::Plugin | Kind::Native => self.plugins,
         }
     }
 
@@ -253,8 +396,14 @@ pub struct Installed {
     pub files: usize,
 }
 
+const NATIVE_ELSEWHERE: &str =
+    "native extensions are installed from Settings > Extensions, which shows what they declare first";
+
 /// Downloads `entry` and installs it (see [`install_bytes`]).
 pub fn install(entry: &Entry, dirs: &Dirs<'_>) -> Result<Installed, String> {
+    if entry.kind == Kind::Native {
+        return Err(NATIVE_ELSEWHERE.to_owned());
+    }
     let bytes = fetch_https(&entry.source, MAX_PACKAGE_BYTES)?;
     install_bytes(entry, &bytes, dirs)
 }
@@ -263,11 +412,42 @@ pub fn install(entry: &Entry, dirs: &Dirs<'_>) -> Result<Installed, String> {
 /// unpacks it into a new folder below the workflows or plugins folder. An
 /// existing folder of that name is never touched.
 pub fn install_bytes(entry: &Entry, bytes: &[u8], dirs: &Dirs<'_>) -> Result<Installed, String> {
+    install_bytes_as(entry, bytes, dirs, Mode::New, &|| {})
+}
+
+/// Whether an install may replace what is there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mode {
+    /// A new folder; an existing one of that name is never touched.
+    New,
+    /// An update: the folder is replaced as one step. Nothing is replaced when
+    /// the package is refused, and a failure while swapping puts the old folder
+    /// back.
+    Replace,
+}
+
+/// [`install_bytes`] with a choice of [`Mode`]. `before_swap` runs once the new
+/// package is checked and written aside, right before it replaces the old
+/// folder: the place to stop a program that still runs from it.
+pub fn install_bytes_as(
+    entry: &Entry,
+    bytes: &[u8],
+    dirs: &Dirs<'_>,
+    mode: Mode,
+    before_swap: &dyn Fn(),
+) -> Result<Installed, String> {
+    if entry.kind == Kind::Native {
+        return Err(NATIVE_ELSEWHERE.to_owned());
+    }
     verify_sha256(bytes, &entry.sha256)?;
     let folder = entry.folder_name();
+    if !valid_folder_name(folder) {
+        return Err("the folder name is not valid".to_owned());
+    }
     let root = dirs.root(entry.kind);
     let target = root.join(folder);
-    if target.exists() {
+    let replace = mode == Mode::Replace;
+    if target.exists() && !replace {
         return Err(format!(
             "\"{folder}\" is already installed. To reinstall it, remove that folder first: {}",
             target.display()
@@ -279,9 +459,8 @@ pub fn install_bytes(entry: &Entry, bytes: &[u8], dirs: &Dirs<'_>) -> Result<Ins
     fs::create_dir_all(root).map_err(|err| format!("could not create the folder: {err}"))?;
     let staging = root.join(format!(".installing-{folder}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&staging);
-    let result = write_package(&package, &staging).and_then(|()| {
-        fs::rename(&staging, &target).map_err(|err| format!("could not finish the install: {err}"))
-    });
+    let result = write_package(&package, &staging)
+        .and_then(|()| place(&staging, &target, replace && target.exists(), before_swap));
     if let Err(err) = result {
         let _ = fs::remove_dir_all(&staging);
         return Err(err);
@@ -292,6 +471,68 @@ pub fn install_bytes(entry: &Entry, bytes: &[u8], dirs: &Dirs<'_>) -> Result<Ins
         path: target,
         files: package.files.len(),
     })
+}
+
+/// Moves the finished `staging` folder to `target`. With `replace`, the old
+/// folder is moved aside first and put back if the new one cannot take its
+/// place, so an update either happens whole or not at all.
+///
+/// A folder whose program is still running cannot be moved on Windows, so the
+/// first move is retried for a moment (the program has just been stopped).
+pub(crate) fn place(
+    staging: &Path,
+    target: &Path,
+    replace: bool,
+    before_swap: &dyn Fn(),
+) -> Result<(), String> {
+    if !replace {
+        return fs::rename(staging, target)
+            .map_err(|err| format!("could not finish the install: {err}"));
+    }
+    before_swap();
+    let backup = staging.with_file_name(format!(
+        ".replaced-{}-{}",
+        target
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default(),
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&backup);
+    retry(|| fs::rename(target, &backup))
+        .map_err(|err| format!("could not replace the old version (is it running?): {err}"))?;
+    if let Err(err) = fs::rename(staging, target) {
+        // Put the old version back; it is the only copy.
+        let restored = fs::rename(&backup, target);
+        return Err(match restored {
+            Ok(()) => format!("could not finish the update, the old version is back: {err}"),
+            Err(back) => format!(
+                "could not finish the update ({err}) and could not put the old version back \
+                 ({back}); it is in {}",
+                backup.display()
+            ),
+        });
+    }
+    let _ = fs::remove_dir_all(&backup);
+    Ok(())
+}
+
+/// Runs `action`, retrying for about two seconds while it fails (Windows holds
+/// a folder until the program that ran from it has really exited).
+pub(crate) fn retry<T>(mut action: impl FnMut() -> std::io::Result<T>) -> std::io::Result<T> {
+    let mut attempts = 0;
+    loop {
+        match action() {
+            Ok(done) => return Ok(done),
+            Err(err) => {
+                attempts += 1;
+                if attempts >= 20 {
+                    return Err(err);
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+        }
+    }
 }
 
 /// A package's files, checked and held in memory.
@@ -398,7 +639,7 @@ impl Package {
 
 /// A path from a zip entry as forward-slash components, or why it is refused:
 /// no leading `/`, drive letter, `..`, empty or hidden-looking tricks.
-fn clean_path(raw: &str) -> Result<String, String> {
+pub(crate) fn clean_path(raw: &str) -> Result<String, String> {
     let name = raw.replace('\\', "/");
     if name.len() > MAX_PATH_BYTES {
         return Err("a path in the package is too long".to_owned());
@@ -416,6 +657,10 @@ fn clean_path(raw: &str) -> Result<String, String> {
             }
             // Windows trims a trailing dot or space, so `a.` and `a` collide.
             part if part.ends_with('.') || part.ends_with(' ') => {
+                return Err("a path in the package is not allowed".to_owned())
+            }
+            // `CON`, `NUL`, `COM1`... (also `nul.txt`) are devices on Windows.
+            part if is_reserved_device_name(part) => {
                 return Err("a path in the package is not allowed".to_owned())
             }
             part => parts.push(part),
@@ -439,7 +684,7 @@ fn check_content(package: &Package, kind: Kind, folder: &str) -> Result<(), Stri
                 return Err(format!("the package's workflow is not valid: {summary}"));
             }
         }
-        Kind::Plugin => {
+        Kind::Plugin | Kind::Native => {
             Manifest::parse(text, folder)
                 .map_err(|err| format!("the package's plugin is not valid: {err}"))?;
         }
@@ -448,7 +693,13 @@ fn check_content(package: &Package, kind: Kind, folder: &str) -> Result<(), Stri
 }
 
 fn write_package(package: &Package, dir: &Path) -> Result<(), String> {
-    for (name, data, executable) in &package.files {
+    write_files(&package.files, dir)
+}
+
+/// Writes `(relative path, contents, executable)` files below `dir`, creating
+/// folders as needed. Only the owner's execute bit survives on Unix.
+pub(crate) fn write_files(files: &[(String, Vec<u8>, bool)], dir: &Path) -> Result<(), String> {
+    for (name, data, executable) in files {
         let path = dir.join(name);
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(|err| format!("could not write a file: {err}"))?;
@@ -475,7 +726,11 @@ mod tests {
     use zip::write::SimpleFileOptions;
 
     use super::*;
-    use crate::net::sha256_hex;
+    use crate::net::{sha256_hex, FetchError};
+
+    fn pin() -> Pin {
+        Pin::new("v1.2.3").unwrap()
+    }
 
     fn zip_of(files: &[(&str, &[u8])]) -> Vec<u8> {
         let mut out = Cursor::new(Vec::new());
@@ -518,6 +773,11 @@ mod tests {
             sha256: sha256_hex(bytes),
             homepage: None,
             folder: None,
+            platforms: BTreeMap::new(),
+            license: None,
+            repository: None,
+            min_sevak: None,
+            permissions: Vec::new(),
         }
     }
 
@@ -550,7 +810,7 @@ mod tests {
     fn good_entry(id: &str) -> serde_json::Value {
         serde_json::json!({
             "id": id, "kind": "workflow", "name": id, "description": "d", "author": "a",
-            "version": "1", "source": "https://example.com/x.zip",
+            "version": "1", "source": "gallery/packages/x.zip",
             "sha256": "A".repeat(64)
         })
     }
@@ -558,28 +818,38 @@ mod tests {
     #[test]
     fn parses_an_index_and_skips_bad_entries() {
         let text = serde_json::json!({
-            "format": 1, "name": "Test gallery",
+            "format": 2, "name": "Test gallery",
             "entries": [
                 good_entry("one"),
-                {"id": "future", "kind": "theme", "name": "T", "source": "https://x.test/t.zip", "sha256": "0".repeat(64)},
-                {"id": "http", "kind": "plugin", "name": "T", "source": "http://x.test/t.zip", "sha256": "0".repeat(64)},
-                {"id": "short-hash", "kind": "plugin", "name": "T", "source": "https://x.test/t.zip", "sha256": "abc"},
-                {"id": "Bad Id", "kind": "plugin", "name": "T", "source": "https://x.test/t.zip", "sha256": "0".repeat(64)},
+                {"id": "future", "kind": "theme", "name": "T", "source": "gallery/t.zip", "sha256": "0".repeat(64)},
+                {"id": "elsewhere", "kind": "plugin", "name": "T", "source": "https://x.test/t.zip", "sha256": "0".repeat(64)},
+                {"id": "short-hash", "kind": "plugin", "name": "T", "source": "gallery/t.zip", "sha256": "abc"},
+                {"id": "Bad Id", "kind": "plugin", "name": "T", "source": "gallery/t.zip", "sha256": "0".repeat(64)},
                 good_entry("one"),
                 {"kind": "plugin"},
                 "not an object",
-                {"id": "plug", "kind": "plugin", "name": "P", "source": "HTTPS://x.test/p.zip", "sha256": "f".repeat(64), "folder": "plug-dir"}
+                {"id": "plug", "kind": "plugin", "name": "P", "source": "gallery/packages/p.zip", "sha256": "f".repeat(64), "folder": "plug-dir"}
             ]
         })
         .to_string();
-        let index = parse_index(&text).unwrap();
+        let index = parse_index(&text, &pin()).unwrap();
         assert_eq!(index.name, "Test gallery");
+        assert_eq!(index.tag, "v1.2.3");
+        assert_eq!(
+            index.source,
+            "https://raw.githubusercontent.com/ninad-k/Sevak/v1.2.3/gallery/index.json"
+        );
         let ids: Vec<_> = index.entries.iter().map(|e| e.id.as_str()).collect();
         assert_eq!(ids, ["one", "plug"]);
         // Hashes are normalized to lower case.
         assert_eq!(index.entries[0].sha256, "a".repeat(64));
         assert_eq!(index.entries[1].folder_name(), "plug-dir");
         assert_eq!(index.entries[0].folder_name(), "one");
+        // Sources are the release's own addresses.
+        assert_eq!(
+            index.entries[0].source,
+            "https://raw.githubusercontent.com/ninad-k/Sevak/v1.2.3/gallery/packages/x.zip"
+        );
         assert_eq!(index.skipped.len(), 7, "{:?}", index.skipped);
         assert!(index.skipped.iter().any(|s| s.starts_with("future")));
     }
@@ -601,8 +871,8 @@ mod tests {
             "e",
             "f"
         ]);
-        let text = serde_json::json!({"format": 1, "entries": [entry, good_entry("plain")]});
-        let index = parse_index(&text.to_string()).unwrap();
+        let text = serde_json::json!({"format": 2, "entries": [entry, good_entry("plain")]});
+        let index = parse_index(&text.to_string(), &pin()).unwrap();
         assert_eq!(
             index.entries[0].tags,
             ["search", "no-code", "a", "b", "c", "d", "e", "f"]
@@ -614,13 +884,245 @@ mod tests {
     }
 
     #[test]
+    fn sources_outside_the_release_are_skipped() {
+        let entry = |id: &str, source: &str| {
+            serde_json::json!({
+                "id": id, "kind": "workflow", "name": id, "source": source,
+                "sha256": "0".repeat(64)
+            })
+        };
+        let text = serde_json::json!({
+            "format": 2,
+            "entries": [
+                entry("relative", "gallery/packages/a.zip"),
+                entry("own-absolute", "https://raw.githubusercontent.com/ninad-k/Sevak/v1.2.3/gallery/packages/b.zip"),
+                entry("own-release", "https://github.com/ninad-k/Sevak/releases/download/v1.2.3/c.zip"),
+                entry("main-branch", "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/d.zip"),
+                entry("other-tag", "https://raw.githubusercontent.com/ninad-k/Sevak/v1.2.4/gallery/packages/e.zip"),
+                entry("other-host", "https://example.com/f.zip"),
+                entry("other-repo", "https://raw.githubusercontent.com/evil/Sevak/v1.2.3/gallery/g.zip"),
+                entry("plain-http", "http://raw.githubusercontent.com/ninad-k/Sevak/v1.2.3/gallery/h.zip"),
+                entry("dot-dot", "gallery/../../../main/i.zip"),
+                entry("credentials", "https://u@raw.githubusercontent.com/ninad-k/Sevak/v1.2.3/gallery/j.zip"),
+                entry("empty", "")
+            ]
+        })
+        .to_string();
+        let index = parse_index(&text, &pin()).unwrap();
+        let ids: Vec<_> = index.entries.iter().map(|e| e.id.as_str()).collect();
+        assert_eq!(ids, ["relative", "own-absolute", "own-release"]);
+        assert_eq!(index.skipped.len(), 8, "{:?}", index.skipped);
+        assert!(index
+            .skipped
+            .iter()
+            .all(|s| s.contains("source is refused")));
+    }
+
+    #[test]
+    fn windows_device_names_are_not_ids_or_folders() {
+        let entry = |id: &str, folder: Option<&str>| {
+            let mut value = serde_json::json!({
+                "id": id, "kind": "workflow", "name": "N", "source": "gallery/x.zip",
+                "sha256": "0".repeat(64)
+            });
+            if let Some(folder) = folder {
+                value["folder"] = folder.into();
+            }
+            value
+        };
+        let text = serde_json::json!({
+            "format": 2,
+            "entries": [
+                entry("con", None), entry("nul", None), entry("com1", None), entry("lpt9", None),
+                entry("ok-id", Some("CON")), entry("ok-id-2", Some("aux.txt")),
+                entry("fine", None), entry("console", None)
+            ]
+        })
+        .to_string();
+        let index = parse_index(&text, &pin()).unwrap();
+        let ids: Vec<_> = index.entries.iter().map(|e| e.id.as_str()).collect();
+        assert_eq!(ids, ["fine", "console"]);
+    }
+
+    fn native_entry(id: &str) -> serde_json::Value {
+        serde_json::json!({
+            "id": id, "kind": "native", "name": "Tool", "description": "d",
+            "author": "Ada", "version": "1.2.3", "license": "MIT",
+            "min_sevak": "0.1.0", "permissions": ["network"],
+            "repository": "https://github.com/example/tool",
+            "platforms": {
+                "linux-x86_64": {
+                    "source": "gallery/extensions/tool/tool-1.2.3-linux-x86_64.sevakext",
+                    "sha256": "A".repeat(64)
+                },
+                "windows-x86_64": {
+                    "source": "gallery/extensions/tool/tool-1.2.3-windows-x86_64.sevakext",
+                    "sha256": "b".repeat(64)
+                }
+            }
+        })
+    }
+
+    #[test]
+    fn native_entries_have_one_package_per_platform() {
+        let text = serde_json::json!({"format": 2, "entries": [native_entry("tool")]}).to_string();
+        let index = parse_index(&text, &pin()).unwrap();
+        assert!(index.skipped.is_empty(), "{:?}", index.skipped);
+        let entry = &index.entries[0];
+        assert_eq!(entry.kind, Kind::Native);
+        assert_eq!(entry.folder_name(), "tool");
+        assert_eq!(entry.permissions, ["network"]);
+        let linux = &entry.platforms["linux-x86_64"];
+        assert_eq!(
+            linux.source,
+            "https://raw.githubusercontent.com/ninad-k/Sevak/v1.2.3/gallery/extensions/tool/tool-1.2.3-linux-x86_64.sevakext"
+        );
+        assert_eq!(linux.sha256, "a".repeat(64), "hashes are lower case");
+        assert!(entry.source.is_empty() && entry.sha256.is_empty());
+    }
+
+    #[test]
+    fn bad_native_entries_are_skipped_not_fatal() {
+        let with = |change: &dyn Fn(&mut serde_json::Value)| {
+            let mut entry = native_entry("tool");
+            change(&mut entry);
+            entry
+        };
+        let bad = vec![
+            with(&|e| {
+                e.as_object_mut().unwrap().remove("platforms");
+            }),
+            with(&|e| e["platforms"] = serde_json::json!({})),
+            with(&|e| e["platforms"]["beos-x86_64"] = e["platforms"]["linux-x86_64"].clone()),
+            with(&|e| e["platforms"]["linux-x86_64"]["sha256"] = "abc".into()),
+            with(&|e| e["platforms"]["linux-x86_64"]["source"] = "https://example.com/x".into()),
+            with(&|e| {
+                e["platforms"]["linux-x86_64"]["source"] = "gallery/../../main/x.sevakext".into()
+            }),
+            with(&|e| e["source"] = "gallery/x.zip".into()),
+            with(&|e| e["version"] = "latest".into()),
+            with(&|e| e["author"] = "".into()),
+            with(&|e| {
+                e.as_object_mut().unwrap().remove("license");
+            }),
+            with(&|e| e["min_sevak"] = "soon".into()),
+            with(&|e| e["repository"] = "http://example.com".into()),
+            with(&|e| e["folder"] = "elsewhere".into()),
+            // Permissions are never silently trimmed: the page and the package must agree.
+            with(&|e| e["permissions"] = serde_json::json!(["network", "Bad Permission"])),
+            with(&|e| e["permissions"] = serde_json::json!(["network", "network"])),
+            with(&|e| {
+                e["permissions"] = serde_json::json!(["a", "b", "c", "d", "e", "f", "g", "h", "i"])
+            }),
+        ];
+        let count = bad.len();
+        let mut entries = bad;
+        entries.push(native_entry("good"));
+        let text = serde_json::json!({"format": 2, "entries": entries}).to_string();
+        let index = parse_index(&text, &pin()).unwrap();
+        assert_eq!(index.entries.len(), 1, "{:?}", index.skipped);
+        assert_eq!(index.entries[0].id, "good");
+        assert_eq!(index.skipped.len(), count, "{:?}", index.skipped);
+    }
+
+    #[test]
+    fn only_native_entries_have_platforms() {
+        let mut entry = good_entry("one");
+        entry["platforms"] = native_entry("x")["platforms"].clone();
+        let text = serde_json::json!({"format": 2, "entries": [entry]}).to_string();
+        let index = parse_index(&text, &pin()).unwrap();
+        assert!(index.entries.is_empty());
+        assert!(
+            index.skipped[0].contains("only native"),
+            "{:?}",
+            index.skipped
+        );
+    }
+
+    #[test]
+    fn a_native_entry_does_not_install_through_the_old_page() {
+        let r = roots();
+        let text = serde_json::json!({"format": 2, "entries": [native_entry("tool")]}).to_string();
+        let entry = parse_index(&text, &pin()).unwrap().entries.remove(0);
+        let err = install_bytes(&entry, b"x", &r.dirs()).unwrap_err();
+        assert!(err.contains("Settings > Extensions"), "{err}");
+        assert!(!r.plugins.exists());
+    }
+
+    #[test]
+    fn an_update_swaps_the_folder_and_a_failure_puts_the_old_one_back() {
+        let r = roots();
+        let v1 = zip_of(&[
+            ("docs/workflow.toml", WORKFLOW.as_bytes()),
+            ("docs/old.txt", b"old"),
+        ]);
+        let v2 = zip_of(&[
+            ("docs/workflow.toml", WORKFLOW.as_bytes()),
+            ("docs/new.txt", b"new"),
+        ]);
+        let one = entry_for(&v1, Kind::Workflow, "docs");
+        let two = entry_for(&v2, Kind::Workflow, "docs");
+        install_bytes(&one, &v1, &r.dirs()).unwrap();
+        // A plain install never replaces.
+        assert!(install_bytes(&two, &v2, &r.dirs()).is_err());
+        let stopped = std::cell::Cell::new(0);
+        install_bytes_as(&two, &v2, &r.dirs(), Mode::Replace, &|| {
+            stopped.set(stopped.get() + 1);
+        })
+        .unwrap();
+        assert_eq!(stopped.get(), 1);
+        assert!(r.workflows.join("docs/new.txt").is_file());
+        assert!(!r.workflows.join("docs/old.txt").exists());
+        // A package that is refused leaves the folder alone and never calls the hook.
+        let bad = zip_of(&[("docs/readme.txt", b"no manifest")]);
+        let refused = entry_for(&bad, Kind::Workflow, "docs");
+        stopped.set(0);
+        assert!(
+            install_bytes_as(&refused, &bad, &r.dirs(), Mode::Replace, &|| {
+                stopped.set(1);
+            })
+            .is_err()
+        );
+        assert_eq!(stopped.get(), 0);
+        assert!(r.workflows.join("docs/new.txt").is_file());
+    }
+
+    #[test]
     fn the_index_format_and_json_are_checked() {
-        let err = parse_index(r#"{"format": 2, "entries": []}"#).unwrap_err();
-        assert!(err.contains("format 2"), "{err}");
-        assert!(parse_index("not json").is_err());
-        assert!(parse_index(r#"{"entries": []}"#).is_err());
-        let empty = parse_index("\u{feff}{\"format\": 1}").unwrap();
+        let err = parse_index(r#"{"format": 1, "entries": []}"#, &pin()).unwrap_err();
+        assert!(err.contains("format 1"), "{err}");
+        let err = parse_index(r#"{"format": 3, "entries": []}"#, &pin()).unwrap_err();
+        assert!(err.contains("format 3"), "{err}");
+        assert!(parse_index("not json", &pin()).is_err());
+        assert!(parse_index(r#"{"entries": []}"#, &pin()).is_err());
+        let empty = parse_index("\u{feff}{\"format\": 2}", &pin()).unwrap();
         assert!(empty.entries.is_empty());
+    }
+
+    /// A transport that serves one canned index and nothing else.
+    struct Canned(String);
+
+    impl Transport for Canned {
+        fn get(&self, url: &str, _max: usize) -> Result<Vec<u8>, FetchError> {
+            if url.ends_with("/v1.2.3/gallery/index.json") {
+                Ok(self.0.clone().into_bytes())
+            } else {
+                Err(FetchError::NotFound)
+            }
+        }
+
+        fn latest_release_page(&self) -> Result<String, String> {
+            Err("not asked".to_owned())
+        }
+    }
+
+    #[test]
+    fn fetching_the_index_reads_the_builds_release() {
+        let text = serde_json::json!({"format": 2, "name": "G", "entries": [good_entry("one")]});
+        let index = fetch_index_with(&Canned(text.to_string()), Some(&pin())).unwrap();
+        assert_eq!(index.entries.len(), 1);
+        assert_eq!(index.note, None);
+        assert!(index.entries[0].source.contains("/v1.2.3/"));
     }
 
     // ---- installing ---------------------------------------------------
@@ -739,6 +1241,46 @@ mod tests {
             &[("docs/workflow.toml", w), ("docs/a\u{7}b", b"x")],
             "not allowed",
         );
+    }
+
+    #[test]
+    fn windows_device_names_are_refused_as_entry_names() {
+        let w = WORKFLOW.as_bytes();
+        for name in [
+            "docs/NUL",
+            "docs/nul.txt",
+            "docs/scripts/CON.py",
+            "docs/Aux",
+            "docs/COM1",
+            "docs/com9.json",
+            "docs/lpt3.txt",
+            "docs/PRN.",
+            "docs/COM\u{b9}",
+            "docs/con/inner.txt",
+        ] {
+            refused(&[("docs/workflow.toml", w), (name, b"x")], "not allowed");
+        }
+        // Names that merely start like one are fine.
+        let r = roots();
+        let bytes = zip_of(&[
+            ("docs/workflow.toml", w),
+            ("docs/console.txt", b"x"),
+            ("docs/connect.py", b"x"),
+        ]);
+        let entry = entry_for(&bytes, Kind::Workflow, "docs");
+        install_bytes(&entry, &bytes, &r.dirs()).unwrap();
+    }
+
+    #[test]
+    fn a_package_under_a_device_name_is_refused() {
+        let w = WORKFLOW.as_bytes();
+        let r = roots();
+        let bytes = zip_of(&[("nul/workflow.toml", w)]);
+        let mut entry = entry_for(&bytes, Kind::Workflow, "docs");
+        entry.folder = Some("nul".to_owned());
+        let err = install_bytes(&entry, &bytes, &r.dirs()).unwrap_err();
+        assert!(err.contains("folder name is not valid"), "{err}");
+        assert!(!r.workflows.exists());
     }
 
     #[test]
@@ -917,17 +1459,17 @@ mod tests {
     #[test]
     fn the_shipped_index_matches_the_shipped_packages() {
         let text = fs::read_to_string(repo_gallery().join("index.json")).unwrap();
-        let index = parse_index(&text).unwrap();
+        let index = parse_index(&text, &pin()).unwrap();
         assert!(index.skipped.is_empty(), "{:?}", index.skipped);
         assert!(index.entries.len() >= 3);
         let kinds: HashSet<_> = index.entries.iter().map(|e| e.kind).collect();
         assert_eq!(kinds.len(), 2, "both workflows and plugins are shown");
         for entry in &index.entries {
-            // The source is the raw GitHub URL of the committed package.
+            // The source is the release's raw address of the committed package.
             let file = entry.source.rsplit('/').next().unwrap();
             assert!(
                 entry.source.starts_with(
-                    "https://raw.githubusercontent.com/ninad-k/Sevak/main/gallery/packages/"
+                    "https://raw.githubusercontent.com/ninad-k/Sevak/v1.2.3/gallery/packages/"
                 ),
                 "{}",
                 entry.source
@@ -948,8 +1490,8 @@ mod tests {
     fn the_packages_match_the_examples_they_were_built_from() {
         let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
         let text = fs::read_to_string(repo_gallery().join("index.json")).unwrap();
-        let index = parse_index(&text).unwrap();
-        for entry in &index.entries {
+        let index = parse_index(&text, &pin()).unwrap();
+        for entry in index.entries.iter().filter(|e| e.kind != Kind::Native) {
             let file = entry.source.rsplit('/').next().unwrap();
             let bytes = fs::read(repo_gallery().join("packages").join(file)).unwrap();
             let r = roots();
@@ -963,6 +1505,7 @@ mod tests {
                     r.plugins.join(entry.folder_name()),
                     examples.join("plugins").join(entry.folder_name()),
                 ),
+                Kind::Native => unreachable!("filtered above"),
             };
             assert_same_files(&installed, &source);
         }

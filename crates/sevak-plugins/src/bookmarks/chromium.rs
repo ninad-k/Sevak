@@ -6,8 +6,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
+use sevak_core::bounded_read::{read_to_string_capped, MAX_BOOKMARKS_BYTES};
 
-use super::{RawBookmark, FOLDER_SEPARATOR, MAX_SOURCE_BYTES};
+use super::{RawBookmark, FOLDER_SEPARATOR};
 
 /// The `Bookmarks` file of every profile below `root`.
 ///
@@ -34,11 +35,9 @@ pub fn bookmark_files(root: &Path) -> Vec<PathBuf> {
 }
 
 pub fn read(path: &Path) -> Result<Vec<RawBookmark>, String> {
-    let length = fs::metadata(path).map_err(|err| err.to_string())?.len();
-    if length > MAX_SOURCE_BYTES {
-        return Err(format!("{length} bytes is too large to index"));
-    }
-    let text = fs::read_to_string(path).map_err(|err| err.to_string())?;
+    // The JSON is read whole; the limit is far above a real bookmarks file.
+    let text = read_to_string_capped(path, MAX_BOOKMARKS_BYTES)
+        .map_err(|err| format!("cannot read the bookmarks: {err}"))?;
     parse(&text)
 }
 

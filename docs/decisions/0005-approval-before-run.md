@@ -16,9 +16,11 @@ Nothing that can run code is started until the user has said yes in a native
 dialog.
 
 - **Script plugins** (`crates/sevak-plugins/src/script/approvals.rs`,
-  `src-tauri/src/script_plugins.rs`): a plugin folder is loaded only if its id
-  and exact command line (mode, format and command) were approved. Changing the
-  command asks again.
+  `src-tauri/src/script_plugins.rs`): a plugin folder is loaded only if the
+  SHA-256 of its contents was approved for its id: the bytes of `plugin.toml`,
+  the command line, the files the command names (and the manifest's `files`)
+  and the folder's canonical location. Changing any of them, or moving the
+  folder, asks again. The files are checked again each time a process starts.
 - **Workflows** (`crates/sevak-plugins/src/workflow/host.rs`): a workflow that
   has a node that can run code or commands (script filter, run script, launch
   app, system command, terminal command, open file) is loaded only if the
@@ -44,11 +46,11 @@ dialog.
 
 - A malicious folder cannot run silently, and a changed workflow script cannot
   run on an old approval.
-- The script-plugin approval covers the command, **not the script file**: if
-  the file behind an approved command is replaced, the plugin keeps running
-  (the documented caveat in [Writing plugins](../plugins.md)). Workflows are
-  stricter. Aligning the two is on the hardening backlog in the
-  [threat model](../security/threat-model.md#hardening-backlog).
+- The script-plugin approval covers the files the command names, the manifest
+  and the folder, like workflows. It does not cover files the script imports
+  that nobody named (the manifest's `files` lists them), the interpreter, or
+  what the script fetches at run time. See
+  [Script and workflow trust](../security/script-workflow-trust.md).
 - Approval is permission to run code with the user's privileges. It is not a
   sandbox, and a plugin that is approved and then misbehaves is outside what
   Sevak can prevent.
