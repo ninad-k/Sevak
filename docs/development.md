@@ -183,6 +183,108 @@ Bundle settings are the `bundle` object in `src-tauri/tauri.conf.json`:
    macOS: app+dmg; ubuntu-22.04: deb+rpm+appimage) and uploads them as
    workflow artifacts.
    Ubuntu 22.04 is the oldest supported base, so the `.deb` and AppImage run on 22.04+.
+4. `msrv`: `cargo check --workspace --locked` on the `rust-version` declared in
+   `Cargo.toml`, so the stated minimum is really buildable.
+
+The Rust toolchain every job uses comes from `rust-toolchain.toml` (see below).
+The security, CodeQL and canary workflows are described in the next section.
+
+## Security and supply chain
+
+| Workflow | Runs | What it does |
+| --- | --- | --- |
+| `security.yml` | PRs that touch a manifest or lockfile, pushes to `main`, weekly | `cargo deny` (advisories; licences, bans and sources) and `npm audit --omit=dev --audit-level=high`. The weekly run also writes a `cargo audit` report and keeps one `security` issue open while something fails. |
+| `codeql.yml` | PRs to `main`, pushes to `main`, weekly | CodeQL for `javascript-typescript` and for the `actions` workflows. Rust is not scanned by CodeQL; clippy (`-D warnings`) and cargo-deny cover it. |
+| `toolchain-canary.yml` | weekly, manually | clippy and tests on the newest `stable` and `beta` Rust (Linux only). A failure opens one `toolchain` issue, "New Rust release breaks the build". |
+
+### Dependency scanning locally
+
+```sh
+cargo install --locked cargo-deny cargo-audit
+
+cargo deny check                       # advisories, licenses, bans, sources (deny.toml)
+cargo deny check licenses              # or a single check
+cargo audit                            # wider RustSec report, including unmaintained crates
+npm audit --omit=dev --audit-level=high
+```
+
+`deny.toml` is the policy: crates.io only, permissive licences only (MIT,
+Apache-2.0, BSD, ISC, Zlib, Unicode and similar; MPL-2.0 per crate), duplicate
+crate versions warn. Advisories fail the check because cargo-deny cannot filter
+by severity; yanked crates and unmaintained *transitive* crates only warn (the
+latter appear in `cargo audit`). The advisory database is fetched on every run,
+so a clean result today can fail next week without any change here; that is what
+the weekly run is for.
+
+### Handling a finding
+
+1. Prefer fixing it: `cargo update -p <crate>` (or bump the requirement), then
+   re-run `cargo deny check` and the tests.
+2. If no fix exists yet, add a time-boxed exception to `deny.toml`:
+
+   ```toml
+   [advisories]
+   ignore = [
+       { id = "RUSTSEC-2099-0001", reason = "only reachable via X, which Sevak never calls; fix tracked in #123; review-by: 2027-01-31" },
+   ]
+   ```
+
+   Always give a reason and a `review-by: YYYY-MM-DD` date (at most three months
+   out): the Security workflow fails once that date has passed, so the exception
+   gets reviewed instead of forgotten. Remove it once the fix lands
+   (`unused-ignored-advisory` warns when it is no longer needed).
+3. A new licence goes in `[licenses] allow` only if it is permissive and
+   compatible with Apache-2.0, with a comment naming the crate. Copyleft that is
+   file-level only (MPL-2.0) is allowed per crate under `[licenses] exceptions`;
+   anything stronger (GPL, AGPL, LGPL-only) needs a maintainer decision, and the
+   dependency is usually better replaced.
+4. A new `THIRD_PARTY_NOTICES.md` entry may be needed when a dependency with
+   a notice requirement is added.
+
+Known, accepted findings (no exception needed, because cargo-deny only gates
+direct dependencies for these classes): `cargo audit` reports
+RUSTSEC-2024-0370 (`proc-macro-error`, unmaintained) and RUSTSEC-2024-0429
+(`glib` 0.18, unsound `VariantStrIter` iterators). Both come from the GTK3
+bindings that Tauri 2 and wry use on Linux only, Sevak does not call the
+affected API, and the fix is Tauri moving to newer bindings, so they clear
+with a Tauri update.
+
+Dependabot (`.github/dependabot.yml`) opens one grouped pull request per month
+for minor and patch updates of Cargo, npm and GitHub Actions, and one pull
+request per major update. Third-party GitHub Actions are pinned to a commit SHA
+(`uses: owner/repo@<sha> # v1.2.3`; Dependabot keeps both in step). Actions owned
+by GitHub (`actions/*`, `github/*`) may use version tags.
+
+### The pinned toolchain
+
+`rust-toolchain.toml` pins an exact Rust version (currently 1.99.0) with the
+`clippy` and `rustfmt` components. It is the single source of truth: rustup
+picks it up in any checkout, and CI installs it through the
+`.github/actions/setup-rust` composite action (which runs `rustup toolchain
+install` against that file). A new Rust release therefore never changes CI, or a
+release build, by itself; new lints cannot block an unrelated pull request.
+
+To bump it, change `channel` in `rust-toolchain.toml` in a pull request of its
+own (Dependabot opens one monthly), fix any new clippy findings, and run the
+checks in "Tests and lint". Nothing else needs editing. The `rust-version` in
+`Cargo.toml` is the separate, lower minimum supported Rust version; the `msrv` CI
+job checks it. Raise it only when the code or a dependency really needs a newer
+compiler.
+
+The canary workflow tells you in advance when a bump will need work: if the
+latest stable or beta fails clippy or tests, it files (or updates) the
+"New Rust release breaks the build" issue, and closes it again when they pass.
+
+### Repository settings (maintainers)
+
+Workflows cannot change repository settings. Enable these under the repository's
+Settings > Advanced Security (Code security): Dependency graph, Dependabot
+alerts, and Dependabot security updates (without the last one, only the monthly
+version PRs arrive). For CodeQL, leave "Code scanning" on "Advanced" or off, not
+"Default setup", or GitHub rejects the results from `codeql.yml`. Do not make the
+`Security` workflow's jobs required status checks of `main`: they run only when
+a manifest or lockfile changes, and a required check that never starts leaves the
+pull request waiting forever.
 
 ## Releasing
 
