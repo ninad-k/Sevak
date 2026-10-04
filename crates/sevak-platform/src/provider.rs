@@ -303,6 +303,13 @@ pub trait PlatformProvider: Send + Sync {
         crate::os_search::search(request)
     }
 
+    /// What encrypts files for the current user on this system (Windows:
+    /// DPAPI), used for the clipboard history. `None` where there is nothing
+    /// of the kind: the files are then plain, readable by their owner only.
+    fn history_sealer(&self) -> Option<std::sync::Arc<dyn sevak_core::sealed::Sealer>> {
+        None
+    }
+
     /// A counter that changes whenever the clipboard does, where the OS has one
     /// (Windows sequence number, macOS change count). `None` means the history
     /// must compare the text itself.

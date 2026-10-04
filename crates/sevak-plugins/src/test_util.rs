@@ -39,6 +39,8 @@ pub struct MockPlatform {
     /// What `clipboard_text` returns (the `{clipboard}` placeholder).
     pub clipboard_now: Mutex<Option<String>>,
     pub foreground: Mutex<Option<ForegroundApp>>,
+    /// What `history_sealer` returns; `None` is a system without encryption.
+    pub sealer: Mutex<Option<Arc<dyn sevak_core::sealed::Sealer>>>,
     pub clipboard_sequence: Mutex<Option<u64>>,
     /// What `read_clipboard` returns; `None` makes it fail like a busy clipboard.
     pub clipboard_read: Mutex<Option<ClipboardRead>>,
@@ -243,6 +245,10 @@ impl PlatformProvider for MockPlatform {
             .unwrap()
             .push((request.files, request.image));
         self.clipboard_media.lock().unwrap().clone()
+    }
+
+    fn history_sealer(&self) -> Option<Arc<dyn sevak_core::sealed::Sealer>> {
+        self.sealer.lock().unwrap().clone()
     }
 
     fn clipboard_sequence(&self) -> Option<u64> {

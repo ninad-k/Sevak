@@ -2,6 +2,7 @@
 
 mod capture;
 mod com;
+pub(crate) mod dpapi;
 mod expand;
 mod icons;
 mod keyhook;

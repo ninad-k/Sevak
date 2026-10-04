@@ -297,7 +297,9 @@ fn load_png_file(path: &Path) -> Result<ClipboardImage> {
             message: format!("{} is too large to copy", path.display()),
         });
     }
-    ClipboardImage::decode_png(&std::fs::read(path)?)
+    // An image of the clipboard history may be encrypted.
+    let bytes = sevak_core::sealed::open_global(std::fs::read(path)?)?;
+    ClipboardImage::decode_png(&bytes)
 }
 
 /// A setter that asks the OS to keep what it writes out of its own history.

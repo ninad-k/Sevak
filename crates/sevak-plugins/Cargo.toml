@@ -20,6 +20,9 @@ doc = false
 [target.'cfg(windows)'.dev-dependencies]
 arboard.workspace = true
 
+[dev-dependencies]
+sevak-core = { workspace = true, features = ["test-util"] }
+
 [dependencies]
 sevak-core.workspace = true
 sevak-platform.workspace = true

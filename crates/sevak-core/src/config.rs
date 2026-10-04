@@ -210,9 +210,10 @@ keep_between_shows = false
 [clipboard]
 # Clipboard history ("cb <text>"). Off by default: turning it on makes Sevak
 # watch the clipboard and keep what you copy in clipboard-history.json in its
-# data folder: text, images (as PNG files in a "clipboard" folder next to it)
-# and the paths of copied files. All of it is stored unencrypted. Content that
-# apps mark as secret (password managers) is never recorded.
+# local data folder (on Windows %LOCALAPPDATA%\sevak, which does not roam with your
+# profile): text, images (as PNG files in a "clipboard" folder next to it) and
+# the paths of copied files. Content that apps mark as secret (password
+# managers) is never recorded.
 enabled = false
 # Items kept, of all kinds together (the oldest are dropped).
 max_items = 200
@@ -223,6 +224,11 @@ images = true
 files = true
 # An image whose PNG is larger than this is not recorded.
 max_image_bytes = 10485760
+# Encrypt the history file and the image files for your Windows account
+# (DPAPI). macOS and Linux have no such encryption here: the files are plain,
+# readable by you only. Files already stored plain are encrypted on the next
+# start.
+encrypt = true
 # Never record text copied from these apps, e.g. ["KeePassXC", "1Password"].
 # Matched case-insensitively against the program or app name.
 ignore_apps = []
@@ -781,6 +787,10 @@ pub struct ClipboardConfig {
     pub files: bool,
     /// An image whose PNG is larger than this many bytes is not recorded.
     pub max_image_bytes: usize,
+    /// Encrypt the history file and the image files at rest for the current
+    /// user, where the system can (Windows: DPAPI). Elsewhere the files are
+    /// plain but readable by the owner only.
+    pub encrypt: bool,
 }
 
 impl Default for ClipboardConfig {
@@ -793,6 +803,7 @@ impl Default for ClipboardConfig {
             images: true,
             files: true,
             max_image_bytes: 10 * 1024 * 1024,
+            encrypt: true,
         }
     }
 }

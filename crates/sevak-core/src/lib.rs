@@ -12,6 +12,7 @@ pub mod fuzzy;
 pub mod model;
 pub mod plugin;
 pub mod preview;
+pub mod sealed;
 pub mod selection;
 pub mod theme;
 pub mod theme_file;

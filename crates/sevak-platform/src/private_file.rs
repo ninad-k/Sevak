@@ -4,6 +4,8 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
 use std::path::Path;
 
+use sevak_core::sealed::{self, OpenError, Opened, Sealer};
+
 /// Reads a whole file, but never one larger than `cap` bytes: the size is
 /// checked first, and the read itself stops one byte past the cap, so a file
 /// that grows while it is read cannot get past it either. A file over the cap
@@ -26,6 +28,47 @@ pub fn read_capped(path: &Path, cap: u64) -> io::Result<Vec<u8>> {
         return Err(too_large());
     }
     Ok(bytes)
+}
+
+/// [`write_atomic`] of `contents` encrypted by `sealer` (see
+/// [`sevak_core::sealed`]); plain when there is no sealer. The sealed bytes are
+/// what is written: the plain contents never reach the disk.
+pub fn write_atomic_sealed(
+    path: &Path,
+    contents: &[u8],
+    sealer: Option<&dyn Sealer>,
+) -> io::Result<()> {
+    match sealer {
+        Some(sealer) => write_atomic(path, &sealed::seal(sealer, contents)?),
+        None => write_atomic(path, contents),
+    }
+}
+
+/// What reading a file that may be sealed came to.
+#[derive(Debug)]
+pub enum SealedRead {
+    /// The contents, decrypted if the file was sealed.
+    Contents(Opened),
+    /// The file is sealed and cannot be opened by this user on this system.
+    Unopenable(OpenError),
+}
+
+/// [`read_capped`] and then opens the file if it is sealed.
+pub fn read_sealed(path: &Path, cap: u64, sealer: Option<&dyn Sealer>) -> io::Result<SealedRead> {
+    let bytes = read_capped(path, cap)?;
+    Ok(match sealed::open(sealer, bytes) {
+        Ok(opened) => SealedRead::Contents(opened),
+        Err(err) => SealedRead::Unopenable(err),
+    })
+}
+
+/// True if the file starts like a sealed one (only its first bytes are read).
+pub fn is_sealed_file(path: &Path) -> bool {
+    let mut head = vec![0u8; sealed::MAGIC.len()];
+    File::open(path)
+        .and_then(|mut file| file.read_exact(&mut head))
+        .is_ok()
+        && sealed::is_sealed(&head)
 }
 
 /// Replaces `path` with `contents` atomically (temporary file + rename), so a
@@ -69,6 +112,40 @@ mod tests {
         write_atomic(&path, b"two").unwrap();
         assert_eq!(fs::read(&path).unwrap(), b"two");
         assert!(!dir.path().join("nested").join("history.json.tmp").exists());
+    }
+
+    #[test]
+    fn sealed_files_hold_no_plain_text_and_read_back() {
+        use sevak_core::sealed::fake::XorSealer;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("history.json");
+        let sealer = XorSealer(9);
+        write_atomic_sealed(&path, b"password hunter2", Some(&sealer)).unwrap();
+
+        let on_disk = fs::read(&path).unwrap();
+        assert!(!on_disk.windows(6).any(|w| w == b"hunter"));
+        assert!(is_sealed_file(&path));
+        assert!(matches!(
+            read_sealed(&path, 1024, Some(&sealer)).unwrap(),
+            SealedRead::Contents(opened) if opened.was_sealed && opened.bytes == b"password hunter2"
+        ));
+        // Another user's key, and a system without one, get nothing.
+        assert!(matches!(
+            read_sealed(&path, 1024, Some(&XorSealer(1))).unwrap(),
+            SealedRead::Unopenable(OpenError::Undecryptable)
+        ));
+        assert!(matches!(
+            read_sealed(&path, 1024, None).unwrap(),
+            SealedRead::Unopenable(OpenError::NoSealer)
+        ));
+
+        // Without a sealer the file is plain, and says so.
+        write_atomic_sealed(&path, b"plain", None).unwrap();
+        assert!(!is_sealed_file(&path));
+        assert!(matches!(
+            read_sealed(&path, 1024, Some(&sealer)).unwrap(),
+            SealedRead::Contents(opened) if !opened.was_sealed && opened.bytes == b"plain"
+        ));
     }
 
     #[test]

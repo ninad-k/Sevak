@@ -6,15 +6,22 @@
 //! stores the hash, so a path is never read back from it.
 //!
 //! The folder is private to the user (0700, files 0600 on Unix; on Windows it
-//! inherits the per-user access of the profile folder). Nothing outside the two
-//! name patterns is ever deleted from it.
+//! inherits the per-user access of the profile folder). Where the system can
+//! encrypt files for the user (Windows) the files are encrypted too: the
+//! callers pass the [`Sealer`], and readers that only have a path (the preview
+//! pane, the icon loader, pasting) open them through
+//! [`sevak_core::sealed::global`]. Nothing outside the two name patterns is ever
+//! deleted from it.
 
 use std::collections::HashSet;
 use std::fs;
 use std::io;
 use std::path::PathBuf;
 
-use sevak_platform::private_file::{read_capped, write_atomic};
+use sevak_core::sealed::{self, Sealer};
+use sevak_platform::private_file::{
+    is_sealed_file, read_capped, write_atomic, write_atomic_sealed,
+};
 
 /// The folder inside Sevak's data folder.
 pub const DIR_NAME: &str = "clipboard";
@@ -64,11 +71,45 @@ impl MediaStore {
     }
 
     /// Writes an image's files (atomically each; the picture last, so a
-    /// picture on disk always has its thumbnail).
-    pub fn write(&self, hash: u64, png: &[u8], thumb_png: &[u8]) -> io::Result<()> {
+    /// picture on disk always has its thumbnail), encrypted when there is a
+    /// `sealer`.
+    pub fn write(
+        &self,
+        hash: u64,
+        png: &[u8],
+        thumb_png: &[u8],
+        sealer: Option<&dyn Sealer>,
+    ) -> io::Result<()> {
         self.ensure_dir()?;
-        write_atomic(&self.thumb_path(hash), thumb_png)?;
-        write_atomic(&self.png_path(hash), png)
+        write_atomic_sealed(&self.thumb_path(hash), thumb_png, sealer)?;
+        write_atomic_sealed(&self.png_path(hash), png, sealer)
+    }
+
+    /// Encrypts every image file that is still plain (from before encryption
+    /// was on). Returns how many files were rewritten; one that cannot be is
+    /// left as it is.
+    pub fn seal_existing(&self, sealer: &dyn Sealer) -> usize {
+        let Ok(entries) = fs::read_dir(&self.dir) else {
+            return 0;
+        };
+        let mut sealed_now = 0;
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            if !name.to_str().is_some_and(|name| image_hash(name).is_some()) {
+                continue;
+            }
+            let path = entry.path();
+            if is_sealed_file(&path) {
+                continue;
+            }
+            let done = read_capped(&path, MAX_IMAGE_FILE_BYTES)
+                .and_then(|bytes| write_atomic(&path, &sealed::seal(sealer, &bytes)?));
+            match done {
+                Ok(()) => sealed_now += 1,
+                Err(err) => tracing::warn!("could not encrypt a clipboard image: {}", err.kind()),
+            }
+        }
+        sealed_now
     }
 
     /// Deletes an image's files. A file that is already gone is fine.
@@ -108,7 +149,7 @@ impl MediaStore {
     /// version kept them) into this store, one at a time: a file is deleted
     /// from `old` only after its copy is written here. Files not named like
     /// Sevak's are left alone, and the old folder is removed if that empties it.
-    pub fn adopt_from(&self, old: &MediaStore) -> Adopted {
+    pub fn adopt_from(&self, old: &MediaStore, sealer: Option<&dyn Sealer>) -> Adopted {
         let mut report = Adopted::default();
         let Ok(entries) = fs::read_dir(&old.dir) else {
             return report;
@@ -126,7 +167,14 @@ impl MediaStore {
             }
             let moved = read_capped(&from, MAX_IMAGE_FILE_BYTES).and_then(|bytes| {
                 self.ensure_dir()?;
-                write_atomic(&self.dir.join(name), &bytes)
+                // Files that are already sealed (by a sealer of this user) are
+                // kept as they are; plain ones are sealed on the way.
+                match sealer {
+                    Some(sealer) if !sealed::is_sealed(&bytes) => {
+                        write_atomic(&self.dir.join(name), &sealed::seal(sealer, &bytes)?)
+                    }
+                    _ => write_atomic(&self.dir.join(name), &bytes),
+                }
             });
             match moved {
                 Ok(()) => {
@@ -239,7 +287,7 @@ mod tests {
     fn written_images_can_be_found_and_removed() {
         let (_dir, store) = store();
         assert!(!store.contains(7));
-        store.write(7, b"full", b"thumb").unwrap();
+        store.write(7, b"full", b"thumb", None).unwrap();
         assert!(store.contains(7));
         assert_eq!(fs::read(store.png_path(7)).unwrap(), b"full");
         assert_eq!(fs::read(store.thumb_path(7)).unwrap(), b"thumb");
@@ -253,8 +301,8 @@ mod tests {
     #[test]
     fn pruning_deletes_orphans_and_nothing_else() {
         let (_dir, store) = store();
-        store.write(1, b"a", b"a").unwrap();
-        store.write(2, b"b", b"b").unwrap();
+        store.write(1, b"a", b"a", None).unwrap();
+        store.write(2, b"b", b"b", None).unwrap();
         // A user's own file, a stray temp file of ours, and a lone thumbnail.
         fs::write(store.dir().join("holiday.png"), b"mine").unwrap();
         fs::write(store.dir().join("0000000000000003.png.tmp"), b"half").unwrap();
@@ -282,11 +330,11 @@ mod tests {
         let (_dir, new) = store();
         let old_dir = tempfile::tempdir().unwrap();
         let old = MediaStore::new(old_dir.path().join(DIR_NAME));
-        old.write(1, b"full", b"thumb").unwrap();
+        old.write(1, b"full", b"thumb", None).unwrap();
         fs::write(old.dir().join("holiday.png"), b"mine").unwrap();
         fs::write(old.dir().join("0000000000000009.png.tmp"), b"half").unwrap();
 
-        let report = new.adopt_from(&old);
+        let report = new.adopt_from(&old, None);
         assert_eq!(report.moved, 2);
         assert_eq!((report.retry, report.dropped), (0, 0));
         assert_eq!(fs::read(new.png_path(1)).unwrap(), b"full");
@@ -295,7 +343,7 @@ mod tests {
         assert_eq!(names(&old), ["holiday.png"]);
         // Nothing to move from a folder that does not exist.
         let none = MediaStore::new(old_dir.path().join("nowhere"));
-        assert_eq!(new.adopt_from(&none), Adopted::default());
+        assert_eq!(new.adopt_from(&none, None), Adopted::default());
     }
 
     #[test]
@@ -307,12 +355,63 @@ mod tests {
         let new = MediaStore::new(blocked);
         let old_dir = tempfile::tempdir().unwrap();
         let old = MediaStore::new(old_dir.path().join(DIR_NAME));
-        old.write(5, b"full", b"thumb").unwrap();
+        old.write(5, b"full", b"thumb", None).unwrap();
 
-        let report = new.adopt_from(&old);
+        let report = new.adopt_from(&old, None);
         assert_eq!(report.moved, 0);
         assert_eq!(report.retry, 2);
         assert!(old.contains(5), "the old copy is kept for the next try");
+    }
+
+    #[test]
+    fn sealed_images_are_unreadable_on_disk_and_open_with_the_key() {
+        use sevak_core::sealed::fake::XorSealer;
+        let (_dir, store) = store();
+        let sealer = XorSealer(3);
+        store
+            .write(4, b"PNGDATA-secret", b"THUMB-secret", Some(&sealer))
+            .unwrap();
+        for path in [store.png_path(4), store.thumb_path(4)] {
+            let on_disk = fs::read(&path).unwrap();
+            assert!(!on_disk.windows(6).any(|w| w == b"secret"));
+            let opened = sealed::open(Some(&sealer), on_disk).unwrap();
+            assert!(opened.was_sealed);
+            assert!(opened.bytes.ends_with(b"secret"));
+        }
+    }
+
+    #[test]
+    fn plain_images_are_sealed_once_and_sealed_ones_are_left() {
+        use sevak_core::sealed::fake::XorSealer;
+        let (_dir, store) = store();
+        let sealer = XorSealer(3);
+        store.write(1, b"plain-full", b"plain-thumb", None).unwrap();
+        store
+            .write(2, b"sealed-full", b"sealed-thumb", Some(&sealer))
+            .unwrap();
+        let before = fs::read(store.png_path(2)).unwrap();
+        fs::write(store.dir().join("holiday.png"), b"mine").unwrap();
+
+        assert_eq!(store.seal_existing(&sealer), 2);
+        assert_eq!(store.seal_existing(&sealer), 0, "nothing left to do");
+        assert!(is_sealed_file(&store.png_path(1)));
+        assert!(is_sealed_file(&store.thumb_path(1)));
+        assert_eq!(fs::read(store.png_path(2)).unwrap(), before);
+        assert_eq!(fs::read(store.dir().join("holiday.png")).unwrap(), b"mine");
+    }
+
+    #[test]
+    fn moved_images_are_sealed_on_the_way() {
+        use sevak_core::sealed::fake::XorSealer;
+        let (_dir, new) = store();
+        let old_dir = tempfile::tempdir().unwrap();
+        let old = MediaStore::new(old_dir.path().join(DIR_NAME));
+        old.write(1, b"full-secret", b"thumb-secret", None).unwrap();
+        let sealer = XorSealer(8);
+
+        assert_eq!(new.adopt_from(&old, Some(&sealer)).moved, 2);
+        assert!(is_sealed_file(&new.png_path(1)));
+        assert!(is_sealed_file(&new.thumb_path(1)));
     }
 
     #[cfg(unix)]
@@ -320,7 +419,7 @@ mod tests {
     fn the_folder_and_files_are_private() {
         use std::os::unix::fs::PermissionsExt;
         let (_dir, store) = store();
-        store.write(9, b"x", b"y").unwrap();
+        store.write(9, b"x", b"y", None).unwrap();
         let mode = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode(store.dir()), 0o700);
         assert_eq!(mode(&store.png_path(9)), 0o600);

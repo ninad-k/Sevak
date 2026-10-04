@@ -7,6 +7,10 @@ license.workspace = true
 authors.workspace = true
 rust-version.workspace = true
 
+[features]
+# A fake `Sealer` (`sealed::fake`) for other crates' tests.
+test-util = []
+
 [dependencies]
 nucleo-matcher.workspace = true
 serde.workspace = true

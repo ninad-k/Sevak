@@ -30,6 +30,9 @@ use crate::model::{Action, ClipContent, LaunchTarget, PreviewHint, ResultItem, V
 pub const MAX_TEXT_BYTES: usize = 64 * 1024;
 /// Most bytes of text shown in the Text View.
 pub const MAX_VIEW_BYTES: usize = 512 * 1024;
+/// What an encrypted image file may be larger than its picture.
+const SEALED_IMAGE_OVERHEAD: usize = 4096;
+
 /// Largest image (file size) sent to the page.
 pub const MAX_IMAGE_BYTES: u64 = 4 * 1024 * 1024;
 /// Most names listed for a folder.
@@ -353,8 +356,12 @@ fn file_content(content: &mut PreviewContent, path: &Path, size: u64) {
             ));
             return;
         }
-        match read_limited(path, MAX_IMAGE_BYTES as usize) {
-            Ok(bytes) if !bytes.is_empty() => {
+        // An image of the clipboard history can be encrypted: a little more is
+        // read, for the encryption's own overhead.
+        let read = read_limited(path, MAX_IMAGE_BYTES as usize + SEALED_IMAGE_OVERHEAD)
+            .and_then(crate::sealed::open_global);
+        match read {
+            Ok(bytes) if !bytes.is_empty() && bytes.len() as u64 <= MAX_IMAGE_BYTES => {
                 content.body = PreviewBody::Image {
                     src: format!("data:{mime};base64,{}", base64(&bytes)),
                 };
