@@ -17,7 +17,7 @@ use crate::keyboard::TypingTarget;
 use super::capture::wait_for_modifier_release;
 use super::keyhook::OWN_EXTRA_INFO;
 use super::paste::{
-    app_of, foreground_window, is_own_window, key_input, send_inputs, window_owner,
+    app_of, foreground_window, hwnd_to_int, is_own_window, key_input, send_inputs, window_owner,
 };
 
 /// `ES_PASSWORD`: the edit control shows dots for what is typed.
@@ -105,14 +105,21 @@ pub(crate) fn typing_target() -> TypingTarget {
     TypingTarget {
         app: app_of(foreground),
         own_window: is_own_window(foreground),
-        private: focus_is_password_box(foreground),
+        private: focus_is_password_box(foreground) || uia_says_password(foreground),
     }
+}
+
+/// UI Automation's answer for the focused control of `foreground`: within a 50 ms
+/// budget, reused for 300 ms per window, and "no" when it cannot say (see
+/// [`super::uia`]). Called from the expansion worker, never from the hook.
+fn uia_says_password(foreground: HWND) -> bool {
+    super::uia::detector().is_password(hwnd_to_int(foreground), super::keyhook_hotkey::clock_ms())
 }
 
 /// True if the control with the keyboard focus in `foreground`'s thread is an
 /// edit control in password mode. This sees classic and most framework edit
-/// controls; it cannot see inside a web page (a browser's password field), which
-/// would need UI Automation.
+/// controls; web pages, WPF, UWP and similar need UI Automation
+/// ([`uia_says_password`]).
 fn focus_is_password_box(foreground: HWND) -> bool {
     let Some((_, thread)) = window_owner(foreground) else {
         return false;

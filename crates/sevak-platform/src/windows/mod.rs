@@ -19,6 +19,7 @@ mod spell;
 pub(crate) mod system;
 pub(crate) mod tasks;
 pub(crate) mod trash;
+mod uia;
 
 pub(crate) use keyhook_hotkey::{clock_ms as hook_clock_ms, service as hotkey_hook_service};
 pub(crate) use provider::WindowsProvider;

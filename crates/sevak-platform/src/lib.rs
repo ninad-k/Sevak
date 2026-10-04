@@ -24,6 +24,7 @@ pub mod keyboard;
 pub mod media;
 pub mod open;
 pub mod os_search;
+mod password_probe;
 pub mod paste;
 pub mod paths;
 pub mod private_file;
