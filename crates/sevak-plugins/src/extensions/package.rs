@@ -78,7 +78,8 @@ pub struct ExtensionPackage {
 
 impl ExtensionPackage {
     /// Reads and checks a package. `folder` is the folder the extension will
-    /// install to (it names the extension when the manifest gives no `id`).
+    /// install to, which must be the id in its manifest (`script:<folder>`);
+    /// an empty `folder` checks the package without that (for tools).
     pub fn read(bytes: &[u8], folder: &str) -> Result<Self, String> {
         if bytes.len() > MAX_PACKAGE_BYTES {
             return Err("the package is larger than expected".to_owned());
@@ -154,7 +155,14 @@ impl ExtensionPackage {
                 String::from_utf8(file.data.clone())
                     .map_err(|_| format!("{MANIFEST_FILE} is not text"))
             })?;
-        let native = check_manifest(&manifest_text, folder)?;
+        let summary = summarize(&manifest_text, folder)?;
+        if !folder.is_empty() && summary.id != folder {
+            return Err(format!(
+                "the package's id is script:{}, but it is installed as \"{folder}\"",
+                summary.id
+            ));
+        }
+        let native = summary.native;
 
         // Only the binaries the manifest declares: a program the manifest does
         // not name would travel with the package but never be reviewed.
@@ -235,6 +243,19 @@ impl ExtensionPackage {
 /// `[extension]` table and parse for every platform that table names. The
 /// returned [`Native`] is what it declares.
 pub fn check_manifest(text: &str, folder: &str) -> Result<Native, String> {
+    // A package must name itself: the folder a gallery entry installs to is not
+    // part of the file, so the manifest says which extension this is.
+    let has_id = toml::from_str::<toml::Table>(text)
+        .map_err(|err| err.to_string())?
+        .get("id")
+        .and_then(toml::Value::as_str)
+        .is_some_and(|id| !id.trim().is_empty());
+    if !has_id {
+        return Err(
+            "plugin.toml needs an `id` (script:<name>, the name the extension installs under)"
+                .to_owned(),
+        );
+    }
     let native = Native::parse_text(text)?.ok_or_else(|| {
         "plugin.toml has no [extension] table; a native extension declares its version, \
          author, licence and binaries there"
@@ -245,6 +266,39 @@ pub fn check_manifest(text: &str, folder: &str) -> Result<Native, String> {
             .map_err(|err| format!("plugin.toml is not valid for {platform}: {err}"))?;
     }
     Ok(native)
+}
+
+/// What a native extension's manifest says about it, for tools and listings.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Summary {
+    /// The gallery id: the manifest's `id` without its `script:` prefix.
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub keyword: String,
+    pub native: Native,
+}
+
+/// The [`Summary`] of manifest `text` (checked for every platform).
+pub fn summarize(text: &str, folder: &str) -> Result<Summary, String> {
+    let native = check_manifest(text, folder)?;
+    let platform = native
+        .binaries
+        .keys()
+        .next()
+        .ok_or_else(|| "plugin.toml declares no binaries".to_owned())?;
+    let manifest = Manifest::parse_for(text, folder, platform)?;
+    Ok(Summary {
+        id: manifest
+            .id
+            .strip_prefix(crate::script::ID_PREFIX)
+            .unwrap_or(&manifest.id)
+            .to_owned(),
+        name: manifest.name,
+        description: manifest.description,
+        keyword: manifest.keyword,
+        native,
+    })
 }
 
 /// Things that are not wrong but that users and reviewers will want fixed.
@@ -478,8 +532,7 @@ impl Builder {
             writer.finish().map_err(|err| err.to_string())?;
         }
         let bytes = out.into_inner();
-        // The folder only names the extension when the manifest has no id.
-        ExtensionPackage::read(&bytes, "extension")?;
+        ExtensionPackage::read(&bytes, "")?;
         Ok(bytes)
     }
 }
@@ -499,6 +552,7 @@ pub(crate) mod tests {
     use super::*;
 
     pub(crate) const MANIFEST: &str = r#"protocol = 1
+id = "script:rust-hello"
 keyword = "rh"
 name = "Rust hello"
 description = "Says hello."
@@ -591,7 +645,7 @@ linux-x86_64 = "bin/rh-linux-x86_64"
     #[test]
     fn one_platform_packages_carry_one_program() {
         let bytes = built().build(Some("macos-aarch64")).unwrap();
-        let package = ExtensionPackage::read(&bytes, "x").unwrap();
+        let package = ExtensionPackage::read(&bytes, "").unwrap();
         assert_eq!(package.platforms(), ["macos-aarch64"]);
         let err = package.files_for("linux-x86_64").unwrap_err();
         assert!(err.contains("no build for linux-x86_64"), "{err}");
@@ -612,7 +666,7 @@ linux-x86_64 = "bin/rh-linux-x86_64"
     #[test]
     fn installing_one_platform_leaves_the_other_programs_out() {
         let bytes = built().build(None).unwrap();
-        let package = ExtensionPackage::read(&bytes, "x").unwrap();
+        let package = ExtensionPackage::read(&bytes, "").unwrap();
         let files = package.files_for("windows-x86_64").unwrap();
         let names: Vec<&str> = files.iter().map(|(name, _, _)| name.as_str()).collect();
         assert_eq!(names, ["bin/rh-windows-x86_64.exe", "plugin.toml"]);
@@ -636,7 +690,8 @@ linux-x86_64 = "bin/rh-linux-x86_64"
             .unwrap_err()
             .contains("no binary was added for windows-x86_64"));
 
-        let script = "protocol = 1\nkeyword = \"x\"\ncommand = [\"python\", \"x.py\"]\n";
+        let script =
+            "protocol = 1\nid = \"script:x\"\nkeyword = \"x\"\ncommand = [\"python\", \"x.py\"]\n";
         assert!(Builder::new(script, "x")
             .err()
             .unwrap()
@@ -661,7 +716,7 @@ linux-x86_64 = "bin/rh-linux-x86_64"
             assert!(builder.add_file(path, b"x".to_vec()).is_err(), "{path}");
         }
         builder.add_file("icon.png", b"png".to_vec()).unwrap();
-        let package = ExtensionPackage::read(&builder.build(None).unwrap(), "x").unwrap();
+        let package = ExtensionPackage::read(&builder.build(None).unwrap(), "").unwrap();
         assert!(package.files.iter().any(|f| f.path == "icon.png"));
     }
 
@@ -671,15 +726,25 @@ linux-x86_64 = "bin/rh-linux-x86_64"
             ("plugin.toml", MANIFEST.as_bytes()),
             ("bin/rh-linux-x86_64", b"ELF linux"),
         ];
-        assert!(ExtensionPackage::read(&with_checksums(&good), "x").is_ok());
+        assert!(ExtensionPackage::read(&with_checksums(&good), "").is_ok());
         let sums = checksums_for(&good);
         let tampered = raw_zip(&[
             ("plugin.toml", MANIFEST.as_bytes()),
             ("bin/rh-linux-x86_64", b"ELF EVIL!"),
             (CHECKSUMS_FILE, sums.as_bytes()),
         ]);
-        let err = ExtensionPackage::read(&tampered, "x").unwrap_err();
+        let err = ExtensionPackage::read(&tampered, "").unwrap_err();
         assert!(err.contains("bin/rh-linux-x86_64 does not match"), "{err}");
+    }
+
+    #[test]
+    fn the_package_must_name_itself_and_match_its_folder() {
+        let bytes = built().build(None).unwrap();
+        assert!(ExtensionPackage::read(&bytes, "rust-hello").is_ok());
+        let err = ExtensionPackage::read(&bytes, "other-name").unwrap_err();
+        assert!(err.contains("script:rust-hello"), "{err}");
+        let no_id = MANIFEST.replace("id = \"script:rust-hello\"\n", "");
+        assert!(Builder::new(&no_id, "x").err().unwrap().contains("`id`"));
     }
 
     #[test]
@@ -691,7 +756,7 @@ linux-x86_64 = "bin/rh-linux-x86_64"
         // No checksums file at all.
         let err = ExtensionPackage::read(
             &raw_zip(&[("plugin.toml", manifest), ("bin/rh-linux-x86_64", program)]),
-            "x",
+            "",
         )
         .unwrap_err();
         assert!(err.contains(CHECKSUMS_FILE), "{err}");
@@ -704,7 +769,7 @@ linux-x86_64 = "bin/rh-linux-x86_64"
                 ("bin/rh-linux-x86_64", program),
                 (CHECKSUMS_FILE, partial.as_bytes()),
             ]),
-            "x",
+            "",
         )
         .unwrap_err();
         assert!(err.contains("not in checksums.sha256"), "{err}");
@@ -721,7 +786,7 @@ linux-x86_64 = "bin/rh-linux-x86_64"
                 ("bin/rh-linux-x86_64", program),
                 (CHECKSUMS_FILE, extra.as_bytes()),
             ]),
-            "x",
+            "",
         )
         .unwrap_err();
         assert!(err.contains("ghost"), "{err}");
@@ -734,7 +799,7 @@ linux-x86_64 = "bin/rh-linux-x86_64"
                     ("bin/rh-linux-x86_64", program),
                     (CHECKSUMS_FILE, bad.as_bytes()),
                 ]),
-                "x",
+                "",
             )
             .unwrap_err();
             assert!(err.contains(CHECKSUMS_FILE), "{bad}: {err}");
@@ -760,7 +825,7 @@ linux-x86_64 = "bin/rh-linux-x86_64"
                 ("bin/rh-linux-x86_64", program),
                 (name, b"evil"),
             ]);
-            let err = ExtensionPackage::read(&bytes, "x").unwrap_err();
+            let err = ExtensionPackage::read(&bytes, "").unwrap_err();
             assert!(
                 err.contains("not allowed") || err.contains("leaves"),
                 "{name:?}: {err}"
@@ -774,7 +839,7 @@ linux-x86_64 = "bin/rh-linux-x86_64"
             ("plugin.toml", MANIFEST.as_bytes()),
             ("Plugin.toml", b"other"),
         ]);
-        let err = ExtensionPackage::read(&bytes, "x").unwrap_err();
+        let err = ExtensionPackage::read(&bytes, "").unwrap_err();
         assert!(err.contains("twice"), "{err}");
     }
 
@@ -792,7 +857,7 @@ linux-x86_64 = "bin/rh-linux-x86_64"
                 .unwrap();
             writer.finish().unwrap();
         }
-        let err = ExtensionPackage::read(&out.into_inner(), "x").unwrap_err();
+        let err = ExtensionPackage::read(&out.into_inner(), "").unwrap_err();
         assert!(err.contains("link"), "{err}");
     }
 
@@ -804,7 +869,7 @@ linux-x86_64 = "bin/rh-linux-x86_64"
             ("bin/rh-linux-x86_64", b"ELF linux"),
             ("bin/sneaky", b"ELF extra"),
         ]);
-        let err = ExtensionPackage::read(&bytes, "x").unwrap_err();
+        let err = ExtensionPackage::read(&bytes, "").unwrap_err();
         assert!(err.contains("bin/sneaky"), "{err}");
         assert!(err.contains("does not declare"), "{err}");
         let exe = with_checksums(&[
@@ -812,7 +877,7 @@ linux-x86_64 = "bin/rh-linux-x86_64"
             ("bin/rh-linux-x86_64", b"ELF linux"),
             ("helper.exe", b"MZ"),
         ]);
-        assert!(ExtensionPackage::read(&exe, "x")
+        assert!(ExtensionPackage::read(&exe, "")
             .unwrap_err()
             .contains("helper.exe"));
     }
@@ -820,29 +885,30 @@ linux-x86_64 = "bin/rh-linux-x86_64"
     #[test]
     fn a_package_with_none_of_the_declared_binaries_is_refused() {
         let bytes = with_checksums(&[("plugin.toml", MANIFEST.as_bytes())]);
-        let err = ExtensionPackage::read(&bytes, "x").unwrap_err();
+        let err = ExtensionPackage::read(&bytes, "").unwrap_err();
         assert!(err.contains("none of the binaries"), "{err}");
     }
 
     #[test]
     fn a_package_without_a_native_manifest_is_refused() {
-        let script = "protocol = 1\nkeyword = \"x\"\ncommand = [\"python\", \"x.py\"]\n";
+        let script =
+            "protocol = 1\nid = \"script:x\"\nkeyword = \"x\"\ncommand = [\"python\", \"x.py\"]\n";
         let bytes = with_checksums(&[("plugin.toml", script.as_bytes())]);
-        let err = ExtensionPackage::read(&bytes, "x").unwrap_err();
+        let err = ExtensionPackage::read(&bytes, "").unwrap_err();
         assert!(err.contains("[extension]"), "{err}");
         let bytes = with_checksums(&[("x.txt", b"x")]);
-        assert!(ExtensionPackage::read(&bytes, "x")
+        assert!(ExtensionPackage::read(&bytes, "")
             .unwrap_err()
             .contains("plugin.toml"));
     }
 
     #[test]
     fn not_a_zip_and_oversized_input() {
-        assert!(ExtensionPackage::read(b"not a zip", "x")
+        assert!(ExtensionPackage::read(b"not a zip", "")
             .unwrap_err()
             .contains("not a valid zip"));
         assert!(
-            ExtensionPackage::read(&vec![0u8; MAX_PACKAGE_BYTES + 1], "x")
+            ExtensionPackage::read(&vec![0u8; MAX_PACKAGE_BYTES + 1], "")
                 .unwrap_err()
                 .contains("larger")
         );
@@ -854,7 +920,7 @@ linux-x86_64 = "bin/rh-linux-x86_64"
         let big = vec![0u8; MAX_FILE_BYTES as usize + 1];
         let bytes = raw_zip(&[("plugin.toml", MANIFEST.as_bytes()), ("big.bin", &big)]);
         assert!(bytes.len() < MAX_PACKAGE_BYTES);
-        let err = ExtensionPackage::read(&bytes, "x").unwrap_err();
+        let err = ExtensionPackage::read(&bytes, "").unwrap_err();
         assert!(err.contains("too large"), "{err}");
     }
 
@@ -868,7 +934,7 @@ linux-x86_64 = "bin/rh-linux-x86_64"
             ("c.bin", &part),
         ]);
         assert!(bytes.len() < MAX_PACKAGE_BYTES);
-        let err = ExtensionPackage::read(&bytes, "x").unwrap_err();
+        let err = ExtensionPackage::read(&bytes, "").unwrap_err();
         assert!(err.contains("too large when unpacked"), "{err}");
     }
 
@@ -876,7 +942,7 @@ linux-x86_64 = "bin/rh-linux-x86_64"
     fn too_many_files_are_refused() {
         let names: Vec<String> = (0..=MAX_FILES).map(|n| format!("f{n}.txt")).collect();
         let entries: Vec<(&str, &[u8])> = names.iter().map(|n| (n.as_str(), &b"x"[..])).collect();
-        let err = ExtensionPackage::read(&raw_zip(&entries), "x").unwrap_err();
+        let err = ExtensionPackage::read(&raw_zip(&entries), "").unwrap_err();
         assert!(err.contains("too many"), "{err}");
     }
 
@@ -888,7 +954,7 @@ linux-x86_64 = "bin/rh-linux-x86_64"
             lint_manifest(MANIFEST, "x")
         );
         let bare =
-            "protocol = 1\nkeyword = \"x\"\n[extension]\nversion = \"1.0.0\"\nauthor = \"a\"\n\
+            "protocol = 1\nid = \"script:x\"\nkeyword = \"x\"\n[extension]\nversion = \"1.0.0\"\nauthor = \"a\"\n\
                     license = \"MIT\"\n[extension.binaries]\nlinux-x86_64 = \"tool\"\n";
         let notes = lint_manifest(bare, "x").join("\n");
         for wanted in [

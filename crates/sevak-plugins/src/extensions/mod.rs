@@ -14,5 +14,6 @@
 pub mod package;
 
 pub use package::{
-    check_manifest, lint_manifest, Builder, ExtensionPackage, PackedFile, CHECKSUMS_FILE, EXTENSION,
+    check_manifest, lint_manifest, summarize, Builder, ExtensionPackage, PackedFile, Summary,
+    CHECKSUMS_FILE, EXTENSION,
 };
