@@ -8,7 +8,10 @@ are all welcome.
 
 - **Bugs and small fixes:** open a pull request directly, or an
   [issue](https://github.com/ninad-k/Sevak/issues/new/choose) first if you're
-  not sure it is a bug.
+  not sure it is a bug. For an issue, `sevak --diagnostics` (or Settings →
+  Help → Copy diagnostics) makes a report with your version, system, plugin
+  status and recent log lines, with private data removed; nothing is sent
+  anywhere, so read it and paste it yourself.
 - **New features and plugins:** open an issue first so we can agree on the
   approach before you spend time on it. Built-in plugins should be useful to
   most people, fast (they run on every keystroke) and work offline.

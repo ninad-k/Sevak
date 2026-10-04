@@ -6,6 +6,7 @@ mod autostart;
 mod backdrop;
 mod cli;
 mod commands;
+mod diagnostics;
 mod direct;
 mod expansion;
 mod file_buffer;
@@ -61,6 +62,10 @@ fn main() -> ExitCode {
         Invocation::RestoreHotkey => {
             process::attach_parent_console();
             restore_hotkey(config.as_deref())
+        }
+        Invocation::Diagnostics => {
+            process::attach_parent_console();
+            diagnostics::run_cli(config.as_deref())
         }
         Invocation::Run(launch) => match run(launch, config.as_deref()) {
             Ok(()) => ExitCode::SUCCESS,

@@ -133,6 +133,13 @@ pub trait Plugin: Send + Sync {
         Ok(())
     }
 
+    /// How many entries the plugin's index holds right now (apps found, files
+    /// indexed), for the diagnostics report. `None` for plugins that keep no
+    /// index. Cheap; the count only, never the entries.
+    fn index_size(&self) -> Option<usize> {
+        None
+    }
+
     /// Receives the shell's "results updated" callback. Only plugins that answer
     /// slowly (script plugins) use it: when a late answer is ready for the query
     /// they last served, they call it with their id and the shell re-runs the

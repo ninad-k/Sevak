@@ -379,6 +379,10 @@ impl Plugin for FilesPlugin {
         Some(self.row(&name, path, metadata.is_dir(), 0.0))
     }
 
+    fn index_size(&self) -> Option<usize> {
+        Some(self.snapshot().len())
+    }
+
     fn refresh(&self) -> PluginResult<()> {
         let started = Instant::now();
         let mut roots = Vec::new();
@@ -451,6 +455,17 @@ mod tests {
 
     fn titles(plugin: &FilesPlugin, query: &str) -> Vec<String> {
         plugin.query(query).into_iter().map(|r| r.title).collect()
+    }
+
+    #[test]
+    fn the_index_size_is_the_number_of_entries() {
+        let dir = tempfile::tempdir().unwrap();
+        touch(&dir.path().join("a.txt"));
+        touch(&dir.path().join("b.txt"));
+        let plugin = FilesPlugin::with_home(config_for(&[dir.path()]), MockPlatform::empty(), None);
+        assert_eq!(plugin.index_size(), Some(0));
+        plugin.refresh().unwrap();
+        assert_eq!(plugin.index_size(), Some(2));
     }
 
     #[test]

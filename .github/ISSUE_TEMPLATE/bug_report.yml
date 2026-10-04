@@ -87,10 +87,24 @@ body:
       required: true
 
   - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics report
+      description: |
+        Optional, but it usually saves a round of questions. Run `sevak --diagnostics` in a
+        terminal, or open Settings → Help and choose **Copy diagnostics**, then paste the result
+        here. It is made on your computer and Sevak sends nothing anywhere. It leaves out what you
+        searched for, your clipboard and snippets, the contents of scripts and workflows, and
+        hides your user name and home folder. **Read it before you paste it** and delete anything
+        you would rather keep private.
+      placeholder: Paste the report here. It is Markdown, so it will display nicely.
+
+  - type: textarea
     id: logs
     attributes:
       label: Logs
       description: |
+        Only if you did not add a diagnostics report (it already holds the last 100 log lines).
         The newest file in the logs folder: `%APPDATA%\sevak\logs\` (Windows),
         `~/Library/Application Support/sevak/logs/` (macOS) or `~/.local/share/sevak/logs/` (Linux).
         Logs can contain search text and file names; remove anything private.

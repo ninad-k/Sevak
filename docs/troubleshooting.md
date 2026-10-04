@@ -304,13 +304,35 @@ The full list is in [Privacy](privacy.md). See [Files and data](files-and-data.m
 
 ## Reporting a problem
 
-Open an issue through the [repository's issue form](https://github.com/ninad-k/Sevak/issues/new/choose)
-and include:
+Sevak has no telemetry, so it learns about problems only when you report them. A
+**diagnostics report** makes that quick: it lists your version, system, settings
+summary, plugin status and recent log lines, with your user name, home folder and
+anything that looks like a secret removed. It is made on your computer and sent
+nowhere; you read it and paste it yourself.
 
-- Sevak version and operating system.
-- Linux desktop and X11/Wayland session type, if relevant.
+1. Open **Settings → Help** and choose **Copy diagnostics** (the report is shown
+   in the box first, so you see exactly what you copy), or run
+   `sevak --diagnostics` in a terminal. The Settings report is the fuller one: it
+   also knows whether the shortcut is registered, whether the tray icon exists and
+   which plugins loaded.
+2. Read it. The top of the report lists what is and is not included; delete
+   anything you would rather not share. The log lines are the part most worth a
+   glance.
+3. Open an issue through the [repository's issue form](https://github.com/ninad-k/Sevak/issues/new/choose)
+   and paste the report into the **Diagnostics report** box.
+
+Also say:
+
 - The query or shortcut that reproduces the issue.
 - What you expected and what happened.
-- Relevant recent log lines, with private paths or unrelated data removed.
+
+**Open logs folder** on the same Help page (or **Reveal logs folder** at the
+bottom of Settings) shows the raw log files, if the maintainers ask for more than
+the last 100 lines. Logs can contain file names and other private details; look
+through them before sharing. See [Privacy](privacy.md#diagnostics-report) for what
+the report contains.
+
+If Sevak does not start, Settings is out of reach: run `sevak --diagnostics`
+instead. It reads files only, so it works without a running Sevak.
 
 Send security issues through [SECURITY.md](https://github.com/ninad-k/Sevak/blob/main/SECURITY.md) instead of a public issue.

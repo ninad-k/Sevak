@@ -17,6 +17,7 @@ Sevak can be controlled from the command line or automated with scripts. When Se
 | `--quit` | Quit the running instance |
 | `--setup-hotkey [KEY]` | Bind hotkeys to GNOME (Wayland desktop on Linux); offers to free Super+Space |
 | `--restore-hotkey` | Put back system shortcuts Sevak changed with your permission (GNOME input sources, macOS Spotlight) |
+| `--diagnostics` | Print a report for bug reports (version, system, settings summary, plugin status, recent log lines) with private data removed |
 | `--config PATH` | Use a custom config folder or file; overrides `SEVAK_CONFIG_DIR` |
 | `-h`, `--help` | Print help |
 | `-V`, `--version` | Print version |
@@ -195,6 +196,28 @@ sevak -V
 ```
 
 Print the version and exit.
+
+#### `--diagnostics`
+
+```bash
+sevak --diagnostics
+sevak --diagnostics > sevak-diagnostics.md
+sevak --diagnostics --config ~/other-sevak
+```
+
+Print a Markdown report that makes a bug report much easier to act on, then exit. Sevak has no telemetry, so this report is the way to tell the maintainers what your installation looks like. It is made on your computer, printed to your terminal and **never sent anywhere**: you read it and decide whether to paste it into an [issue](https://github.com/ninad-k/Sevak/issues/new/choose).
+
+It reads files only, so it works whether or not Sevak is running (it does not contact the running instance, and does not start a second one). Because of that it cannot say whether the shortcut is registered or the tray icon exists, or which plugins loaded; the report from **Settings → Help → Copy diagnostics** adds those. It does build the app and file indexes once to count them, which can take a few seconds.
+
+The first lines of the report say exactly what is and is not in it; see [Privacy](privacy.md#diagnostics-report) for the details. In short it has the version and build, your OS and display server, where Sevak is installed, which features are on, your shortcut, the theme and the keywords in use, the names and sizes of the files in Sevak's folders, the status of every plugin, script plugin and workflow, a few health checks, and the last 100 log lines with private text removed. It never has what you searched for, clipboard or snippet text, the contents of scripts or workflows, usage statistics, contacts, 1Password data or file lists.
+
+To keep the report in a file, use `sevak --diagnostics > sevak-diagnostics.md` in a terminal that understands `>`. On Windows, where Sevak is a window program rather than a console program, `>` may produce an empty file in Command Prompt. Use PowerShell instead:
+
+```powershell
+sevak --diagnostics | Out-File -Encoding utf8 sevak-diagnostics.md
+```
+
+or **Settings → Help → Save as file**, which works the same everywhere. `--help` and `--version` behave the same way.
 
 ## Single-instance forwarding
 

@@ -7,6 +7,7 @@
 
 pub mod checksum;
 pub mod config;
+pub mod diagnostics;
 pub mod engine;
 pub mod fuzzy;
 pub mod model;
