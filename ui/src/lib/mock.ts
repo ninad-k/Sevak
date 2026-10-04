@@ -356,7 +356,7 @@ export function mockSettings(): SettingsDto {
   return {
     config: {
       general: {
-        hotkey: "Alt+Space",
+        hotkey: "Super+Space",
         actions_hotkey: "Ctrl+Alt+Space",
         hide_on_blur: true,
         launch_at_login: false,
@@ -372,6 +372,7 @@ export function mockSettings(): SettingsDto {
         font_size: 15,
         font_family: "",
         opacity: 100,
+        blur: false,
         radius: 14,
         theme_file: "",
         custom_css: "",

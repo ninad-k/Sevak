@@ -310,6 +310,7 @@ graph TD
 **Hotkey strategies:**
 
 - **Windows, macOS, X11 Linux:** Sevak grabs the configured global shortcut through the Tauri `global-shortcut` plugin. When you press it, the plugin invokes the handler immediately.
+- **Super+Space (the default) and keys another app owns:** The OS reserves Win+Space (input language), Cmd+Space (Spotlight) and Super+Space (GNOME input sources). On Windows a low-level keyboard hook (`sevak_platform::hotkey_hook`, one hook thread shared with snippet expansion) recognises exactly the configured shortcuts the plugin cannot register, swallows them and sends the shell the same "pressed" event; the recognising logic is a pure state machine with unit tests. On macOS and GNOME, Sevak asks once whether it may turn the OS shortcut off or move it, records the answer and the old values (`hotkey-takeover.json`) and can restore them (`sevak --restore-hotkey`). See [Troubleshooting](troubleshooting.md#super-space).
 - **Wayland Linux:** Applications cannot grab keys (security model). Instead, the desktop environment (typically GNOME) owns the bindings and runs `sevak --toggle` (or `--actions`, `--query`, `--run`) when the hotkey is pressed. Sevak's single-instance handler forwards the command to the running instance.
 - **Single-instance:** Only one Sevak process runs. If a second instance is launched, it exits after forwarding its arguments to the first.
 

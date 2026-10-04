@@ -5,6 +5,7 @@
 //! implementations are selected with `#[cfg(target_os = ...)]` so callers never
 //! need cfg gates.
 
+pub mod accelerator;
 pub mod browsers;
 pub mod capture;
 pub mod clip_media;
@@ -16,6 +17,7 @@ pub mod dictionary;
 pub mod error;
 mod expand;
 pub mod gnome;
+pub mod hotkey_hook;
 pub mod icon_file;
 pub mod icon_theme;
 pub mod keyboard;
@@ -28,6 +30,7 @@ pub mod private_file;
 pub mod process;
 pub mod provider;
 pub mod session;
+pub mod spotlight;
 pub mod system;
 pub mod tasks;
 pub mod terminal;

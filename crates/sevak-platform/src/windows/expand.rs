@@ -15,7 +15,7 @@ use crate::expand::{self, ExpandDriver, SystemExpandClipboard};
 use crate::keyboard::TypingTarget;
 
 use super::capture::wait_for_modifier_release;
-use super::keyhook_expand::OWN_EXTRA_INFO;
+use super::keyhook::OWN_EXTRA_INFO;
 use super::paste::{
     app_of, foreground_window, is_own_window, key_input, send_inputs, window_owner,
 };

@@ -4,7 +4,9 @@ mod capture;
 mod com;
 mod expand;
 mod icons;
+mod keyhook;
 mod keyhook_expand;
+mod keyhook_hotkey;
 pub(crate) mod media;
 pub(crate) mod os_search;
 mod packaged;
@@ -17,6 +19,7 @@ pub(crate) mod system;
 pub(crate) mod tasks;
 pub(crate) mod trash;
 
+pub(crate) use keyhook_hotkey::{clock_ms as hook_clock_ms, service as hotkey_hook_service};
 pub(crate) use provider::WindowsProvider;
 
 use std::ffi::OsStr;

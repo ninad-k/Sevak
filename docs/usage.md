@@ -6,7 +6,7 @@ Learn how Sevak works: opening it, typing queries, selecting results and running
 
 ### Show the launcher
 
-Press your global shortcut (default: ++alt+space++, ++option+space++ on macOS). The search bar appears centered on your screen.
+Press your global shortcut (default: ++win+space++ on Windows, ++cmd+space++ on macOS, ++super+space++ on Linux). The search bar appears centered on your screen. Sevak takes this key over from the system; see [Win+Space, Cmd+Space and Super+Space](troubleshooting.md#super-space), including how to go back to ++alt+space++.
 
 On **Linux Wayland**, configure the shortcut first: [Setting up the hotkey](install.md#setting-up-the-hotkey-on-linux).
 
@@ -20,7 +20,9 @@ Hiding does not quit Sevak. It stays in the background until you press the hotke
 
 ### Tray menu and system integration
 
-Click the tray icon (Windows, Linux) or menu-bar icon (macOS) to access:
+Click the tray icon (Windows) or menu-bar icon (macOS) to open **Settings**
+directly. Right-click it to open the menu below. Linux tray icons (AppIndicator)
+always open the menu on click.
 
 | Menu item | Action |
 |---|---|
@@ -415,7 +417,7 @@ Quick summary:
 
 | Context | Shortcut | Action |
 |---|---|---|
-| **Launcher** | ++alt+space++ | Show or hide (or your configured hotkey) |
+| **Launcher** | ++win+space++ / ++cmd+space++ / ++super+space++ | Show or hide (or your configured hotkey) |
 | **Navigation** | ++arrow-up++ / ++arrow-down++ or ++ctrl+p++ / ++ctrl+n++ | Previous / next result |
 | **Running** | ++enter++ | Run selected result |
 | **Actions panel** | ++arrow-right++ or ++ctrl+k++ | Open actions panel |
@@ -444,6 +446,7 @@ sevak --background          # Start without showing the launcher
 sevak --settings            # Open Settings
 sevak --quit                # Quit Sevak
 sevak --setup-hotkey        # Configure GNOME shortcuts on Linux
+sevak --restore-hotkey      # Put back system shortcuts Sevak changed (GNOME, macOS Spotlight)
 sevak --setup-hotkey Ctrl+Space   # Set up a specific key on Linux
 sevak --config ~/Dropbox/sevak    # Use another config folder
 sevak --help

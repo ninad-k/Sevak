@@ -26,7 +26,11 @@ Options:
                          Bind KEY (default: the hotkey from config.toml) to
                          `sevak --toggle` in GNOME, the actions_hotkey to
                          `--actions`, and the [[hotkey]] entries to `--query` /
-                         `--run`. Needed on Wayland.
+                         `--run`. Needed on Wayland. On GNOME, if the input-source
+                         switcher uses the same key (Super+Space), it offers to
+                         move that shortcut, after you confirm.
+      --restore-hotkey   Put back what Sevak changed to get its shortcut: GNOME's
+                         input-source shortcuts, macOS Spotlight's shortcut
       --config PATH      Use PATH as the config folder (or the config file, if
                          it ends in .toml) instead of the default; overrides
                          SEVAK_CONFIG_DIR. Only used when this process starts
@@ -86,6 +90,8 @@ impl fmt::Debug for Launch {
 pub enum Invocation {
     Run(Launch),
     SetupHotkey(Option<String>),
+    /// Undo the system shortcut changes Sevak made with permission.
+    RestoreHotkey,
     Help,
     Version,
 }
@@ -192,6 +198,7 @@ where
             "--actions" => set(&mut invocation, Invocation::Run(Launch::Actions))?,
             "-h" | "--help" => set(&mut invocation, Invocation::Help)?,
             "-V" | "--version" => set(&mut invocation, Invocation::Version)?,
+            "--restore-hotkey" => set(&mut invocation, Invocation::RestoreHotkey)?,
             "--setup-hotkey" => {
                 // The key is optional; `--config` after it is not the key.
                 let key = match args.peek() {
@@ -494,6 +501,26 @@ mod tests {
                 config: Some("d".into()),
             }
         );
+    }
+
+    #[test]
+    fn restore_hotkey_stands_alone() {
+        assert_eq!(
+            parse_strs(&["--restore-hotkey"]),
+            Ok(Invocation::RestoreHotkey)
+        );
+        assert_eq!(
+            parse(["--config", "d", "--restore-hotkey"]).unwrap(),
+            Command {
+                invocation: Invocation::RestoreHotkey,
+                config: Some("d".into()),
+            }
+        );
+        assert!(parse_strs(&["--restore-hotkey", "--toggle"]).is_err());
+        assert!(parse_strs(&["--restore-hotkey", "Alt+Space"]).is_err());
+        // A running instance is not asked to restore anything: it is a plain launch.
+        let remote = parse_remote(&argv(&["sevak", "--restore-hotkey"]));
+        assert_eq!(remote.launch, Launch::Show);
     }
 
     #[test]

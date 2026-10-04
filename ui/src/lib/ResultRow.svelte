@@ -89,6 +89,7 @@
 
   .row.selected {
     background: var(--selected);
+    box-shadow: inset 3px 0 0 var(--accent);
   }
 
   /* An unset --selected-fg keeps the title in the normal text color. */

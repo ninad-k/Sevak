@@ -1,15 +1,16 @@
-//! Windows: a low-level keyboard hook (`WH_KEYBOARD_LL`) and a mouse hook
-//! (`WH_MOUSE_LL`) that feed snippet expansion with [`KeyEvent`]s.
+//! Windows: what snippet expansion takes from the keyboard and mouse hooks.
 //!
-//! This module exists only for that feature and is deliberately self-contained
-//! (no other module touches these hooks), so it can be folded into a shared
-//! keyboard hook later. Only installed while `[snippets] auto_expand` is on.
+//! The hooks themselves (`WH_KEYBOARD_LL`, `WH_MOUSE_LL`) and their thread are
+//! shared with the global hotkeys: see [`keyhook`]. This module turns the key
+//! events the shared hook passes it into [`KeyEvent`]s for the expansion
+//! feature, which is opt-in (`[snippets] auto_expand`): it is only on the hook
+//! while that setting is on.
 //!
-//! What the hooks do and do not do:
+//! What it does and does not do:
 //!
 //! - A hook procedure must return quickly or Windows drops the hook, so it only
 //!   translates the key and hands a [`KeyEvent`] to the sink (a channel send).
-//!   It never swallows a key: `CallNextHookEx` is always called.
+//!   It never swallows a key.
 //! - Keys are translated with `ToUnicodeEx` and the layout of the thread that
 //!   owns the foreground window, with flag 4 ("do not change the keyboard
 //!   state"), so the dead keys of the app being typed into keep working. For the
@@ -25,31 +26,24 @@
 //! lower, so typing into an app running as administrator is not seen when Sevak
 //! is not (and expansion could not press keys there anyway).
 
-use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc;
 use std::sync::Mutex;
-use std::thread::JoinHandle;
 
-use windows::Win32::Foundation::{HINSTANCE, LPARAM, LRESULT, WPARAM};
-use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, GetKeyState, GetKeyboardLayout, ToUnicodeEx, HKL, VK_BACK, VK_CAPITAL,
     VK_CONTROL, VK_LCONTROL, VK_LMENU, VK_LSHIFT, VK_LWIN, VK_MENU, VK_RCONTROL, VK_RMENU,
     VK_RSHIFT, VK_RWIN, VK_SHIFT,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, DispatchMessageW, GetMessageW, PeekMessageW, PostThreadMessageW,
-    SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx, HC_ACTION, KBDLLHOOKSTRUCT,
-    KBDLLHOOKSTRUCT_FLAGS, LLKHF_INJECTED, LLKHF_LOWER_IL_INJECTED, MSG, PM_NOREMOVE,
-    WH_KEYBOARD_LL, WH_MOUSE_LL, WM_KEYDOWN, WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_NCLBUTTONDOWN,
-    WM_NCRBUTTONDOWN, WM_QUIT, WM_RBUTTONDOWN, WM_SYSKEYDOWN, WM_USER, WM_XBUTTONDOWN,
+    KBDLLHOOKSTRUCT, KBDLLHOOKSTRUCT_FLAGS, LLKHF_INJECTED, LLKHF_LOWER_IL_INJECTED, WM_KEYDOWN,
+    WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_NCLBUTTONDOWN, WM_NCRBUTTONDOWN, WM_RBUTTONDOWN,
+    WM_SYSKEYDOWN, WM_XBUTTONDOWN,
 };
 
 use crate::error::{PlatformError, Result};
 use crate::keyboard::{compose_dead_key, KeyEvent, KeyListener, KeySink};
 
+use super::keyhook::{self, Client, OWN_EXTRA_INFO};
 use super::paste::{foreground_window, hwnd_to_int, window_owner};
 
 /// `ToUnicodeEx` flag: do not change the keyboard state (Windows 10 1607+).
@@ -63,10 +57,6 @@ const VK_APPS: u32 = 0x5D;
 const VK_PROCESSKEY: u32 = 0xE5;
 const VK_PACKET: u32 = 0xE7;
 
-/// Stamped on every key event Sevak injects (`dwExtraInfo`), so its own
-/// Backspaces and paste are never mistaken for typing.
-pub(super) const OWN_EXTRA_INFO: usize = 0x5345_5641;
-
 /// Whether a key event is not the user's typing: Sevak's own (stamped with
 /// [`OWN_EXTRA_INFO`]) or injected by any program (`SendInput`, remote tools,
 /// automation). Injected events are always ignored, in every build: nothing
@@ -75,7 +65,7 @@ fn is_ignored(flags: KBDLLHOOKSTRUCT_FLAGS, extra_info: usize) -> bool {
     extra_info == OWN_EXTRA_INFO || flags.0 & (LLKHF_INJECTED.0 | LLKHF_LOWER_IL_INJECTED.0) != 0
 }
 
-/// Only one hook pair can be installed at a time.
+/// Only one listener can run at a time.
 static ACTIVE: AtomicBool = AtomicBool::new(false);
 static STATE: Mutex<Option<HookState>> = Mutex::new(None);
 
@@ -286,7 +276,8 @@ fn translate(info: &KBDLLHOOKSTRUCT, mods: Modifiers) -> Translation {
     }
 }
 
-fn on_key(message: u32, info: &KBDLLHOOKSTRUCT) {
+/// Called by the shared hook for every keyboard event.
+pub(super) fn on_key(message: u32, info: &KBDLLHOOKSTRUCT) {
     if message != WM_KEYDOWN && message != WM_SYSKEYDOWN {
         return;
     }
@@ -316,7 +307,8 @@ fn on_key(message: u32, info: &KBDLLHOOKSTRUCT) {
     }
 }
 
-fn on_mouse(message: u32) {
+/// Called by the shared hook for every mouse event.
+pub(super) fn on_mouse(message: u32) {
     let clicked = matches!(
         message,
         WM_LBUTTONDOWN
@@ -337,31 +329,8 @@ fn on_mouse(message: u32) {
     }
 }
 
-unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-    if code == HC_ACTION as i32 && lparam.0 != 0 {
-        // SAFETY: for HC_ACTION, `lparam` points to a KBDLLHOOKSTRUCT that is
-        // valid for the duration of this call.
-        let info = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
-        // A panic must not unwind into Windows.
-        let _ = catch_unwind(AssertUnwindSafe(|| on_key(wparam.0 as u32, info)));
-    }
-    // SAFETY: forwarding the arguments we were given.
-    unsafe { CallNextHookEx(None, code, wparam, lparam) }
-}
-
-unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-    if code == HC_ACTION as i32 {
-        let _ = catch_unwind(AssertUnwindSafe(|| on_mouse(wparam.0 as u32)));
-    }
-    // SAFETY: forwarding the arguments we were given.
-    unsafe { CallNextHookEx(None, code, wparam, lparam) }
-}
-
-/// What the hook thread reports once it has tried to install the hooks.
-type Started = std::result::Result<u32, String>;
-
-/// Installs the hooks on a thread of their own (a low-level hook is called
-/// through that thread's message loop) and returns the handle that removes them.
+/// Puts the listener on the shared keyboard hook thread (see [`keyhook`]) and
+/// returns the handle that takes it off again.
 pub(crate) fn start(sink: KeySink) -> Result<KeyListener> {
     if ACTIVE.swap(true, Ordering::SeqCst) {
         return Err(PlatformError::Os {
@@ -377,34 +346,13 @@ pub(crate) fn start(sink: KeySink) -> Result<KeyListener> {
         dead: DeadKeys::default(),
     });
 
-    let (started_tx, started_rx) = mpsc::channel::<Started>();
-    let thread = std::thread::Builder::new()
-        .name("sevak-keyhook".to_owned())
-        .spawn(move || hook_thread(&started_tx));
-    let handle = match thread {
-        Ok(handle) => handle,
-        Err(err) => {
-            release();
-            return Err(PlatformError::Io(err));
-        }
-    };
-
-    match started_rx.recv() {
-        Ok(Ok(thread_id)) => Ok(KeyListener::new(move || stop(thread_id, handle))),
-        Ok(Err(message)) => {
-            let _ = handle.join();
+    match keyhook::acquire(Client::Expansion) {
+        Ok(()) => Ok(KeyListener::new(stop)),
+        Err(message) => {
             release();
             Err(PlatformError::Os {
                 operation: "SetWindowsHookExW",
                 message,
-            })
-        }
-        Err(_) => {
-            let _ = handle.join();
-            release();
-            Err(PlatformError::Os {
-                operation: "SetWindowsHookExW",
-                message: "the hook thread ended unexpectedly".to_owned(),
             })
         }
     }
@@ -417,57 +365,17 @@ fn release() {
     ACTIVE.store(false, Ordering::SeqCst);
 }
 
-fn stop(thread_id: u32, handle: JoinHandle<()>) {
-    // SAFETY: plain Win32 call; the thread has a message queue (it made one
-    // before reporting its id) and WM_QUIT ends its loop.
-    unsafe {
-        let _ = PostThreadMessageW(thread_id, WM_QUIT, WPARAM(0), LPARAM(0));
-    }
-    let _ = handle.join();
+fn stop() {
+    // The hook thread may be inside `on_key` waiting for `STATE`, so `STATE`
+    // is only cleared once the listener is off the hook thread.
+    keyhook::release(Client::Expansion);
     release();
-}
-
-fn hook_thread(started: &mpsc::Sender<Started>) {
-    // SAFETY: Win32 hook installation and the message loop that serves it, all
-    // on this thread; the hooks are removed before the thread ends.
-    unsafe {
-        let module = GetModuleHandleW(None)
-            .ok()
-            .map(|module| HINSTANCE(module.0));
-        let keyboard = match SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard_proc), module, 0) {
-            Ok(hook) => hook,
-            Err(err) => {
-                let _ = started.send(Err(err.to_string()));
-                return;
-            }
-        };
-        // Clicks only make the buffer forget; without this hook a click that
-        // moves the caret would go unnoticed, so it is optional but wanted.
-        let mouse = SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_proc), module, 0).ok();
-        if mouse.is_none() {
-            tracing::warn!("the mouse hook could not be installed; clicks will not reset typing");
-        }
-
-        // A thread gets its message queue on first use; `stop` needs it.
-        let mut message = MSG::default();
-        let _ = PeekMessageW(&mut message, None, WM_USER, WM_USER, PM_NOREMOVE);
-        let _ = started.send(Ok(GetCurrentThreadId()));
-
-        while GetMessageW(&mut message, None, 0, 0).0 > 0 {
-            let _ = TranslateMessage(&message);
-            DispatchMessageW(&message);
-        }
-
-        let _ = UnhookWindowsHookEx(keyboard);
-        if let Some(mouse) = mouse {
-            let _ = UnhookWindowsHookEx(mouse);
-        }
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::mpsc;
 
     const NONE: Modifiers = Modifiers {
         shift: false,

@@ -4,7 +4,7 @@
   "homepage": "https://github.com/ninad-k/Sevak",
   "license": "Apache-2.0",
   "notes": [
-    "Sevak runs in the system tray; press Alt+Space to open it.",
+    "Sevak runs in the system tray; press Win+Space to open it.",
     "Scoop keeps it up to date: scoop update sevak"
   ],
   "architecture": {

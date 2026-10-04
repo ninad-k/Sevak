@@ -45,7 +45,21 @@ pub struct ResolvedAppearance {
     pub warnings: Vec<String>,
     /// The launcher width the theme file asks for, if it does.
     pub window_width: Option<u32>,
+    /// Whether the window gets a blurred backdrop (the setting, minus
+    /// platforms that cannot draw one).
+    pub blur: bool,
+    /// The corner radius in pixels the card ends up with.
+    pub radius: u32,
 }
+
+/// Windows rounds a backdrop window's corners itself, with a fixed radius.
+#[cfg(windows)]
+const BLUR_RADIUS: Option<u32> = Some(8);
+#[cfg(not(windows))]
+const BLUR_RADIUS: Option<u32> = None;
+
+/// Platforms that can blur what is behind the window.
+const BLUR_SUPPORTED: bool = cfg!(any(windows, target_os = "macos"));
 
 impl ResolvedAppearance {
     /// The launcher width to use, given `window.width` from the config. The
@@ -142,6 +156,7 @@ pub fn resolve(appearance: &AppearanceConfig, config_dir: &Path) -> ResolvedAppe
         f64::from(font_size) / f64::from(DEFAULT_FONT_SIZE)
     ));
 
+    let blur = appearance.blur && BLUR_SUPPORTED;
     let radius = pick(
         "radius",
         appearance.radius,
@@ -150,6 +165,10 @@ pub fn resolve(appearance: &AppearanceConfig, config_dir: &Path) -> ResolvedAppe
         layout.as_ref().and_then(|l| l.radius),
         &mut warn,
     );
+    let radius = match BLUR_RADIUS {
+        Some(fixed) if blur => fixed,
+        _ => radius,
+    };
     rules.push(format!("--radius: {radius}px"));
 
     let opacity = pick(
@@ -193,6 +212,8 @@ pub fn resolve(appearance: &AppearanceConfig, config_dir: &Path) -> ResolvedAppe
         custom_css,
         warnings,
         window_width: layout.and_then(|l| l.window_width),
+        blur,
+        radius,
     }
 }
 
@@ -696,6 +717,20 @@ accent = \"#88c0d0\"
         let resolved = resolve(&config, dir.path());
         assert_eq!(resolved.custom_css, ":root { --bg: red; }");
         assert!(resolved.css.contains("--bg: #101010"));
+    }
+
+    #[test]
+    fn blur_is_reported_only_where_the_platform_can_draw_it() {
+        let mut config = appearance();
+        assert!(!resolve(&config, Path::new("")).blur);
+        config.blur = true;
+        config.radius = 20;
+        let resolved = resolve(&config, Path::new(""));
+        assert_eq!(resolved.blur, cfg!(any(windows, target_os = "macos")));
+        // Windows rounds a blurred window itself, with a fixed radius.
+        let expected = if cfg!(windows) { 8 } else { 20 };
+        assert_eq!(resolved.radius, expected);
+        assert!(resolved.css.contains(&format!("--radius: {expected}px")));
     }
 
     #[test]

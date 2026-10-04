@@ -8,13 +8,13 @@ These work anywhere on your system:
 
 | Shortcut | Action | Configure |
 |---|---|---|
-| ++alt+space++ | Show or hide the launcher | `[general] hotkey` |
+| ++win+space++ (++cmd+space++ on macOS, ++super+space++ on Linux) | Show or hide the launcher | `[general] hotkey` |
 | ++ctrl+alt+space++ | Universal Actions for your current selection | `[general] actions_hotkey` (or empty to disable) |
 | Custom `[[hotkey]]` entries | Type a query or run a result without showing the launcher | `[[hotkey]]` in config.toml or Settings → Hotkeys |
 | A workflow's hotkey trigger | Start that [workflow](workflows.md#triggers) | The trigger node in Settings → Workflows |
 | A snippet's keyword, typed in any app | Replace it with the snippet (only with expansion turned on) | [`[snippets] auto_expand`](features/snippets.md#expand-snippets-as-you-type) |
 
-On **macOS**, ++alt++ is ++option++, and ++ctrl++ is ++cmd++.
+On **macOS**, ++alt++ is ++option++, and ++ctrl++ is ++cmd++. The default launcher key `Super+Space` is ++cmd+space++ there. The system uses that key too (Windows: input language, macOS: Spotlight, GNOME: input sources), so Sevak takes it over: [how, and how to undo it](troubleshooting.md#super-space).
 
 On **Linux Wayland**, apps cannot register global keys; run `sevak --setup-hotkey` to bind the launcher shortcut in GNOME. For the effect of a custom `[[hotkey]]` there, bind a desktop shortcut to `sevak --query "<text>"` or `sevak --run <result-id>` yourself (see [Command line](cli.md)).
 
@@ -163,7 +163,7 @@ The following are blocked in production to prevent accidental page reloads:
 |---|---|---|
 | Ctrl prefix | ++ctrl++ | ++cmd++ |
 | Alt prefix | ++alt++ | ++option++ |
-| Tray access | Click the icon; no key | Click the menu-bar icon; no key |
+| Tray access | Click the icon to open Settings, right-click for the menu | Click the menu-bar icon to open Settings, right-click for the menu |
 
 ## Custom shortcuts
 

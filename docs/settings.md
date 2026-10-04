@@ -4,7 +4,8 @@ Configure Sevak through the Settings window.
 
 ## Open Settings
 
-- Click the tray or menu-bar icon and select **Settings**
+- Click the tray icon (Windows) or menu-bar icon (macOS), or right-click it and
+  select **Settings** (on Linux, click the icon and select **Settings**)
 - Run `sevak --settings` from the command line
 
 ## Using Settings
@@ -25,7 +26,17 @@ Validation errors appear under each field and prevent saving until they are fixe
 
 The global hotkey to show and hide Sevak. Tap it to toggle the launcher from anywhere.
 
-Examples: ++alt+space++, ++ctrl+space++, ++ctrl+shift+k++. The key combination must not be in use by another app or your desktop.
+The default is ++super+space++ (shown as ++win+space++ on Windows and ++cmd+space++ on macOS). Examples: ++alt+space++, ++ctrl+space++, ++ctrl+shift+k++.
+
+Three ways to set it:
+
+- **Record** the keys. On Windows the recorder also sees ++win+space++, which Windows normally keeps from apps.
+- Pick one from the **Presets** list: Super+Space, Alt+Space, Ctrl+Space or Ctrl+Alt+Space.
+- **Type** it: ++win++, ++windows++, ++meta++, ++cmd++ and ++super++ all mean the Windows/Command key, and Sevak saves it as `Super`.
+
+Under the field Sevak says how the key is delivered: registered the normal way, taken over with the Windows keyboard hook, Spotlight's shortcut turned off with your permission, GNOME's input-source shortcut moved, or Option+Space used because you kept Spotlight's. When Sevak changed a system shortcut with your permission, a **Restore** button puts it back; when the system shortcut is in the way, **Let Sevak use ...** asks. See [Win+Space, Cmd+Space and Super+Space](troubleshooting.md#super-space).
+
+Another app's or your desktop's shortcut can stand in the way of a key; the status under the field says so.
 
 On **Linux Wayland**, the desktop manages global hotkeys. If the field won't register, click **Set up GNOME shortcut** to create a desktop binding, or run `sevak --setup-hotkey "Your+Combo"`.
 
@@ -139,6 +150,10 @@ Links to: `[appearance] font_family` in configuration.
 Background opacity of the search bar as a percentage. Range: 30–100%. Text stays fully opaque.
 
 Links to: `[appearance] opacity` in configuration.
+
+### Frosted-glass blur
+
+Blurs the desktop behind the search bar (Windows and macOS; hidden on Linux). Lower **Background opacity** to see it. Links to: `[appearance] blur` in configuration.
 
 ### Corner radius
 

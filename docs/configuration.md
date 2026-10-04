@@ -59,15 +59,15 @@ Main hotkeys and startup behaviour.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `hotkey` | string | `"Alt+Space"` | Global keyboard shortcut to show/hide Sevak. Examples: `"Ctrl+Space"`, `"Super+Space"`, `"Ctrl+Shift+K"`. On macOS, `Alt` is the Option key. On Linux Wayland, run `sevak --setup-hotkey` to bind this in GNOME instead. |
+| `hotkey` | string | `"Super+Space"` | Global keyboard shortcut to show/hide Sevak. `Super` is the Windows key (Cmd on macOS; `Win`, `Windows` and `Meta` are accepted spellings). Examples: `"Alt+Space"`, `"Ctrl+Space"`, `"Ctrl+Shift+K"`. On macOS, `Alt` is the Option key. Super+Space is used by the system too; Sevak takes it over (a keyboard hook on Windows; a question on macOS and GNOME) - see [Troubleshooting](troubleshooting.md#super-space). Existing config files keep the key they have. On Linux Wayland, run `sevak --setup-hotkey` to bind this in GNOME instead. |
 | `actions_hotkey` | string | `"Ctrl+Alt+Space"` | Hotkey for Universal Actions: capture the selection in the foreground app and offer actions on it. Empty string `""` turns Universal Actions off. On Wayland, run `sevak --setup-hotkey` to bind this in GNOME. |
 | `hide_on_blur` | boolean | `true` | Hide the launcher when it loses focus to another window. Press Esc or click elsewhere to close; this setting hides it automatically. |
 | `launch_at_login` | boolean | `false` | Start Sevak when you log in to your desktop. |
-| `check_for_updates` | boolean | `true` | Check GitHub for a new version at startup and once daily. Updates are only installed after you confirm. Apart from optional currency rates, this is the only automatic network request. |
+| `check_for_updates` | boolean | `true` | Check GitHub for a new version shortly after startup, every six hours, and whenever you open Sevak (if the last check is over an hour old). Updates are only installed after you confirm. Apart from optional currency rates, this is the only automatic network request. |
 
 ```toml
 [general]
-hotkey = "Alt+Space"
+hotkey = "Super+Space"
 actions_hotkey = "Ctrl+Alt+Space"
 hide_on_blur = true
 launch_at_login = false
@@ -128,6 +128,7 @@ Launcher theme and styling.
 | `font_size` | integer | `15` | 12–22 (pixels) | Size of result titles. The rest of the launcher (icons, text, spacing) scales with it. Clamped to the range. |
 | `font_family` | string | `""` (empty) | any font family name, comma-separated | Comma-separated font family list, e.g. `"Fira Sans, sans-serif"`. Empty uses your system font. CSS font-family syntax; if the font is missing, the next in the list is used. |
 | `opacity` | integer | `100` | 30–100 (percent) | Background opacity of the search bar. 100 is fully opaque; 30 is quite transparent. Whole numbers only. |
+| `blur` | boolean | `false` | `true`, `false` | Frosted-glass blur of the desktop behind the search bar (Windows Acrylic, macOS vibrancy); ignored on Linux. You only see it when `opacity` is below 100. On Windows 11 the corners are rounded by the system, so `radius` is fixed at 8 px while blur is on. |
 | `radius` | integer | `14` | 0–32 (pixels) | Corner radius of the search bar. 0 is sharp corners; 32 is very rounded. Whole numbers only. |
 | `theme_file` | string | `""` (empty) | path in config folder, or `""` | A theme file, such as `"themes/Nord.toml"`, made, imported or installed in **Settings → Appearance → Theme editor**. Applied between the built-in light/dark look and the settings above; `""` uses none. See [Theme files and the editor](themes.md#theme-files-and-the-editor). |
 | `custom_css` | string | `""` (empty) | filename in config folder, or `""` | Stylesheet to override theme colours and layout. Must be a file in the config folder (same folder as `config.toml`), e.g. `"theme.css"`. `""` loads none. See [Themes guide](themes.md) for available CSS variables. |
@@ -413,7 +414,7 @@ use_system = true
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `auto_expand` | boolean | `false` | Expand snippet keywords as you type. Reloading applies changes; the keyboard hook is removed when this is turned off. |
+| `auto_expand` | boolean | `false` | Expand snippet keywords as you type. Reloading applies changes; Sevak stops watching typing when this is turned off. |
 | `prefix` | string | `""` | Typed before every keyword, e.g. `";"` so that `;sig` expands and `sig` does not. No spaces. |
 | `expand_on` | string | `"immediate"` | `"immediate"` expands the moment the keyword is typed; `"delimiter"` waits for a space or punctuation mark, which is kept after the text. An unknown value is treated as `"delimiter"`. |
 | `case_sensitive` | boolean | `true` | `false`: `SIG` and `sig` both expand. |
@@ -556,11 +557,15 @@ This is the full default configuration written on first run:
 # from the tray menu (or restart Sevak) to apply changes.
 
 [general]
-# Shortcut that shows and hides Sevak. Examples: "Alt+Space", "Ctrl+Space",
-# "Super+Space", "Ctrl+Shift+K".
+# Shortcut that shows and hides Sevak. Super is the Windows key (Cmd on macOS).
+# Examples: "Super+Space", "Alt+Space", "Ctrl+Space", "Ctrl+Shift+K".
+# Super+Space is normally taken by the system (Windows' input-language switcher,
+# macOS Spotlight, GNOME's input sources). Sevak takes the key over on Windows
+# with a keyboard hook, and on macOS and GNOME after asking you once. To go back
+# to a key the system leaves alone, use "Alt+Space" (Option+Space on macOS).
 # On Linux Wayland sessions applications cannot grab global keys. Run
 # `sevak --setup-hotkey` to bind this key to `sevak --toggle` in GNOME instead.
-hotkey = "Alt+Space"
+hotkey = "Super+Space"
 
 # Shortcut for Universal Actions: it copies what you have selected in the app
 # you are using (text, a URL, files) and offers actions for it. "" turns it off.
@@ -573,7 +578,7 @@ hide_on_blur = true
 # Start Sevak in the background when you log in.
 launch_at_login = false
 
-# Check GitHub for a new version at startup and once a day. Updates are only
+# Check GitHub for a new version at startup, every six hours and when you open Sevak. Updates are only
 # installed after you agree. Apart from the optional currency rates (see
 # [calculator]), this is the only request Sevak makes on its own.
 check_for_updates = true
@@ -609,6 +614,9 @@ font_size = 15
 font_family = ""
 # How opaque the search bar's background is, in percent (30-100).
 opacity = 100
+# Frosted-glass blur of the desktop behind the search bar (Windows and macOS).
+# You only see it when opacity is below 100.
+blur = false
 # Corner radius of the search bar in pixels (0-32).
 radius = 14
 # A theme file inside this config folder, for example "themes/Nord.toml". Settings,

@@ -7,10 +7,27 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 export type HotkeyMode = "global" | "external";
 
+/** How a shortcut reaches Sevak. */
+export type HotkeyMechanism =
+  | "registered"
+  | "windows_hook"
+  | "spotlight_disabled"
+  | "gnome_input_source_moved"
+  | "fallback_key"
+  | "desktop"
+  | "inactive";
+
 export interface HotkeyStatus {
   accelerator: string;
   mode: HotkeyMode;
   error: string | null;
+  mechanism: HotkeyMechanism;
+  /** One sentence on the mechanism (taken over with the keyboard hook, Spotlight's shortcut off...). */
+  note: string | null;
+  /** An OS shortcut stands in the way and the user may let Sevak take it (macOS, GNOME). */
+  can_take_over: boolean;
+  /** Sevak changed an OS shortcut with permission and can put it back. */
+  can_restore: boolean;
 }
 
 export type ThemeSetting = "system" | "light" | "dark";
@@ -21,12 +38,15 @@ export interface CustomHotkeyStatus {
   description: string;
   /** Why it is not active, if it is not. */
   error: string | null;
+  mechanism: HotkeyMechanism;
 }
 
 /** The validated appearance settings as CSS (see `appearance.ts`). */
 export interface AppearanceCss {
   css: string;
   custom_css: string;
+  /** The window has a blurred backdrop. */
+  blur?: boolean;
   /** Why a setting was ignored. */
   warnings: string[];
 }

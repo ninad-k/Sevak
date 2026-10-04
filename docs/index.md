@@ -20,7 +20,7 @@ paste a snippet or run a command, all without leaving the keyboard.
 
 ```mermaid
 flowchart TD
-    K["Press the shortcut<br/>(Alt+Space by default)"] --> W["Search bar appears<br/>where you are working"]
+    K["Press the shortcut<br/>(Win+Space or Cmd+Space by default)"] --> W["Search bar appears<br/>where you are working"]
     W --> T["Type a few letters,<br/>a calculation or a keyword"]
     T --> R["Ranked results from apps, files,<br/>calculator, web search and more"]
     R -->|"Enter or Ctrl+1…9"| A["Launch, open, copy,<br/>paste or run"]

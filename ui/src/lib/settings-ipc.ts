@@ -2,6 +2,7 @@
 // running in a plain browser (`npm run dev`) where there is no Rust backend.
 
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { hasTauri, type Status, type ThemeSetting } from "./ipc";
 
 export interface WebSearchEngine {
@@ -23,6 +24,8 @@ export interface Appearance {
   font_size: number;
   font_family: string;
   opacity: number;
+  /** Frosted-glass blur behind the search bar (Windows and macOS). */
+  blur: boolean;
   radius: number;
   /** A theme file in the config folder, such as `themes/Nord.toml`; empty uses none. */
   theme_file: string;
@@ -155,6 +158,61 @@ export async function resumeHotkey(): Promise<void> {
     await invoke("resume_hotkey");
   } catch (err) {
     console.warn("[ipc] resume_hotkey failed:", err);
+  }
+}
+
+/**
+ * Asks the keyboard hook (Windows) for the next shortcut pressed, even one the OS
+ * keeps from the page (Win+Space). Resolves to false where there is no hook; the
+ * recorder then uses the keys the page sees. The shortcut arrives through
+ * {@link onHotkeyRecorded}.
+ */
+export async function startHotkeyRecording(): Promise<boolean> {
+  if (preview()) return false;
+  try {
+    await invoke("start_hotkey_recording");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function stopHotkeyRecording(): Promise<void> {
+  if (preview()) return;
+  try {
+    await invoke("stop_hotkey_recording");
+  } catch (err) {
+    console.warn("[ipc] stop_hotkey_recording failed:", err);
+  }
+}
+
+/** The hook recorded a shortcut (`null` when Escape cancelled the recording). */
+export async function onHotkeyRecorded(
+  cb: (accelerator: string | null) => void,
+): Promise<UnlistenFn> {
+  if (!hasTauri()) return () => {};
+  return listen<{ accelerator: string | null }>("sevak:hotkey-recorded", (event) =>
+    cb(event.payload.accelerator),
+  );
+}
+
+/** "Let Sevak use Cmd+Space / Super+Space": asks first, then changes the OS shortcut. */
+export async function takeOverHotkey(): Promise<Outcome> {
+  if (preview()) return { ok: true, text: "Done. Sevak now uses the shortcut." };
+  try {
+    return { ok: true, text: await invoke<string>("takeover_hotkey") };
+  } catch (err) {
+    return { ok: false, text: errorText(err) };
+  }
+}
+
+/** Puts back the OS shortcut Sevak switched off or moved. */
+export async function restoreTakeover(): Promise<Outcome> {
+  if (preview()) return { ok: true, text: "Spotlight's shortcut is on again." };
+  try {
+    return { ok: true, text: await invoke<string>("restore_takeover") };
+  } catch (err) {
+    return { ok: false, text: errorText(err) };
   }
 }
 

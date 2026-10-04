@@ -1,8 +1,9 @@
 //! Self-update from GitHub Releases (`tauri-plugin-updater`).
 //!
 //! Every release publishes a signed `latest.json` (see `.github/workflows/release.yml`).
-//! Sevak checks it shortly after startup and then once a day, when
-//! `general.check_for_updates` is on, and from the tray's "Check for updates".
+//! Sevak checks it shortly after startup, then every six hours, and when the
+//! launcher opens if the last check is over an hour old. All of that needs
+//! `general.check_for_updates`; the tray's "Check for updates" always works.
 //! An available update is only installed after the user agrees in a dialog;
 //! its signature is verified against the public key in `tauri.conf.json`.
 //!
@@ -13,7 +14,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use tauri::{AppHandle, Manager, Wry};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
@@ -24,31 +25,62 @@ use crate::state::AppState;
 
 /// The first automatic check waits for startup (indexing, hotkey) to settle.
 const FIRST_CHECK_DELAY: Duration = Duration::from_secs(60);
-const CHECK_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
+/// How often the background thread checks.
+const CHECK_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
+/// Opening the launcher also checks, if the last check is at least this old.
+const OPEN_CHECK_INTERVAL: Duration = Duration::from_secs(60 * 60);
+/// The thread wakes this often to compare the wall clock. A single long sleep
+/// does not count the time the computer spent suspended, so a laptop that is
+/// asleep most of the day would otherwise check far too rarely.
+const TICK: Duration = Duration::from_secs(5 * 60);
 const TITLE: &str = "Sevak update";
 
-/// One check at a time (the daily one and a tray click can overlap).
+/// One check at a time (the periodic one and a tray click can overlap).
 static CHECKING: AtomicBool = AtomicBool::new(false);
 /// A version the user answered "Later" to; automatic checks don't ask again
 /// for it until Sevak restarts. A manual check always asks.
 static POSTPONED: Mutex<Option<String>> = Mutex::new(None);
+/// When the last automatic check started (wall clock).
+static LAST_CHECK: Mutex<Option<SystemTime>> = Mutex::new(None);
 
 pub fn plugin() -> tauri::plugin::TauriPlugin<Wry, tauri_plugin_updater::Config> {
     tauri_plugin_updater::Builder::new().build()
 }
 
-/// Starts the background checks. Debug builds skip them: their version is
-/// whatever the repository says, so every release would look like an update.
-pub fn start(app: &AppHandle) {
+/// Whether Sevak updates itself at all: not in debug builds (their version is
+/// whatever the repository says, so every release would look like an update)
+/// and not when a package manager does it.
+fn self_update_possible() -> bool {
     if cfg!(debug_assertions) {
         tracing::debug!("automatic update checks are off in debug builds");
-        return;
+        return false;
     }
     if let Some(managed) = ManagedBy::detect() {
         tracing::info!(
             manager = managed.name,
             "updates are managed by a package manager"
         );
+        return false;
+    }
+    true
+}
+
+/// True when the last automatic check is at least `interval` old. A clock set
+/// back counts as due.
+fn due(interval: Duration) -> bool {
+    is_due(
+        *LAST_CHECK.lock().unwrap_or_else(|p| p.into_inner()),
+        interval,
+    )
+}
+
+fn is_due(last: Option<SystemTime>, interval: Duration) -> bool {
+    last.is_none_or(|at| at.elapsed().map_or(true, |age| age >= interval))
+}
+
+/// Starts the background checks.
+pub fn start(app: &AppHandle) {
+    if !self_update_possible() {
         return;
     }
     let app = app.clone();
@@ -57,18 +89,44 @@ pub fn start(app: &AppHandle) {
         .spawn(move || {
             std::thread::sleep(FIRST_CHECK_DELAY);
             loop {
-                let enabled = app
-                    .try_state::<AppState>()
-                    .is_some_and(|state| state.config().general.check_for_updates);
-                if enabled {
-                    tauri::async_runtime::block_on(check(&app, Trigger::Automatic));
+                if due(CHECK_INTERVAL) {
+                    check_automatically(&app);
                 }
-                std::thread::sleep(CHECK_INTERVAL);
+                std::thread::sleep(TICK);
             }
         });
     if let Err(err) = spawned {
         tracing::error!("could not start the update checker: {err}");
     }
+}
+
+/// Called when the launcher opens: checks in the background if the last check
+/// is more than an hour old.
+pub fn check_on_open(app: &AppHandle) {
+    if cfg!(debug_assertions) || !due(OPEN_CHECK_INTERVAL) {
+        return;
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if self_update_possible() && due(OPEN_CHECK_INTERVAL) {
+            check_automatically_async(&app).await;
+        }
+    });
+}
+
+fn check_automatically(app: &AppHandle) {
+    tauri::async_runtime::block_on(check_automatically_async(app));
+}
+
+async fn check_automatically_async(app: &AppHandle) {
+    let enabled = app
+        .try_state::<AppState>()
+        .is_some_and(|state| state.config().general.check_for_updates);
+    if !enabled {
+        return;
+    }
+    *LAST_CHECK.lock().unwrap_or_else(|p| p.into_inner()) = Some(SystemTime::now());
+    check(app, Trigger::Automatic).await;
 }
 
 /// "Check for updates" from the tray: reports the outcome either way.
@@ -293,6 +351,16 @@ mod tests {
                     .join("package-manager"),
             ]
         );
+    }
+
+    #[test]
+    fn a_check_is_due_when_the_last_one_is_old_enough_or_the_clock_went_back() {
+        let hour = Duration::from_secs(3600);
+        let ago = |secs| Some(SystemTime::now() - Duration::from_secs(secs));
+        assert!(is_due(None, hour));
+        assert!(!is_due(ago(60), hour));
+        assert!(is_due(ago(2 * 3600), hour));
+        assert!(is_due(Some(SystemTime::now() + hour), hour));
     }
 
     /// The plugin parses this section at startup and Sevak cannot start if it

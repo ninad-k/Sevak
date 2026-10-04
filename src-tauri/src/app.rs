@@ -10,8 +10,8 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent};
 use crate::cli::{self, Launch};
 use crate::state::AppState;
 use crate::{
-    autostart, commands, direct, expansion, file_buffer, hotkey, icons, search, selection,
-    settings, themes, tray, updater, window, workflows,
+    autostart, backdrop, commands, direct, expansion, file_buffer, hotkey, icons, search,
+    selection, settings, takeover, themes, tray, updater, window, workflows,
 };
 
 pub fn run(
@@ -83,6 +83,10 @@ pub fn run(
             settings::resume_hotkey,
             settings::pick_directory,
             settings::setup_wayland_hotkey,
+            settings::start_hotkey_recording,
+            settings::stop_hotkey_recording,
+            takeover::takeover_hotkey,
+            takeover::restore_takeover,
             settings::open_config_file,
             settings::open_log_dir,
             settings::close_settings,
@@ -117,6 +121,7 @@ pub fn run(
             tray::init(handle);
             hotkey::apply(handle);
             window::apply_configured_width(handle);
+            backdrop::apply(handle);
             apply_theme(handle);
             autostart::sync(handle);
             search::start(handle);
@@ -168,6 +173,7 @@ pub fn reload(app: &AppHandle) {
 
     hotkey::apply(app);
     window::apply_configured_width(app);
+    backdrop::apply(app);
     apply_theme(app);
     autostart::sync(app);
     // The index is rebuilt in the background and swapped in when ready.
@@ -206,6 +212,7 @@ pub fn apply_theme(app: &AppHandle) {
 pub fn quit(app: &AppHandle) {
     tracing::info!("quitting");
     expansion::stop();
+    hotkey::shutdown();
     search::save_usage(app);
     search::shutdown(app);
     app.exit(0);

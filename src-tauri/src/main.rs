@@ -3,6 +3,7 @@
 
 mod app;
 mod autostart;
+mod backdrop;
 mod cli;
 mod commands;
 mod direct;
@@ -16,6 +17,7 @@ mod search;
 mod selection;
 mod settings;
 mod state;
+mod takeover;
 mod themes;
 mod tray;
 mod updater;
@@ -55,6 +57,10 @@ fn main() -> ExitCode {
         Invocation::SetupHotkey(key) => {
             process::attach_parent_console();
             setup_hotkey(key, config.as_deref())
+        }
+        Invocation::RestoreHotkey => {
+            process::attach_parent_console();
+            restore_hotkey(config.as_deref())
         }
         Invocation::Run(launch) => match run(launch, config.as_deref()) {
             Ok(()) => ExitCode::SUCCESS,
@@ -117,24 +123,47 @@ fn run(launch: Launch, config_override: Option<&Path>) -> anyhow::Result<()> {
 /// hotkey to `--actions`, and the config's `[[hotkey]]` entries to `--query` /
 /// `--run`, where the desktop owns global shortcuts (GNOME on Wayland).
 fn setup_hotkey(key: Option<String>, config_override: Option<&Path>) -> ExitCode {
-    let config = AppPaths::resolve_with_config(config_override)
-        .ok()
+    let paths = AppPaths::resolve_with_config(config_override).ok();
+    let config = paths
+        .as_ref()
         .and_then(|paths| Config::load_or_create(&paths.config_file).ok())
         .map(|(config, _)| config)
         .unwrap_or_default();
     let hotkey = key.unwrap_or_else(|| config.general.hotkey.clone());
-    setup_hotkey_for_platform(&hotkey, &config)
+    setup_hotkey_for_platform(&hotkey, &config, paths.as_ref())
+}
+
+/// `sevak --restore-hotkey`: undoes the system shortcut changes Sevak made
+/// with permission (GNOME's input sources, macOS Spotlight's shortcut).
+fn restore_hotkey(config_override: Option<&Path>) -> ExitCode {
+    let paths = match AppPaths::resolve_with_config(config_override) {
+        Ok(paths) => paths,
+        Err(err) => {
+            eprintln!("error: cannot determine Sevak's directories: {err}");
+            return ExitCode::FAILURE;
+        }
+    };
+    match takeover::cli_restore(&paths) {
+        Ok(text) => {
+            println!("{text}");
+            ExitCode::SUCCESS
+        }
+        Err(err) => {
+            eprintln!("error: {err}");
+            ExitCode::FAILURE
+        }
+    }
 }
 
 #[cfg(not(target_os = "linux"))]
-fn setup_hotkey_for_platform(hotkey: &str, config: &Config) -> ExitCode {
-    let _ = config;
+fn setup_hotkey_for_platform(hotkey: &str, config: &Config, paths: Option<&AppPaths>) -> ExitCode {
+    let _ = (config, paths);
     println!("Nothing to set up: on this platform Sevak registers {hotkey} itself while it runs.");
     ExitCode::SUCCESS
 }
 
 #[cfg(target_os = "linux")]
-fn setup_hotkey_for_platform(hotkey: &str, config: &Config) -> ExitCode {
+fn setup_hotkey_for_platform(hotkey: &str, config: &Config, paths: Option<&AppPaths>) -> ExitCode {
     use sevak_platform::gnome;
 
     let customs = hotkey::custom_shortcuts(config);
@@ -153,6 +182,11 @@ fn setup_hotkey_for_platform(hotkey: &str, config: &Config) -> ExitCode {
         println!("{}", gnome::manual_instructions(hotkey, &command));
         print!("{}", gnome::manual_custom_instructions(&customs));
         return ExitCode::SUCCESS;
+    }
+
+    // Super+Space is GNOME's input-source switcher: offer to move it first.
+    if let Some(paths) = paths {
+        takeover::cli_offer_gnome(hotkey, paths);
     }
 
     match gnome::install_shortcut(hotkey, &command) {

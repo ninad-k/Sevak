@@ -54,7 +54,9 @@ fn build(app: &AppHandle) -> tauri::Result<()> {
                 ..
             } = event
             {
-                window::toggle(tray.app_handle());
+                // A click on the icon goes straight to Settings; the menu (right
+                // click) still has Show for the launcher, and the hotkey opens it.
+                settings::open(tray.app_handle());
             }
         });
     if let Some(icon) = app.default_window_icon() {

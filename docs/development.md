@@ -11,13 +11,16 @@ crates/sevak-platform   OS access: launching, icons, app scanning, clipboard, pa
                         whole-disk search through the OS file index (os_search), watching typed
                         keywords and replacing them (snippet expansion), paths, terminal
                         launching, hotkey strategy, GNOME
-                        shortcut setup (Windows, macOS and Linux backends)
+                        shortcut setup, the Windows keyboard hook that takes Win+Space
+                        (hotkey_hook), the macOS Spotlight shortcut (spotlight)
+                        (Windows, macOS and Linux backends)
 crates/sevak-plugins    built-in plugins: apps, calculator (+ units, currency), files, bookmarks,
                         web search, system commands, automation tasks, media controls, shell,
                         clipboard history, snippets, emoji picker (data/emoji.tsv), uuid example;
                         the file buffer (collect files, act on all); the script plugin host
                         (external plugins); workflows (graph engine, runtime, gallery)
-src-tauri               the Tauri shell: window, hotkeys (main, Universal Actions + [[hotkey]] entries), tray, CLI,
+src-tauri               the Tauri shell: window, hotkeys (main, Universal Actions + [[hotkey]] entries,
+                        takeover of Win+Space / Cmd+Space / Super+Space), tray, CLI,
                         --query / --run handling (direct.rs), script plugin approval, IPC
                         commands, bundling config
 ui                      Svelte 5 + Vite frontend (builds to ui/dist)
@@ -241,7 +244,7 @@ release with `node scripts/package-manifests.mjs <version> SHA256SUMS.txt out`.
 Installed copies poll
 `https://github.com/ninad-k/Sevak/releases/latest/download/latest.json`
 (`plugins.updater` in `tauri.conf.json`; code in `src-tauri/src/updater.rs`) at
-startup and daily, and from the tray's "Check for updates". They install an
+startup, every six hours and when the launcher opens, and from the tray's "Check for updates". They install an
 update only after the user agrees, and only if its signature matches the
 `pubkey` in `tauri.conf.json`.
 
@@ -305,7 +308,7 @@ The PDF script requires Chrome or Chromium; set `CHROME_PATH` if it's not in the
 
 **Publishing:**
 
-The site is built and deployed to [GitHub Pages](https://ninad-k.github.io/Sevak/) by `.github/workflows/docs.yml` on every push to `main`.
+The site is built and deployed to [GitHub Pages](https://ninad-k.github.io/Sevak/docs/) by `.github/workflows/docs.yml` on every push to `main`. The same workflow publishes the product page from `landing/` at the site root, [ninad-k.github.io/Sevak](https://ninad-k.github.io/Sevak/), with the documentation under `/docs/`.
 
 **Linux testing in WSL:**
 

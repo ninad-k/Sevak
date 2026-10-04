@@ -1,17 +1,20 @@
 name: Docs
 
-# Builds the documentation site from docs/ and publishes it to GitHub Pages.
-# Pull requests only build (with --strict, so broken links fail the check).
+# Publishes the GitHub Pages site: the product page from landing/ at the root,
+# and the documentation built from docs/ under /docs/. Pull requests only
+# build (with --strict, so broken links fail the check).
 on:
   push:
     branches: [main]
     paths:
       - "docs/**"
+      - "landing/**"
       - "mkdocs.yml"
       - ".github/workflows/docs.yml"
   pull_request:
     paths:
       - "docs/**"
+      - "landing/**"
       - "mkdocs.yml"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
@@ -35,7 +38,9 @@ jobs:
           cache: pip
           cache-dependency-path: docs/requirements.txt
       - run: pip install -r docs/requirements.txt
-      - run: mkdocs build --strict
+      - run: mkdocs build --strict --site-dir site/docs
+      - name: Add the product page at the site root
+        run: cp -r landing/. site/
       - uses: actions/upload-pages-artifact@v3
         if: github.event_name != 'pull_request'
         with:

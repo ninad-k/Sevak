@@ -19,11 +19,15 @@ pub const DEFAULT_CONFIG_TOML: &str = r##"# Sevak configuration
 # from the tray menu (or restart Sevak) to apply changes.
 
 [general]
-# Shortcut that shows and hides Sevak. Examples: "Alt+Space", "Ctrl+Space",
-# "Super+Space", "Ctrl+Shift+K".
+# Shortcut that shows and hides Sevak. Super is the Windows key (Cmd on macOS).
+# Examples: "Super+Space", "Alt+Space", "Ctrl+Space", "Ctrl+Shift+K".
+# Super+Space is normally taken by the system (Windows' input-language switcher,
+# macOS Spotlight, GNOME's input sources). Sevak takes the key over on Windows
+# with a keyboard hook, and on macOS and GNOME after asking you once. To go back
+# to a key the system leaves alone, use "Alt+Space" (Option+Space on macOS).
 # On Linux Wayland sessions applications cannot grab global keys. Run
 # `sevak --setup-hotkey` to bind this key to `sevak --toggle` in GNOME instead.
-hotkey = "Alt+Space"
+hotkey = "Super+Space"
 
 # Shortcut for Universal Actions: it copies what you have selected in the app
 # you are using (text, a URL, files) and offers actions for it. "" turns it off.
@@ -36,7 +40,7 @@ hide_on_blur = true
 # Start Sevak in the background when you log in.
 launch_at_login = false
 
-# Check GitHub for a new version at startup and once a day. Updates are only
+# Check GitHub for a new version at startup, every six hours and when you open Sevak. Updates are only
 # installed after you agree. Apart from the optional currency rates (see
 # [calculator]), this is the only request Sevak makes on its own.
 check_for_updates = true
@@ -72,6 +76,9 @@ font_size = 15
 font_family = ""
 # How opaque the search bar's background is, in percent (30-100).
 opacity = 100
+# Frosted-glass blur of the desktop behind the search bar (Windows and macOS).
+# You only see it when opacity is below 100.
+blur = false
 # Corner radius of the search bar in pixels (0-32).
 radius = 14
 # A theme file inside this config folder, for example "themes/Nord.toml". Settings,
@@ -394,8 +401,8 @@ impl Default for Config {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct GeneralConfig {
-    /// Accelerator string, e.g. `"Alt+Space"`. Parsed by the shell, because the
-    /// accepted key names depend on the hotkey backend.
+    /// Accelerator string, e.g. `"Super+Space"`. Parsed by the shell, because
+    /// the accepted key names depend on the hotkey backend.
     pub hotkey: String,
     /// Accelerator for Universal Actions; empty turns the feature off.
     pub actions_hotkey: String,
@@ -408,7 +415,7 @@ pub struct GeneralConfig {
 impl Default for GeneralConfig {
     fn default() -> Self {
         Self {
-            hotkey: "Alt+Space".to_owned(),
+            hotkey: "Super+Space".to_owned(),
             actions_hotkey: "Ctrl+Alt+Space".to_owned(),
             hide_on_blur: true,
             launch_at_login: false,
@@ -564,6 +571,9 @@ pub struct AppearanceConfig {
     pub font_family: String,
     /// Background opacity of the search bar, in percent.
     pub opacity: u32,
+    /// Frosted-glass blur behind the search bar (Windows and macOS). Only
+    /// visible when `opacity` is below 100.
+    pub blur: bool,
     /// Corner radius of the search bar, in pixels.
     pub radius: u32,
     /// Theme file inside the config directory (`themes/Nord.toml`); empty uses none.
@@ -580,6 +590,7 @@ impl Default for AppearanceConfig {
             font_size: crate::theme::DEFAULT_FONT_SIZE,
             font_family: String::new(),
             opacity: crate::theme::MAX_OPACITY,
+            blur: false,
             radius: crate::theme::DEFAULT_RADIUS,
             theme_file: String::new(),
             custom_css: String::new(),
@@ -1417,6 +1428,25 @@ mod tests {
     }
 
     #[test]
+    fn super_space_is_the_default_and_existing_files_keep_their_key() {
+        assert_eq!(Config::default().general.hotkey, "Super+Space");
+        assert!(DEFAULT_CONFIG_TOML.contains("hotkey = \"Super+Space\""));
+
+        // A config written by an earlier version still says Alt+Space.
+        let existing = "[general]\nhotkey = \"Alt+Space\"\n";
+        let old = Config::from_toml_str(existing).unwrap();
+        assert_eq!(old.general.hotkey, "Alt+Space");
+        // Saving it unchanged does not rewrite the key.
+        let text = saved(Some(existing), &old);
+        assert!(text.contains("hotkey = \"Alt+Space\""), "{text}");
+        assert!(!text.contains("Super+Space"), "{text}");
+        assert_eq!(
+            Config::from_toml_str(&text).unwrap().general.hotkey,
+            "Alt+Space"
+        );
+    }
+
+    #[test]
     fn integrations_are_opt_in_and_normalized() {
         let defaults = Config::default();
         assert!(!defaults.contacts.enabled);
@@ -1762,7 +1792,7 @@ expand_in_terminals = true
     fn out_of_range_values_are_normalized() {
         let config =
             Config::from_toml_str("[general]\nhotkey = \"  \"\n[window]\nwidth = 10\n").unwrap();
-        assert_eq!(config.general.hotkey, "Alt+Space");
+        assert_eq!(config.general.hotkey, "Super+Space");
         assert_eq!(config.window.width, MIN_WINDOW_WIDTH);
 
         let config = Config::from_toml_str("[window]\nwidth = 99999\n").unwrap();
@@ -2178,6 +2208,7 @@ query = "no key, dropped"
         config.appearance.font_size = 18;
         config.appearance.font_family = "Fira Sans, sans-serif".to_owned();
         config.appearance.opacity = 85;
+        config.appearance.blur = true;
         config.appearance.radius = 4;
         config.appearance.theme_file = "themes/Nord.toml".to_owned();
         config.appearance.custom_css = "theme.css".to_owned();

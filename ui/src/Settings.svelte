@@ -14,8 +14,10 @@
     openConfigFile,
     openLogDir,
     pickDirectory,
+    restoreTakeover,
     saveSettings,
     setupWaylandHotkey,
+    takeOverHotkey,
     validateHotkey,
     fallbackList,
     type Config,
@@ -23,6 +25,7 @@
     type PluginInfo,
     type SettingsDto,
   } from "./lib/settings-ipc";
+  import { displayAccelerator } from "./lib/accelerator";
   import { applyAppearance } from "./lib/appearance";
   import { applyTheme } from "./lib/theme";
   import {
@@ -52,6 +55,7 @@
       font_size: 15,
       font_family: "",
       opacity: 100,
+      blur: false,
       radius: 14,
       theme_file: "",
       custom_css: "",
@@ -107,6 +111,8 @@
   let footerError = $state<string | null>(null);
   let waylandBusy = $state(false);
   let waylandResult = $state<Outcome | null>(null);
+  let takeoverBusy = $state(false);
+  let takeoverResult = $state<Outcome | null>(null);
   let content: HTMLElement | undefined = $state();
 
   const ready = $derived(loaded !== null);
@@ -284,6 +290,26 @@
       : null,
   );
 
+  /** How the saved shortcut reaches Sevak (keyboard hook, Spotlight's shortcut off...), while the field still shows it. */
+  const hotkeyNote = $derived(
+    status?.hotkey.note && status.hotkey.accelerator === draft.general.hotkey.trim()
+      ? status.hotkey.note
+      : null,
+  );
+  const canTakeOver = $derived(
+    !!status?.hotkey.can_take_over && status.hotkey.accelerator === draft.general.hotkey.trim(),
+  );
+  const canRestore = $derived(!!status?.hotkey.can_restore);
+  const platform = $derived(loaded?.platform ?? "linux");
+  const takeoverLabel = $derived(
+    `Let Sevak use ${displayAccelerator(draft.general.hotkey.trim(), platform)}`,
+  );
+  const restoreLabel = $derived(
+    platform === "macos"
+      ? "Restore Spotlight's shortcut"
+      : "Restore GNOME's input-source shortcut",
+  );
+
   const actionsRegistrationWarning = $derived(
     !isWayland &&
       status?.actions_hotkey?.error &&
@@ -362,6 +388,14 @@
     waylandResult = null;
     waylandResult = await setupWaylandHotkey(draft.general.hotkey);
     waylandBusy = false;
+  }
+
+  async function runTakeover(action: () => Promise<Outcome>) {
+    takeoverBusy = true;
+    takeoverResult = null;
+    takeoverResult = await action();
+    takeoverBusy = false;
+    status = (await getStatus()) ?? status;
   }
 
   async function addDirectory() {
@@ -493,11 +527,47 @@
               {:else}
                 <p class="hint">Shows and hides Sevak from anywhere.</p>
               {/if}
-              <HotkeyField id="hotkey" bind:value={draft.general.hotkey} error={hotkeyError} />
+              <HotkeyField
+                id="hotkey"
+                bind:value={draft.general.hotkey}
+                error={hotkeyError}
+                {platform}
+                presets
+              />
               {#if registrationWarning}
                 <p class="msg warn" role="status">
                   This shortcut could not be registered: {registrationWarning}
                 </p>
+              {/if}
+              {#if hotkeyNote}
+                <p class="msg info" role="status">{hotkeyNote}</p>
+              {/if}
+              {#if canTakeOver || canRestore}
+                <div class="inline">
+                  {#if canTakeOver}
+                    <button
+                      type="button"
+                      class="btn"
+                      disabled={takeoverBusy}
+                      onclick={() => runTakeover(takeOverHotkey)}
+                    >
+                      {takeoverBusy ? "Working…" : takeoverLabel}
+                    </button>
+                  {/if}
+                  {#if canRestore}
+                    <button
+                      type="button"
+                      class="btn"
+                      disabled={takeoverBusy}
+                      onclick={() => runTakeover(restoreTakeover)}
+                    >
+                      {takeoverBusy ? "Working…" : restoreLabel}
+                    </button>
+                  {/if}
+                </div>
+                {#if takeoverResult}
+                  <pre class="result" class:fail={!takeoverResult.ok} role="status">{takeoverResult.text}</pre>
+                {/if}
               {/if}
               {#if isWayland}
                 <div class="inline">
@@ -531,6 +601,7 @@
                 id="actions-hotkey"
                 bind:value={draft.general.actions_hotkey}
                 error={actionsHotkeyError}
+                {platform}
               />
               {#if actionsRegistrationWarning}
                 <p class="msg warn" role="status">
@@ -584,6 +655,7 @@
             bind:parseProblems={hotkeyParseProblems}
             errors={problems.hotkeys}
             statuses={status?.custom_hotkeys ?? []}
+            {platform}
             wayland={isWayland}
           />
         {:else if active === "appearance"}
@@ -633,6 +705,7 @@
             bind:appearance={draft.appearance}
             errors={problems.appearance}
             warnings={status?.appearance.warnings ?? []}
+            blurSupported={loaded?.platform !== "linux"}
           />
 
           <ThemeEditor bind:appearance={draft.appearance} />
@@ -1249,6 +1322,11 @@
 
   .msg.warn {
     color: var(--warn);
+  }
+
+  .msg.info {
+    margin: 6px 0 0;
+    color: var(--muted);
   }
 
   .inline {

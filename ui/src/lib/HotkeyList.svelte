@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Platform } from "./accelerator";
   import HotkeyField from "./HotkeyField.svelte";
   import type { CustomHotkeyStatus } from "./ipc";
   import { validateHotkey, type HotkeyBinding } from "./settings-ipc";
@@ -9,6 +10,7 @@
     errors,
     statuses = [],
     wayland = false,
+    platform = "linux",
     parseProblems = $bindable(0),
   }: {
     bindings: HotkeyBinding[];
@@ -17,6 +19,8 @@
     /** How the saved entries registered, in config order. */
     statuses?: CustomHotkeyStatus[];
     wayland?: boolean;
+    /** For showing keys by this OS's names. */
+    platform?: Platform;
     /** Entries whose key Rust could not parse. */
     parseProblems?: number;
   } = $props();
@@ -94,6 +98,7 @@
           id="hk-{i}"
           bind:value={binding.key}
           error={rowErrors.key ?? parseErrors[binding.key.trim()] ?? null}
+          {platform}
         />
       </div>
       <button
