@@ -33,7 +33,7 @@ A minimal config works: missing fields use their defaults, so a nearly empty fil
 
 ### Keywords
 
-Every keyword is one word, and no two searches may share one: the configurable keywords (`[files]` `keyword` / `index_keyword` / `content_keyword`, `[bookmarks]`, `[tasks]`, `[media]`, `[contacts]`, `[onepassword]`, `[dictionary]` `define_keyword` / `spell_keyword`), the fixed ones (`>`, `cb`, `s`, `emoji`, `:`, `@`, `uuid`) and your web search keywords. Settings refuses to save a clash; in a hand-edited file a clashing keyword is ignored and logged. An empty keyword turns that keyword off.
+Every keyword is one word, and no two searches may share one: the configurable keywords (`[files]` `keyword` / `index_keyword` / `content_keyword`, `[bookmarks]`, `[tasks]`, `[media]`, `[contacts]`, `[onepassword]`, `[dictionary]` `define_keyword` / `spell_keyword`, `[ai]`), the fixed ones (`>`, `cb`, `s`, `emoji`, `:`, `@`, `uuid`) and your web search keywords. Settings refuses to save a clash; in a hand-edited file a clashing keyword is ignored and logged. An empty keyword turns that keyword off.
 
 Keywords of [workflows](workflows.md) and [script plugins](features/script-plugins.md) are checked the same way but only produce a warning (in Settings and in the log), because both plugins then answer the keyword and show their results.
 
@@ -408,6 +408,36 @@ cache_minutes = 10
 define_keyword = "define"
 spell_keyword = "spell"
 use_system = true
+```
+
+### [ai]
+
+The optional [AI assistant](ai.md) (`ai <question>`). **Off by default and strictly opt-in:** nothing is sent anywhere until `enabled = true` and you press ++enter++ on a question. Set it in **Settings → AI assistant**, which also has the write-only **API key** field and **Test connection**.
+
+!!! warning "API keys are not in this file"
+    A key is never written to `config.toml`. Save it in Settings (Windows: encrypted with DPAPI; macOS and Linux: an owner-only file) or set the `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` environment variable. See [API keys](ai.md#api-keys).
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | boolean | `false` | Turn the assistant on. |
+| `keyword` | string | `"ai"` | Keyword before a question. One word; `""` keeps the default. |
+| `provider` | string | `"ollama"` | `"ollama"` (a model on this computer), `"openai"` (OpenAI or any OpenAI-compatible server) or `"anthropic"`. An unknown value is treated as `"ollama"`, so a typo never sends anything to a cloud service. |
+| `model` | string | `""` | Which model answers. `""` uses the provider's default (`llama3.2`, `gpt-4o-mini`, `claude-haiku-4-5`). |
+| `base_url` | string | `""` | Where requests go. `""` uses `http://localhost:11434`, `https://api.openai.com/v1` or `https://api.anthropic.com`. Must be `http://` or `https://` with no user name, password or query. A key is never sent over `http://` to another computer. |
+| `system_prompt` | string | a short "be concise" instruction | Sent with every question. At most 4000 characters. |
+| `max_tokens` | integer | `512` | Longest answer asked for, in tokens. Range: 16–8192. |
+| `timeout_secs` | integer | `60` | How long to wait for the whole answer. Range: 5–300. |
+
+```toml
+[ai]
+enabled = false
+keyword = "ai"
+provider = "ollama"
+model = ""
+base_url = ""
+system_prompt = "You are a concise assistant inside a desktop launcher. Answer briefly in plain text, without Markdown headings."
+max_tokens = 512
+timeout_secs = 60
 ```
 
 ### [snippets]
@@ -814,6 +844,33 @@ define_keyword = "define"
 spell_keyword = "spell"
 # false always uses the bundled dictionary and word list.
 use_system = true
+
+[ai]
+# An optional AI assistant: "ai <question>" and Enter sends the question to the
+# service below and shows the answer. OFF by default and strictly opt-in:
+# nothing is sent anywhere until you set enabled = true AND press Enter on a
+# question. What is sent: the question (or the text you chose with "Ask AI about
+# selection"), the system prompt and the model name, to the host of base_url.
+# Nothing else; no clipboard, files or search history. Answers are kept in memory only.
+# API keys are NOT stored here: add one in Settings > AI assistant (kept encrypted
+# with Windows DPAPI, or in an owner-only file elsewhere), or set the environment
+# variable OPENAI_API_KEY / ANTHROPIC_API_KEY. Ollama needs no key.
+enabled = false
+keyword = "ai"
+# "ollama" (a model running on this computer), "openai" (OpenAI or any
+# OpenAI-compatible server) or "anthropic".
+provider = "ollama"
+# "" uses the provider's default model (llama3.2, gpt-4o-mini, claude-haiku-4-5).
+model = ""
+# "" uses the provider's address (http://localhost:11434, https://api.openai.com/v1,
+# https://api.anthropic.com). Point "openai" at another server, such as
+# "http://localhost:1234/v1" for LM Studio. An API key is never sent over plain
+# http:// except to this computer.
+base_url = ""
+system_prompt = "You are a concise assistant inside a desktop launcher. Answer briefly in plain text, without Markdown headings."
+# Longest answer asked for (16-8192 tokens) and how long to wait (5-300 seconds).
+max_tokens = 512
+timeout_secs = 60
 
 # Snippets ("s <name>"): text you paste often. Placeholders: {date}, {time},
 # {datetime}, {date:%d %B %Y}, {clipboard}, {uuid}; write {{ and }} for literal

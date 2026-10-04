@@ -22,6 +22,7 @@ Sevak itself makes network requests in exactly these cases, all listed in
 | Update check | `[general] check_for_updates` (on by default; can be switched off) | A GET of `latest.json` on GitHub Releases. Installing needs a separate yes in a dialog and a valid update signature |
 | Theme gallery | The user clicks *Browse online themes* | The theme index, then one theme file |
 | Workflow gallery | The user presses *Load gallery* | The gallery index, then one package |
+| AI assistant | `[ai] enabled = true` (off by default) **and** Enter on an `ai <question>` row; or the *Test connection* button | One HTTPS request to the chosen provider (Ollama on this computer by default). Sends the question, the system prompt, the model name and the API key; never a clipboard, file or history. See [AI assistant](../ai.md) |
 
 Rules that follow from this:
 

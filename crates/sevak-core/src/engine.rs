@@ -429,6 +429,14 @@ impl SearchEngine {
         .unwrap_or(None)
     }
 
+    /// Whether the launcher stays open after `item` is run (see
+    /// [`Plugin::keeps_open`]).
+    pub fn keeps_open(&self, item: &ResultItem) -> bool {
+        self.plugin(&item.plugin_id).is_some_and(|plugin| {
+            guarded(plugin.as_ref(), "keeps_open", || plugin.keeps_open(item)).unwrap_or(false)
+        })
+    }
+
     /// Finds the result with id `id` (`<plugin id>:<key>`) through its owning
     /// plugin, for running it without a query. `None` if no plugin owns the id
     /// or the plugin cannot rebuild it (not indexed yet, uninstalled, ...).

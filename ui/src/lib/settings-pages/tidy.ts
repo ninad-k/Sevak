@@ -21,6 +21,10 @@ export function tidyPluginSettings(config: Config): void {
   config.onepassword.account = config.onepassword.account.trim();
   config.dictionary.define_keyword = config.dictionary.define_keyword.trim();
   config.dictionary.spell_keyword = config.dictionary.spell_keyword.trim();
+  config.ai.keyword = config.ai.keyword.trim();
+  config.ai.model = config.ai.model.trim();
+  config.ai.base_url = config.ai.base_url.trim().replace(/\/+$/, "");
+  config.ai.system_prompt = config.ai.system_prompt.trim();
   config.clipboard.ignore_apps = trimmed(config.clipboard.ignore_apps);
   config.snippets.ignore_apps = trimmed(config.snippets.ignore_apps);
   config.snippets.prefix = config.snippets.prefix.trim();

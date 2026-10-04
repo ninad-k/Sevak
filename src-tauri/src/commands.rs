@@ -362,6 +362,11 @@ fn run_execute(
                 "executed result"
             );
             search.saver.poke();
+            // A result that is answered inside the launcher (the AI assistant's
+            // "Asking..." row turning into the answer) leaves the window open.
+            if !optimistic && search.engine().keeps_open(&target) {
+                return Ok(());
+            }
             if optimistic {
                 window::announce_hidden(app);
             } else {

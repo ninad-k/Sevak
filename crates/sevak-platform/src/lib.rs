@@ -30,6 +30,7 @@ pub mod paths;
 pub mod private_file;
 pub mod process;
 pub mod provider;
+pub mod secret;
 pub mod session;
 pub mod spotlight;
 pub mod system;

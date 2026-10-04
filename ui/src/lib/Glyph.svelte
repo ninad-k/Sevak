@@ -102,6 +102,9 @@
     <path d="M9 17.5V6l10-2v11.5" />
     <circle cx="6.5" cy="17.5" r="2.5" />
     <circle cx="16.5" cy="15.5" r="2.5" />
+  {:else if name === "sparkle"}
+    <path d="M11 3.5 13 9l5.5 2-5.5 2-2 5.5L9 13 3.5 11 9 9Z" />
+    <path d="M18.5 3v4M16.5 5h4" />
   {:else}
     <path d="M9 3v4M15 3v4" />
     <path d="M6 7h12v4.5a6 6 0 0 1-12 0Z" />

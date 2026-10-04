@@ -131,6 +131,20 @@ const GROUPS: &[(&str, &[Field])] = &[
             ("dictionary.use_system", Show::Value),
         ],
     ),
+    // Which assistant is set up, never where it points, what it is told, or a
+    // key (keys are not in the config at all).
+    (
+        "AI assistant",
+        &[
+            ("ai.enabled", Show::Value),
+            ("ai.provider", Show::Value),
+            ("ai.model", Show::Set),
+            ("ai.base_url", Show::Set),
+            ("ai.system_prompt", Show::Bytes),
+            ("ai.max_tokens", Show::Value),
+            ("ai.timeout_secs", Show::Value),
+        ],
+    ),
 ];
 
 /// Top-level sections reported by custom code or deliberately left out; every
@@ -213,6 +227,7 @@ const KEYWORD_PATHS: &[&str] = &[
     "onepassword.keyword",
     "dictionary.define_keyword",
     "dictionary.spell_keyword",
+    "ai.keyword",
 ];
 
 /// The configurable keywords of `config`, as `(setting, keyword)`; a search
@@ -405,6 +420,9 @@ mod tests {
         config.contacts.vcard_files = vec!["~/SECRET-CONTACTS.vcf".into()];
         config.onepassword.op_path = "/SECRET/op".into();
         config.onepassword.account = "SECRET-ACCOUNT.1password.com".into();
+        config.ai.base_url = "https://SECRET-HOST.example/v1".into();
+        config.ai.model = "SECRET-MODEL".into();
+        config.ai.system_prompt = "SECRET-PROMPT".into();
         config.snippet = vec![Snippet {
             name: "SECRET-NAME".into(),
             keyword: Some("SECRET-KW".into()),

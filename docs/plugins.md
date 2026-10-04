@@ -8,6 +8,7 @@ plugins without rebuilding Sevak by dropping in a script.
 - [Architecture](#architecture)
 - [Writing a built-in plugin](#writing-a-built-in-plugin)
 - [Universal Actions](#universal-actions): offering actions for what the user selected in another app
+- [The AI assistant](#the-ai-assistant): work that starts on Enter, `keeps_open`, and the rules for anything that talks to a network service
 - [Contacts, 1Password and dictionary](#contacts-1password-and-dictionary): plugins with two keywords, an external tool, OS data sources and a bundled dictionary
 - [External plugins](#external-plugins): script plugins in Python, PowerShell, Node or anything else, including Alfred Script Filter scripts
 - [Workflows for contributors](#workflows-for-contributors): the engine behind [Settings > Workflows](workflows.md)
@@ -28,6 +29,7 @@ Code map:
 | Workflows and the gallery | `crates/sevak-plugins/src/workflow/`, `src-tauri/src/workflows.rs` |
 | Standard action execution | `crates/sevak-plugins/src/actions.rs` |
 | Contacts, 1Password, dictionary | `crates/sevak-plugins/src/{contacts,onepassword,dictionary}/`, `crates/sevak-platform/src/{contacts,deep_link,dictionary}.rs` |
+| AI assistant | `crates/sevak-core/src/ai.rs` (config), `crates/sevak-plugins/src/ai/` (plugin, providers, HTTP, keys), `crates/sevak-platform/src/secret.rs` (DPAPI), `src-tauri/src/ai.rs` (Settings commands) |
 | Universal Actions (selection) | `crates/sevak-core/src/selection.rs`, `crates/sevak-plugins/src/selection/`, `crates/sevak-platform/src/capture.rs`, `src-tauri/src/selection.rs` |
 | OS access (`PlatformProvider`) | `crates/sevak-platform/src/provider.rs` |
 
@@ -221,6 +223,7 @@ process, so plugins must never panic.
 | `contacts` | `contacts`, `contacts:at` | `c` and `@`, opt-in through `[contacts] enabled` ([below](#contacts-1password-and-dictionary)) |
 | `1password` | `1password` | `1p`, opt-in through `[onepassword] enabled` |
 | `dict` | `dict`, `dict:spell` | `define` and `spell`, offline |
+| `ai` | `ai` | `ai <question>`, the opt-in AI assistant ([below](#the-ai-assistant)) |
 | `uuid` | `uuid` | example plugin, keyword-only |
 
 - `PluginRegistry::builtin()` is the stock set; `register(descriptor)` adds (or
@@ -820,6 +823,47 @@ another program, runs everything off the UI thread and sends
 `sevak:buffer-progress` events. In a browser preview (`npm run dev`) the page
 uses `mockBuffer` from `ui/src/lib/mock.ts`; open `/#buffer` or `/#buffer-dest`.
 
+## The AI assistant
+
+`crates/sevak-plugins/src/ai/` is the optional `ai <question>` plugin; user
+documentation is [AI assistant](ai.md). It shows three patterns the simpler
+plugins do not:
+
+- **Work that starts on Enter, not on typing.** `query` only builds an "Ask"
+  row. `execute` on it starts the request on a worker thread, records a pending
+  exchange (keyed by the question, in memory) and calls the
+  `ResultsNotifier`; the shell re-runs the query and the row is now "Asking…",
+  then the answer. A generation counter drops the late reply of a cancelled
+  question.
+- **`Plugin::keeps_open(item)`.** Normally a successful `execute` hides the
+  launcher. A plugin whose result appears in the launcher itself returns `true`
+  for that row and the shell leaves the window where it is. Default `false`.
+- **The network behind two traits.** `Provider` (`provider.rs`) builds a request
+  and reads a reply for one service (OpenAI-compatible, Anthropic, Ollama);
+  `HttpTransport` (`http.rs`) is the only code that touches the network.
+  `Asker` is what the plugin talks to, so plugin tests use a scripted asker and
+  provider tests a loopback server (`testserver.rs`): no test contacts a real
+  service.
+
+Rules it follows, and a new provider must too:
+
+- Nothing is sent except on the user's Enter (or the *Test connection* button,
+  which sends no question). Add any new request to [Privacy](privacy.md).
+- The reply is untrusted text. Rows built from it use `CopyText`, `PasteText` or
+  a text view only (a test fails if another action kind can appear), and
+  `clean_answer` strips control and direction-override characters and caps it.
+- Sizes and time are capped (`MAX_PROMPT_CHARS`, `MAX_RESPONSE_BYTES`,
+  `MAX_ANSWER_CHARS`, the timeout), redirects are never followed and a key is
+  never sent over plain `http://` to a non-loopback host.
+- API keys are not config. `ApiKey` has no `Display` and prints as `ApiKey(****)`;
+  `keys::scrub` removes a key from anything shown; the key file is written with
+  `sevak_platform::secret` (DPAPI on Windows) and `private_file::write_atomic`.
+- `tracks_usage` is `false` and nothing about the question or answer is logged.
+
+"Ask AI about selection" is a `selection_actions` row whose `Custom` payload
+starts with `search:`, which the launcher window turns into text in the search
+box (see `selection::ui_request`).
+
 ## Contacts, 1Password and dictionary
 
 Three built-in plugins (`crates/sevak-plugins/src/contacts/`, `onepassword/`,
@@ -979,7 +1023,7 @@ idle_timeout_secs = 300          # persistent: stop after this much inactivity (
   when two folders claim one id the first (by folder name) wins.
 - Keywords are matched case-insensitively. A keyword that another plugin (built-in
   or script) also uses queries both and merges their results, so pick one
-  that is not taken (`g`, `yt`, `gh`, `f`, `b`, `>`, `cb`, `s`, `c`, `@`, `1p`, `define`, `spell` and `uuid` are by
+  that is not taken (`g`, `yt`, `gh`, `f`, `b`, `>`, `cb`, `s`, `c`, `@`, `1p`, `define`, `spell`, `ai` and `uuid` are by
   default).
 - Unknown keys are ignored, so a manifest written for a newer Sevak still loads.
 - A `plugin.toml` that is invalid is skipped with a message in the log and shown

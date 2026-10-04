@@ -112,6 +112,10 @@ Optional clipboard history (only if `[clipboard] enabled = true`). `clipboard-hi
 
 **Privacy:** Disabled by default because it records what you copy. Apps that mark their content as secret (password managers, etc.) are never recorded. Configure `[clipboard] ignore_apps` to never record copies from specific apps, and `[clipboard] images = false` / `files = false` to record text only.
 
+### ai-keys.json
+
+API keys for the optional [AI assistant](ai.md), only if you saved one in **Settings → AI assistant**. On Windows each key is encrypted with DPAPI for your user account; on macOS and Linux the file is readable by your user account only (mode `0600`) and **not encrypted**. It is never part of `config.toml`, a settings export or the diagnostics report. Delete a key with **Remove** in Settings, or delete the file.
+
 ### currency-rates.json
 
 Cached European Central Bank exchange rates, only if currency conversion (`[calculator] currency`) is on.

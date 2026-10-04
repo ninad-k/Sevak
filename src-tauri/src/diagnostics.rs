@@ -227,6 +227,7 @@ fn builtin_on(config: &Config, family: &str) -> bool {
             "clipboard" => config.clipboard.enabled,
             "contacts" => config.contacts.enabled,
             "1password" => config.onepassword.enabled,
+            "ai" => config.ai.enabled,
             _ => true,
         }
 }

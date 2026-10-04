@@ -11,6 +11,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+pub use crate::ai::{AiConfig, AiProvider};
+
 /// The file written on first run. It mirrors [`Config::default`] (enforced by a
 /// unit test) but carries comments, which `toml::to_string` cannot produce.
 pub const DEFAULT_CONFIG_TOML: &str = r##"# Sevak configuration
@@ -275,6 +277,33 @@ spell_keyword = "spell"
 # false always uses the bundled dictionary and word list.
 use_system = true
 
+[ai]
+# An optional AI assistant: "ai <question>" and Enter sends the question to the
+# service below and shows the answer. OFF by default and strictly opt-in:
+# nothing is sent anywhere until you set enabled = true AND press Enter on a
+# question. What is sent: the question (or the text you chose with "Ask AI about
+# selection"), the system prompt and the model name, to the host of base_url.
+# Nothing else; no clipboard, files or search history. Answers are kept in memory only.
+# API keys are NOT stored here: add one in Settings > AI assistant (kept encrypted
+# with Windows DPAPI, or in an owner-only file elsewhere), or set the environment
+# variable OPENAI_API_KEY / ANTHROPIC_API_KEY. Ollama needs no key.
+enabled = false
+keyword = "ai"
+# "ollama" (a model running on this computer), "openai" (OpenAI or any
+# OpenAI-compatible server) or "anthropic".
+provider = "ollama"
+# "" uses the provider's default model (llama3.2, gpt-4o-mini, claude-haiku-4-5).
+model = ""
+# "" uses the provider's address (http://localhost:11434, https://api.openai.com/v1,
+# https://api.anthropic.com). Point "openai" at another server, such as
+# "http://localhost:1234/v1" for LM Studio. An API key is never sent over plain
+# http:// except to this computer.
+base_url = ""
+system_prompt = "You are a concise assistant inside a desktop launcher. Answer briefly in plain text, without Markdown headings."
+# Longest answer asked for (16-8192 tokens) and how long to wait (5-300 seconds).
+max_tokens = 512
+timeout_secs = 60
+
 # Snippets ("s <name>"): text you paste often. Placeholders: {date}, {time},
 # {datetime}, {date:%d %B %Y}, {clipboard}, {uuid}; write {{ and }} for literal
 # braces. "keyword" is optional and also matches the search.
@@ -365,6 +394,8 @@ pub struct Config {
     pub contacts: ContactsConfig,
     pub onepassword: OnePasswordConfig,
     pub dictionary: DictionaryConfig,
+    /// `[ai]`: the optional AI assistant (`ai <question>`). Off by default.
+    pub ai: AiConfig,
     /// `[snippets]`: expanding snippet keywords as you type.
     pub snippets: SnippetsConfig,
     /// `[[snippet]]` entries. Edited by hand only: saves from the settings
@@ -399,6 +430,7 @@ impl Default for Config {
             contacts: ContactsConfig::default(),
             onepassword: OnePasswordConfig::default(),
             dictionary: DictionaryConfig::default(),
+            ai: AiConfig::default(),
             snippets: SnippetsConfig::default(),
             snippet: Vec::new(),
             web_search: WebSearchEngine::defaults(),
@@ -1277,6 +1309,7 @@ impl Config {
             .onepassword
             .cache_minutes
             .clamp(1, MAX_ONEPASSWORD_CACHE_MINUTES);
+        self.ai = self.ai.normalized();
         self.snippets.prefix = self.snippets.prefix.trim().to_owned();
         self.snippets
             .ignore_apps

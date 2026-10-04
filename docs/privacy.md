@@ -13,6 +13,7 @@ Sevak is local-first. Your data stays on your machine except when you explicitly
 - Snippet library, and snippet expansion as you type (if enabled): the last 64 typed characters are kept in memory only, never stored, logged or sent
 - Contacts (if enabled) and the 1Password list of logins (if enabled): in memory only, and kept out of the search history and usage statistics
 - The dictionary and spelling checker (bundled WordNet data or the system's own), the emoji picker, automation tasks and media controls
+- The AI assistant's question and answer (if you use it), in memory only; its API keys, if you save any, in `ai-keys.json` (see [below](#ai-assistant))
 - Themes: built-in, edited, imported or exported
 - Settings and configuration
 - Usage statistics (how often you run each result)
@@ -23,7 +24,7 @@ All data is stored in a single folder on your machine; none is uploaded anywhere
 
 ## What touches the network
 
-Only when you opt in or use network features. Every network request Sevak itself makes is listed in this section: links you open, update checks, update downloads, currency rates, the theme gallery and the workflow gallery.
+Only when you opt in or use network features. Every network request Sevak itself makes is listed in this section: links you open, update checks, update downloads, currency rates, the theme gallery, the workflow gallery and, if you turn it on, the [AI assistant](#ai-assistant).
 
 ### Web search and links
 
@@ -61,6 +62,22 @@ Disable with `[general] check_for_updates = false` to turn off the network reque
 #### Update channel
 
 With the default `[general] update_channel = "stable"`, only the URL above is requested. If you switch to `"beta"` (Settings, General, Update channel), Sevak also requests `https://github.com/ninad-k/Sevak/releases/download/channel-beta/latest-beta.json`. It is the same kind of request to the same GitHub release assets, just a different small JSON file, and it sends nothing about you beyond what any web request does. The signature check on the downloaded package is the same on both channels.
+
+### AI assistant
+
+Opt-in feature (off by default). When you turn it on (`[ai] enabled = true`, **Settings → AI assistant**), pressing **Enter** on an `ai <question>` row makes one HTTPS request to the host of the provider you chose:
+
+- **Ollama** (the default): `localhost:11434`, a model on your own computer. Nothing leaves it.
+- **OpenAI-compatible**: `api.openai.com`, or the host of the base URL you set.
+- **Anthropic**: `api.anthropic.com`.
+
+The request contains your question (or the text you chose with **Ask AI about selection**, sent only after you press Enter), the system prompt from Settings, the model name, the maximum answer length and your API key in a header. Nothing else: not your clipboard, files, search history or any identifier. The provider receives your IP address like any web server, and its own privacy terms cover what it does with the question.
+
+- Nothing is sent while you type, at startup or in the background. **Test connection** (a button in Settings) lists the provider's models and sends no question.
+- The question and the answer stay in memory until the next question, a reload or quitting. They are not logged, not written to disk and not in the search history or usage statistics.
+- API keys are never in `config.toml`, a settings export, the diagnostics report or the log. Saved keys are in `ai-keys.json` in your data folder: encrypted with DPAPI on Windows, in an owner-only file on macOS and Linux. Environment variables `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` also work. A key is never sent over plain `http://` to another computer, and redirects are not followed.
+
+Turn it off with `[ai] enabled = false`. Details: [AI assistant](ai.md).
 
 ### Installing an update
 

@@ -228,6 +228,9 @@ fn validate_limits(config: &Config) -> Result<(), String> {
             "1Password: the cache time must be from 1 to {MAX_ONEPASSWORD_CACHE_MINUTES} minutes."
         ));
     }
+    if let Some(problem) = config.ai.problem() {
+        return Err(problem);
+    }
     Ok(())
 }
 

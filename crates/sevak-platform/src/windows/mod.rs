@@ -14,6 +14,7 @@ mod packaged;
 mod paste;
 mod people;
 mod provider;
+pub(crate) mod secret;
 mod shortcuts;
 mod spell;
 pub(crate) mod system;

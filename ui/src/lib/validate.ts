@@ -3,6 +3,7 @@
 // parsed by Rust only (see `validateHotkey`).
 
 import { acceleratorId } from "./accelerator";
+import { aiProblems, type AiProblems } from "./ai";
 import {
   fallbackList,
   type Appearance,
@@ -22,6 +23,7 @@ export type SectionId =
   | "clipboard"
   | "tasks"
   | "integrations"
+  | "ai"
   | "system"
   | "linux";
 
@@ -54,7 +56,8 @@ export type KeywordField =
   | "contacts.keyword"
   | "onepassword.keyword"
   | "dictionary.define_keyword"
-  | "dictionary.spell_keyword";
+  | "dictionary.spell_keyword"
+  | "ai.keyword";
 
 export interface ClipboardErrors {
   maxItems?: string;
@@ -70,6 +73,8 @@ export interface Problems {
   keywords: Partial<Record<KeywordField, string>>;
   clipboard: ClipboardErrors;
   cacheMinutes?: string;
+  /** What is wrong with each field of the AI assistant page (the keyword is under `keywords`). */
+  ai: AiProblems;
   fallback?: string;
   filesDepth?: string;
   /** Number of problems per section (hotkey problems are added by the form). */
@@ -121,6 +126,7 @@ const KEYWORDS: KeywordSpec[] = [
   { field: "onepassword.keyword", owner: "1Password", required: true, section: "integrations", read: (c) => c.onepassword.keyword },
   { field: "dictionary.define_keyword", owner: "the dictionary", required: true, section: "integrations", read: (c) => c.dictionary.define_keyword },
   { field: "dictionary.spell_keyword", owner: "the spelling checker", required: true, section: "integrations", read: (c) => c.dictionary.spell_keyword },
+  { field: "ai.keyword", owner: "the AI assistant", required: true, section: "ai", read: (c) => c.ai.keyword },
 ];
 
 /** Every keyword of a built-in search (lowercased) and what answers it. */
@@ -264,6 +270,7 @@ export function validate(config: Config): Problems {
     clipboard: 0,
     tasks: 0,
     integrations: 0,
+    ai: 0,
     system: 0,
     linux: 0,
   };
@@ -289,12 +296,15 @@ export function validate(config: Config): Problems {
   }
   const clipboard = clipboardErrors(config);
   count.clipboard += Object.keys(clipboard).length;
+  const ai = aiProblems(config.ai);
+  count.ai += Object.keys(ai).length;
   const problems: Problems = {
     engines,
     hotkeys,
     appearance,
     keywords: keywordErrors,
     clipboard,
+    ai,
     count,
   };
 

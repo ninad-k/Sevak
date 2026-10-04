@@ -22,6 +22,7 @@
 //! | `1password`      | [`OnePasswordPlugin`] (opt-in)          | `1p`    | no     |
 //! | `dict`           | [`DictionaryPlugin`] (also `dict:spell`) | `define`, `spell` | no |
 //! | `uuid`           | [`UuidPlugin`] (a tutorial example)     | `uuid`  | no     |
+//! | `ai`             | [`AiPlugin`] (opt-in AI assistant)      | `ai`    | no     |
 //!
 //! Script plugins (`script:<name>`, from `<config dir>/plugins/`) are loaded by
 //! [`ScriptPluginHost`]; see [`script`].
@@ -36,6 +37,7 @@ use sevak_core::{Config, Plugin};
 use sevak_platform::PlatformProvider;
 
 pub mod actions;
+pub mod ai;
 pub mod apps;
 pub mod bookmarks;
 pub mod calculator;
@@ -71,6 +73,7 @@ pub mod workflow;
 mod test_util;
 
 pub use actions::execute_action;
+pub use ai::AiPlugin;
 pub use apps::AppsPlugin;
 pub use bookmarks::BookmarksPlugin;
 pub use calculator::CalculatorPlugin;
@@ -97,7 +100,7 @@ pub use workflow::WorkflowHost;
 /// Instantiates every enabled built-in plugin (`apps`, `calculator`, one
 /// `web:<keyword>` per `[[web_search]]` engine, `files`, `bookmarks`, `system`,
 /// `tasks`, `media`, `shell`, `clipboard`, `snippets`, `emoji`, `selection`,
-/// `contacts`, `1password`, `dict`, `uuid`).
+/// `contacts`, `1password`, `dict`, `uuid`, `ai`).
 ///
 /// Shorthand for `PluginRegistry::builtin().instantiate(config, platform)`.
 ///
@@ -150,7 +153,8 @@ mod tests {
                 "1password",
                 "dict",
                 "dict:spell",
-                "uuid"
+                "uuid",
+                "ai"
             ]
         );
     }
@@ -180,7 +184,8 @@ mod tests {
                 "1password",
                 "dict",
                 "dict:spell",
-                "uuid"
+                "uuid",
+                "ai"
             ]
         );
     }

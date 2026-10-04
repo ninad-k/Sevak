@@ -195,7 +195,7 @@ const HEADER: &str = "\
 
 **Included:** the Sevak version and build; your operating system, display server and install location; which features are on, your shortcut and whether it works, the theme, the update setting and the keywords in use; the names and sizes (never the contents) of the files in Sevak's folders; which plugins loaded, and the ids of script plugins and workflows with whether you allowed them; how many apps and files are indexed; the last 100 log lines and a count of recent errors; a few health checks.
 
-**Not included:** clipboard history or snippet text; what is in any script or workflow; what you searched for, or your search history; usage statistics; contacts or 1Password data; file lists or bookmark titles; the folders you chose to search; web search addresses; any setting not listed above. Your user name, computer name and home folder are shown as `<user>`, `<host>` and `~`; e-mail addresses, web addresses with a query, tokens, keys and IP addresses are removed from the log lines.
+**Not included:** clipboard history or snippet text; what is in any script or workflow; what you searched for, or your search history; usage statistics; contacts or 1Password data; your questions to the AI assistant, its answers, or any API key; file lists or bookmark titles; the folders you chose to search; web search addresses; any setting not listed above. Your user name, computer name and home folder are shown as `<user>`, `<host>` and `~`; e-mail addresses, web addresses with a query, tokens, keys and IP addresses are removed from the log lines.
 
 Removing private data automatically cannot be perfect. Skim the log lines at the end and delete anything you would rather not share.";
 
