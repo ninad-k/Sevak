@@ -75,7 +75,7 @@ What an attacker might want, and where it lives. "At rest" means on disk.
 | TB2 | **Rust to the operating system** | Launches, paths, URLs, keystrokes, clipboard, system commands | The closed `Action` vocabulary, the `PlatformProvider` trait, allow-lists for URL schemes, per-shell quoting |
 | TB3 | **Sevak to script plugins and workflow children** | JSON in and out, environment, arguments | Approval, no shell, path checks, output caps, timeouts |
 | TB4 | **Sevak to GitHub** (updates, galleries) and the ECB (rates) | Fetched indexes, packages, manifests | HTTPS only, size caps, SHA-256, updater signature, user action |
-| TB5 | **Installer to the OS** | Files placed on disk, registry or login-item entries, WebView2 bootstrap | Per-user install (NSIS `currentUser`), package signature checks (unsigned installers: see below) |
+| TB5 | **Installer to the OS** | Files placed on disk, registry or login-item entries, WebView2 bootstrap | The Windows installer defaults to a per-user install (no administrator rights); a per-machine install asks for UAC, and before replacing files the installer runs the installed `sevak.exe --quit` (a clean exit through the single-instance channel, never a forced kill). Package signature checks (unsigned installers: see below) |
 | TB6 | **Sevak to other local processes** | The clipboard, injected key events, the single-instance channel for `--run`, `--query`, `--trigger` | Same-user only; see [Local interfaces](#local-interfaces) |
 
 ## Data-flow diagrams
@@ -236,6 +236,8 @@ Each row was read in the code. "Where" gives the implementing file and symbol.
 | Package-manager installs do not self-update | `updater.rs` (`ManagedBy`) | A `package-manager` marker disables the in-app updater. |
 | Published checksums | `.github/workflows/release.yml` (publish job) | `SHA256SUMS.txt` lists every attached file. |
 | Draft-then-publish | `release.yml` | A failed build leaves only a draft and no tag. |
+| Beta channel is the same trust, one more file | `updater.rs`, `release.yml`, `promote.yml` | A user who picks the beta channel (`[general] update_channel`) also reads `latest-beta.json` from the fixed `channel-beta` release; packages are checked against the same updater signature, and a beta is never offered to stable users. Promoting a beta rewrites `latest.json` only after `verify-release.mjs` checks every checksum and signature. |
+| SBOMs and build provenance | `sbom.yml`, `attest.yml` (called by `release.yml` and `promote.yml`) | CycloneDX SBOMs and a signed attestation of the published installers are attached to every stable release. The attestation is made after publishing, over the published bytes, so it shows what the pipeline published, not an independent rebuild ([Supply chain](supply-chain.md)). |
 
 ### Keystrokes, clipboard, selection
 
