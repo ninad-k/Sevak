@@ -18,7 +18,7 @@ use sevak_core::{Config, Plugin};
 use sevak_platform::PlatformProvider;
 
 use super::approvals::{script_approval_key, ApprovalStore};
-use super::manifest::{Manifest, ID_PREFIX, MANIFEST_FILE};
+use super::manifest::{Launch, Manifest, ID_PREFIX, MANIFEST_FILE};
 use super::plugin::ScriptPlugin;
 use super::runner::Spec;
 use crate::keywords::{KeywordOwners, KeywordUse, OwnerKind};
@@ -48,6 +48,9 @@ pub struct Candidate {
     /// changed, it moved, or the allowance dates from before approvals were
     /// bound to contents. The Allow dialog says so.
     pub reviewed_before: bool,
+    /// A native extension: the SHA-256 of its program file (what the Allow
+    /// dialog shows next to the publisher's). `None` for scripts.
+    pub binary_sha256: Option<String>,
 }
 
 impl Candidate {
@@ -55,12 +58,13 @@ impl Candidate {
     /// what runs, what it is given, with everything the author wrote made safe
     /// to show.
     pub fn prompt(&self) -> String {
-        super::dialog::script_prompt(
+        super::dialog::script_prompt_with_binary(
             &self.manifest,
             &self.folder,
             &self.dir.display().to_string(),
             &self.key,
             self.reviewed_before,
+            self.binary_sha256.as_deref(),
         )
     }
 }
@@ -172,6 +176,12 @@ impl ScriptPluginHost {
             }
             let approved = approved_now(&manifest, &key);
             let reviewed_before = !approved && approvals.has_record(&manifest.id);
+            let binary_sha256 = match (&manifest.native, &manifest.launch) {
+                (Some(_), Launch::Command(argv)) => argv
+                    .first()
+                    .and_then(|program| super::native::binary_sha256(&dir, program)),
+                _ => None,
+            };
             scanned.push(Scanned::Plugin(Box::new(Candidate {
                 folder,
                 dir,
@@ -179,6 +189,7 @@ impl ScriptPluginHost {
                 key,
                 approved,
                 reviewed_before,
+                binary_sha256,
             })));
         }
         scanned
@@ -286,6 +297,9 @@ impl ScriptPluginHost {
                 Scanned::Plugin(c) => {
                     let id = c.manifest.id.clone();
                     let mut description = c.manifest.description.clone();
+                    if c.manifest.native.is_some() {
+                        description = format!("Native extension. {description}");
+                    }
                     if !c.approved {
                         description = format!(
                             "Waiting for your approval (restart Sevak or choose Reload index \
@@ -493,6 +507,91 @@ mod tests {
             f.host.approve(&c).unwrap();
         }
         assert!(f.host.pending(&Config::default()).is_empty());
+    }
+
+    fn native_manifest(platform: &str) -> String {
+        let program = if platform.starts_with("windows") {
+            "bin/tool.exe"
+        } else {
+            "bin/tool"
+        };
+        format!(
+            "protocol = 1
+keyword = \"nat\"
+name = \"Native tool\"
+             [extension]
+version = \"1.0.0\"
+author = \"Ada\"
+license = \"MIT\"
+             permissions = [\"network\"]
+[extension.binaries]
+{platform} = \"{program}\"
+"
+        )
+    }
+
+    fn add_native(f: &Fixture, folder: &str, bytes: &[u8]) {
+        let platform = crate::script::current_platform();
+        add(f, folder, &native_manifest(&platform));
+        let program = if platform.starts_with("windows") {
+            "bin/tool.exe"
+        } else {
+            "bin/tool"
+        };
+        let path = f.plugins.join(folder).join(program);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, bytes).unwrap();
+    }
+
+    #[test]
+    fn a_native_extension_waits_for_approval_bound_to_its_binary() {
+        let f = fixture();
+        add_native(&f, "tool", b"ELF first build");
+        let config = Config::default();
+        assert!(f.host.plugins(&config, &platform()).is_empty());
+
+        let pending = f.host.pending(&config);
+        assert_eq!(pending.len(), 1, "never runs before it is allowed");
+        let candidate = &pending[0];
+        assert!(candidate.manifest.native.is_some());
+        let hash = candidate
+            .binary_sha256
+            .clone()
+            .expect("the binary is hashed");
+        assert_eq!(hash, sevak_core::checksum::sha256_hex(b"ELF first build"));
+        let prompt = candidate.prompt();
+        assert!(prompt.contains("NATIVE EXTENSION"), "{prompt}");
+        assert!(
+            prompt.contains(&hash),
+            "the full checksum is shown: {prompt}"
+        );
+        assert!(prompt.contains("Publisher: Ada"), "{prompt}");
+        assert!(prompt.contains("network: connects"), "{prompt}");
+        assert!(prompt.contains("NOT sandboxed"), "{prompt}");
+        f.host.approve(candidate).unwrap();
+        assert_eq!(ids(&f.host.plugins(&config, &platform())), ["script:tool"]);
+
+        // A different binary is a different thing: it asks again.
+        add_native(&f, "tool", b"ELF second build");
+        assert!(f.host.plugins(&config, &platform()).is_empty());
+        let again = f.host.pending(&config);
+        assert_eq!(again.len(), 1);
+        assert!(again[0].reviewed_before);
+        assert!(again[0].prompt().contains("review again"));
+        assert_ne!(again[0].binary_sha256.as_deref(), Some(hash.as_str()));
+    }
+
+    #[test]
+    fn a_native_extension_is_labelled_in_the_plugin_list() {
+        let f = fixture();
+        add_native(&f, "tool", b"bin");
+        let rows = f
+            .host
+            .catalog(&Config::default(), &KeywordOwners::default());
+        assert!(
+            rows[0].description.contains("Native extension."),
+            "{rows:?}"
+        );
     }
 
     #[test]

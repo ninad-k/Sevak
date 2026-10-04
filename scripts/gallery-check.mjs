@@ -8,7 +8,9 @@
 // (version 2) it checks the address (a path relative to the repository root, such
 // as gallery/packages/<id>.zip; the app resolves it against the release it was
 // built from, see docs/security/gallery-trust.md), that the file exists, that its SHA-256 matches, and that no file in gallery/packages or
-// gallery/themes is missing from the index. It reads the files exactly as they
+// gallery/themes is missing from the index. A native extension (kind "native")
+// has one `.sevakext` package per platform under gallery/extensions/<id>/ and
+// is checked the same way, platform by platform. It reads the files exactly as they
 // are committed (they are stored with LF line endings; see .gitattributes).
 //
 // The Rust tests (`cargo test -p sevak-plugins -p sevak-core`) go further: they
@@ -27,8 +29,20 @@ const gallery = join(root, "gallery");
 const BASE = "gallery/";
 const TREE = "https://github.com/ninad-k/Sevak/tree/main/examples/";
 const MAX_PACKAGE_BYTES = 5 * 1024 * 1024; // the app refuses larger downloads
+// A native extension carries a compiled program. The app accepts up to 32 MiB;
+// the gallery asks for less because every package is committed to the repository.
+const MAX_NATIVE_PACKAGE_BYTES = 10 * 1024 * 1024;
 const MAX_THEME_BYTES = 64 * 1024;
 const MAX_TAGS = 8;
+/** The platforms a native extension may have a build for (`<os>-<arch>`). */
+const PLATFORMS = [
+  "windows-x86_64",
+  "windows-aarch64",
+  "macos-x86_64",
+  "macos-aarch64",
+  "linux-x86_64",
+  "linux-aarch64",
+];
 
 const update = process.argv.includes("--update");
 const problems = [];
@@ -54,9 +68,71 @@ function listed(where, folder, files) {
   }
 }
 
-// ---- gallery/index.json: workflows and script plugins ------------------------
+/**
+ * A native extension: one `.sevakext` package per platform in
+ * gallery/extensions/<id>/, each listed with its SHA-256. (The Rust tests open
+ * the packages and compare their manifests with the entry; this only needs
+ * the files.)
+ */
+function checkNative(where, entry, dirs) {
+  if (entry.source !== undefined || entry.sha256 !== undefined) {
+    problem(where, "a native extension lists `platforms`, not `source` and `sha256`");
+  }
+  if (!/^\d+\.\d+\.\d+$/.test(entry.version ?? "")) problem(where, "version must be like 1.2.3");
+  if (typeof entry.license !== "string" || !entry.license.trim()) problem(where, "license is empty");
+  if (!String(entry.repository ?? "").startsWith("https://")) problem(where, "repository must be an https:// address");
+  if (entry.min_sevak !== undefined && !/^\d+\.\d+\.\d+$/.test(entry.min_sevak)) {
+    problem(where, "min_sevak must be like 1.2.3");
+  }
+  const permissions = entry.permissions ?? [];
+  if (
+    !Array.isArray(permissions) ||
+    permissions.length > 8 ||
+    new Set(permissions).size !== permissions.length ||
+    !permissions.every((p) => /^[a-z][a-z0-9-]{0,23}$/.test(p))
+  ) {
+    problem(where, "permissions must be at most 8 unique lower case words (network, filesystem, ...)");
+  }
+  if (entry.folder !== undefined && entry.folder !== entry.id) problem(where, "a native extension has no folder");
+  const platforms = entry.platforms;
+  if (typeof platforms !== "object" || platforms === null || Object.keys(platforms).length === 0) {
+    problem(where, "platforms must name at least one platform");
+    return;
+  }
+  dirs.set(entry.id, new Set());
+  for (const [platform, artifact] of Object.entries(platforms)) {
+    if (!PLATFORMS.includes(platform)) {
+      problem(where, `unknown platform ${platform} (known: ${PLATFORMS.join(", ")})`);
+      continue;
+    }
+    const prefix = `${BASE}extensions/${entry.id}/`;
+    const source = artifact?.source;
+    const file = typeof source === "string" && source.startsWith(prefix) ? source.slice(prefix.length) : null;
+    if (!file || !file.endsWith(".sevakext") || /[/?#\\\s]/.test(file)) {
+      problem(where, `${platform}: source must be ${prefix}<file>.sevakext (a path, not an address)`);
+      continue;
+    }
+    dirs.get(entry.id).add(file);
+    const path = join(gallery, "extensions", entry.id, file);
+    if (!existsSync(path)) {
+      problem(where, `${platform}: extensions/${entry.id}/${file} does not exist`);
+      continue;
+    }
+    const bytes = readFileSync(path);
+    if (bytes.length > MAX_NATIVE_PACKAGE_BYTES) problem(where, `${platform}: the package is larger than 10 MiB`);
+    const actual = sha256(bytes);
+    if (artifact.sha256 !== actual) {
+      if (update) artifact.sha256 = actual;
+      else problem(where, `${platform}: sha256 is ${artifact.sha256} but extensions/${entry.id}/${file} hashes to ${actual}`);
+    }
+  }
+}
+
+// ---- gallery/index.json: workflows, script plugins and native extensions ------
 const index = readJson("index.json");
 if (index.format !== 2) problem("index.json", `format is ${index.format}, expected 2`);
+/** native extension id -> the package files its entry lists */
+const nativeDirs = new Map();
 {
   const ids = new Set();
   const zips = new Set();
@@ -65,7 +141,7 @@ if (index.format !== 2) problem("index.json", `format is ${index.format}, expect
     if (!/^[a-z0-9-]{1,48}$/.test(entry.id ?? "")) problem(where, "the id may only use a-z, 0-9 and -");
     if (ids.has(entry.id)) problem(where, "the id is used twice");
     ids.add(entry.id);
-    if (!["workflow", "plugin"].includes(entry.kind)) problem(where, `unknown kind ${entry.kind}`);
+    if (!["workflow", "plugin", "native"].includes(entry.kind)) problem(where, `unknown kind ${entry.kind}`);
     for (const field of ["name", "description", "author", "version"]) {
       if (typeof entry[field] !== "string" || !entry[field].trim()) problem(where, `${field} is empty`);
     }
@@ -75,6 +151,12 @@ if (index.format !== 2) problem("index.json", `format is ${index.format}, expect
     } else if (!tags.every((tag) => /^[a-z0-9-]{1,24}$/.test(tag)) || new Set(tags).size !== tags.length) {
       problem(where, "tags must be unique, lower case (a-z, 0-9, -) and at most 24 characters");
     }
+
+    if (entry.kind === "native") {
+      checkNative(where, entry, nativeDirs);
+      continue;
+    }
+    if (entry.platforms !== undefined) problem(where, "only native extensions have platforms");
 
     const folderName = entry.kind === "plugin" ? "plugins" : "workflows";
     const source = join(root, "examples", folderName, entry.folder ?? entry.id);
@@ -104,6 +186,18 @@ if (index.format !== 2) problem("index.json", `format is ${index.format}, expect
     }
   }
   listed("index.json", "packages", zips);
+  // gallery/extensions/<id>/ exists only for a listed native extension, and
+  // holds only the packages its entry lists.
+  const extensionsRoot = join(gallery, "extensions");
+  if (existsSync(extensionsRoot)) {
+    for (const id of readdirSync(extensionsRoot)) {
+      if (!nativeDirs.has(id)) {
+        problem("index.json", `extensions/${id} has no native entry in the index`);
+        continue;
+      }
+      listed(`index.json ${id}`, `extensions/${id}`, nativeDirs.get(id));
+    }
+  }
 }
 
 // ---- gallery/themes.json: themes -----------------------------------------------
@@ -161,6 +255,6 @@ if (problems.length > 0) {
   process.exit(1);
 }
 console.log(
-  `gallery ok: ${index.entries.length} workflows and plugins, ${themes.themes.length} themes` +
+  `gallery ok: ${index.entries.length} workflows, plugins and native extensions, ${themes.themes.length} themes` +
     (update ? " (hashes refreshed)" : ""),
 );

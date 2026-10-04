@@ -19,6 +19,7 @@ merge here reaches users with the next release, not at once. `index.json` has
 | Gallery | Index | Files | Opened from | What the app does |
 |---|---|---|---|---|
 | Workflows and script plugins | `index.json` | `packages/*.zip` | Settings → Gallery → **Load gallery** | [docs/workflows.md](../docs/workflows.md#the-gallery) |
+| Native extensions (programs written in Rust) | `index.json` (kind `native`) | `extensions/<id>/*.sevakext` | Settings → Extensions, or `ext` in the launcher | [docs/writing-extensions-in-rust.md](../docs/writing-extensions-in-rust.md) |
 | Themes | `themes.json` | `themes/*.toml` | Settings → Appearance → Theme editor → **Browse online themes** | [docs/themes.md](../docs/themes.md#theme-gallery) |
 
 Everything here is written by the Sevak project and licensed under Apache-2.0
@@ -82,6 +83,8 @@ and `cargo test` enforces most of it (see [Checking your change](#checking-your-
   System command, Terminal command, Open file or Hotkey.
 - **Small and readable.** A script is under 20 KiB, a package under 5 MiB, and
   both can be read in a few minutes. No minified, bundled or binary files.
+  The one exception is a [native extension](#adding-a-native-extension): a
+  compiled program (a package under 10 MiB), reviewed against its public source.
 - **No secrets, no accounts, no telemetry.**
 - **Cross-platform or honest about it.** Say in the description what a package
   needs (`needs-python`, `needs-node` tags) and give it a unique keyword that no
@@ -134,6 +137,34 @@ and `cargo test` enforces most of it (see [Checking your change](#checking-your-
    or a stale hash.
 
 An installed package still has to be allowed before anything in it runs.
+
+## Adding a native extension
+
+A native extension is a compiled program, so it is held to more than the rules
+above. Read [Writing extensions in Rust](../docs/writing-extensions-in-rust.md)
+first (the manifest, what Sevak does and does not protect, versioning); then:
+
+1. Build the program for each platform you support and pack one package per
+   platform: `sevak-ext pack . --split --binary <platform>=<program> ...`. The
+   files are named `<id>-<version>-<platform>.sevakext`.
+2. Put them in `gallery/extensions/<id>/` (at most 10 MiB each; nothing else in
+   that folder).
+3. Add the entry to `index.json`: `sevak-ext entry gallery/extensions/<id>/*.sevakext`
+   prints it. `kind` is `native`; it has `platforms` (each a `source` path and
+   a `sha256`) instead of `source` and `sha256`; `author`, `license`,
+   `repository` and `version` (like `1.2.3`) are required; `min_sevak` and
+   `permissions` say what it needs and what its author declares it does. They
+   must equal what the package's `plugin.toml` says: Sevak refuses an install
+   where they differ, and a test checks it.
+4. `node scripts/gallery-check.mjs` (`--update` fills in the hashes) and
+   `cargo test -p sevak-plugins --test gallery_content`.
+
+A reviewer checks that the source is public and builds the committed binaries,
+that the declared permissions match the code, the licence, and that nothing is
+obfuscated or downloads more code. An entry reaches users with the next release
+(builds read the list at their own tag, see
+[Gallery trust](../docs/security/gallery-trust.md)). Index format 2 is unchanged:
+older Sevaks skip entries of a kind they do not know.
 
 ## Adding a theme
 

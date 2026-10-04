@@ -1,0 +1,30 @@
+# The manifest of a Sevak native extension. Documented in
+# docs/writing-extensions-in-rust.md ("The manifest").
+
+protocol    = 1
+keyword     = "{{keyword}}"            # what users type to reach it (no spaces)
+name        = "{{project-name}}"
+description = "{{description}}"
+id          = "script:{{project-name}}"  # required: the name it installs under (the gallery id)
+
+[extension]
+version     = "0.1.0"                  # this extension's version (semver); bump it per release
+author      = "{{authors}}"            # the publisher users see in the Allow dialog
+license     = "Apache-2.0"             # an SPDX expression
+min_sevak   = "0.1.0"                  # the oldest Sevak you tested with
+repository  = "https://github.com/your-name/{{project-name}}"   # where the source is
+# What the program does beyond answering queries, shown to users before they
+# allow it. NOT enforced: a native program can do anything the user can.
+# Known: "network", "filesystem" (outside its own folders), "processes",
+# "clipboard", "system".
+permissions = []
+
+# One program per platform; list only the platforms you build for. Paths are
+# inside the extension's folder; Windows programs end in .exe.
+[extension.binaries]
+windows-x86_64  = "bin/{{project-name}}-windows-x86_64.exe"
+windows-aarch64 = "bin/{{project-name}}-windows-aarch64.exe"
+macos-x86_64    = "bin/{{project-name}}-macos-x86_64"
+macos-aarch64   = "bin/{{project-name}}-macos-aarch64"
+linux-x86_64    = "bin/{{project-name}}-linux-x86_64"
+linux-aarch64   = "bin/{{project-name}}-linux-aarch64"

@@ -23,6 +23,7 @@ explains the change.
 | [0009](0009-hotkey-takeover-per-os.md) | Taking over Super+Space differently on each OS | Accepted |
 | [0010](0010-opt-in-network-features.md) | Network features only on the user's action or opt-in | Accepted |
 | [0011](0011-snippet-expansion-hooks-no-wayland.md) | Snippet expansion through low-level input hooks, and no Wayland support | Accepted |
+| [0012](0012-native-extensions-reuse-the-script-trust-model.md) | Native extensions reuse the script plugin trust model; no sandbox, honestly labelled | Accepted |
 
 See also the [threat model](../security/threat-model.md) and
 [How Sevak works](../architecture.md).

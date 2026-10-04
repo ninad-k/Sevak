@@ -1,0 +1,25 @@
+# The manifest of the example native extension. Documented in
+# docs/writing-extensions-in-rust.md ("The manifest").
+
+protocol    = 1
+id          = "script:rust-hello"
+keyword     = "rh"
+name        = "Rust hello"
+description = "Type rh and a name for greetings; Remember saves the name. An example written with sevak-extension-sdk."
+
+[extension]
+version     = "0.1.0"
+author      = "Sevak project"
+license     = "Apache-2.0"
+min_sevak   = "0.1.0"
+repository  = "https://github.com/ninad-k/Sevak/tree/main/examples/rust-hello"
+# It only answers queries and keeps a file in its own data folder.
+permissions = []
+
+[extension.binaries]
+windows-x86_64  = "bin/rust-hello-windows-x86_64.exe"
+windows-aarch64 = "bin/rust-hello-windows-aarch64.exe"
+macos-x86_64    = "bin/rust-hello-macos-x86_64"
+macos-aarch64   = "bin/rust-hello-macos-aarch64"
+linux-x86_64    = "bin/rust-hello-linux-x86_64"
+linux-aarch64   = "bin/rust-hello-linux-aarch64"

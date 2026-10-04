@@ -374,3 +374,13 @@ sevak --config /path/to/test/config.toml --version
 ```
 
 This loads the config without starting the UI. Parsing errors are printed to the terminal.
+
+## `sevak-ext`: for extension authors
+
+Writing a [native extension in Rust](writing-extensions-in-rust.md)? A separate
+tool, `sevak-ext` (built from the Sevak repository with `cargo run -p sevak-ext --`
+or `cargo install --git https://github.com/ninad-k/Sevak sevak-ext --locked`),
+scaffolds a project (`init`), checks it (`validate`), builds the `.sevakext`
+package (`pack`, `--split` for one per platform) and prints the gallery entry
+(`entry`). It is not part of `sevak` itself: that program is the launcher and has
+no console on Windows. `sevak-ext --help` lists the options.

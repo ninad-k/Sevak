@@ -1,0 +1,20 @@
+[package]
+name = "rust-hello"
+description = "Example Sevak extension written in Rust with sevak-extension-sdk; the template in templates/rust-extension is generated from it."
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+sevak-extension-sdk = { path = "../../crates/sevak-extension-sdk" }
+
+[dev-dependencies]
+# tests/host.rs runs the built program through Sevak's real script-plugin host
+# and approval, so the SDK and the host are tested against each other.
+sevak-core.workspace = true
+sevak-platform.workspace = true
+sevak-plugins.workspace = true
+tempfile.workspace = true

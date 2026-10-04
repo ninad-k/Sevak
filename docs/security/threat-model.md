@@ -217,6 +217,7 @@ Each row was read in the code. "Where" gives the implementing file and symbol.
 | Workflow limits | `workflow/validate.rs`, `workflow/exec.rs` | Cycles and bad ports rejected; at most 200 nodes, 500 connections, 200 steps, 8 concurrent runs, a 15-minute run limit; delays capped; output capped at 4 MiB. |
 | Environment | `script/runner.rs`, `workflow/exec.rs`, `sevak-platform/src/process.rs` (`scrub_environment`) | A script starts with a small fixed environment, not Sevak's own; a manifest asks for more with `inherit_env`. Variables that change how interpreters or loaders start (`LD_*`, `DYLD_*`, `PYTHON*`, `NODE_OPTIONS` and similar) cannot be exported by a workflow or inherited. |
 | Closed result set, process trees | `script/items.rs`, `sevak-platform/src/process_tree.rs` | A script's results use a closed set of actions, and `launch` needs a declared capability. Stopping a script stops everything it started (job object on Windows, process group elsewhere). A persistent script's stderr is read with limits. |
+| Native extensions | `script/native.rs`, `script/dialog.rs`, `extensions/package.rs` | A compiled program is a script plugin whose manifest declares per-platform binaries. It takes the approval above, bound to the program's bytes; the dialog is labelled and shows publisher, declared permissions and the full SHA-256. Declared permissions are information, not enforcement. See [Writing extensions in Rust](../writing-extensions-in-rust.md#security-model). |
 | Size limits on files read | `sevak-core/src/bounded_read.rs` | Configuration, manifests, approvals, state files, caches, bookmarks, icons and description files are read through one capped function that checks the size first and stops one byte past the cap. |
 
 ### Gallery
@@ -346,7 +347,8 @@ fully mitigated is repeated under [Residual risks](#residual-risks).
 | S | A man-in-the-middle serves a fake gallery | HTTPS with the platform trust store; redirects to HTTPS and to Sevak's repository only. |
 | T | A tampered package passes | SHA-256 from the index must match; the index itself comes from the same repository at the build's release tag, so this protects the transfer, not the source (see [Gallery trust](#gallery-trust)). |
 | T | Zip-slip, symlink, zip bomb | Checks listed above. |
-| E | An installed package runs by itself | It is installed unapproved and nothing runs until the dialog. |
+| E | An installed package runs by itself | It is installed unapproved and nothing runs until the dialog. A native extension's package must also agree with its index entry (version, publisher, licence, permissions) and carries per-file checksums. |
+| E | A native extension does more than it declared | **Residual.** It is not sandboxed; the declared permissions are shown to the user, not enforced. Gallery review, public source and the Allow dialog are the controls. |
 
 ### Updater and release pipeline
 
@@ -411,6 +413,16 @@ vulnerability report: they are design properties or documented limits.
    group), but a program that deliberately leaves its group or job can outlive it.
 10. **Third-party decoders** (image and archive parsing) run before some Sevak
     size limits; a clipboard image's header is checked first on Windows only.
+
+### Native extensions
+
+A native extension is a program the user allows to run with their account's
+permissions. Sevak shows the publisher and the permissions the author declares
+and binds the allowance to the program's bytes, but it cannot check who the
+publisher is, inspect the program or limit what it does once it runs; an OS
+sandbox (or a WASM runtime) would be a separate, additional extension type.
+Programs Sevak writes also carry no download mark, so Gatekeeper and SmartScreen
+do not look at them.
 
 ### Gallery trust
 

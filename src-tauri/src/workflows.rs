@@ -528,9 +528,11 @@ fn gallery_dto(app: &AppHandle, index: &gallery::Index) -> GalleryDto {
         source: index.source.clone(),
         note: index.note.clone(),
         name: index.name.clone(),
+        // Native extensions are installed from Settings > Extensions.
         entries: index
             .entries
             .iter()
+            .filter(|entry| entry.kind != Kind::Native)
             .map(|entry| GalleryEntry {
                 installed: dirs.is_installed(entry),
                 entry: entry.clone(),

@@ -95,6 +95,48 @@ failure is reported as a failure and is never answered with different content.
   conflict; **Reinstall** on an already installed theme replaces exactly that
   theme and nothing else.
 
+### 5. Native extensions
+
+A gallery entry of kind `native` is a compiled program, so it has stricter
+handling on top of rules 1 to 4. The index stays **format 2**: an entry of a kind
+an older Sevak does not know is skipped there, so older builds simply do not list
+native extensions.
+
+- **One package per platform.** The entry lists a `platforms` table
+  (`windows-x86_64`, `macos-aarch64`, `linux-x86_64`, ...), each with a path under
+  `gallery/extensions/<id>/` and its SHA-256, so a user downloads only the build
+  for their computer. The paths are resolved against the release tag like every
+  other source (rule 2); an entry that names another host, branch or release is
+  skipped. `scripts/gallery-check.mjs` and the repository's tests refuse a
+  package that is not listed, a hash that does not match, a package over 10 MiB
+  and a file name that is not `<id>-<version>-<platform>.sevakext`.
+- **Limits.** A package is at most 32 MiB when downloaded (the gallery asks for
+  10 MiB), 100 files, 64 MiB per file and 128 MiB unpacked. Paths follow the same
+  rules as rule 4. The package carries `checksums.sha256` covering every other
+  file, and a file that is missing from it, extra to it or different from it
+  discards the package. Only programs the manifest declares are accepted.
+- **The package says what the list says.** The page shows the index entry and the
+  Allow dialog shows the package's own `plugin.toml`. Before anything is
+  written Sevak compares the version, publisher, licence and permissions in both
+  and refuses to install if they differ; the package's `id` must also be the
+  entry's. A test checks every committed entry the same way.
+- **Installed is not allowed.** The folder is new and unapproved. The approval is
+  bound to the program's bytes, so an update (a new program) asks again, and
+  declared permissions are information, not a limit. See
+  [Writing extensions in Rust](../writing-extensions-in-rust.md#security-model).
+- **Tag pinning means a release carries the list.** An entry merged to `main`
+  reaches users with the next release. That is a delay, not a hole: a shipped
+  build cannot be made to list or install something that was added later.
+- **Review is the human check.** Reviewers look for public source that builds the
+  committed binaries, permissions that match the code, an open-source licence
+  and no obfuscation. A review is not an audit, and a signature is still in the
+  backlog (below).
+- **Updates and removal** are the same code path as install for every kind:
+  an update is written aside and swapped in as one step, with the old version put
+  back if the swap fails, and removal deletes only what a receipt (the store's
+  own record in the data folder) says it installed, only inside the managed
+  folders, and only if the folder still holds a manifest.
+
 ## What this does not protect against
 
 - **No signature yet.** The hash in an index comes from the same repository as
@@ -111,6 +153,8 @@ failure is reported as a failure and is never answered with different content.
   behaviour.
 - **GitHub and TLS.** The connection is HTTPS with the system's trusted roots;
   a compromise of those, or of the account, is not addressed here.
+- **A native extension is not sandboxed.** The gallery makes sure the file
+  you get is the file listed, not that the program is harmless; see rule 5.
 - **What an installed package does** is decided by the Allow dialog and the
   script-plugin rules, not by the gallery (see the
   [threat model](threat-model.md) and

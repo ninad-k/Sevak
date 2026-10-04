@@ -21,6 +21,8 @@ pub const FIXED_KEYWORDS: &[(&str, &str)] = &[
     (":", "the emoji picker"),
     ("@", "contacts"),
     ("uuid", "the UUID generator"),
+    ("ext", "the extension store"),
+    ("store", "the extension store"),
 ];
 
 /// A keyword the user can change in `[files]`, `[bookmarks]`, `[tasks]`,

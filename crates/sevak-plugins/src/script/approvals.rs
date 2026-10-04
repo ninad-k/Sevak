@@ -36,7 +36,7 @@ const KEY_PREFIX: &str = "v2:";
 
 /// The largest file whose bytes are hashed. A bigger one is bound by its size
 /// only (nobody ships a multi-hundred-megabyte script).
-const MAX_HASHED_FILE: u64 = 256 * 1024 * 1024;
+pub(super) const MAX_HASHED_FILE: u64 = 256 * 1024 * 1024;
 
 fn format_one() -> u32 {
     1
@@ -116,6 +116,19 @@ impl ApprovalStore {
     /// The file as it is now, for checking many plugins with one read.
     pub fn snapshot(&self) -> Approvals {
         Approvals(self.read())
+    }
+
+    /// Drops what is recorded for `id` (the plugin or workflow was removed), so
+    /// a later install under the same name asks again and the file does not
+    /// keep names of things that are gone. Nothing happens if there is no record.
+    pub fn forget(&self, id: &str) -> io::Result<()> {
+        let mut record = self.read();
+        if record.approved.remove(id).is_none() {
+            return Ok(());
+        }
+        record.version = FORMAT;
+        let text = serde_json::to_string_pretty(&record).map_err(io::Error::other)?;
+        sevak_platform::private_file::write_atomic(&self.path, text.as_bytes())
     }
 
     /// Records that plugin `id` may run exactly `key`.

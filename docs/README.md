@@ -39,7 +39,8 @@ too:
 [1Password](features/1password.md) ·
 [Dictionary and spelling](features/dictionary.md) ·
 [Script plugins](features/script-plugins.md) ·
-[Workflows](workflows.md)
+[Workflows](workflows.md) ·
+[Extensions: browse and install](features/extensions.md)
 
 ## Reference
 
@@ -54,5 +55,6 @@ too:
 ## Developers
 
 - [How Sevak works](architecture.md) · [Writing plugins](plugins.md) ·
+  [Writing extensions in Rust](writing-extensions-in-rust.md) ·
   [Development](development.md) · [Name and brand](brand.md) ·
   [Media and its regeneration](media/README.md)

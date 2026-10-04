@@ -1,0 +1,18 @@
+# Used by `cargo generate`; plain copies and `sevak-ext init` ignore it.
+#
+#   cargo generate --git https://github.com/ninad-k/Sevak templates/rust-extension --name my-extension
+
+[template]
+cargo_generate_version = ">=0.18.0"
+
+[placeholders.keyword]
+type = "string"
+prompt = "Keyword (what users type to reach the extension, no spaces)"
+default = "hello"
+regex = "^[^\\s\"\\\\]+$"
+
+[placeholders.description]
+type = "string"
+prompt = "One sentence on what the extension does"
+default = "Says hello."
+regex = "^[^\"\\\\\\n]*$"
