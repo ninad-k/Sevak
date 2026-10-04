@@ -148,6 +148,7 @@ fn windows_drive_is_remote(path: &str) -> bool {
 }
 
 /// The drive letter a path starts with (`C:\x`, `c:`, `\\?\C:\x`), if any.
+#[cfg(any(windows, test))]
 fn drive_letter(path: &str) -> Option<char> {
     let unified = path.trim().replace('/', "\\");
     let rest = unified

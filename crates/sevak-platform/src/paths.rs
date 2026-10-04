@@ -86,6 +86,24 @@ impl AppPaths {
         }
     }
 
+    /// Creates the data and log folders so that only their owner can read them
+    /// (0700 on Unix; on Windows they inherit the profile's own access), and
+    /// makes the ones Sevak itself named (`sevak`, `logs`) owner-only if an
+    /// earlier version created them wider. The config folder is left to the
+    /// user's own settings. Failures are returned, not fatal: the caller logs.
+    pub fn ensure_private_dirs(&self) -> std::io::Result<()> {
+        for dir in [&self.data_dir, &self.log_dir] {
+            crate::private_file::create_private_dir_all(dir)?;
+            let ours = dir
+                .file_name()
+                .is_some_and(|name| name == OsStr::new(APP_DIR) || name == OsStr::new("logs"));
+            if ours {
+                crate::private_file::restrict_dir(dir)?;
+            }
+        }
+        Ok(())
+    }
+
     /// Where a `--config` / `SEVAK_CONFIG_DIR` value puts the config:
     /// `(config directory, config file)`. A path ending in `.toml` (that is not
     /// an existing directory) names the config file itself and its parent is
@@ -150,6 +168,43 @@ fn tilde_path(path: &std::path::Path, home: Option<&std::path::Path>) -> String 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_data_and_log_folders_are_created() {
+        let root = tempfile::tempdir().unwrap();
+        let paths = AppPaths::with_roots(root.path().join("config"), root.path().join("data"));
+        paths.ensure_private_dirs().unwrap();
+        assert!(paths.data_dir.is_dir());
+        assert!(paths.log_dir.is_dir());
+        assert!(
+            !paths.config_dir.exists(),
+            "the config folder is not ours to create"
+        );
+        // Again, with everything there.
+        paths.ensure_private_dirs().unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_data_and_log_folders_are_owner_only_even_if_an_earlier_version_made_them_wider() {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = |path: &Path| std::fs::metadata(path).unwrap().permissions().mode() & 0o777;
+        let root = tempfile::tempdir().unwrap();
+        let paths = AppPaths::with_roots(root.path().join("config"), root.path().join("data"));
+        std::fs::create_dir_all(&paths.log_dir).unwrap();
+        for dir in [&paths.data_dir, &paths.log_dir] {
+            std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        paths.ensure_private_dirs().unwrap();
+        assert_eq!(mode(&paths.data_dir), 0o700);
+        assert_eq!(mode(&paths.log_dir), 0o700);
+
+        // Fresh ones too.
+        let fresh = AppPaths::with_roots(root.path().join("c2"), root.path().join("d2"));
+        fresh.ensure_private_dirs().unwrap();
+        assert_eq!(mode(&fresh.data_dir), 0o700);
+        assert_eq!(mode(&fresh.log_dir), 0o700);
+    }
 
     #[test]
     fn home_is_abbreviated() {

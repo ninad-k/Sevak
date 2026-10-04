@@ -213,7 +213,8 @@ impl UsageSaver {
         }
         let usage = snapshot();
         let started = Instant::now();
-        match usage.save(&self.path) {
+        // The file holds the last typed queries: owner-only on Unix.
+        match usage.save_with(&self.path, sevak_platform::private_file::write_atomic) {
             Ok(()) => tracing::debug!(
                 entries = usage.len(),
                 elapsed_ms = started.elapsed().as_millis() as u64,

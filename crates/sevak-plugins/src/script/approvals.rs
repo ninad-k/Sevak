@@ -57,18 +57,9 @@ impl ApprovalStore {
     pub fn approve(&self, id: &str, key: &str) -> io::Result<()> {
         let mut record = self.read();
         record.approved.insert(id.to_owned(), key.to_owned());
-        if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent)?;
-        }
         let text = serde_json::to_string_pretty(&record).map_err(io::Error::other)?;
-        let mut temp = self.path.as_os_str().to_owned();
-        temp.push(".tmp");
-        let temp = PathBuf::from(temp);
-        let written = fs::write(&temp, text).and_then(|()| fs::rename(&temp, &self.path));
-        if written.is_err() {
-            let _ = fs::remove_file(&temp);
-        }
-        written
+        // Owner-only on Unix (0600, in a 0700 folder it creates).
+        sevak_platform::private_file::write_atomic(&self.path, text.as_bytes())
     }
 }
 
@@ -97,6 +88,24 @@ mod tests {
         );
         assert!(store.is_approved("script:b", "node b.js"));
         assert!(!dir.path().join("sub").join("approvals.json.tmp").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_approvals_file_is_private_to_the_owner() {
+        use std::os::unix::fs::PermissionsExt;
+        let mode =
+            |path: &std::path::Path| fs::metadata(path).unwrap().permissions().mode() & 0o777;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state").join("approvals.json");
+        let store = ApprovalStore::new(path.clone());
+        store.approve("script:a", "python main.py").unwrap();
+        assert_eq!(mode(&path), 0o600);
+        assert_eq!(mode(path.parent().unwrap()), 0o700);
+        // Rewriting a file that was left wider by an older version tightens it.
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+        store.approve("script:b", "node b.js").unwrap();
+        assert_eq!(mode(&path), 0o600);
     }
 
     #[test]
