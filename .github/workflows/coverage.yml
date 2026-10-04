@@ -1,0 +1,86 @@
+name: Coverage
+
+# Report-only: measures how much of the code the tests run and shows it in the
+# job summary, with the full lcov and HTML reports attached as an artifact.
+# Nothing is uploaded to an outside service and nothing gates a merge.
+#
+#   Rust  cargo-llvm-cov on Linux, library crates (sevak-core, sevak-platform,
+#         sevak-plugins). Only the Linux code of sevak-platform runs here; the
+#         Windows and macOS backends are exercised by CI's own test jobs.
+#   UI    Vitest with the v8 provider (npm run test:coverage).
+on:
+  pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "landing/**"
+      - "**/*.md"
+  schedule:
+    - cron: "17 4 * * 1" # Mondays 04:17 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: coverage-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  RUST_BACKTRACE: "1"
+
+jobs:
+  coverage:
+    name: Coverage (Linux)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - uses: Swatinem/rust-cache@v2
+
+      # Pinned by commit; the comment is the release it points at.
+      - uses: taiki-e/install-action@861a07ce7084f55488e375df125cdc99bba60eb7 # v2.87.23
+        with:
+          tool: cargo-llvm-cov
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Run the Rust tests with coverage
+        run: >
+          cargo llvm-cov --no-report
+          -p sevak-core -p sevak-platform -p sevak-plugins
+          --ignore-filename-regex '(/tests/|/benches/|test_util\.rs)'
+
+      - name: Write the Rust reports
+        run: |
+          mkdir -p coverage
+          cargo llvm-cov report --lcov --output-path coverage/rust.lcov
+          cargo llvm-cov report --html --output-dir coverage/rust-html
+          cargo llvm-cov report --json --summary-only --output-path coverage/rust-summary.json
+
+      - name: Run the UI tests with coverage
+        run: |
+          npm ci
+          npm run test:coverage
+
+      - name: Summarize
+        run: |
+          node scripts/coverage-summary.mjs \
+            --rust coverage/rust-summary.json \
+            --ui ui/coverage/coverage-summary.json >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          retention-days: 30
+          path: |
+            coverage/
+            ui/coverage/

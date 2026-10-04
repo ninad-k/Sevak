@@ -59,6 +59,36 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
 
+  # Unit tests of the frontend's pure TypeScript logic (Vitest; no browser, no Rust).
+  ui-tests:
+    name: UI unit tests
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm test
+
+  # Coarse guard against catastrophic search slowdowns: the default engine over a
+  # large mock index must answer typical queries in well under 100 ms (p95). Needs
+  # an optimized build, so it runs here instead of in the debug `cargo test`.
+  latency-budget:
+    name: Search latency budget
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - run: cargo test --profile fast-release -p sevak-plugins --test latency -- --nocapture
+
   fedora:
     name: Build and test (Fedora ${{ matrix.fedora }})
     runs-on: ubuntu-latest
