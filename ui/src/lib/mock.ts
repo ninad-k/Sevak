@@ -459,6 +459,7 @@ export function mockSettings(): SettingsDto {
       { id: "shell", name: "Terminal commands", description: "Type `> command` to run it in a terminal; recent commands are offered again.", keyword: ">", enabled: true },
       { id: "uuid", name: "UUID generator", description: "Type `uuid ` to generate random UUIDs; Enter copies one.", keyword: "uuid", enabled: false },
     ],
+    startup: { registered: false, enabled: false, error: null },
     display: mockDisplay(),
     is_gnome: true,
     config_path: "C:/Users/someone/AppData/Roaming/sevak/config.toml",

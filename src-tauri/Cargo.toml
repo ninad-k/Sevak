@@ -23,7 +23,6 @@ serde_json.workspace = true
 semver.workspace = true
 # macos-private-api: a transparent window on macOS (app.macOSPrivateApi).
 tauri = { workspace = true, features = ["tray-icon", "macos-private-api"] }
-tauri-plugin-autostart.workspace = true
 tauri-plugin-dialog.workspace = true
 tauri-plugin-global-shortcut.workspace = true
 tauri-plugin-notification.workspace = true

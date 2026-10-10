@@ -49,6 +49,11 @@ LangString sevakFinishText ${LANG_ENGLISH} "Sevak waits quietly in the system tr
 LangString sevakRunNow ${LANG_ENGLISH} "Start Sevak now"
 LangString sevakOpenSettings ${LANG_ENGLISH} "Open Sevak Settings"
 LangString sevakDesktopShortcut ${LANG_ENGLISH} "Create a desktop shortcut"
+LangString sevakStartAtSignIn ${LANG_ENGLISH} "Start Sevak when I sign in"
+LangString sevakStartupHint ${LANG_ENGLISH} "For your account only, including an all-users installation. Sevak starts quietly in the tray. Change this later in Settings > General."
+LangString sevakStartupElevatedHint ${LANG_ENGLISH} "To choose startup for your account, start this installer normally (without Run as administrator), or change Settings > General after installation."
+LangString sevakStartupFailed ${LANG_ENGLISH} "Sevak was installed, but your startup preference could not be saved. Open Sevak > Settings > General to set 'Start Sevak when I sign in'."
+LangString sevakStartupRemoveFailed ${LANG_ENGLISH} "Your sign-in startup entry could not be checked. If Sevak remains listed in Windows Settings > Apps > Startup, turn it off there. Other accounts' preferences were not changed."
 
 ; ---- Who is Sevak for? ------------------------------------------------------
 

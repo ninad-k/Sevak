@@ -42,7 +42,6 @@ pub fn run(
                 Launch::Quit => quit(app),
             }
         }))
-        .plugin(autostart::plugin())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(updater::plugin());

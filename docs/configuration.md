@@ -63,7 +63,7 @@ Main hotkeys and startup behaviour.
 | `actions_hotkey` | string | `"Ctrl+Alt+Space"` | Hotkey for Universal Actions: capture the selection in the foreground app and offer actions on it. Empty string `""` turns Universal Actions off. On Wayland, run `sevak --setup-hotkey` to bind this in GNOME. |
 | `accept_injected_hotkeys` | boolean | `false` | Windows keyboard hook only. By default the hook ignores key events that another program sends (`SendInput`), so no program on your desktop can open Sevak or make Universal Actions copy the foreground app's selection by pressing the shortcut for you. Turn it on if **AutoHotkey, PowerToys Keyboard Manager** or another remapper is meant to type Sevak's shortcut. Shortcuts that Windows itself registers (not Win-key combinations or keys another app owns) are still delivered by the system whoever sends them. |
 | `hide_on_blur` | boolean | `true` | Hide the launcher when it loses focus to another window. Press Esc or click elsewhere to close; this setting hides it automatically. |
-| `launch_at_login` | boolean | `false` | Start Sevak when you log in to your desktop. |
+| `launch_at_login` | boolean | `false` | Start Sevak in the background after this account signs in to Windows, macOS or Linux. Set in **Settings → General → Start Sevak when I sign in**, then **Save**; the Windows installer uses the same preference. An OS-level startup restriction can still prevent launch; Settings shows registration errors or a disabled/missing entry. |
 | `check_for_updates` | boolean | `true` | Check GitHub for a new version shortly after startup, every six hours, and whenever you open Sevak (if the last check is over an hour old). Updates are only installed after you confirm. Apart from optional currency rates, this is the only automatic network request. |
 | `update_channel` | `"stable"` or `"beta"` | `"stable"` | Which releases the update check follows. `"beta"` also offers pre-release builds (`X.Y.Z-beta.N`), which arrive earlier and may be less tested; Sevak then reads `latest-beta.json` from GitHub Releases as well as `latest.json` and offers the newer of the two. Switching back to `"stable"` never downgrades: Sevak waits for a stable version newer than the one installed. Any other value means `"stable"`. |
 
@@ -77,6 +77,19 @@ launch_at_login = false
 check_for_updates = true
 update_channel = "stable"
 ```
+
+Startup is per user, including a Windows installation for all users. It does not
+launch before sign-in, require administrator rights to run, or open the search
+window automatically. Windows uses a per-user Startup apps entry, macOS a user
+LaunchAgent, and Linux a desktop autostart entry. See [Start Sevak after
+sign-in](install.md#start-sevak-after-sign-in) for controls and troubleshooting.
+
+The saved opt-in and the OS's effective startup state are separate. Disabling
+startup in Windows Startup apps or a Linux desktop's startup settings is
+respected during ordinary startup and unrelated Settings saves. To opt in
+again through Sevak, save `false`, then save `true`. A failed Settings save
+keeps the previous preference and shows the error; check the registration
+warning before assuming automatic launch is active.
 
 ### [window]
 

@@ -82,11 +82,35 @@ Automatically close the launcher when you click outside it or switch to another 
 
 Links to: `[general] hide_on_blur` in configuration.
 
-### Launch at login
+### Start Sevak when I sign in
 
-Start Sevak in the background when you sign in.
+Turn this on under **General**, then click **Save**. Sevak starts in the
+background after you sign in to Windows, macOS or a Linux desktop, including
+after a restart. Use your shortcut to open the launcher; signing in does not
+open the search window. Turn the option off and **Save** to stop automatic starts.
 
-Links to: `[general] launch_at_login` in configuration.
+This is off on a fresh install and applies only to your account, even when the
+Windows app is installed for everyone. The Windows installer checkbox controls
+the same preference; **Start Sevak now** is a separate, one-time action.
+
+Sevak reports errors if it cannot register startup, rather than reporting a
+successful save. It also shows a warning when your saved opt-in has been
+disabled outside Sevak or the startup entry is missing. Windows exposes the
+entry under **Settings → Apps → Startup** (also **Task Manager → Startup apps**).
+macOS may restrict background items in **System Settings → General → Login
+Items**; Linux desktops have their own startup application settings. Turning
+startup off in your OS is respected when Sevak next starts or you save unrelated
+settings. To re-enable it, use the OS control or turn this option off and **Save**,
+then on and **Save** again.
+
+Install Sevak in its permanent location first. For an AppImage, keep that file
+in the same folder so the startup entry can find it. A macOS `.dmg` and Linux
+packages have no Windows-style setup checkbox: launch the installed app and
+use this setting. If an organization manages startup policy, it can prevent
+automatic starts even when the preference is on.
+
+Links to: `[general] launch_at_login` in [Configuration](configuration.md#general)
+and [installation instructions](install.md#start-sevak-after-sign-in).
 
 ### Check for updates
 

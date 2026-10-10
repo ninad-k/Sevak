@@ -39,6 +39,7 @@ pub mod secret;
 mod secret_hint;
 pub mod session;
 pub mod spotlight;
+pub mod startup;
 pub mod system;
 pub mod tasks;
 pub mod terminal;

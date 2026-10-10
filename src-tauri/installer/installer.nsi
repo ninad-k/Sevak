@@ -120,6 +120,16 @@ Var OtherVer
 Var OtherDir
 Var OtherScopeName
 Var WixKey             ; registry subkey of an earlier MSI install, when there is one
+Var StartupChoice      ; empty preserves the preference; only "on" / "off" change it
+Var StartupExplicit    ; /AUTOSTART= explicitly requests persistence even if state matches
+Var StartupFresh       ; wizard with no installed copy must save even its unchecked default
+Var StartupInitial     ; effective Run/StartupApproved state, read before elevation
+Var StartupRegistered  ; distinguishes an absent Run entry from one Windows disabled
+Var StartupSelected
+Var StartupCheckbox
+Var StartupResultFile  ; created by the original user, also writable after over-the-shoulder UAC
+Var StartupCommand
+Var StartupCommandResult
 ; SEVAK end
 
 Name "${PRODUCTNAME}"
@@ -257,6 +267,25 @@ Function PageScope
   ${NSD_CreateAdditionalRadioButton} 12u 62u -12u 24u "$(sevakScopeMachine)"
   Pop $ScopePageMachine
 
+  ; Startup belongs to the signing-in account, independently of install scope.
+  ${NSD_CreateCheckbox} 12u 100u -12u 12u "$(sevakStartAtSignIn)"
+  Pop $StartupCheckbox
+  StrCpy $StartupSelected $StartupInitial
+  ${If} $StartupChoice == "on"
+    StrCpy $StartupSelected 1
+  ${ElseIf} $StartupChoice == "off"
+    StrCpy $StartupSelected 0
+  ${EndIf}
+  SendMessage $StartupCheckbox ${BM_SETCHECK} $StartupSelected 0
+  ${NSD_CreateLabel} 12u 116u -12u 30u "$(sevakStartupHint)"
+  Pop $0
+  ${If} $StartupResultFile == ""
+    ; An installer started already elevated has no original-user handoff.
+    ; Never guess that the administrator's HKCU is the intended account.
+    EnableWindow $StartupCheckbox 0
+    ${NSD_SetText} $0 "$(sevakStartupElevatedHint)"
+  ${EndIf}
+
   ${If} $InstallScope == "machine"
     SendMessage $ScopePageMachine ${BM_SETCHECK} ${BST_CHECKED} 0
     ${NSD_SetFocus} $ScopePageMachine
@@ -267,6 +296,18 @@ Function PageScope
   nsDialogs::Show
 FunctionEnd
 Function PageLeaveScope
+  ${NSD_GetState} $StartupCheckbox $StartupSelected
+  StrCpy $StartupFresh 0
+  ${If} $UserUninst == ""
+  ${AndIf} $MachUninst == ""
+  ${AndIf} $WixMode <> 1
+  ${AndIf} $StartupResultFile != ""
+    StrCpy $StartupFresh 1
+  ${EndIf}
+  ${If} $StartupResultFile != ""
+  ${OrIf} $StartupExplicit = 1
+    Call ResolveStartupChoice
+  ${EndIf}
   ${NSD_GetState} $ScopePageMachine $0
   ${If} $0 = ${BST_CHECKED}
     StrCpy $InstallScope "machine"
@@ -526,6 +567,7 @@ FunctionEnd
 {{/each}}
 
 Function .onInit
+  Call InitStartup ; SEVAK: capture the original account before possible elevation
   ${GetOptions} $CMDLINE "/P" $PassiveMode
   ${IfNot} ${Errors}
     StrCpy $PassiveMode 1
@@ -648,16 +690,196 @@ FunctionEnd
 !insertmacro SevakScopeFunctions ""
 !insertmacro SevakScopeFunctions "un."
 
+; SEVAK: login startup -------------------------------------------------------
+
+; The original unelevated process reserves the receipt filename before UAC.
+; RunAsUser uses the desktop shell token, so even an alternate administrator
+; cannot accidentally enroll their own account or every account on the PC.
+!macro SevakStartupFunctions PREFIX
+  Function ${PREFIX}InitStartupResult
+    ${GetOptions} $CMDLINE "/LOGINRESULT=" $StartupResultFile
+    ${If} ${Errors}
+      StrCpy $StartupResultFile ""
+      Call ${PREFIX}CheckElevated
+      ${If} $IsElevated <> 1
+        GetTempFileName $StartupResultFile
+      ${EndIf}
+    ${EndIf}
+  FunctionEnd
+
+  ; Both commands and receipts are generated here, not assembled through a
+  ; shell. The helper exits before Tauri starts (no launcher or single instance).
+  ; Wait for its receipt so uninstall cannot delete a still-running executable.
+  Function ${PREFIX}RunStartupCommand
+    StrCpy $StartupCommandResult 2
+    ${If} $StartupResultFile == ""
+      Return
+    ${EndIf}
+    Delete "$StartupResultFile"
+    nsis_tauri_utils::RunAsUser "$INSTDIR\${MAINBINARYNAME}.exe" '$StartupCommand --startup-result "$StartupResultFile"'
+    Pop $0
+    ${If} $0 <> 0
+      Return
+    ${EndIf}
+    StrCpy $1 0
+    ${PREFIX}startup_wait:
+      ClearErrors
+      FileOpen $0 "$StartupResultFile" r
+      ${IfNot} ${Errors}
+        FileRead $0 $2
+        FileClose $0
+        ${If} $2 == "0$\n"
+        ${OrIf} $2 == "0$\r$\n"
+          StrCpy $StartupCommandResult 0
+          Return
+        ${ElseIf} $2 == "1$\n"
+        ${OrIf} $2 == "1$\r$\n"
+          StrCpy $StartupCommandResult 1
+          Return
+        ${ElseIf} $2 == "2$\n"
+        ${OrIf} $2 == "2$\r$\n"
+          Return
+        ${EndIf}
+      ${EndIf}
+      Sleep 100
+      IntOp $1 $1 + 1
+      ${If} $1 < 100
+        Goto ${PREFIX}startup_wait
+      ${EndIf}
+  FunctionEnd
+!macroend
+!insertmacro SevakStartupFunctions ""
+!insertmacro SevakStartupFunctions "un."
+
+Function InitStartup
+  Call InitStartupResult
+  StrCpy $StartupChoice ""
+  StrCpy $StartupExplicit 0
+  ${GetOptions} $CMDLINE "/AUTOSTART=" $0
+  ${IfNot} ${Errors}
+    StrCpy $StartupExplicit 1
+    ${If} $0 == "on"
+      StrCpy $StartupChoice "on"
+    ${ElseIf} $0 == "off"
+      StrCpy $StartupChoice "off"
+    ${Else}
+      SetErrorLevel 1639 ; ERROR_INVALID_COMMAND_LINE
+      Quit
+    ${EndIf}
+  ${EndIf}
+
+  ; Never execute an older installed Sevak to query state: it may not understand
+  ; --startup-status. Read Windows' existing choice without changing it instead.
+  StrCpy $StartupInitial 0
+  StrCpy $StartupRegistered 0
+  ${GetOptions} $CMDLINE "/LOGINREGISTERED=" $0
+  ${IfNot} ${Errors}
+    ${If} $0 == "1"
+      StrCpy $StartupRegistered 1
+    ${EndIf}
+  ${EndIf}
+  ${GetOptions} $CMDLINE "/LOGININITIAL=" $0
+  ${IfNot} ${Errors}
+    ${If} $0 == "1"
+      StrCpy $StartupInitial 1
+    ${EndIf}
+    Return
+  ${EndIf}
+  ${If} $StartupResultFile == ""
+    Return
+  ${EndIf}
+  ${If} ${RunningX64}
+    SetRegView 64
+  ${EndIf}
+  ReadRegStr $0 HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCTNAME}"
+  ${If} $0 == ""
+    Return
+  ${EndIf}
+  StrCpy $StartupRegistered 1
+  StrCpy $StartupInitial 1
+
+  ; Windows Settings / Task Manager can disable an otherwise present Run value.
+  ; StartupApproved is REG_BINARY; only known states 2 and 6 mean enabled. Read the native
+  ; view explicitly because the NSIS process itself is 32-bit.
+  System::Call 'advapi32::RegOpenKeyExW(p 0x80000001, w "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run", i 0, i 0x20119, *p .r0) i .r3'
+  ${If} $3 = 0
+    System::Alloc 12
+    Pop $1
+    ${If} $1 <> 0
+      StrCpy $2 12
+      System::Call 'advapi32::RegQueryValueExW(p r0, w "${PRODUCTNAME}", p 0, *i .r4, p r1, *i r2) i .r3'
+      ${If} $3 = 0
+      ${AndIf} $4 = 3 ; REG_BINARY
+        System::Call '*$1(i .r2)'
+        ${If} $2 <> 2
+        ${AndIf} $2 <> 6
+          StrCpy $StartupInitial 0
+        ${EndIf}
+      ${EndIf}
+      System::Free $1
+    ${EndIf}
+    System::Call 'advapi32::RegCloseKey(p r0)'
+  ${EndIf}
+FunctionEnd
+
+; Keep an unchanged upgrade choice empty so it does not overwrite a preference
+; or Windows' disabled state. A fresh wizard saves even an unchecked default,
+; because an older uninstalled copy may have left autostart=true in config.toml.
+Function ResolveStartupChoice
+  StrCpy $StartupChoice ""
+  ${If} $StartupSelected <> $StartupInitial
+  ${OrIf} $StartupExplicit = 1
+  ${OrIf} $StartupFresh = 1
+    ${If} $StartupSelected = 1
+      StrCpy $StartupChoice "on"
+    ${Else}
+      StrCpy $StartupChoice "off"
+    ${EndIf}
+  ${ElseIf} $StartupSelected = 0
+  ${AndIf} $StartupRegistered = 0
+    ; A saved true preference without a Run entry would otherwise be repaired
+    ; on first launch, contradicting the unchecked choice in this wizard.
+    StrCpy $StartupChoice "off"
+  ${EndIf}
+FunctionEnd
+
+; A changed installation path needs a registration refresh even if Windows has
+; disabled its entry. Refresh preserves arguments, config and OS approval, and
+; does not create an entry. Keep-both installations do not claim the other copy.
+Function SelectStartupCommand
+  StrCpy $StartupCommand ""
+  ${If} $StartupChoice != ""
+    StrCpy $StartupCommand "--set-startup $StartupChoice"
+  ${ElseIf} $SameUninst != ""
+  ${AndIf} $SameDir != ""
+  ${AndIf} $SameDir != $INSTDIR
+    StrCpy $StartupCommand "--refresh-startup"
+  ${ElseIf} $RemoveOther = 1
+  ${AndIf} $OtherUninst != ""
+  ${AndIf} $OtherDir != ""
+  ${AndIf} $OtherDir != $INSTDIR
+    StrCpy $StartupCommand "--refresh-startup"
+  ${EndIf}
+FunctionEnd
+; SEVAK end
+
 ; Runs this installer again with administrator rights (the UAC prompt) and the same
 ; switches plus /ELEVATED /ALLUSERS. $0 = 1 when Windows started it (the caller
 ; quits), 0 when the prompt was refused. The strings go through registers because a
 ; quote inside the switches would end the System plugin's string.
 Function RelaunchElevated
   ${GetParameters} $1
-  StrCpy $3 "/ELEVATED /ALLUSERS $1"
+  ; Keep /D= at the end of the original parameters. These internal switches
+  ; carry the original account's choice and receipt across an alternate-admin UAC.
+  StrCpy $3 '/ELEVATED /ALLUSERS /LOGININITIAL=$StartupInitial /LOGINREGISTERED=$StartupRegistered /LOGINRESULT="$StartupResultFile"'
+  ${If} $StartupChoice != ""
+    StrCpy $3 "$3 /AUTOSTART=$StartupChoice"
+  ${EndIf}
+  StrCpy $3 "$3 $1"
   StrCpy $4 "$EXEPATH"
   System::Call 'shell32::ShellExecuteW(p $HWNDPARENT, t "runas", t r4, t r3, p 0, i 1) i .r2'
   ${If} $2 > 32 ; ShellExecute returns a value above 32 on success
+    StrCpy $StartupResultFile "" ; the child now owns and cleans up the receipt
     StrCpy $0 1
   ${Else}
     StrCpy $0 0
@@ -1129,6 +1351,22 @@ Section Install
     !insertmacro NSIS_HOOK_POSTINSTALL
   !endif
 
+  ; Refresh changed paths independently of launch-now, without reenabling a
+  ; disabled registration. Unchanged upgrades do not rewrite the preference.
+  Call SelectStartupCommand
+  ${If} $StartupCommand != ""
+    Call RunStartupCommand
+    ${If} $StartupCommandResult <> 0
+      DetailPrint "$(sevakStartupFailed)"
+      SetErrorLevel 2
+      ${IfNot} ${Silent}
+      ${AndIf} $PassiveMode <> 1
+        MessageBox MB_ICONEXCLAMATION "$(sevakStartupFailed)"
+      ${EndIf}
+    ${EndIf}
+  ${EndIf}
+  Delete "$StartupResultFile"
+
   ; Auto close this page for passive mode
   ${If} $PassiveMode = 1
     SetAutoClose true
@@ -1146,6 +1384,10 @@ Function .onInstSuccess
       nsis_tauri_utils::RunAsUser "$INSTDIR\${MAINBINARYNAME}.exe" "$R0"
     ${EndIf}
   ${EndIf}
+FunctionEnd
+
+Function .onGUIEnd
+  Delete "$StartupResultFile"
 FunctionEnd
 
 Function un.onInit
@@ -1167,6 +1409,10 @@ Function un.onInit
   ${GetOptions} $CMDLINE "/MOVE" $MoveMode
   ${IfNot} ${Errors}
     StrCpy $MoveMode 1
+  ${EndIf}
+  ${If} $UpdateMode <> 1
+  ${AndIf} $MoveMode <> 1
+    Call un.InitStartupResult
   ${EndIf}
 
   ; SEVAK: which scope is this uninstall for, and does it need administrator rights?
@@ -1219,7 +1465,7 @@ FunctionEnd
 ; Starts uninstall.exe again from the install folder, elevated, with the same
 ; switches. $0 = 1 when Windows started it, 0 when the prompt was refused.
 Function un.RelaunchElevated
-  StrCpy $3 "/ELEVATED /ALLUSERS"
+  StrCpy $3 '/ELEVATED /ALLUSERS /LOGINRESULT="$StartupResultFile"'
   ${If} ${Silent}
     StrCpy $3 "$3 /S"
   ${EndIf}
@@ -1235,12 +1481,17 @@ Function un.RelaunchElevated
   StrCpy $4 "$INSTDIR\uninstall.exe"
   System::Call 'shell32::ShellExecuteW(p $HWNDPARENT, t "runas", t r4, t r3, p 0, i 1) i .r2'
   ${If} $2 > 32
+    StrCpy $StartupResultFile "" ; the elevated child owns this receipt now
     StrCpy $0 1
   ${Else}
     StrCpy $0 0
   ${EndIf}
 FunctionEnd
 ; SEVAK end
+
+Function un.onGUIEnd
+  Delete "$StartupResultFile"
+FunctionEnd
 
 Section Uninstall
 
@@ -1250,9 +1501,39 @@ Section Uninstall
 
   !insertmacro CheckIfAppIsRunning "$INSTDIR\${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
 
-  ; Delete the app directory and its content from disk
-  ; Copy main executable
-  Delete "$INSTDIR\${MAINBINARYNAME}.exe"
+  ; Run the path-aware cleanup before deleting the executable, in the original
+  ; desktop user's context. Updates and scope moves retain their registration.
+  ${If} $UpdateMode <> 1
+  ${AndIf} $MoveMode <> 1
+    StrCpy $StartupCommand "--remove-startup"
+    Call un.RunStartupCommand
+    ${If} $StartupCommandResult <> 0
+      DetailPrint "$(sevakStartupRemoveFailed)"
+      ${IfNot} ${Silent}
+      ${AndIf} $PassiveMode <> 1
+        MessageBox MB_ICONEXCLAMATION "$(sevakStartupRemoveFailed)"
+      ${EndIf}
+    ${EndIf}
+    Delete "$StartupResultFile"
+  ${EndIf}
+
+  ; Delete the app directory and its content from disk.
+  ; SEVAK: the startup receipt is written just before the helper exits. Give its
+  ; executable handle time to close; defer to reboot if Windows still holds it.
+  StrCpy $3 0
+  sevak_delete_main:
+    ClearErrors
+    Delete "$INSTDIR\${MAINBINARYNAME}.exe"
+    ${If} ${Errors}
+    ${AndIf} $3 < 20
+      Sleep 100
+      IntOp $3 $3 + 1
+      Goto sevak_delete_main
+    ${EndIf}
+    ${If} ${Errors}
+      Delete /REBOOTOK "$INSTDIR\${MAINBINARYNAME}.exe"
+    ${EndIf}
+  ; SEVAK end
 
   ; Delete resources
   {{#each resources}}
@@ -1326,15 +1607,9 @@ Section Uninstall
     DeleteRegKey HKCU "${UNINSTKEY}"
   !endif
 
-  ; Removes the Autostart entry for ${PRODUCTNAME} from the HKCU Run key if it exists.
-  ; This ensures the program does not launch automatically after uninstallation if it exists.
-  ; If it doesn't exist, it does nothing.
-  ; We do this when not updating (to preserve the registry value on updates)
-  ; SEVAK: nor when Sevak only moves to the other scope (/MOVE)
-  ${If} $UpdateMode <> 1
-  ${AndIf} $MoveMode <> 1
-    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCTNAME}"
-  ${EndIf}
+  ; SEVAK: startup cleanup happens before deleting the executable above. Never
+  ; delete an unverified HKCU Run value: it may belong to another Sevak copy or
+  ; to the administrator who approved elevation rather than the desktop user.
 
   ; Delete app data if the checkbox is selected
   ; and if not updating

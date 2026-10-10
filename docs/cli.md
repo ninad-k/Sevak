@@ -13,6 +13,10 @@ Sevak can be controlled from the command line or automated with scripts. When Se
 | `--actions` | Universal Actions: capture the selection in the foreground app |
 | `--trigger WORKFLOW/ID [TEXT]` | Start a workflow's external trigger, with TEXT as its argument |
 | `--background` | Start Sevak without showing the window |
+| `--set-startup on` / `--set-startup off` | Enable/disable this account's sign-in startup and save the same preference used in Settings |
+| `--startup-status` | Exit with `0` if startup is enabled, `1` if disabled, `2` if it cannot be checked; no window |
+| `--refresh-startup` | Update an existing startup entry to this executable's path while keeping its arguments, config path and disabled state; do not create an entry or change the saved preference |
+| `--remove-startup` | Remove this executable's own startup entry for uninstall cleanup; no window |
 | `--settings` | Open the Settings window |
 | `--quit` | Quit the running instance |
 | `--setup-hotkey [KEY]` | Bind hotkeys to GNOME (Wayland desktop on Linux); offers to free Super+Space |
@@ -76,6 +80,42 @@ sevak --background
 ```
 
 Start Sevak in the background. The search bar does not appear. Useful for the `launch_at_login` setting or autostart scripts.
+
+#### Start at sign-in
+
+```bash
+sevak --set-startup on
+sevak --startup-status
+sevak --set-startup off
+```
+
+The startup helpers run without opening a window or forwarding a request to
+an already-running launcher. `--set-startup` updates the per-user OS registration
+and `general.launch_at_login`, retaining other settings and TOML comments. A
+registration or save error fails the command and preserves the previous state.
+Use the helper from the account that should start Sevak; a machine-wide install
+does not make the opt-in apply to all users.
+
+`--startup-status` reports the OS entry's state through its exit code (`0` on,
+`1` off, `2` error). `--remove-startup` is an installer cleanup command: it removes
+only the startup entry owned by this executable, so uninstalling a different
+copy cannot remove the active copy's entry. For ordinary use, choose
+`--set-startup off` to update both the registration and the saved preference.
+
+`--refresh-startup` is for an installer moving Sevak to a different folder. It
+changes only the executable path in an existing registration, retaining the
+original arguments (including a custom `--config` path) and an OS-disabled
+state. It does nothing when no entry exists and never writes the startup
+preference. Windows installers apply explicit startup choices and refresh
+existing paths before automatically launching Sevak.
+
+An older Windows version may have created a machine-wide Run entry if it was
+launched as administrator. Sevak reports an actionable error when that entry
+points to this copy, rather than changing startup for all users. See
+[legacy Windows startup](install.md#legacy-windows-startup).
+
+See [Start Sevak after sign-in](install.md#start-sevak-after-sign-in) for the
+Settings controls and OS-specific behavior.
 
 #### `--run ID`
 
