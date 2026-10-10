@@ -1,0 +1,16 @@
+# Type "days" and a date: "days 2026-12-25", "days 2026-01-01 2026-12-31", "days +90"
+# or "days 2026-03-01 + 45".
+#
+# A one-shot Python plugin (Python 3.8 or newer, standard library only) that
+# counts days until or between dates and adds or subtracts days. Offline;
+# writes no files. Enter copies the row you picked.
+protocol    = 1
+id          = "script:date-calculator"
+name        = "Date calculator (Python)"
+description = "days 2026-12-25, days +90, days 2026-01-01 2026-12-31: days until or between dates, and date plus N days. Offline."
+keyword     = "days"
+mode        = "oneshot"
+script      = "days.py"
+
+# Python starts a little slower than the default 50 ms wait.
+timeout_ms  = 200

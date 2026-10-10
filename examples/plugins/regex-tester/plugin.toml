@@ -1,0 +1,16 @@
+# Type "rx", a pattern, " :: " and some text: "rx (\d+)-(\d+) :: call 555-1234".
+#
+# A one-shot Python plugin (Python 3.8 or newer, standard library only) that
+# tests a regular expression (Python `re` syntax) against text and lists the
+# matches and their groups. The text is capped at 2000 characters. Offline;
+# writes no files. Enter copies the row you picked.
+protocol    = 1
+id          = "script:regex-tester"
+name        = "Regex tester (Python)"
+description = "rx (\\d+)-(\\d+) :: call 555-1234 lists every match and capture group of a regular expression. Offline."
+keyword     = "rx"
+mode        = "oneshot"
+script      = "regex.py"
+
+# Python starts a little slower than the default 50 ms wait.
+timeout_ms  = 500

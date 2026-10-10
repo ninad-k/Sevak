@@ -1,0 +1,15 @@
+# Type "chmod" and a mode: "chmod 755", "chmod 0644", "chmod 4755" or "chmod rwxr-xr-x".
+#
+# A one-shot Python plugin (Python 3.8 or newer, standard library only) that
+# converts between octal and symbolic Unix permissions and explains each class.
+# It only calculates; it never changes a file. Offline. Enter copies a row.
+protocol    = 1
+id          = "script:chmod-calculator"
+name        = "chmod calculator (Python)"
+description = "chmod 755 or chmod rwxr-xr-x: octal and symbolic Unix permissions, what each class may do. Calculates only. Offline."
+keyword     = "chmod"
+mode        = "oneshot"
+script      = "chmod.py"
+
+# Python starts a little slower than the default 50 ms wait.
+timeout_ms  = 200

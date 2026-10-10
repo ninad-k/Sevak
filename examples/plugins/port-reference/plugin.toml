@@ -1,0 +1,15 @@
+# Type "port" and a number or service: "port 443", "port ssh", "port postgres".
+#
+# A one-shot Python plugin (Python 3.8 or newer, standard library only) with a
+# built-in table of common TCP/UDP ports. It never scans or contacts anything.
+# Offline; writes no files. Enter copies the port number.
+protocol    = 1
+id          = "script:port-reference"
+name        = "Port reference (Python)"
+description = "port 5432, port ssh: what a TCP/UDP port number is normally used for, and common dev-server ports. Offline."
+keyword     = "port"
+mode        = "oneshot"
+script      = "ports.py"
+
+# Python starts a little slower than the default 50 ms wait.
+timeout_ms  = 200
