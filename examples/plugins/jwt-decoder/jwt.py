@@ -1,4 +1,4 @@
-"""Decode a JSON Web Token for the "jwt" keyword (Sevak one-shot plugin).
+"""Decode a JSON Web Token for the "pyjwt" keyword (Sevak one-shot plugin).
 
 Paste a token (with or without "Bearer ") and see its header, payload and the
 time claims (exp, iat, nbf) in plain language. The token is only decoded: the

@@ -270,12 +270,11 @@ knows what is checked by hand because it cannot be checked by a machine.
 | INS-8 | all | Uninstall (Settings > Apps on Windows; delete the app on macOS; `apt remove` or `dnf remove`) | Sevak disappears from the menus and stops; the config and data folders are left in place (see [Files and data](files-and-data.md)); the launch-at-login entry is removed (check Startup apps or Login Items) | None | S2 |
 | INS-9 | all | Uninstall, then reinstall | Old settings are picked up | None | S3 |
 
-#### Installer scenarios
+#### Windows installer scenarios
 
-!!! note "Pending the branded installer"
-    A separate effort is building the branded Windows installer. Until it lands,
-    run these against the NSIS and MSI packages above and note the deviations.
-    Update this section when the installer ships.
+Run these against the branded Windows installer. They remain manual checks
+because packaging CI builds the installers but does not exercise their UI or
+installation behaviour on a real desktop.
 
 | ID | OS | Scenario | Steps | Expected | Sev |
 |---|---|---|---|---|---|
@@ -531,13 +530,13 @@ quits something, check that a confirmation appears and cancel it.
 | UPD-4 | all | Turn "Check for updates" off in Settings; watch the network | No update request at startup, every six hours, or on opening the launcher | None | S1 |
 | UPD-5 | W | Scoop or winget install (when published) | Scoop installs leave updates to the package manager (the tray names the command); winget keeps Sevak's own updater | `ManagedBy` marker tested | S2 |
 | UPD-6 | L | AUR install (when published) | Same: self-update off | Marker tested | S3 |
-| UPD-7 | all | Beta channel (when present): switch to Beta in Settings, check for updates, then switch back to Stable | Beta builds are offered only on Beta; going back to Stable does not offer a downgrade without asking and never loses config | Not yet testable | S2 |
+| UPD-7 | all | Switch Update channel to Beta in Settings, check for updates, then switch back to Stable | Beta builds are offered on Beta; switching back to Stable does not offer a downgrade and never loses config | Version and manifest logic are unit-tested; end to end is manual | S2 |
 
-### Diagnostics report (when present)
+### Diagnostics report
 
 | ID | OS | Steps | Expected | Auto | Sev |
 |---|---|---|---|---|---|
-| DIA-1 **S** | all | Use clipboard history, snippets and search, then generate a diagnostics report (wherever the feature puts it) | A report is produced locally; read it fully before sharing | Redaction function: unit tests | S1 |
+| DIA-1 **S** | all | Use clipboard history, snippets and search, then generate a report from Settings → Help → Copy diagnostics (or `sevak --diagnostics`) | A report is produced locally; read it fully before sharing | Redaction function: unit tests | S1 |
 | DIA-2 | all | Search the report for your user name, home path, a copied text, a snippet body, a query, a bookmark title, an email address | None of them appears; paths use placeholders | Unit-tested | S1 |
 | DIA-3 | all | Check that nothing is sent anywhere by creating the report | It is a local file or clipboard text you share yourself | None | S1 |
 

@@ -1,4 +1,4 @@
-# Type "cron" and an expression: "cron */15 * * * *", "cron 30 9 * * mon-fri" or "cron @daily".
+# Type "pycron" and an expression: "pycron */15 * * * *", "pycron 30 9 * * mon-fri" or "pycron @daily".
 #
 # A one-shot Python plugin (Python 3.8 or newer, standard library only) that
 # explains a five-field cron expression in words and lists its next five run
@@ -6,8 +6,8 @@
 protocol    = 1
 id          = "script:cron-explainer"
 name        = "Cron explainer (Python)"
-description = "cron 30 9 * * mon-fri says in words when a cron expression runs and lists its next five runs. Offline."
-keyword     = "cron"
+description = "pycron 30 9 * * mon-fri says in words when a cron expression runs and lists its next five runs. Offline."
+keyword     = "pycron"
 mode        = "oneshot"
 script      = "cron.py"
 

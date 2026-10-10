@@ -34,6 +34,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { manifestKeywords as sourceKeywords, workflowBehavior } from "./lib/gallery-manifests.mjs";
 
 const argv = process.argv.slice(2);
 /** The value after `--name` (or `--name=value`), or undefined. */
@@ -254,12 +255,7 @@ function checkCommon(where, entry) {
 
 /** The `keyword = "..."` values in an entry's manifest (a plugin's, or each trigger node's of a workflow). */
 function manifestKeywords(entry) {
-  const folderName = entry.kind === "plugin" ? "plugins" : "workflows";
-  const manifest = entry.kind === "plugin" ? "plugin.toml" : "workflow.toml";
-  const path = join(root, "examples", folderName, entry.folder ?? entry.id, manifest);
-  if (!existsSync(path)) return [];
-  const text = readFileSync(path, "utf8");
-  return [...text.matchAll(/^\s*keyword\s*=\s*"([^"]+)"/gm)].map((match) => match[1].toLowerCase());
+  return sourceKeywords(root, entry).map((keyword) => keyword.toLowerCase());
 }
 
 // ---- gallery/index.json: workflows, script plugins and native extensions ------
@@ -323,11 +319,10 @@ const nativeDirs = new Map();
   listed("index.json", "packages", zips);
 
   // Keywords are how people reach an entry, so two entries may not share one.
-  // (The Rust tests also check them against the built-in plugins and engines;
-  // a native extension's keyword is inside its package and is checked there.)
+  // Read source manifests for all three kinds. The Rust tests additionally
+  // inspect packaged native manifests and check the built-in plugins/engines.
   const keywordOwners = new Map();
   for (const entry of index.entries ?? []) {
-    if (entry.kind === "native") continue;
     for (const keyword of new Set(manifestKeywords(entry))) {
       if (!keywordOwners.has(keyword)) keywordOwners.set(keyword, []);
       keywordOwners.get(keyword).push(entry.id);
@@ -432,9 +427,7 @@ function readBase(name) {
 /** Does adding or changing this entry need the security review (it runs code)? */
 function runsCode(entry) {
   if (entry.kind !== "workflow") return true;
-  const path = join(root, "examples", "workflows", entry.folder ?? entry.id, "workflow.toml");
-  if (!existsSync(path)) return false;
-  return /^\s*type\s*=\s*"(run_script|paste)"/m.test(readFileSync(path, "utf8"));
+  return workflowBehavior(root, entry).securityReview;
 }
 
 /** A string that changes exactly when the downloaded bytes of an entry change. */

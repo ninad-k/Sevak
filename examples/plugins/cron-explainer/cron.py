@@ -1,4 +1,4 @@
-"""Explain a cron expression for the "cron" keyword (Sevak one-shot plugin).
+"""Explain a cron expression for the "pycron" keyword (Sevak one-shot plugin).
 
 Takes the usual five fields (minute hour day-of-month month day-of-week) or a
 macro such as @daily, says in words when it runs and lists the next few run

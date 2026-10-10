@@ -24,6 +24,10 @@ on:
       - "examples/plugins/**"
       - "examples/workflows/**"
       - "scripts/gallery-check*.mjs"
+      - "scripts/gallery-review-comment.test.mjs"
+      - "scripts/lib/gallery-manifests.mjs"
+      - "package.json"
+      - "package-lock.json"
       - "scripts/tests/extensions.test.mjs"
       - "crates/sevak-plugins/tests/gallery_content.rs"
       - ".github/workflows/gallery-review*.yml"
@@ -61,7 +65,11 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           path: tools
-          sparse-checkout: scripts/gallery-check.mjs
+          sparse-checkout: |
+            scripts/gallery-check.mjs
+            scripts/lib
+            package.json
+            package-lock.json
           sparse-checkout-cone-mode: false
           persist-credentials: false
 
@@ -77,13 +85,17 @@ jobs:
         continue-on-error: true
         run: |
           checker=tools/scripts/gallery-check.mjs
-          # Until the base branch has a checker that can be pointed at another
-          # directory (--root), fall back to the pull request's own copy.
-          if ! grep -q -- '--root' "$checker"; then
-            echo "::notice::The base branch's checker has no --root option; using the pull request's copy."
-            checker=pr/scripts/gallery-check.mjs
-          fi
           mkdir -p report
+          # Bootstrap must not turn contributor-controlled code into the report
+          # that the privileged comment workflow presents to maintainers.
+          if [ ! -f "$checker" ] || ! grep -q -- '--root' "$checker"; then
+            echo "::notice::Trusted review unavailable: the base branch does not support --root yet."
+            echo '{"ok":false,"unavailable":true,"changes":[],"warnings":[],"problems":["The base branch does not yet contain a checker that supports --root. Review the test job and request a fresh review after the checker is merged."]}' > report/report.json
+            echo '## Automated gallery review unavailable' > report/report.md
+            echo 'The base branch has no checker supporting --root. No trusted automated result is available; the pull request checker runs only in the test job.' >> report/report.md
+            exit 0
+          fi
+          npm --prefix tools ci --ignore-scripts
           node "$checker" --root pr --base "$BASE_SHA" --summary report/report.md --json report/report.json
 
       - name: Show the report
@@ -127,6 +139,9 @@ jobs:
 
       - uses: ./.github/actions/setup-rust
 
+      - name: Install test dependencies
+        run: npm ci --ignore-scripts
+
       # Restore only. The cache a fork's run could save would be read by later
       # runs, so these runs never save one.
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
@@ -138,7 +153,12 @@ jobs:
       - name: Node tests of the checker
         id: node-checker
         continue-on-error: true
-        run: node --test scripts/gallery-check.test.mjs
+        run: node --test scripts/gallery-check.test.mjs scripts/gallery-review-comment.test.mjs
+
+      - name: Check the gallery with the proposed checker
+        id: proposed-checker
+        continue-on-error: true
+        run: node scripts/gallery-check.mjs
 
       - name: Node tests of the example extensions
         id: node-extensions
@@ -156,6 +176,7 @@ jobs:
         if: always()
         env:
           NODE_CHECKER: ${{ steps.node-checker.outcome }}
+          PROPOSED_CHECKER: ${{ steps.proposed-checker.outcome }}
           NODE_EXTENSIONS: ${{ steps.node-extensions.outcome }}
           RUST: ${{ steps.rust.outcome }}
         run: |
@@ -164,11 +185,12 @@ jobs:
             echo
             echo "| Test | Result |"
             echo "|---|---|"
-            echo "| \`node --test scripts/gallery-check.test.mjs\` | $NODE_CHECKER |"
+            echo "| Checker and review-comment tests | $NODE_CHECKER |"
+            echo "| \`node scripts/gallery-check.mjs\` | $PROPOSED_CHECKER |"
             echo "| \`node --test scripts/tests/extensions.test.mjs\` | $NODE_EXTENSIONS |"
             echo "| \`cargo test -p sevak-plugins --test gallery_content\` | $RUST |"
           } >> "$GITHUB_STEP_SUMMARY"
-          if [ "$NODE_CHECKER" != success ] || [ "$NODE_EXTENSIONS" != success ] || [ "$RUST" != success ]; then
+          if [ "$NODE_CHECKER" != success ] || [ "$PROPOSED_CHECKER" != success ] || [ "$NODE_EXTENSIONS" != success ] || [ "$RUST" != success ]; then
             echo "::error::A gallery test failed; see the steps above."
             exit 1
           fi

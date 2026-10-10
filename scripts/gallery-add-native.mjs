@@ -22,12 +22,24 @@ if (files.length === 0) {
 }
 
 const index = JSON.parse(readFileSync(indexPath, "utf8"));
+if (index.format !== 2 || !Array.isArray(index.entries)) {
+  console.error("gallery/index.json: expected a format 2 catalog with entries");
+  process.exit(1);
+}
+const seen = new Set();
 for (const file of files) {
   const entry = JSON.parse(readFileSync(file, "utf8"));
-  if (entry.kind !== "native" || !/^[a-z0-9-]{1,48}$/.test(entry.id ?? "")) {
+  if (entry?.kind !== "native" || typeof entry.id !== "string"
+      || !/^[a-z0-9-]{1,48}$/.test(entry.id)
+      || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/.test(entry.id)) {
     console.error(`${file}: not a native extension entry`);
     process.exit(1);
   }
+  if (seen.has(entry.id)) {
+    console.error(`${file}: ${entry.id} is supplied more than once`);
+    process.exit(1);
+  }
+  seen.add(entry.id);
   const at = index.entries.findIndex((existing) => existing.id === entry.id);
   if (at === -1) {
     index.entries.push(entry);

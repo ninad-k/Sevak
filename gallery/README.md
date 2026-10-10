@@ -58,9 +58,9 @@ standard-library only, and wait for your permission before anything runs:
 | `color-converter` | `color` | HEX, RGB, HSL, HSV and WCAG contrast | Python 3 |
 | `lorem-ipsum` | `lorem` | placeholder text (`lorem 3 paragraphs`) | Python 3 |
 | `hash-calculator` | `hash` | MD5, SHA-1, SHA-256, SHA-512, SHA3, BLAKE2b, CRC-32 of text or a file | Python 3 |
-| `jwt-decoder` | `jwt` | decode a JSON Web Token's header, payload and expiry (no signature check) | Python 3 |
+| `jwt-decoder` | `pyjwt` | decode a JSON Web Token's header, payload and expiry (no signature check) | Python 3 |
 | `base-converter` | `base` | binary, octal, decimal, hex, base 32 and 36 (`base 0xff`) | Python 3 |
-| `cron-explainer` | `cron` | cron expression in words and its next five runs | Python 3 |
+| `cron-explainer` | `pycron` | cron expression in words and its next five runs | Python 3 |
 | `regex-tester` | `rx` | matches and groups of a regular expression (`rx (\d+) :: a 12`) | Python 3 |
 | `unicode-lookup` | `uni` | code point, name, UTF-8 bytes and escapes; search by name | Python 3 |
 | `http-status` | `http` | what an HTTP status code means (`http 404`, `http redirect`) | Python 3 |

@@ -1,11 +1,10 @@
 // Tests of the native-extension rules of scripts/gallery-check.mjs. The script
-// finds the repository from its own location, so each test builds a tiny
-// repository in a temporary folder (the script, a gallery with one native
-// extension and no workflows or themes) and runs the script there.
+// reads a tiny repository in a temporary folder through --root. The tested
+// script and its TOML parser always come from this checkout.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -59,7 +58,6 @@ function check(entries, { extra = () => {}, args = [], base, reports = false } =
   const repo = mkdtempSync(join(tmpdir(), "gallery-check-"));
   try {
     mkdirSync(join(repo, "scripts"));
-    cpSync(script, join(repo, "scripts", "gallery-check.mjs"));
     const gallery = join(repo, "gallery");
     mkdirSync(join(gallery, "packages"), { recursive: true });
     mkdirSync(join(gallery, "themes"));
@@ -79,7 +77,7 @@ function check(entries, { extra = () => {}, args = [], base, reports = false } =
       extraArgs.push("--base", "HEAD");
     }
     if (reports) extraArgs.push("--summary", join(repo, "report.md"), "--json", join(repo, "report.json"));
-    const run = spawnSync(process.execPath, [join(repo, "scripts", "gallery-check.mjs"), ...extraArgs], {
+    const run = spawnSync(process.execPath, [script, "--root", repo, ...extraArgs], {
       encoding: "utf8",
     });
     const read = (name) => (reports ? readFileSync(join(repo, name), "utf8") : undefined);
@@ -253,6 +251,36 @@ test("two entries may not share a keyword", () => {
   assert.match(clash.stderr, /the keyword "dup" is used by first and second/);
   const fine = check([a.entry, c.entry], { extra: both(a, c) });
   assert.equal(fine.status, 0, fine.stderr);
+});
+
+test("Python plugins and native extensions cannot share a keyword", () => {
+  const bytes = Buffer.from("python package");
+  const python = {
+    id: "python-tool", kind: "plugin", name: "Python tool", description: "An offline tool.",
+    author: "Sevak", version: "1.0", tags: ["needs-python"],
+    source: "gallery/packages/python-tool.zip", sha256: sha256(bytes),
+  };
+  const run = check([entry(), python], { extra: (gallery, repo) => {
+    writeFileSync(join(gallery, "packages", "python-tool.zip"), bytes);
+    for (const [kind, id, keyword] of [["plugins", "python-tool", "JWT"], ["native", "tool", "jwt"]]) {
+      const dir = join(repo, "examples", kind, id);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, "plugin.toml"), `keyword = '${keyword}'\n`);
+    }
+  } });
+  assert.match(run.stderr, /the keyword "jwt" is used by tool and python-tool/);
+});
+
+test("security review understands literal strings, inline TOML nodes and unknown nodes", () => {
+  for (const node of ["{ type = 'run_script' }", "{ type = 'paste' }", "{ type = 'new_action' }"]) {
+    const workflowFixture = workflow("added", "added");
+    const run = check([workflowFixture.entry], { base: [], reports: true, extra: (gallery, repo) => {
+      workflowFixture.files(gallery, repo);
+      writeFileSync(join(repo, "examples", "workflows", "added", "workflow.toml"),
+        `node = [{ type = 'keyword', keyword = 'added' }, ${node}]\n`);
+    } });
+    assert.equal(run.json.changes[0].security_review, true, node);
+  }
 });
 
 test("against a base ref, changed bytes need a higher version", () => {

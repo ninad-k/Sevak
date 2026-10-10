@@ -32,6 +32,7 @@ on:
       - "crates/sevak-extension-sdk/**"
       - "crates/sevak-ext/**"
       - "scripts/gallery-add-native.mjs"
+      - "scripts/gallery-add-native.test.mjs"
       - ".github/workflows/native-extensions.yml"
   workflow_dispatch:
     inputs:
@@ -69,6 +70,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Test catalog updates
+        run: node --test scripts/gallery-add-native.test.mjs
       - id: ids
         env:
           # An input is data: it goes through the environment, never into the script text.
@@ -86,7 +89,8 @@ jobs:
               { echo "::error::there is no extension '$requested' in examples/native"; exit 1; }
             ids="$requested"
           fi
-          json=$(printf '%s\n' $ids | jq -R . | jq -sc .)
+          [ -n "$ids" ] || { echo "::error::no native extensions found"; exit 1; }
+          json=$(printf '%s\n' "$ids" | jq -Rsc 'split("\n") | map(select(length > 0))')
           echo "ids=$json" >> "$GITHUB_OUTPUT"
           echo "Extensions: $json"
 
@@ -157,7 +161,12 @@ jobs:
         if: matrix.platform.key == 'linux-aarch64'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu
+          # With --no-install-recommends GCC omits glibc's startup objects
+          # (Scrt1.o/crti.o) unless the cross development package is explicit.
+          sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu libc6-dev-arm64-cross
+          # Check the linker and sysroot before spending time on Rust builds.
+          printf 'int main(void) { return 0; }\n' |
+            aarch64-linux-gnu-gcc -x c - -o "$RUNNER_TEMP/aarch64-link-check"
 
       # No build cache here on purpose: a release build starts from the locked
       # sources and the pinned toolchain, nothing else.
@@ -322,7 +331,7 @@ jobs:
   # a pull request. It never pushes to main and never merges.
   publish-pr:
     name: Open gallery pull request
-    needs: [plan, package]
+    needs: [plan, test, package]
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-22.04
     timeout-minutes: 60
@@ -345,6 +354,9 @@ jobs:
         with:
           pattern: packages-*
           path: packages
+
+      - name: Install gallery checker dependencies
+        run: npm ci --ignore-scripts
 
       - name: Add the packages and entries
         id: add

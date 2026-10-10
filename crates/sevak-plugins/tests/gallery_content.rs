@@ -214,6 +214,62 @@ fn native_extensions_are_real_packages() {
     check_native_entries(&all_entries(), &repo().join("gallery"));
 }
 
+#[test]
+fn native_keywords_do_not_collide_with_other_gallery_entries() {
+    use sevak_plugins::extensions::ExtensionPackage;
+
+    let owners = KeywordOwners::builtin(&Config::default());
+    let mut seen = BTreeMap::new();
+    for entry in index() {
+        let keywords = if entry.kind == Kind::Workflow {
+            let (workflow, _) = load_workflow(&entry);
+            workflow
+                .keyword_nodes()
+                .map(|(_, keyword)| keyword.to_lowercase())
+                .collect::<Vec<_>>()
+        } else {
+            vec![
+                Manifest::load(&examples(Kind::Plugin).join(entry.folder_name()))
+                    .unwrap()
+                    .keyword
+                    .to_lowercase(),
+            ]
+        };
+        for keyword in keywords {
+            seen.insert(keyword, entry.id.clone());
+        }
+    }
+    for entry in all_entries().into_iter().filter(|e| e.kind == Kind::Native) {
+        let mut first_keyword = None;
+        for (platform, artifact) in &entry.platforms {
+            let file = artifact.source.rsplit('/').next().unwrap();
+            let bytes = std::fs::read(repo().join("gallery/extensions").join(&entry.id).join(file))
+                .unwrap();
+            let package = ExtensionPackage::read(&bytes, &entry.id).unwrap();
+            let manifest =
+                Manifest::parse_for(&package.manifest_text, &entry.id, platform).unwrap();
+            let keyword = manifest.keyword.to_lowercase();
+            if let Some(first) = &first_keyword {
+                assert_eq!(first, &keyword, "{}: platform keywords differ", entry.id);
+            } else {
+                assert!(
+                    owners.owners_of(&keyword, None).is_empty(),
+                    "{}: built-in keyword {keyword:?}",
+                    entry.id
+                );
+                assert!(
+                    !seen.contains_key(&keyword),
+                    "{} and {} both use {keyword:?}",
+                    entry.id,
+                    seen.get(&keyword).unwrap()
+                );
+                seen.insert(keyword.clone(), entry.id.clone());
+                first_keyword = Some(keyword);
+            }
+        }
+    }
+}
+
 /// The checks behind [`native_extensions_are_real_packages`], over `gallery`
 /// (a folder laid out like the repository's `gallery/`), so they can be tried
 /// on a small gallery built in a test.
@@ -597,7 +653,7 @@ fn gallery_workflows_validate_and_stay_within_the_policy() {
             "{id}: keyword clash"
         );
         assert_eq!(workflow.name, entry.name, "{id}: name");
-        assert_eq!(workflow.author, "Sevak", "{id}");
+        assert_eq!(workflow.author, entry.author, "{id}: author");
         assert_eq!(workflow.version, entry.version, "{id}");
         assert!(workflow.enabled);
 

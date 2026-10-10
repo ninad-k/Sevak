@@ -5,7 +5,8 @@
 //
 // <assets-dir> holds every asset of the release. Fails (exit 1, one problem per
 // line) unless:
-//   - SHA256SUMS.txt exists, lists every other asset, and each hash matches;
+//   - SHA256SUMS.txt exists, lists every release-time asset, and each hash matches;
+//   - optional post-release SBOM assets match SBOM-SHA256SUMS.txt;
 //   - every installer the updater can use has a non-empty `.sig` next to it;
 //   - each named manifest (latest.json, latest-beta.json) is for <version>, and
 //     every platform in it points at an asset of this release whose signature
@@ -20,6 +21,11 @@ import { pathToFileURL } from "node:url";
 import { TARGETS } from "./updater-manifest.mjs";
 
 const SUMS = "SHA256SUMS.txt";
+// sbom.yml uploads these after release.yml writes SHA256SUMS.txt. They have a
+// separate checksum file, so rollback must accept (and check) this exact set.
+const SBOM_SUMS = "SBOM-SHA256SUMS.txt";
+const SBOM_ASSETS = ["sevak-sbom-rust.cdx.json", "sevak-sbom-npm.cdx.json"];
+const POST_RELEASE_ASSETS = new Set([SBOM_SUMS, ...SBOM_ASSETS]);
 
 /** "<hash>  <name>" lines (sha256sum output; a leading "*" marks binary mode). */
 export function parseSums(text) {
@@ -48,7 +54,27 @@ export function verify(dir, version, manifests = []) {
       else if (sha256(join(dir, name)) !== hash) problems.push(`${name}: checksum does not match ${SUMS}`);
     }
     for (const name of files) {
-      if (name !== SUMS && !sums.has(name)) problems.push(`${name} is not listed in ${SUMS}`);
+      if (name !== SUMS && !sums.has(name) && !POST_RELEASE_ASSETS.has(name)) {
+        problems.push(`${name} is not listed in ${SUMS}`);
+      }
+    }
+  }
+
+  if (files.some((name) => POST_RELEASE_ASSETS.has(name))) {
+    if (!files.includes(SBOM_SUMS)) {
+      problems.push(`${SBOM_SUMS} is missing`);
+    } else {
+      const sbomSums = parseSums(readFileSync(join(dir, SBOM_SUMS), "utf8"));
+      for (const name of SBOM_ASSETS) {
+        if (!files.includes(name)) problems.push(`${name} is missing`);
+        else if (!sbomSums.has(name)) problems.push(`${name} is not listed in ${SBOM_SUMS}`);
+        else if (sha256(join(dir, name)) !== sbomSums.get(name)) {
+          problems.push(`${name}: checksum does not match ${SBOM_SUMS}`);
+        }
+      }
+      for (const name of sbomSums.keys()) {
+        if (!SBOM_ASSETS.includes(name)) problems.push(`${SBOM_SUMS} lists unexpected asset ${name}`);
+      }
     }
   }
 

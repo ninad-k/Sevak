@@ -3,7 +3,7 @@
 Type the pattern, then " :: ", then the text: "rx (\\d+)-(\\d+) :: call 555-1234".
 Shows whether it matches and lists every match with its groups, using Python's
 `re` syntax (inline flags such as (?i) work). The text is limited to 2000
-characters so a pathological pattern cannot hang the launcher for long.
+characters; Sevak's process timeout stops patterns that take too long.
 Standard library only; nothing is stored or sent.
 """
 import json

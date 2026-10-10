@@ -120,7 +120,7 @@ test("an id that could escape the output folder is refused", () => {
   assert.throws(() => buildCatalog({ entries: [evil, evil] }, { themes: [] }), /duplicate/);
 });
 
-test("unknown kinds are skipped and the trust badge follows the kind", () => {
+test("unknown kinds are skipped and absent workflow manifests cannot claim no code", () => {
   const catalog = buildCatalog(
     {
       entries: [
@@ -135,12 +135,49 @@ test("unknown kinds are skipped and the trust badge follows the kind", () => {
   );
   assert.deepEqual(
     catalog.map((e) => `${e.id}:${e.trust}`),
-    ["b:none", "c:script", "d:script", "e:native", "t:none"],
+    ["b:unknown", "c:unknown", "d:script", "e:native", "t:none"],
   );
   assert.equal(trustOf({ kind: "theme", tags: [] }), "none");
   const html = renderDetail(catalog[3]);
   assert.ok(html.includes("linux-x86_64"));
   assert.ok(html.includes(HASH));
+});
+
+test("workflow trust and keywords come from TOML nodes rather than tags", () => {
+  const root = scratch({ entries: [] });
+  try {
+    const dir = join(root, "examples", "workflows", "custom");
+    mkdirSync(dir, { recursive: true });
+    const entry = { ...evil, id: "custom", tags: ["no-code"] };
+    const catalog = () => buildCatalog({ entries: [entry] }, { themes: [] }, root)[0];
+    writeFileSync(join(dir, "workflow.toml"), "node = [{ type = 'keyword', keyword = 'custom' }, { type = 'run_script', script = 'main.py' }]\n");
+    assert.equal(catalog().trust, "script", "script use is independent of interpreter tags");
+    assert.deepEqual(catalog().keywords, ["custom"]);
+    writeFileSync(join(dir, "workflow.toml"), "[[node]]\ntype = 'keyword'\nkeyword = 'safe'\n[[node]]\ntype = 'copy'\n");
+    assert.equal(catalog().trust, "none");
+    writeFileSync(join(dir, "workflow.toml"), "[[node]]\ntype = 'future_code_node'\n");
+    assert.equal(catalog().trust, "unknown");
+    assert.ok(!renderDetail(catalog()).includes("Runs no code"));
+    writeFileSync(join(dir, "workflow.toml"), "invalid = [");
+    assert.equal(catalog().trust, "unknown");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("native manifest keywords appear in the catalog, search data and install instructions", () => {
+  const root = scratch({ entries: [] });
+  try {
+    const dir = join(root, "examples", "native", "tool");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "plugin.toml"), "keyword = 'native-tool'\n");
+    const entries = buildCatalog({ entries: [{ ...evil, id: "tool", kind: "native" }] }, { themes: [] }, root);
+    assert.deepEqual(entries[0].keywords, ["native-tool"]);
+    assert.match(renderIndex(entries), /data-text="[^"]*native-tool/);
+    assert.match(renderDetail(entries[0]), /type <code>native-tool<\/code>/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("a build replaces its own output but never a folder it did not write", () => {

@@ -20,6 +20,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { CSS, JS } from "./lib/marketplace-assets.mjs";
+import { manifestKeywords, workflowBehavior } from "./lib/gallery-manifests.mjs";
 
 export const SITE = "https://ninad-k.github.io/Sevak/";
 export const DOCS = `${SITE}docs/`;
@@ -71,39 +72,26 @@ export function repoPath(value) {
 const encodePath = (path) => path.split("/").map(encodeURIComponent).join("/");
 const SAFE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const SAFE_TAG = /^[a-z0-9][a-z0-9-]{0,31}$/;
-const SAFE_KEYWORD = /^[A-Za-z0-9:_.-]{1,24}$/;
 const text = (v, max) => (typeof v === "string" ? v.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, max) : "");
 
 // ---------------------------------------------------------------- catalog
 
 /** What running the entry means for the person installing it. */
-export function trustOf(entry) {
+export function trustOf(entry, root = ".") {
   if (entry.kind === "native") return "native";
   if (entry.kind === "plugin") return "script";
-  if (entry.kind === "workflow" && entry.tags.some((t) => t === "needs-python" || t === "needs-node")) return "script";
+  if (entry.kind === "workflow") return workflowBehavior(root, entry).trust;
   return "none";
 }
 
 export const TRUST = {
+  unknown: { label: "Code status unknown", detail: "The source manifest could not establish what this workflow runs. Inspect its contents before installing or allowing it." },
   none: { label: "Runs no code", detail: "It is data only: Sevak interprets it and no program of the author's is started. Workflows that paste into another app still ask for your permission once." },
   script: { label: "Runs a script", detail: "A script on your computer runs when you use the keyword, but only after you allow it. Sevak shows the exact command and asks once; if the files change it asks again." },
   native: { label: "Native program", detail: "A compiled program that runs with your user's rights. Sevak asks for your permission before it runs and shows the permissions its author declares, but it cannot confine the program: install only what you trust." },
 };
 
 /** Keyword(s) from the example's manifest, when the example folder is in this checkout. */
-function keywordsOf(root, kind, id, folder) {
-  const dir = KINDS[kind]?.dir;
-  if (!dir) return [];
-  const manifest = join(root, dir, folder || id, kind === "plugin" ? "plugin.toml" : "workflow.toml");
-  if (!existsSync(manifest)) return [];
-  const found = [];
-  for (const line of readFileSync(manifest, "utf8").split(/\r?\n/)) {
-    const m = /^\s*keyword\s*=\s*"([^"]*)"/.exec(line);
-    if (m && SAFE_KEYWORD.test(m[1]) && !found.includes(m[1])) found.push(m[1]);
-  }
-  return found;
-}
-
 function normalise(raw, kind, root) {
   const id = typeof raw.id === "string" ? raw.id : "";
   if (!SAFE_ID.test(id)) throw new Error(`${kind} entry has an id that is not a-z, 0-9 and dashes: ${JSON.stringify(raw.id)}`);
@@ -135,8 +123,8 @@ function normalise(raw, kind, root) {
     }
     entry.platforms.sort((a, b) => a.platform.localeCompare(b.platform));
   }
-  entry.keywords = keywordsOf(root, kind, id, typeof raw.folder === "string" && SAFE_ID.test(raw.folder) ? raw.folder : null);
-  entry.trust = trustOf(entry);
+  entry.keywords = manifestKeywords(root, { ...raw, kind });
+  entry.trust = trustOf({ ...raw, kind }, root);
   entry.page = `${SITE}marketplace/${kind}/${id}/`;
   return entry;
 }

@@ -325,7 +325,7 @@
       "id": "jwt-decoder",
       "kind": "plugin",
       "name": "JWT decoder (Python)",
-      "description": "jwt <token> decodes a JSON Web Token's header, payload and expiry in plain language. Decode only, no signature check. Offline; needs Python 3.",
+      "description": "pyjwt <token> decodes a JSON Web Token's header, payload and expiry in plain language. Decode only, no signature check. Offline; needs Python 3.",
       "author": "Sevak",
       "version": "1.0",
       "tags": [
@@ -334,7 +334,7 @@
         "needs-python"
       ],
       "source": "gallery/packages/jwt-decoder.zip",
-      "sha256": "c666d98fa61cf243417569a35e60e757edf332bb79d76157846157a3ce693df8",
+      "sha256": "5a1cf006e4326f796a40e0efec2d919be3d3e5169966336dc90a084657f25886",
       "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/jwt-decoder"
     },
     {
@@ -357,7 +357,7 @@
       "id": "cron-explainer",
       "kind": "plugin",
       "name": "Cron explainer (Python)",
-      "description": "cron 30 9 * * mon-fri says in words when a cron expression runs and lists its next five run times. Offline; needs Python 3.",
+      "description": "pycron 30 9 * * mon-fri says in words when a cron expression runs and lists its next five run times. Offline; needs Python 3.",
       "author": "Sevak",
       "version": "1.0",
       "tags": [
@@ -366,7 +366,7 @@
         "needs-python"
       ],
       "source": "gallery/packages/cron-explainer.zip",
-      "sha256": "2cd63c03d12c66ce89674399bec15ea856c1e5390d37d52bd14e7a9008c4f669",
+      "sha256": "05915af4baa3a76163c2ca381a46410ebb721a07c3d85b30d2221dfd0472e500",
       "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/cron-explainer"
     },
     {
@@ -382,7 +382,7 @@
         "needs-python"
       ],
       "source": "gallery/packages/regex-tester.zip",
-      "sha256": "c03496c574c1eb0a055b131e157a7da3ce34cddc0e6ff16ab1c43bcfe9967e4c",
+      "sha256": "37995370e69acb478f4f3ef66c11914dd706d2b66c0140a211076225b3ff4e38",
       "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/regex-tester"
     },
     {

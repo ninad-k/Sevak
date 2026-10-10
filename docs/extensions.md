@@ -97,9 +97,9 @@ needs a space after it, and each shows example rows when you type it alone.
 
 | Extension | Try | What it does |
 |---|---|---|
-| **JWT decoder** | `jwt eyJhbGci...` | Header, payload and `exp`/`iat`/`nbf` in plain words. Decodes only: the signature is **not** verified |
+| **JWT decoder** | `pyjwt eyJhbGci...` | Header, payload and `exp`/`iat`/`nbf` in plain words. Decodes only: the signature is **not** verified |
 | **Number base converter** | `base 0xff`, `base ff 16` | Binary, octal, decimal, hex, base 32 and base 36 |
-| **Cron explainer** | `cron 30 9 * * mon-fri` | Explains the expression and lists the next five runs |
+| **Cron explainer** | `pycron 30 9 * * mon-fri` | Explains the expression and lists the next five runs |
 | **Regex tester** | `rx (\d+)-(\d+) :: call 555-1234` | Every match and capture group (Python `re` syntax) |
 | **Unicode lookup** | `uni U+1F600`, `uni right arrow` | Name, UTF-8 bytes, HTML entity and escapes; searches names |
 | **HTTP status codes** | `http 404`, `http redirect` | What a status code or a group of codes means |
@@ -110,9 +110,12 @@ needs a space after it, and each shows example rows when you type it alone.
 
 Notes on behavior: the cron explainer uses this computer's clock and cron's
 rule that day-of-month and weekday match when *either* does; the regex tester
-caps the text at 2,000 characters so a pathological pattern cannot hang the
-launcher; the date calculator counts weekdays without knowing any holidays.
+caps the text at 2,000 characters, and Sevak stops its process if a pattern
+exceeds the plugin timeout; the date calculator counts weekdays without knowing any holidays.
 Enter copies the row you picked.
+
+The Python JWT and cron tools use `pyjwt` and `pycron` so they can be installed
+alongside the native `jwt` and `cron` tools without sharing a keyword.
 
 ### Research basis
 

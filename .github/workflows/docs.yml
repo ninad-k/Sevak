@@ -11,6 +11,12 @@ on:
       - "docs/**"
       - "landing/**"
       - "gallery/**"
+      - "examples/plugins/**"
+      - "examples/workflows/**"
+      - "examples/native/**/plugin.toml"
+      - "scripts/lib/gallery-manifests.mjs"
+      - "package.json"
+      - "package-lock.json"
       - "scripts/build-marketplace.mjs"
       - "scripts/lib/marketplace-assets.mjs"
       - "mkdocs.yml"
@@ -20,6 +26,12 @@ on:
       - "docs/**"
       - "landing/**"
       - "gallery/**"
+      - "examples/plugins/**"
+      - "examples/workflows/**"
+      - "examples/native/**/plugin.toml"
+      - "scripts/lib/gallery-manifests.mjs"
+      - "package.json"
+      - "package-lock.json"
       - "scripts/build-marketplace.mjs"
       - "scripts/lib/marketplace-assets.mjs"
       - "mkdocs.yml"
@@ -50,7 +62,9 @@ jobs:
         with:
           node-version: 22
       - name: Generate the marketplace pages from the galleries
-        run: node scripts/build-marketplace.mjs
+        run: |
+          npm ci --ignore-scripts
+          node scripts/build-marketplace.mjs
       - name: Add the product page at the site root
         run: cp -r landing/. site/
       - uses: actions/upload-pages-artifact@v5

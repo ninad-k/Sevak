@@ -1479,8 +1479,14 @@ mod tests {
         assert!(index.skipped.is_empty(), "{:?}", index.skipped);
         assert!(index.entries.len() >= 3);
         let kinds: HashSet<_> = index.entries.iter().map(|e| e.kind).collect();
-        assert_eq!(kinds.len(), 2, "both workflows and plugins are shown");
-        for entry in &index.entries {
+        assert_eq!(
+            kinds,
+            HashSet::from([Kind::Workflow, Kind::Plugin, Kind::Native]),
+            "workflows, script plugins and native extensions are shown"
+        );
+        // Native artifacts use the extensions installer; gallery_content's
+        // native_extensions_are_real_packages checks every platform package.
+        for entry in index.entries.iter().filter(|e| e.kind != Kind::Native) {
             // The source is the release's raw address of the committed package.
             let file = entry.source.rsplit('/').next().unwrap();
             assert!(
