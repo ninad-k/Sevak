@@ -314,8 +314,10 @@ list data your program depends on.
 
 The template's release profile (`opt-level = "z"`, `lto`, `codegen-units = 1`,
 `strip`) keeps programs small; do not use `panic = "abort"`, because the SDK
-turns a panic into an error for that query. A sketch of a CI job (adjust it; it
-is an example, not part of Sevak):
+turns a panic into an error for that query. A sketch of a CI job for your own
+repository (adjust it; Sevak's own, with reproducibility settings, is described
+in [Building and publishing native extensions with
+CI](#building-and-publishing-native-extensions-with-ci)):
 
 ```yaml
 jobs:
@@ -418,6 +420,80 @@ Two limits to plan for:
   Sevak](#try-it-in-sevak) (or unzip the `.sevakext`), and Sevak asks before it runs.
 - **There is no signature yet.** The checksum in the list comes from the same
   repository as the file; see the limits listed in Gallery trust.
+
+## Building and publishing native extensions with CI
+
+The extensions Sevak ships itself (`jwt`, `cron` and `regex`) live in
+[`examples/native/<id>/`](https://github.com/ninad-k/Sevak/tree/main/examples/native),
+each its own cargo project with its own `Cargo.lock` and an empty `[workspace]`
+table (so it does not join the app's workspace and is built from exactly the
+dependencies it lists), a `plugin.toml`, a README that lists every dependency
+and its licence, unit tests, and a `tests/host.rs` that runs the built program
+through Sevak's real plugin host. The workflow
+[`.github/workflows/native-extensions.yml`](https://github.com/ninad-k/Sevak/blob/main/.github/workflows/native-extensions.yml)
+builds, tests and packages them. A new folder with a `plugin.toml` is picked up
+without editing the workflow. (The shared test harness is
+`examples/native/_support/host.rs`; the folder has no manifest, so it is not an
+extension.)
+
+**What runs when**
+
+| Trigger | What happens |
+|---|---|
+| A pull request touching `examples/native/**` (or the SDK, the packer or the workflow) | per extension: `cargo fmt --check`, `clippy -D warnings`, `cargo test --locked`; then a release build for all six platforms, a smoke test where the runner can run the program, and a package per platform checked with `sevak-ext validate`. Packages are uploaded as artifacts (30 days) with their SHA-256 in the job summary. **Nothing is committed.** |
+| **Run workflow** (`workflow_dispatch`) with an `extension` id or `all` | the same, for that extension |
+| the same with **publish** ticked, started on `main` | additionally the `publish-pr` job: puts the packages in `gallery/extensions/<id>/`, adds or replaces the entry in `gallery/index.json` (`sevak-ext entry` and `scripts/gallery-add-native.mjs`; tags already chosen in the index are kept), runs `node scripts/gallery-check.mjs --update` and the plain check, runs `cargo test -p sevak-plugins --test gallery_content`, commits to a new branch `gallery/native-extensions-<run id>` and opens a pull request. It never pushes to `main` and never merges. |
+
+Only `publish-pr` has write permission (`contents: write`, `pull-requests: write`);
+the workflow's default is read-only, actions are pinned to commit SHAs, and the
+`extension` input reaches scripts through the environment, never as script text.
+A workflow run needs write access to the repository, so only maintainers can
+start one. A pull request opened with the workflow's token does not start other
+workflows: **close and reopen it** to run CI before merging. (The repository
+setting "Allow GitHub Actions to create and approve pull requests" must be on.)
+
+**Making the builds reproducible.** A gallery binary should come from public
+source by a public command. The workflow builds with the toolchain pinned in
+`rust-toolchain.toml`, `cargo build --release --locked --target <triple>`, the
+release profile of each `Cargo.toml` (`opt-level = "z"`, `lto`,
+`codegen-units = 1`, `strip`, unwinding panics), `--remap-path-prefix` for the
+checkout, `~/.cargo` and `~/.rustup` (so runner paths are not in the program),
+`/Brepro` for MSVC (no link timestamp), and `SOURCE_DATE_EPOCH` set from the
+commit time. Build caches are not used for the release builds. Two builds of
+the same commit on the same machine give identical bytes (the three extensions
+were built twice with different target folders on Windows and compared), and
+`sevak-ext pack` is deterministic. Different runner images or toolchains may
+still differ, so to verify a package compare it with the one the workflow built
+for that commit, not with a local build.
+
+| Platform | Built on | How |
+|---|---|---|
+| `windows-x86_64` | `windows-latest` | native |
+| `windows-aarch64` | `windows-latest` | cross (`aarch64-pc-windows-msvc`); not run |
+| `macos-aarch64` | `macos-latest` (Apple silicon) | native |
+| `macos-x86_64` | `macos-latest` | cross (`x86_64-apple-darwin`); not run |
+| `linux-x86_64` | `ubuntu-22.04` | native (needs glibc 2.35 or newer) |
+| `linux-aarch64` | `ubuntu-22.04` | cross with `gcc-aarch64-linux-gnu`; not run |
+
+**Publishing a release of an extension** (maintainers):
+
+1. Change the code, bump `version` in its `Cargo.toml` and `plugin.toml` (the
+   package name carries the version), update `Cargo.lock` if a dependency
+   changed, and merge the pull request after the build and test jobs are green.
+2. **Actions → Native extensions → Run workflow** on `main` with the extension
+   id and **publish** ticked.
+3. Review the pull request it opens: the diff should be the packages for that
+   extension and its entry (and nothing else), the hashes should match the
+   job summary, and the build's commit is named in the description. Close and
+   reopen it to run CI, then merge. Users get it with the next Sevak release,
+   because builds read the gallery at their own tag.
+
+To add a new native extension to the set, copy an existing folder in
+`examples/native`, change the id, keyword and code, run `cargo test` in it
+(which creates `Cargo.lock`; commit it), and open a pull request: the build and
+test jobs run on it. Choose a keyword that no built-in or gallery entry uses;
+`cargo test -p sevak-plugins --test gallery_content` checks that once the entry
+is in the index.
 
 ## Versioning and updates
 

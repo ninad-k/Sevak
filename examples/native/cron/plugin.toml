@@ -1,0 +1,25 @@
+# The manifest of the cron native extension. Documented in
+# docs/writing-extensions-in-rust.md ("The manifest").
+
+protocol    = 1
+id          = "script:cron"
+keyword     = "cron"
+name        = "Cron explainer"
+description = "Type cron and an expression to read it in words and see the next five run times (UTC, or add an offset like +05:30)."
+
+[extension]
+version     = "0.1.0"
+author      = "Sevak"
+license     = "Apache-2.0"
+min_sevak   = "0.1.0"
+repository  = "https://github.com/ninad-k/Sevak/tree/main/examples/native/cron"
+# It only reads the text you type and the system clock. No network, no files, no other programs.
+permissions = []
+
+[extension.binaries]
+windows-x86_64  = "bin/cron-windows-x86_64.exe"
+windows-aarch64 = "bin/cron-windows-aarch64.exe"
+macos-x86_64    = "bin/cron-macos-x86_64"
+macos-aarch64   = "bin/cron-macos-aarch64"
+linux-x86_64    = "bin/cron-linux-x86_64"
+linux-aarch64   = "bin/cron-linux-aarch64"
