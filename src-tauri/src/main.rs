@@ -82,6 +82,10 @@ fn main() -> ExitCode {
             process::attach_parent_console();
             backup::run_cli_undo(config.as_deref())
         }
+        Invocation::Startup { action, result } => {
+            process::attach_parent_console();
+            autostart::run_cli(action, config.as_deref(), result.as_deref())
+        }
         Invocation::Run(launch) => match run(launch, config.as_deref()) {
             Ok(()) => ExitCode::SUCCESS,
             Err(err) => {

@@ -17,6 +17,7 @@ permission dialogs of the OS, other people's apps receiving a paste. The
 | Rust unit tests | Fuzzy matching, config parsing and comment-preserving saves, ranking, every plugin's logic (calculator, units, snippets, clipboard history, tasks, workflows ...), platform helpers | `#[cfg(test)]` modules in `crates/*/src` | Every push, on each OS (platform code runs on its own OS) |
 | Rust integration tests | The real search engine and registry with a recording platform: keyword routing, secrets never leaking into global queries, Enter reaching the platform; script plugins and workflows with real child processes | `crates/sevak-plugins/tests/` | Every push |
 | UI unit tests | Accelerator parsing and identity, settings validation, path helpers, theme colour and contrast maths, theme JSON, workflow graph rules, a few components | `ui/src/**/*.test.ts` (Vitest) | Every push (`UI unit tests` job) |
+| Startup integration | Per-user registration, config persistence and rollback, background arguments; Settings toggle through real IPC wrappers with a mocked native bridge | Platform startup tests; `ui/src/Settings.startup.test.ts` | Rust and UI test jobs |
 | Latency budget | The default engine over a large mock index answers typical queries in under 100 ms at p95 | `crates/sevak-plugins/tests/latency.rs` | Every push (`Search latency budget` job, optimized build) |
 | Benchmark | Precise latency numbers and startup index time | `crates/sevak-plugins/benches/` | Weekly and on demand (`Benchmark` workflow) |
 | Coverage | Which lines the tests run | `Coverage` workflow | Every pull request (report only) and weekly |
@@ -54,7 +55,11 @@ reproduces it.
 | `cargo test --profile fast-release -p sevak-plugins --test latency -- --nocapture` | The latency budget, with timings (the profile is optimized without link-time optimization, so it builds in a few minutes) |
 | `cargo bench -p sevak-plugins` | The latency benchmark (uses the full release profile, so the first build is slow) |
 | `npm ci` then `npm run check` | Install and type-check the UI |
-| `npm test` | UI unit tests (Vitest, a few seconds) |
+| `npm test` | UI unit and component integration tests (Vitest, a few seconds) |
+| `npm test -- Settings.startup.test.ts` | Settings sign-in toggle, Save/reopen/disable, cancelled draft, OS failure/retry and registration warnings |
+| `cargo test -p sevak-platform startup` | Startup registration helpers and integration cases without changing the host's real startup entries |
+| `npm run test:scripts` | Installer source and packaging contracts, including startup controls. On Windows with the Tauri NSIS toolchain, also compiles and executes startup policy and helper-receipt fixtures. Windows bundle/release jobs rerun these after building the installers. |
+| `pwsh -NoProfile -File scripts/test-windows-installer.ps1` | Windows only, after building the installers: inspect the compiled MSI and evaluate its real startup conditions without installing it. CI runs this after the bundle build. Use `-MsiPath <file>` to select a specific MSI. |
 | `npm run test:watch` | Vitest in watch mode |
 | `npm run test:coverage` | UI tests with a coverage report in `ui/coverage/` |
 | `mkdocs build --strict` | Documentation build (needs `pip install -r docs/requirements.txt`) |
@@ -71,8 +76,12 @@ Two rules for tests in this repository:
 The unit tests of the pure UI logic live next to the code (`accelerator.test.ts`
 beside `accelerator.ts`). A test that needs a DOM starts with
 `// @vitest-environment jsdom`; Svelte components are tested with
-`@testing-library/svelte`, which is worth doing only for small, self-contained
-components (`Toggle.test.ts` is the example).
+`@testing-library/svelte` (`Toggle.test.ts` is a small example). The startup
+integration suite renders the full Settings form through its actual IPC
+wrappers with a fake Tauri transport: toggling is only a draft until Save,
+successful saves reload the persisted choice, and native errors remain visible
+without a success toast. These are UI integration tests, not native desktop or
+reboot tests.
 
 ### Coverage
 
@@ -267,7 +276,7 @@ knows what is checked by hand because it cannot be checked by a machine.
 | INS-5 | L | Make the AppImage executable and run it (with FUSE 2, then with `--appimage-extract-and-run`) | Starts both ways | Bundle job builds it | S2 |
 | INS-6 **S** | all | Launch Sevak for the first time with no config folder | `config.toml` is created with comments; launcher opens with the default shortcut; no error dialog | Config defaults are unit-tested | S1 |
 | INS-7 | all | Install the previous release, change settings, use clipboard history and snippets, then install this release over it | Settings, usage ranking, clipboard history and snippets survive; the launcher works at once | Config round-trips are unit-tested; upgrades are manual | S1 |
-| INS-8 | all | Uninstall (Settings > Apps on Windows; delete the app on macOS; `apt remove` or `dnf remove`) | Sevak disappears from the menus and stops; the config and data folders are left in place (see [Files and data](files-and-data.md)); the launch-at-login entry is removed (check Startup apps or Login Items) | None | S2 |
+| INS-8 | all | Turn start at sign-in off and Save, then uninstall (Settings > Apps on Windows; delete the app on macOS; `apt remove` or `dnf remove`) | Sevak disappears from the menus and stops; config/data remain (see [Files and data](files-and-data.md)); this account's startup entry is absent. Also test Windows owned-entry cleanup with startup still on (STA-7). | Registration removal helpers; uninstall itself is manual | S2 |
 | INS-9 | all | Uninstall, then reinstall | Old settings are picked up | None | S3 |
 
 #### Windows installer scenarios
@@ -296,8 +305,27 @@ installation behaviour on a real desktop.
 | LCH-3 | all | Start Sevak a second time from the menu or `sevak` | No second instance or icon; the running one shows the launcher | Single-instance plugin | S2 |
 | LCH-4 | all | Set `[general] hotkey` to something else in Settings and save; try the old and new keys | New key works at once, old key stops; conflicts show an inline message and the old key keeps working | Accelerator parsing and duplicate checks are unit-tested | S2 |
 | LCH-5 | all | Add a custom hotkey (`query = "> "` and `run = "..."`) and the Universal Actions key; press each | The launcher opens with the text / the result runs / Universal Actions opens | Hotkey config parsing is unit-tested | S2 |
-| LCH-6 | all | Turn "Launch at login" on, sign out and in; then off | Starts hidden after login; no start after turning off | None | S2 |
+| LCH-6 | all | Turn **Start Sevak when I sign in** on and Save, sign out and in; then off and Save | Starts hidden after login; no start after turning off; see startup cases below | Preference, registration and UI save are tested; real sign-in is manual | S2 |
 | LCH-7 | all | Multiple monitors: move the mouse to the second screen (different scale) and open the launcher | Appears on that screen at a readable size | None | S3 |
+
+#### Startup and sign-in
+
+Use disposable accounts or VM snapshots. Record the OS, installer format, install
+scope and whether the test was an actual sign-out/sign-in or a restart. Passing
+unit, integration or package-build tests alone does not complete these cases.
+
+| ID | OS | Steps | Expected | Auto | Sev |
+|---|---|---|---|---|---|
+| STA-1 **S** | W | Fresh EXE and MSI installs, first with startup unchecked, then checked | Sevak appears in Start → All apps and Settings → Apps → Installed apps in both cases. Startup defaults off; opting in adds a per-user Startup apps entry and General shows on. | Installer source contracts and native registration tests | S1 |
+| STA-2 **S** | all | Enable in General, Save, quit Sevak, restart and sign in; repeat after turning it off and saving | When on: one tray/menu-bar instance, launcher hidden, shortcut works. When off: no automatic process. On macOS/Linux use Settings after installation; no setup checkbox is expected. | Settings save/reopen and background command tests; restart is manual | S1 |
+| STA-3 | W | Install for all users and opt in as account A; sign in as B. Repeat installation where UAC uses another administrator's credentials | Only the desktop account that chose startup is opted in; no machine-wide Run entry or automatic opt-in for the administrator/B. | User-scope installer contracts; real account/UAC behavior is manual | S1 |
+| STA-4 | W, L | Enable and Save, disable Sevak through OS startup controls, then run Sevak manually and save an unrelated setting | OS disable is preserved; General warns that startup is disabled outside Sevak. Re-enable using the OS or off+Save then on+Save in Sevak. | Startup state preservation and UI warning tests | S2 |
+| STA-5 | all | On a disposable profile, deny writes to startup registration, then try to enable/disable from General | Save displays an actionable error, keeps the prior persisted choice/registration, and does not show Saved. Fix access and retry; it succeeds. | Transaction rollback and UI failure/retry tests | S1 |
+| STA-6 | W | Upgrade an opted-in and an opted-out install interactively and silently; repeat with `/AUTOSTART=on\|off` (EXE) or `SEVAK_AUTOSTART=on\|off` (MSI) | Unchanged/unspecified startup is preserved; explicit choice updates the invoking user's setting. Start-now remains independent. Service-account deployment never opts all users in. | Installer source contracts; installed upgrade is manual | S2 |
+| STA-7 | W | Uninstall a copy with startup enabled; repeat with the entry pointing to a different Sevak install | Removes only this executable's entry for the invoking user. The other install's entry is kept. Upgrade/scope migration preserves the chosen startup behavior. | Ownership comparison/removal tests; uninstall is manual | S2 |
+| STA-8 | M, L | Enable startup after installing to Applications/a permanent AppImage path; inspect the entry and sign in again | User LaunchAgent or XDG autostart starts the installed path with background arguments. Linux desktop supports XDG autostart; no temporary AppImage mount path is stored. | Native entry format/path tests; desktop behavior is manual | S2 |
+| STA-9 | W | Move an install with an enabled entry, then with a Windows-disabled entry and custom `--config` argument; repeat an upgrade with no Run entry and an old saved opt-in | Existing registration follows the new executable while retaining arguments and disable state. An unchecked interactive choice with a missing entry saves off. Explicit preference/refresh happens before automatic launch. | Refresh fixtures, installer choice contracts and compiled MSI sequencing checks | S2 |
+| STA-10 | W, L | In a disposable Windows VM, reproduce the old machine-wide Sevak Run entry; on Linux, use a minimal `[Desktop Entry]` with `Hidden=true` | Windows reports the migration error and leaves machine-wide startup untouched; administrator cleanup is clearly described. Linux recognizes the minimal override as disabled and an explicit opt-in can re-enable it. | Legacy command and Hidden-only fixtures; real OS integration is manual | S2 |
 
 #### Windows
 

@@ -228,6 +228,13 @@ jobs:
       - name: Build installers
         run: npx tauri build --bundles ${{ matrix.bundles }}
 
+      - name: Verify Windows installer startup integration
+        if: runner.os == 'Windows'
+        run: |
+          node --test scripts/installer.test.mjs scripts/installer-startup.test.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pwsh -NoProfile -File scripts/test-windows-installer.ps1
+
       - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}

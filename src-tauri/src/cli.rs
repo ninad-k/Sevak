@@ -20,6 +20,16 @@ Options:
                          folder WORKFLOW, with TEXT as its argument (put -- before
                          text that starts with a dash)
       --background       Start without showing the window
+      --set-startup on|off
+                         Start Sevak in the background after sign-in, or turn
+                         startup off, for the current user. Saves the preference.
+      --startup-status   Exit 0 if startup is enabled, 1 if disabled, 2 on error
+      --remove-startup   Remove this copy's startup entry; keep saved settings
+      --refresh-startup  Update an existing entry to this copy's path; keep
+                         its arguments, disabled state and saved settings
+      --startup-result PATH
+                         Write the startup command's numeric exit code to PATH
+                         (for installers running it as the signed-in user)
       --settings         Open the settings window
       --quit             Quit the running instance
       --setup-hotkey [KEY]
@@ -118,8 +128,21 @@ pub enum Invocation {
     },
     /// Undo the last restore and exit.
     UndoRestore,
+    /// Startup management exits before creating a window or single instance.
+    Startup {
+        action: StartupAction,
+        result: Option<PathBuf>,
+    },
     Help,
     Version,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StartupAction {
+    Set(bool),
+    Status,
+    Remove,
+    Refresh,
 }
 
 /// A parsed command line.
@@ -131,13 +154,15 @@ pub struct Command {
 }
 
 /// Options that take a value, as `--name VALUE` or `--name=VALUE`.
-const VALUE_OPTIONS: [&str; 6] = [
+const VALUE_OPTIONS: [&str; 8] = [
     "--config",
     "--query",
     "--run",
     "--trigger",
     "--backup",
     "--restore",
+    "--set-startup",
+    "--startup-result",
 ];
 
 /// Parses the arguments after the executable name.
@@ -153,6 +178,7 @@ where
     let mut invocation: Option<Invocation> = None;
     let mut config: Option<PathBuf> = None;
     let mut replace = false;
+    let mut startup_result = None;
 
     while let Some(arg) = args.next() {
         let (name, inline) = match arg.split_once('=') {
@@ -172,6 +198,28 @@ where
                     .ok_or_else(|| format!("{name}: expected a value"))?,
             };
             match name {
+                "--set-startup" => {
+                    let enabled = match value.as_str() {
+                        "on" => true,
+                        "off" => false,
+                        _ => return Err("--set-startup: expected on or off".to_owned()),
+                    };
+                    set(
+                        &mut invocation,
+                        Invocation::Startup {
+                            action: StartupAction::Set(enabled),
+                            result: None,
+                        },
+                    )?;
+                }
+                "--startup-result" => {
+                    if value.trim().is_empty() {
+                        return Err("--startup-result: expected a path".to_owned());
+                    }
+                    if startup_result.replace(PathBuf::from(value)).is_some() {
+                        return Err("--startup-result was given twice".to_owned());
+                    }
+                }
                 "--config" => {
                     if value.is_empty() {
                         return Err("--config: expected a path".to_owned());
@@ -252,6 +300,27 @@ where
             "--restore-hotkey" => set(&mut invocation, Invocation::RestoreHotkey)?,
             "--diagnostics" => set(&mut invocation, Invocation::Diagnostics)?,
             "--undo-restore" => set(&mut invocation, Invocation::UndoRestore)?,
+            "--startup-status" => set(
+                &mut invocation,
+                Invocation::Startup {
+                    action: StartupAction::Status,
+                    result: None,
+                },
+            )?,
+            "--remove-startup" => set(
+                &mut invocation,
+                Invocation::Startup {
+                    action: StartupAction::Remove,
+                    result: None,
+                },
+            )?,
+            "--refresh-startup" => set(
+                &mut invocation,
+                Invocation::Startup {
+                    action: StartupAction::Refresh,
+                    result: None,
+                },
+            )?,
             "--replace" => replace = true,
             "--setup-hotkey" => {
                 // The key is optional; `--config` after it is not the key.
@@ -276,6 +345,13 @@ where
         match &mut invocation {
             Some(Invocation::Restore { replace, .. }) => *replace = true,
             _ => return Err("--replace only goes with --restore".to_owned()),
+        }
+    }
+
+    if let Some(path) = startup_result {
+        match &mut invocation {
+            Some(Invocation::Startup { result, .. }) => *result = Some(path),
+            _ => return Err("--startup-result only goes with a startup command".to_owned()),
         }
     }
 
@@ -345,6 +421,58 @@ mod tests {
     #[test]
     fn no_arguments_shows() {
         assert_eq!(parse_strs(&[]), Ok(Invocation::Run(Launch::Show)));
+    }
+
+    #[test]
+    fn startup_commands_are_headless_and_accept_installer_receipts() {
+        for (args, action) in [
+            (vec!["--set-startup", "on"], StartupAction::Set(true)),
+            (vec!["--set-startup=off"], StartupAction::Set(false)),
+            (vec!["--startup-status"], StartupAction::Status),
+            (vec!["--remove-startup"], StartupAction::Remove),
+            (vec!["--refresh-startup"], StartupAction::Refresh),
+        ] {
+            assert_eq!(
+                parse_strs(&args),
+                Ok(Invocation::Startup {
+                    action,
+                    result: None
+                })
+            );
+            let mut with_receipt = args;
+            with_receipt.extend(["--startup-result", "result file.txt", "--config", "profile"]);
+            assert_eq!(
+                parse(&with_receipt).unwrap(),
+                Command {
+                    invocation: Invocation::Startup {
+                        action,
+                        result: Some("result file.txt".into())
+                    },
+                    config: Some("profile".into()),
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn startup_commands_reject_ambiguous_or_incomplete_arguments() {
+        for args in [
+            vec!["--set-startup"],
+            vec!["--set-startup", "yes"],
+            vec!["--set-startup="],
+            vec!["--set-startup", "on", "--toggle"],
+            vec!["--startup-status", "--remove-startup"],
+            vec!["--startup-result", "receipt"],
+            vec!["--background", "--startup-result", "receipt"],
+            vec!["--remove-startup", "--startup-result", ""],
+            vec![
+                "--remove-startup",
+                "--startup-result=a",
+                "--startup-result=b",
+            ],
+        ] {
+            assert!(parse(&args).is_err(), "{args:?}");
+        }
     }
 
     #[test]

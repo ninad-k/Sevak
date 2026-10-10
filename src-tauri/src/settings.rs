@@ -19,7 +19,7 @@ use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 use crate::state::AppState;
-use crate::{app, hotkey, takeover, window};
+use crate::{app, autostart, hotkey, takeover, window};
 
 const WINDOW_TITLE: &str = "Sevak Settings";
 /// Same frontend as the launcher; `main.ts` picks the view from the hash.
@@ -81,6 +81,7 @@ pub struct SettingsDto {
     pub log_dir: String,
     /// `windows`, `macos` or `linux`.
     pub platform: &'static str,
+    pub startup: autostart::StartupStatus,
 }
 
 #[tauri::command]
@@ -98,6 +99,7 @@ pub async fn get_settings(app: AppHandle) -> SettingsDto {
         is_gnome: session::is_gnome(),
         config_path: state.paths.config_file.display().to_string(),
         log_dir: state.paths.log_dir.display().to_string(),
+        startup: autostart::status(&state.paths.config_file),
         platform: if cfg!(windows) {
             "windows"
         } else if cfg!(target_os = "macos") {
@@ -411,9 +413,17 @@ fn save(app: &AppHandle, mut config: Config) -> Result<(), String> {
     normalize_hotkeys(&mut config);
     validate(&config, state.display.hotkey_strategy())?;
     let config = config.normalized();
-    config
-        .save_to(&state.paths.config_file)
-        .map_err(|err| err.to_string())?;
+    sevak_platform::startup::save_settings(
+        state.config().general.launch_at_login,
+        config.general.launch_at_login,
+        || autostart::backend(&state.paths.config_file),
+        || {
+            config
+                .save_to(&state.paths.config_file)
+                .map_err(|error| error.to_string())
+        },
+    )
+    .map_err(|error| format!("Settings were not saved: {error}"))?;
     tracing::info!(path = %state.paths.config_file.display(), "settings saved");
     // Re-reads the file just written, so what runs is exactly what is on disk.
     app::reload(app);

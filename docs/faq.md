@@ -12,7 +12,11 @@ More: [Custom hotkeys](configuration.md#hotkey).
 
 ### How do I make Sevak start at login?
 
-Open **Settings → General** and turn on **Launch at login**. Click **Save**.
+Open **Settings → General**, turn on **Start Sevak when I sign in**, and click
+**Save**. It starts in the background for your account on Windows, macOS and
+Linux; press your shortcut to open it. The Windows installer offers the same
+opt-in. If it does not start, check the warning beneath that setting and your
+OS's startup controls. See [Start Sevak after sign-in](install.md#start-sevak-after-sign-in).
 
 ### Why doesn't my search show any results?
 

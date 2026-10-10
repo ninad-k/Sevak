@@ -139,6 +139,67 @@ cargo test --profile fast-release -p sevak-plugins --test latency -- --nocapture
 cargo bench -p sevak-plugins      # search latency and startup benchmark (criterion)
 ```
 
+### Start-at-sign-in integration
+
+`general.launch_at_login` is the persisted opt-in. The platform startup layer
+owns each user's OS registration: `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
+on Windows, `~/Library/LaunchAgents/Sevak.plist` on macOS, and
+`$XDG_CONFIG_HOME/autostart/Sevak.desktop` (normally
+`~/.config/autostart/Sevak.desktop`) on Linux. Entries pass `--background` so
+sign-in never opens the launcher. AppImages register their stable file path.
+
+Settings returns both the saved preference and a `startup` status object
+(`registered`, `enabled`, `error`). Do not infer successful registration from
+the preference alone: OS restrictions or an external disable can prevent
+startup. An explicit off-to-on change may re-enable an entry. Routine startup,
+index reload and unrelated saves preserve an external disable, while repairing
+a missing entry for a saved opt-in and refreshing an enabled entry's executable
+path after an install moves.
+
+Linux `Hidden=true` overrides are treated as disabled even when the desktop
+manager leaves only a minimal `[Desktop Entry]` group without `Exec`. Windows
+also recognizes legacy unquoted commands from the old autostart plugin for
+owned-entry cleanup. If the old plugin registered this executable under HKLM,
+status and mutation return an actionable migration error; this per-user backend
+never deletes machine-wide registry values. See
+[legacy Windows startup](install.md#legacy-windows-startup).
+
+The Windows installers use Sevak's headless helpers to keep their checkbox and
+Settings on the same path:
+
+- `sevak --set-startup on` / `sevak --set-startup off`: update only the startup
+  preference and its OS registration, retaining the rest of `config.toml`.
+- `sevak --startup-status`: exit code `0` when enabled, `1` when disabled,
+  `2` when status cannot be read.
+- `sevak --refresh-startup`: update only an existing entry's executable path,
+  retaining its arguments, custom config path and disabled state. It does not
+  create a missing entry or write `general.launch_at_login`.
+- `sevak --remove-startup`: remove only an entry owned by this executable,
+  for uninstall cleanup.
+
+These commands do not open the launcher. Never run a per-user startup action
+as LocalSystem on behalf of all users. The backend snapshots registration and
+rolls back if the OS update or config persistence fails; Settings must surface
+the failure and must not display **Saved**. Ordinary application startup logs
+a registration problem without preventing the launcher from running.
+
+Focused tests:
+
+```sh
+cargo test -p sevak-platform startup
+cargo test -p sevak-platform --test startup
+cargo test -p sevak cli::tests::startup
+npm test -- Settings.startup.test.ts
+npm run test:scripts
+```
+
+The UI integration tests exercise the real Settings component and IPC wrappers
+with only the Tauri bridge mocked. Native startup tests use isolated storage
+and fake OS operations; they must not change the developer's real login items.
+Installer source checks and these tests do not establish that a real desktop
+will restart Sevak after sign-in. Follow the dedicated cases in
+[Testing](testing.md#startup-and-sign-in) on each supported OS before release.
+
 Coverage of the Rust crates uses `cargo-llvm-cov` (`cargo install --locked
 cargo-llvm-cov`, `rustup component add llvm-tools-preview`); the exact command and
 the current numbers are in [Testing](testing.md#coverage). CI runs `npm test` and the
@@ -228,6 +289,9 @@ Everything about the Windows installers is in `src-tauri/installer/`, wired up i
 | `upstream/installer.nsi` | The unmodified Tauri template it was copied from, kept to diff and merge against |
 | `English.nsh` | Every installer string (`nsis.customLanguageFiles`); the only language, no selector |
 | `upstream/English.nsh` | The unmodified Tauri strings, same purpose |
+| `main.wxs` | Sevak's copy of Tauri's WiX template (`wix.template`): wires in the MSI startup UI and orders startup helpers before automatic launch |
+| `upstream/main.wxs` | The pristine WiX template, kept as the common ancestor for Tauri upgrades |
+| `startup.wxs` | MSI startup checkbox, existing-state lookup, explicit silent properties, path refresh and owned-entry cleanup actions |
 | `hooks.nsh` | `NSIS_HOOK_PREINSTALL` and `NSIS_HOOK_PREUNINSTALL` (`nsis.installerHooks`): ask a running Sevak to quit before files change |
 | `sidebar.bmp`, `header.bmp` | NSIS Welcome/Finish artwork (164x314) and page header (150x57) |
 | `wix-banner.bmp`, `wix-dialog.bmp` | The same artwork for the MSI (493x58, 493x312) |
@@ -264,6 +328,19 @@ text) uses only config options, the language file and the hooks.
 - Switch names must not start with another switch's name: Tauri finds `/R` and `/P`
   with a substring search.
 - Custom pages never show in silent or passive mode; their decisions are switches.
+- Startup remains per user for either scope. The EXE offers it before UAC and
+  carries the original desktop user's choice across elevation; an EXE started
+  already elevated disables the checkbox rather than guessing the account.
+  The MSI offers it on Finish. `/AUTOSTART=on|off` (EXE) and
+  `SEVAK_AUTOSTART=on|off` (MSI) make an explicit scripted choice; omission keeps
+  the preference. Both call the same headless startup backend as Settings.
+- An unchecked interactive choice with no existing Run entry persists off,
+  including an upgrade with an old `launch_at_login=true` config. An unchanged
+  registered-but-disabled entry preserves the OS disable. Setup uses
+  `--refresh-startup` to follow a changed installation path without rewriting
+  arguments or re-enabling disabled startup. In MSI, both preference actions
+  and refresh must run before `LaunchApplication` in the execute sequence as
+  well as on the Finish button.
 
 **Regenerating the images.** `scripts/generate-installer-images.mjs` draws the
 four BMPs from `assets/sevak-icon.png` (the flame is cut out of it by its red
@@ -284,7 +361,7 @@ recolour the text of its check boxes, so a dark page would make them unreadable.
 Edit the layout in the script. NSIS and WiX only take uncompressed 24-bit BMP, which
 `scripts/bmp.mjs` writes.
 
-**After a Tauri upgrade, re-sync the template.** `installer.nsi` and `English.nsh`
+**After a Tauri upgrade, re-sync the templates.** `installer.nsi`, `English.nsh` and `main.wxs`
 are copies, so new Tauri behaviour (and fixes) reach Sevak only by merging them.
 `utils.nsh` and `FileAssociation.nsh` are not copies: Tauri writes its own next to
 the template at build time, so the macros the template calls (`CheckIfAppIsRunning`
@@ -310,10 +387,23 @@ and friends) are always the current ones.
    Resolve any conflict markers. Every Sevak change sits between `SEVAK:` comments
    (`diff src-tauri/installer/upstream/installer.nsi src-tauri/installer/installer.nsi`
    lists them all). Update the version in the header comment of `installer.nsi`.
-3. Build (`npx tauri build --bundles nsis`; makensis must report no warning) and
+   Also obtain the same tag's `crates/tauri-bundler/src/bundle/windows/msi/main.wxs`,
+   merge it into `src-tauri/installer/main.wxs` using `upstream/main.wxs` as the
+   ancestor, and replace that pristine copy. Keep `SevakStartupUI` and the
+   startup-before-launch ordering when resolving conflicts; `startup.wxs` is
+   Sevak's own fragment, not a pristine upstream file.
+3. Build (`npx tauri build --bundles nsis,msi`; makensis must report no warning) and
    run `npm run test:scripts`, which checks that every string the template uses is
-   defined and that every upstream string is still in `English.nsh`.
-4. Test by hand, since CI cannot run an installer, on a machine that is not your
+   defined and that every upstream string is still in `English.nsh`. With the
+   Windows toolchain available, it also compiles and runs the production NSIS
+   startup functions against isolated fixtures: choices, disabled states, path
+   changes, elevation arguments and helper receipts.
+   On Windows also run `pwsh -NoProfile -File scripts/test-windows-installer.ps1`
+   against the compiled MSI. It inspects app registration and evaluates real
+   installer conditions and sequencing without installing or changing startup;
+   the Windows bundle and release jobs run both installer test suites after
+   building, when the required NSIS toolchain is available.
+4. Test the actual installers by hand, on a machine that is not your
    daily one (or in a VM): a fresh per-user install; a fresh all-users install (UAC);
    upgrading a per-user and an all-users install with Sevak running, from the wizard
    and with `/S`; the in-app update path (`/P /UPDATE /R`); per-user over all-users
