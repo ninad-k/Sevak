@@ -108,7 +108,7 @@ test("the template keeps the pieces the in-app updater and Tauri rely on", () =>
 test("switches are not prefixes of each other (GetOptions matches substrings)", () => {
   const template = read("installer", "installer.nsi");
   const switches = [
-    ...new Set([...template.matchAll(/\$\{GetOptions\} \$CMDLINE "(\/\w+)"/g)].map((m) => m[1])),
+    ...new Set([...template.matchAll(/\$\{GetOptions\} \$CMDLINE "(\/\w+)=?"/g)].map((m) => m[1])),
   ];
   assert.ok(switches.length >= 8, `found only ${switches.join(" ")}`);
   for (const a of switches) {

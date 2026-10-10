@@ -22,8 +22,12 @@ tempfile = "3"
 sysinfo = { version = "0.39", default-features = false, features = ["system"] }
 thiserror.workspace = true
 tracing.workspace = true
+toml_edit.workspace = true
+# LaunchAgent property lists are rendered and validated in cross-platform tests.
+plist = "1"
 
 [target.'cfg(windows)'.dependencies]
+winreg = "0.55"
 windows = { workspace = true, features = [
     "ApplicationModel_Contacts",
     "Data_Pdf",
@@ -76,7 +80,6 @@ libc = "0.2"
 x11rb = { version = "0.14", features = ["randr", "record", "xtest"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-plist = "1"
 # Scratch files for `sips` icon conversions: exclusive, unpredictable names.
 tempfile.workspace = true
 # Frontmost app, pasteboard types and the Cmd+V key event (all already in the

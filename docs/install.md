@@ -52,7 +52,7 @@ one you have. See [Releasing](releasing.md) for how releases move from beta to s
 
 2. Run the installer and follow the prompts (below).
 
-3. After installation, Sevak appears in your Start Menu and runs in the tray. The finish page offers to start it, open Settings, and add a desktop shortcut.
+3. After installation, Sevak appears in **Start → All apps** and **Settings → Apps → Installed apps**. The finish page offers to start it in the tray, open Settings, and add a desktop shortcut. Automatic startup is a separate opt-in; see [Start Sevak after sign-in](#start-sevak-after-sign-in).
 
 !!! warning "SmartScreen warning"
 
@@ -67,7 +67,7 @@ one you have. See [Releasing](releasing.md) for how releases move from beta to s
 | Page | What it asks |
 |---|---|
 | Welcome, License | Nothing to decide: what Sevak is, and the Apache 2.0 licence. |
-| **Who is Sevak for?** | **Install for me only** (the default): no administrator permission, installs to `%LOCALAPPDATA%\Sevak`. Or **Install for all users on this PC**: Windows asks for administrator permission (UAC) and Sevak goes in `C:\Program Files\Sevak`. |
+| **Who is Sevak for?** | **Install for me only** (the default): no administrator permission, installs to `%LOCALAPPDATA%\Sevak`. Or **Install for all users on this PC**: Windows asks for administrator permission (UAC) and Sevak goes in `C:\Program Files\Sevak`. **Start Sevak when I sign in** is optional and applies only to the account running the wizard. |
 | **Sevak is already installed** | Only shown when Sevak is already there; see [Upgrading](#upgrading-and-reinstalling). |
 | Install folder, Start Menu folder | The usual; the folder is not asked again when you upgrade in place. |
 | Finish | **Start Sevak now** (on by default), **Open Sevak Settings**, **Create a desktop shortcut**. |
@@ -82,6 +82,27 @@ Per user and per PC differ in where Sevak is installed and who can run it:
 | Start Menu | Your Start Menu | All users' Start Menu |
 
 Settings and data are the same either way: each user's own `%APPDATA%\sevak`.
+
+The startup checkbox is unchecked for a new account and reflects the current
+startup state when upgrading. Leaving an existing, OS-disabled entry unchecked
+preserves that disable. If the entry is missing, finishing the wizard with the
+checkbox unchecked saves startup off so an old saved opt-in cannot restore it.
+It never enables startup for every account on a PC. Each other user can opt in
+from **Settings → General** after launching Sevak.
+
+The MSI offers the same **Start Sevak when I sign in** choice on its finish
+page, separately from launching Sevak now. For a silent MSI installation use
+`SEVAK_AUTOSTART=on` or `SEVAK_AUTOSTART=off` to make an explicit choice; omitting
+it preserves startup. Startup is still per user, even though MSI installs the
+app for the PC. A deployment running as a Windows service account cannot opt
+other users in: they must enable it from their own desktop sessions.
+
+Start the EXE installer normally and choose **Install for all users** inside
+the wizard if needed. If you instead launch it with **Run as administrator**,
+the startup checkbox is disabled because setup cannot safely identify the
+original desktop account. Use **Settings → General** after installation. An
+explicit `/AUTOSTART` request in this already-elevated case reports a failure
+to save startup instead of enrolling the administrator's account.
 
 If you choose **all users** and are not an administrator, Windows asks for an administrator's credentials. If you decline the prompt, the installer returns to the choice so you can pick **for me only**.
 
@@ -100,6 +121,12 @@ Upgrading installs over the old files, in the same folder and the same scope, an
 
 **Moving between per-user and per-PC.** If Sevak is installed for one scope and you pick the other, the installer warns that two copies would compete for the hotkey and offers to **replace** the existing copy (recommended: it is removed, your settings stay) or **keep both**. Removing a per-PC copy from a per-user install asks for administrator permission. If both copies already exist when you upgrade one, a check box offers to remove the other.
 
+When the install location changes, setup updates the executable path in an
+existing startup entry, keeping its arguments, custom configuration path and
+Windows-disabled state. This refresh does not opt you in or create an entry.
+Explicit startup choices and path refresh complete before setup automatically
+launches Sevak.
+
 ### Silent and scripted installs
 
 The installer accepts these switches, so it can be deployed without a wizard:
@@ -114,6 +141,7 @@ The installer accepts these switches, so it can be deployed without a wizard:
 | `/NS` | Do not create shortcuts. Without it, a silent or passive first install creates the Start Menu and desktop shortcuts. |
 | `/UNINSTALLOTHER` | Also remove a copy installed in the other scope. Without it, a silent install leaves the other copy alone. |
 | `/R` | After a `/S` or `/P` install, start Sevak. |
+| `/AUTOSTART=on` or `/AUTOSTART=off` | Explicitly enable or disable start at sign-in for the installing desktop user. Without this switch, silent/passive installs preserve the existing preference. This is separate from `/R`, which only starts Sevak now. |
 
 ```powershell
 # For the current user, no prompts (what winget runs)
@@ -124,6 +152,9 @@ The installer accepts these switches, so it can be deployed without a wizard:
 
 # A specific folder
 .\Sevak_<version>_x64-setup.exe /S /CURRENTUSER /D=D:\Tools\Sevak
+
+# For the current user, with automatic start after sign-in
+.\Sevak_<version>_x64-setup.exe /S /CURRENTUSER /AUTOSTART=on
 ```
 
 Silent installs never wait for an answer: if Sevak is running it is asked to quit and then closed by Windows' Restart Manager, and the installer carries on. A silent install over an existing copy upgrades it in place, whatever its version.
@@ -135,6 +166,58 @@ Open Settings → Apps → Installed apps, find Sevak, and click Uninstall (a pe
 The uninstaller offers **Also delete the web cache**, which removes only the web view's cache folders (`%LOCALAPPDATA%\com.ninad.sevak` and `%APPDATA%\com.ninad.sevak`). Your Sevak settings, history and plugins in `%APPDATA%\sevak\` are always preserved; see [Files and data](files-and-data.md) to delete them.
 
 For scripts: `"%LOCALAPPDATA%\Sevak\uninstall.exe" /CURRENTUSER /S` (per user) or `"%ProgramFiles%\Sevak\uninstall.exe" /ALLUSERS /S` (per PC, with the administrator prompt).
+
+Startup registration is per user too. The Windows uninstaller removes the
+current user's entry only when it points at the copy being removed; it must
+not remove an entry for a different installation. Other users should turn off
+startup in their own Settings before a machine-wide uninstall. Turn it off
+before deleting the macOS app or removing a Linux package as well; removing
+an application file does not reliably remove a user's startup configuration.
+
+## Start Sevak after sign-in
+
+Automatic startup is optional and off by default. On any supported OS:
+
+1. Open Sevak's **Settings → General**.
+2. Turn on **Start Sevak when I sign in** and click **Save**.
+3. Sign out and back in to test it. Sevak should be running in the tray or menu
+   bar with the launcher hidden; press your configured shortcut to open it.
+
+This also works after a restart, once you sign in. Turn the option off and
+**Save** to stop automatic starts. It controls only your account. The Windows
+installer checkbox and this setting write the same preference; **Start Sevak
+now** on the finish page does not enable future startup.
+
+| OS | Where startup is registered and managed |
+|---|---|
+| Windows | A per-user entry shown under **Settings → Apps → Startup** and **Task Manager → Startup apps**. Installing Sevak also adds its separate Start menu and Installed apps entries, whether startup is on or off. |
+| macOS | A user LaunchAgent. macOS can restrict it in **System Settings → General → Login Items** (the section's name varies with macOS version). Move Sevak to Applications before enabling it. |
+| Linux | A desktop autostart entry for your account. Desktop environments expose this in their startup applications settings. Keep an AppImage in a permanent folder before enabling it. |
+
+macOS `.dmg` files and Linux packages do not run the Windows installer wizard.
+Use the in-app setting after installing and launching Sevak. Linux autostart
+needs a graphical desktop session that supports the XDG autostart standard.
+
+Settings shows an error if it cannot update startup registration. It also
+warns if a saved opt-in is disabled by the OS or its entry is missing. In
+Windows Startup apps or Linux startup settings, enable Sevak again, or save
+the in-app option off and then on. Administrative policies may still block
+startup; an enabled preference cannot override those policies. See
+[Settings](settings.md#start-sevak-when-i-sign-in) for more detail.
+
+### Legacy Windows startup
+
+An older Sevak build run as administrator could register startup for every
+account. If Sevak finds that machine-wide entry pointing at this executable,
+Settings reports it instead of claiming that the per-user switch can disable
+it. Sevak does not change machine-wide startup entries automatically.
+
+Ask an administrator to inspect the **Sevak** value under
+`HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Run`, confirm that
+it points to the old Sevak installation, and remove **only that value**. Then
+use **Settings → General → Start Sevak when I sign in** for each account that
+wants startup. This is a migration step for affected older installations; a
+new installation uses per-user startup.
 
 ## macOS 11+
 

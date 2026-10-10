@@ -228,6 +228,13 @@ jobs:
           # signatures; parallel jobs updating it here could overwrite each other.
           uploadUpdaterJson: false
 
+      - name: Verify Windows installer startup integration
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          node --test scripts/installer.test.mjs scripts/installer-startup.test.mjs
+          pwsh -NoProfile -File scripts/test-windows-installer.ps1
+
   publish:
     name: Publish release
     needs: [plan, build]

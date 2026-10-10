@@ -142,6 +142,8 @@ export interface PluginInfo {
 
 export interface SettingsDto {
   config: Config;
+  /** OS registration, including startup disabled outside Sevak; separate from the saved preference. */
+  startup: { registered: boolean; enabled: boolean; error: string | null };
   catalog: PluginInfo[];
   display: Status["display"];
   is_gnome: boolean;

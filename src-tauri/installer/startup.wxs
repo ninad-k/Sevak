@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Per-user startup is applied by Sevak's transactional CLI, never by an HKLM
+     Run entry. Interactive actions run in the installer UI client, after the
+     files have been installed and before LaunchApplication. The stock WiX
+     success dialog is overridable; all other stock wizard pages stay intact.
+     https://docs.firegiant.com/wix3/xsd/wix/customaction/ -->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Fragment>
+    <!-- An omitted command-line property preserves the current preference.
+         Explicit silent selection: msiexec /i Sevak.msi /qn SEVAK_AUTOSTART=on -->
+    <Property Id="SEVAK_AUTOSTART" Secure="yes" />
+    <Condition Message="SEVAK_AUTOSTART must be on or off (or omitted to keep the current startup preference).">NOT SEVAK_AUTOSTART OR SEVAK_AUTOSTART="on" OR SEVAK_AUTOSTART="off"</Condition>
+    <Property Id="SEVAK_LAUNCH_NOW" Value="1" />
+    <Property Id="SEVAK_STARTUP_CHECKED" Secure="yes" />
+    <Property Id="SEVAK_STARTUP_INITIAL" Value="0" />
+    <Property Id="SEVAK_EXISTING_RUN">
+      <RegistrySearch Id="SevakUserRun" Root="HKCU" Key="Software\Microsoft\Windows\CurrentVersion\Run" Name="Sevak" Type="raw" Win64="yes" />
+    </Property>
+    <Property Id="SEVAK_STARTUP_APPROVAL">
+      <RegistrySearch Id="SevakStartupApproval" Root="HKCU" Key="Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" Name="Sevak" Type="raw" Win64="yes" />
+    </Property>
+    <Property Id="SEVAK_EXISTING_INSTALL">
+      <RegistrySearch Id="SevakPreviousMachineInstall" Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\Sevak" Name="InstallLocation" Type="raw" Win64="yes" />
+      <RegistrySearch Id="SevakPreviousUserInstall" Root="HKCU" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\Sevak" Name="InstallLocation" Type="raw" Win64="yes" />
+      <RegistrySearch Id="SevakPreviousMsiInstall" Root="HKCU" Key="Software\Ninad Kulkarni\Sevak" Name="InstallDir" Type="raw" Win64="yes" />
+    </Property>
+    <!-- RegistrySearch returns binary values as #x followed by hexadecimal.
+         Only known enabled states 02/06 (or no override) count as enabled;
+         preserve disabled and unknown future states just like the app does. -->
+    <SetProperty Id="SEVAK_STARTUP_CHECKED" Value="1" After="AppSearch" Sequence="ui"><![CDATA[
+      SEVAK_AUTOSTART="on" OR (SEVAK_AUTOSTART<>"off" AND SEVAK_EXISTING_RUN AND (NOT SEVAK_STARTUP_APPROVAL OR SEVAK_STARTUP_APPROVAL ~<< "#x02000000" OR SEVAK_STARTUP_APPROVAL ~<< "#x06000000"))
+    ]]></SetProperty>
+    <SetProperty Id="SEVAK_STARTUP_INITIAL" Value="1" After="SetSEVAK_STARTUP_CHECKED" Sequence="ui">SEVAK_STARTUP_CHECKED="1"</SetProperty>
+
+    <CustomAction Id="SevakEnableStartup" FileKey="Path" ExeCommand="--set-startup on" Impersonate="yes" Return="check" />
+    <CustomAction Id="SevakDisableStartup" FileKey="Path" ExeCommand="--set-startup off" Impersonate="yes" Return="check" />
+    <CustomAction Id="SevakRefreshStartup" FileKey="Path" ExeCommand="--refresh-startup" Impersonate="yes" Return="check" />
+    <CustomAction Id="SevakRemoveStartup" FileKey="Path" ExeCommand="--remove-startup" Impersonate="yes" Return="ignore" />
+    <InstallExecuteSequence>
+      <!-- An explicit property applies to the invoking account, not every user.
+           Never create a startup preference for a built-in service account. -->
+      <Custom Action="SevakEnableStartup" After="InstallFinalize"><![CDATA[
+        NOT REMOVE AND SEVAK_AUTOSTART="on" AND UserSID<>"S-1-5-18" AND UserSID<>"S-1-5-19" AND UserSID<>"S-1-5-20"
+      ]]></Custom>
+      <Custom Action="SevakDisableStartup" After="SevakEnableStartup"><![CDATA[
+        NOT REMOVE AND SEVAK_AUTOSTART="off" AND UserSID<>"S-1-5-18" AND UserSID<>"S-1-5-19" AND UserSID<>"S-1-5-20"
+      ]]></Custom>
+      <Custom Action="SevakRefreshStartup" After="SevakDisableStartup"><![CDATA[
+        NOT REMOVE AND (Installed OR WIX_UPGRADE_DETECTED OR SEVAK_EXISTING_INSTALL) AND UserSID<>"S-1-5-18" AND UserSID<>"S-1-5-19" AND UserSID<>"S-1-5-20"
+      ]]></Custom>
+      <!-- Path ownership is checked by the CLI. Upgrade removal must preserve
+           the new version's registration and the user's stored preference. -->
+      <Custom Action="SevakRemoveStartup" Before="RemoveFiles"><![CDATA[
+        REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE AND UserSID<>"S-1-5-18" AND UserSID<>"S-1-5-19" AND UserSID<>"S-1-5-20"
+      ]]></Custom>
+    </InstallExecuteSequence>
+
+    <UI Id="SevakStartupUI">
+      <Dialog Id="SevakExitDialog" Width="370" Height="270" Title="[ProductName] Setup">
+        <Control Id="Background" Type="Bitmap" X="0" Y="0" Width="370" Height="234" TabSkip="yes" Text="!(loc.ExitDialogBitmap)" />
+        <Control Id="Title" Type="Text" X="135" Y="20" Width="220" Height="45" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Bigger}Sevak setup is complete" />
+        <Control Id="Description" Type="Text" X="135" Y="75" Width="220" Height="45" Transparent="yes" NoPrefix="yes" Text="You can find Sevak in the Start menu and Windows Installed apps. Choose your startup preference, then click Finish.">
+          <Condition Action="hide">REMOVE="ALL"</Condition>
+        </Control>
+        <Control Id="Removed" Type="Text" X="135" Y="75" Width="220" Height="45" Transparent="yes" NoPrefix="yes" Hidden="yes" Text="Sevak has been removed. Click Finish to close setup.">
+          <Condition Action="show">REMOVE="ALL"</Condition>
+        </Control>
+        <Control Id="Startup" Type="CheckBox" X="135" Y="128" Width="220" Height="20" Property="SEVAK_STARTUP_CHECKED" CheckBoxValue="1" Text="Start Sevak when I sign in">
+          <Condition Action="hide">REMOVE="ALL"</Condition>
+        </Control>
+        <Control Id="StartupHint" Type="Text" X="150" Y="150" Width="200" Height="30" Transparent="yes" NoPrefix="yes" Text="Starts in the background for your account. Change this later in Settings &gt; General.">
+          <Condition Action="hide">REMOVE="ALL"</Condition>
+        </Control>
+        <Control Id="LaunchNow" Type="CheckBox" X="135" Y="190" Width="220" Height="20" Property="SEVAK_LAUNCH_NOW" CheckBoxValue="1" Text="Launch Sevak now">
+          <Condition Action="hide">Installed OR REMOVE="ALL"</Condition>
+        </Control>
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
+        <Control Id="Finish" Type="PushButton" X="304" Y="243" Width="56" Height="17" Default="yes" Cancel="yes" Text="Finish">
+          <!-- Untouched upgrades preserve an OS-disabled startup entry. Fresh
+               installs write even the unchecked preference so a retained old
+               config cannot silently turn startup back on at first launch. -->
+          <Publish Event="DoAction" Value="SevakEnableStartup" Order="1"><![CDATA[
+            NOT REMOVE AND SEVAK_STARTUP_CHECKED="1" AND (SEVAK_STARTUP_INITIAL<>"1" OR (NOT Installed AND NOT WIX_UPGRADE_DETECTED AND NOT SEVAK_EXISTING_INSTALL))
+          ]]></Publish>
+          <Publish Event="DoAction" Value="SevakDisableStartup" Order="2"><![CDATA[
+            NOT REMOVE AND SEVAK_STARTUP_CHECKED<>"1" AND (SEVAK_STARTUP_INITIAL="1" OR NOT SEVAK_EXISTING_RUN OR (NOT Installed AND NOT WIX_UPGRADE_DETECTED AND NOT SEVAK_EXISTING_INSTALL))
+          ]]></Publish>
+          <Publish Event="EndDialog" Value="Return" Order="999">1</Publish>
+        </Control>
+      </Dialog>
+      <InstallUISequence>
+        <!-- Reschedule the stock overridable success action to a never-shown
+             normal sequence slot; the custom dialog owns the one success slot. -->
+        <Show Dialog="ExitDialog" Before="ExecuteAction">0</Show>
+        <Show Dialog="SevakExitDialog" OnExit="success" />
+      </InstallUISequence>
+    </UI>
+  </Fragment>
+</Wix>

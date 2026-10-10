@@ -731,10 +731,29 @@
 
             <div class="row">
               <div class="label">
-                <span class="name">Launch at login</span>
-                <span class="hint">Starts Sevak in the background when you sign in.</span>
+                <span class="name">Start Sevak when I sign in</span>
+                <span class="hint">Start in the background for this account after sign-in. Your shortcut opens the launcher. Click Save to apply.</span>
+                {#if platform === "windows"}
+                  <span class="hint">Also managed in Windows Settings → Apps → Startup.</span>
+                {:else if platform === "macos"}
+                  <span class="hint">macOS can also restrict startup in System Settings → General → Login Items.</span>
+                {:else}
+                  <span class="hint">Uses your desktop's autostart settings. Keep an AppImage in a permanent location.</span>
+                {/if}
+                {#if loaded?.startup.error}
+                  <span class="hint error" role="alert">Could not check startup: {loaded.startup.error}</span>
+                {:else if loaded?.config.general.launch_at_login && !loaded.startup.enabled}
+                  <span class="hint error" role="status">
+                    {loaded.startup.registered ? "Startup is disabled outside Sevak." : "Sevak's startup entry is missing."}
+                    Enable it in your system's startup settings, or turn this option off and Save, then on and Save again.
+                  </span>
+                {/if}
               </div>
-              <Toggle bind:checked={draft.general.launch_at_login} label="Launch at login" />
+              <Toggle
+                bind:checked={draft.general.launch_at_login}
+                label="Start Sevak when I sign in"
+                disabled={saving}
+              />
             </div>
 
             <div class="row">
