@@ -500,9 +500,29 @@
       "repository": "https://github.com/ninad-k/Sevak/tree/main/examples/native/jwt",
       "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/native/jwt",
       "platforms": {
+        "linux-aarch64": {
+          "source": "gallery/extensions/jwt/jwt-0.1.0-linux-aarch64.sevakext",
+          "sha256": "3b557af762a855d13cc59620c90f2984c3b52d1f05b0ec8b511cb8bdae5eb82f"
+        },
+        "linux-x86_64": {
+          "source": "gallery/extensions/jwt/jwt-0.1.0-linux-x86_64.sevakext",
+          "sha256": "9532d3876c1c2cd701087ee282122cdfd84f00ac98a18fd0ccb65067c86390f9"
+        },
+        "macos-aarch64": {
+          "source": "gallery/extensions/jwt/jwt-0.1.0-macos-aarch64.sevakext",
+          "sha256": "6a0a33547affff9895d08479ff0da4d6dd9e8c5901a2def9367ea7b88a3b7239"
+        },
+        "macos-x86_64": {
+          "source": "gallery/extensions/jwt/jwt-0.1.0-macos-x86_64.sevakext",
+          "sha256": "01bcc7e85a7b3aec6a9a5f4553b72abbb853af2ddf43e59705ceff40700dc849"
+        },
+        "windows-aarch64": {
+          "source": "gallery/extensions/jwt/jwt-0.1.0-windows-aarch64.sevakext",
+          "sha256": "e325209588c65d6a8e63eeacb2d7db20cd70d31f8ac696882a2780d87e21fa24"
+        },
         "windows-x86_64": {
           "source": "gallery/extensions/jwt/jwt-0.1.0-windows-x86_64.sevakext",
-          "sha256": "d6638cef38db8f998f9eceedeb7cc4cee8191e0f308988de374e385b5816fc79"
+          "sha256": "5c975d32875ff4990a0c21481cc6285b2ab2fd35a58f989a646c26085cfb8f5f"
         }
       }
     },
@@ -524,9 +544,29 @@
       "repository": "https://github.com/ninad-k/Sevak/tree/main/examples/native/cron",
       "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/native/cron",
       "platforms": {
+        "linux-aarch64": {
+          "source": "gallery/extensions/cron/cron-0.1.0-linux-aarch64.sevakext",
+          "sha256": "9b29a62b51f55ec64ba343ec75ed9baf27da7f3a1ec093abf98ac0d91dc943d1"
+        },
+        "linux-x86_64": {
+          "source": "gallery/extensions/cron/cron-0.1.0-linux-x86_64.sevakext",
+          "sha256": "d305d65e158629c01bc60ea68efcf2bd54ae9f5d02dd4ba551d5f632b94cc65a"
+        },
+        "macos-aarch64": {
+          "source": "gallery/extensions/cron/cron-0.1.0-macos-aarch64.sevakext",
+          "sha256": "9bddd69552ed27d9480b6e1a7aadfeb774d819635f7ad0ee78681965b1946545"
+        },
+        "macos-x86_64": {
+          "source": "gallery/extensions/cron/cron-0.1.0-macos-x86_64.sevakext",
+          "sha256": "fb43e08475b78ffb4a8417cca7f1db9517fbffc6d4ad9ec32bb0f0fa84f98cd7"
+        },
+        "windows-aarch64": {
+          "source": "gallery/extensions/cron/cron-0.1.0-windows-aarch64.sevakext",
+          "sha256": "59eca403751537326b26edb23386dec72a38dea5ed2ac62dc5daba7035ea1628"
+        },
         "windows-x86_64": {
           "source": "gallery/extensions/cron/cron-0.1.0-windows-x86_64.sevakext",
-          "sha256": "04afb2b6fa2df8f63c921ac04c4811e160a8070927731207fb7fed73e99673c1"
+          "sha256": "ad82606a6cb47b89111717984bd347eb4f8252c52325334119879eda56ccd2ab"
         }
       }
     },
@@ -548,9 +588,29 @@
       "repository": "https://github.com/ninad-k/Sevak/tree/main/examples/native/regex",
       "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/native/regex",
       "platforms": {
+        "linux-aarch64": {
+          "source": "gallery/extensions/regex/regex-0.1.0-linux-aarch64.sevakext",
+          "sha256": "4d7cc0a0aec92e29ce7a08687b867435d2a59ae197b920fafa46b39b53e8c29f"
+        },
+        "linux-x86_64": {
+          "source": "gallery/extensions/regex/regex-0.1.0-linux-x86_64.sevakext",
+          "sha256": "f5eeb5111ff4c365afe01d7905cb871c93b1e6af788164546efeb5ef33fcbf74"
+        },
+        "macos-aarch64": {
+          "source": "gallery/extensions/regex/regex-0.1.0-macos-aarch64.sevakext",
+          "sha256": "032af8542d85df3533c22ae6ce5bd0702d43be5cd70a7a189f92cf90571ce884"
+        },
+        "macos-x86_64": {
+          "source": "gallery/extensions/regex/regex-0.1.0-macos-x86_64.sevakext",
+          "sha256": "c0415f1d11fafd6d03cfc088990214bac144c3bf18f2c34fc5f67995cd5b9f3c"
+        },
+        "windows-aarch64": {
+          "source": "gallery/extensions/regex/regex-0.1.0-windows-aarch64.sevakext",
+          "sha256": "23a4a3bf93b13c06396a5524be4ffcab5190e27396fbfafffcfbf9144f05609b"
+        },
         "windows-x86_64": {
           "source": "gallery/extensions/regex/regex-0.1.0-windows-x86_64.sevakext",
-          "sha256": "6868c1aee416a05386dfeb60125a935ed7057746d77cd69b3a8835c06eca4a1a"
+          "sha256": "77731e45027f66c540d9e5e23a089abb1e8abc4c83b50a41e52ba7f90ce6119f"
         }
       }
     }

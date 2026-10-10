@@ -200,6 +200,7 @@ Workflows and script plugins, in `gallery/index.json`:
 ## Check it before you push
 
 ```sh
+npm ci --ignore-scripts                           # install the checker and TOML parser dependencies
 node scripts/gallery-check.mjs                    # paths, hashes, orphans, the rules above
 node scripts/gallery-check.mjs --base origin/main # also: a changed package needs a higher version
 node --test scripts/gallery-check.test.mjs        # only if you changed the checker

@@ -80,8 +80,10 @@ declare no permissions, and wait for your permission before the first run:
 | `regex` | `regex` | test a regex against sample text, with positions and capture groups (`regex (\d+) => a1 b22`) |
 
 They are built for every platform by `.github/workflows/native-extensions.yml`.
+The committed 0.1.0 packages cover x86-64 and ARM64 on Windows, macOS and Linux,
+and were built and validated in [this native-extension workflow run](https://github.com/ninad-k/Sevak/actions/runs/38061280813).
 A package for a platform appears here only once it was built by that workflow;
-Sevak shows "no build for your platform" for the rest.
+Sevak shows "no build for your platform" for any platform an entry does not list.
 
 **Themes** (`themes/<Name>.toml`): the eight built-in ones (Sevak Light and
 Dark, Nord, Dracula, Solarized Light and Dark, Gruvbox, High Contrast) and
@@ -247,6 +249,7 @@ and may not be a Windows device name such as `con` or `nul`.
 ## Checking your change
 
 ```sh
+npm ci --ignore-scripts                              # install the checker and TOML parser dependencies
 node scripts/gallery-check.mjs                       # hashes, paths, orphans; no build needed
 node scripts/gallery-check.mjs --base origin/main    # also compare with main: a changed package needs a higher version
 cargo test -p sevak-core -p sevak-plugins            # the full checks, below

@@ -740,7 +740,7 @@
             <div class="row">
               <div class="label">
                 <span class="name">Check for updates</span>
-                <span class="hint">Looks for a new version at startup and daily, and asks before installing.</span>
+                <span class="hint">Checks at startup, every six hours, and when opened if over an hour has passed. Asks before installing.</span>
               </div>
               <Toggle bind:checked={draft.general.check_for_updates} label="Check for updates" />
             </div>

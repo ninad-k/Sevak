@@ -19,11 +19,8 @@ name: Native extensions
 # are made reproducible on purpose (below), so anyone can rebuild a tag and
 # compare SHA-256s.
 #
-# Honest status: this workflow could not be run before it was merged (GitHub
-# Actions cannot be run locally). The pieces were exercised by hand on Windows
-# (the build flags, the packaging commands, the smoke test, the gallery checks);
-# the cross-compilation for windows-aarch64, macos-x86_64 and linux-aarch64 and
-# the publish job are the parts that have only been reviewed, not run.
+# Build and package jobs also run on pull requests. Publishing is a separate,
+# maintainer-triggered job on main; it opens a reviewable pull request.
 
 on:
   pull_request:
