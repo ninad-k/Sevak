@@ -20,7 +20,7 @@ const assets = {
   [`Sevak_${version}_amd64.deb`]: sha("d"),
 };
 
-function render(files) {
+function render(files, releaseVersion = version) {
   const dir = mkdtempSync(join(tmpdir(), "sevak-manifests-"));
   const sums = join(dir, "SHA256SUMS.txt");
   writeFileSync(
@@ -30,7 +30,7 @@ function render(files) {
       .join("\n"),
   );
   const out = join(dir, "out");
-  const run = spawnSync(process.execPath, [script, version, sums, out], { encoding: "utf8" });
+  const run = spawnSync(process.execPath, [script, releaseVersion, sums, out], { encoding: "utf8" });
   return { run, out, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
 }
 
@@ -79,6 +79,23 @@ test("rendering fails when the installer is missing from SHA256SUMS.txt", () => 
   try {
     assert.notEqual(run.status, 0);
     assert.match(run.stderr, /no nsis asset/);
+  } finally {
+    cleanup();
+  }
+});
+
+test("promoted beta uses an Arch-safe pkgver but downloads the upstream beta asset", () => {
+  const beta = "1.3.0-beta.2";
+  const betaAssets = Object.fromEntries(
+    Object.entries(assets).map(([name, hash]) => [name.replaceAll(version, beta), hash]),
+  );
+  const { run, out, cleanup } = render(betaAssets, beta);
+  try {
+    assert.equal(run.status, 0, run.stderr);
+    const aur = readFileSync(join(out, "aur", "PKGBUILD"), "utf8");
+    assert.match(aur, /^pkgver=1\.3\.0_beta\.2$/m);
+    assert.match(aur, /v\$\{pkgver\/\/_\/-\}\/Sevak_\$\{pkgver\/\/_\/-\}_amd64\.deb/);
+    assert.match(aur, new RegExp(`sha256sums_x86_64=\\('` + sha("d") + `'\\)`));
   } finally {
     cleanup();
   }

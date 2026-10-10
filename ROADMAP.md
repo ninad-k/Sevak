@@ -2,17 +2,25 @@
 
 **This roadmap is a statement of intent, not a commitment.** Priorities can shift based on community feedback, technical constraints and the maintainer's time.
 
-## Now (in progress)
+## Implemented on this branch
 
-- Branded Windows installer with per-user / per-PC installation choice and upgrade prompt
-- Settings pages for plugins that are config-file-only today (Contacts, Clipboard, Tasks, Dictionary)
-- Safari bookmarks and PDF previews
-- More gallery themes, workflows and plugins
-- Refreshed demo media and screenshots
-- Security scanning, threat model review, and security advisory guidelines
-- Diagnostics report for troubleshooting
-- License and SBOM documentation
-- Test infrastructure improvements (faster CI, better coverage)
+These features are present in the current branch. A feature being present here
+does not mean a release containing it is published yet.
+
+- Branded Windows installer with per-user and per-machine installation, upgrade,
+  repair and uninstall flows
+- Settings pages for Contacts, Clipboard, Tasks and media, and Dictionary
+- Safari bookmark indexing and previews for PDFs and other supported files
+- Media controls and now-playing results
+- Security scanning and dependency checks, a threat model, and private security
+  reporting guidance
+- Local diagnostics reports for troubleshooting
+- Licence and SBOM documentation; stable releases generate SBOMs and provenance
+  attestations
+- Automated tests, coverage reporting and a latency budget in CI
+- Marketplace site, gallery packages, and in-app gallery and extension pages
+  (integrated on this branch; availability in a published release follows the
+  release process)
 
 ## Next (planned, awaiting resources)
 
@@ -31,7 +39,11 @@
 - Music library browsing and filtering
 - Richer file search filters
 - Localisation for other languages
-- A larger community gallery with user-submitted workflows and plugins
+- More community gallery themes, workflows, plugins and extensions (the initial
+  marketplace, gallery packages, submission and review process exist; see
+  [Publishing to the gallery](docs/marketplace/publishing.md))
+- Gallery revocation and deprecation notices in the app: today a removed entry stays listed in builds released before the removal and stays installed where it was installed, and the optional `deprecated` / `replaced_by` index fields are not shown. A fix would be a signed revocation list checked only when the user opens the gallery or the extensions page, plus a notice and an offer to uninstall. Not started; see [updating and removal](docs/marketplace/updating-and-removal.md#takedown)
+- Signed gallery indexes (see [Gallery trust](docs/security/gallery-trust.md#future-sign-the-indexes))
 
 ## How to propose a feature
 

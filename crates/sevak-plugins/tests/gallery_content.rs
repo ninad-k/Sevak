@@ -50,9 +50,26 @@ const ALLOWED_HOSTS: &[&str] = &[
 
 /// Python modules the gallery's scripts may import: text, math, hashing,
 /// randomness and time only. Nothing that reaches the network or other programs.
+/// `base64` (decode a JWT's segments) and `unicodedata` (character names for
+/// the Unicode lookup, accent folding for slugs) are pure in-memory data
+/// transforms with no I/O, added for the second plugin pack.
 const ALLOWED_PYTHON_IMPORTS: &[&str] = &[
-    "colorsys", "datetime", "hashlib", "json", "math", "os", "random", "re", "secrets", "string",
-    "sys", "time", "uuid", "zlib",
+    "base64",
+    "colorsys",
+    "datetime",
+    "hashlib",
+    "json",
+    "math",
+    "os",
+    "random",
+    "re",
+    "secrets",
+    "string",
+    "sys",
+    "time",
+    "unicodedata",
+    "uuid",
+    "zlib",
 ];
 
 fn repo() -> PathBuf {
@@ -195,6 +212,62 @@ fn the_native_package_checks_catch_each_kind_of_mismatch() {
 #[test]
 fn native_extensions_are_real_packages() {
     check_native_entries(&all_entries(), &repo().join("gallery"));
+}
+
+#[test]
+fn native_keywords_do_not_collide_with_other_gallery_entries() {
+    use sevak_plugins::extensions::ExtensionPackage;
+
+    let owners = KeywordOwners::builtin(&Config::default());
+    let mut seen = BTreeMap::new();
+    for entry in index() {
+        let keywords = if entry.kind == Kind::Workflow {
+            let (workflow, _) = load_workflow(&entry);
+            workflow
+                .keyword_nodes()
+                .map(|(_, keyword)| keyword.to_lowercase())
+                .collect::<Vec<_>>()
+        } else {
+            vec![
+                Manifest::load(&examples(Kind::Plugin).join(entry.folder_name()))
+                    .unwrap()
+                    .keyword
+                    .to_lowercase(),
+            ]
+        };
+        for keyword in keywords {
+            seen.insert(keyword, entry.id.clone());
+        }
+    }
+    for entry in all_entries().into_iter().filter(|e| e.kind == Kind::Native) {
+        let mut first_keyword = None;
+        for (platform, artifact) in &entry.platforms {
+            let file = artifact.source.rsplit('/').next().unwrap();
+            let bytes = std::fs::read(repo().join("gallery/extensions").join(&entry.id).join(file))
+                .unwrap();
+            let package = ExtensionPackage::read(&bytes, &entry.id).unwrap();
+            let manifest =
+                Manifest::parse_for(&package.manifest_text, &entry.id, platform).unwrap();
+            let keyword = manifest.keyword.to_lowercase();
+            if let Some(first) = &first_keyword {
+                assert_eq!(first, &keyword, "{}: platform keywords differ", entry.id);
+            } else {
+                assert!(
+                    owners.owners_of(&keyword, None).is_empty(),
+                    "{}: built-in keyword {keyword:?}",
+                    entry.id
+                );
+                assert!(
+                    !seen.contains_key(&keyword),
+                    "{} and {} both use {keyword:?}",
+                    entry.id,
+                    seen.get(&keyword).unwrap()
+                );
+                seen.insert(keyword.clone(), entry.id.clone());
+                first_keyword = Some(keyword);
+            }
+        }
+    }
 }
 
 /// The checks behind [`native_extensions_are_real_packages`], over `gallery`
@@ -580,7 +653,7 @@ fn gallery_workflows_validate_and_stay_within_the_policy() {
             "{id}: keyword clash"
         );
         assert_eq!(workflow.name, entry.name, "{id}: name");
-        assert_eq!(workflow.author, "Sevak", "{id}");
+        assert_eq!(workflow.author, entry.author, "{id}: author");
         assert_eq!(workflow.version, entry.version, "{id}");
         assert!(workflow.enabled);
 
@@ -1425,5 +1498,460 @@ fn the_hash_calculator_matches_known_digests_for_text_and_files() {
     assert_eq!(
         titles(&ask("")),
         ["Type some text, or the full path of a file"]
+    );
+}
+
+// ---- the second plugin pack ----------------------------------------------------
+
+#[test]
+fn the_jwt_decoder_decodes_without_verifying() {
+    let Some(py) = require_python() else { return };
+    let ask = |query: &str| ask(&py, "jwt-decoder", "jwt.py", query);
+    let old = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4iLCJpYXQiOjE1MTYyMzkwMjIsImV4cCI6MTUxNjI0MjYyMn0.sig";
+    for query in [
+        old.to_owned(),
+        format!("Bearer {old}"),
+        format!("\"{old}\""),
+    ] {
+        let items = ask(&query);
+        assert_eq!(
+            item(&items, "header"),
+            "{\"alg\": \"HS256\", \"typ\": \"JWT\"}"
+        );
+        assert!(item(&items, "payload").contains("\"sub\": \"1234567890\""));
+        assert!(item(&items, "iat").starts_with("Issued: 2018-01-18 01:30:22 UTC ("));
+        assert!(item(&items, "exp").starts_with("Expires: 2018-01-18 02:30:22 UTC ("));
+        assert_eq!(item(&items, "status"), "Expired");
+        assert_eq!(item(&items, "sub"), "sub: 1234567890");
+        assert!(item(&items, "signature").contains("NOT verified"));
+    }
+    // The pretty JSON is offered in the text view.
+    let items = ask(old);
+    assert!(items[0]["text"].as_str().unwrap().contains("\n  \"alg\""));
+    // A token that expires in 2100 is not expired; "alg none" is called out.
+    let future = ask("eyJhbGciOiJub25lIn0.eyJleHAiOjQxMDI0NDQ4MDAsImlzcyI6InNldmFrIn0.");
+    assert!(item(&future, "status").starts_with("Not expired"));
+    assert!(item(&future, "exp").contains("2100-01-01 00:00:00 UTC (in "));
+    assert_eq!(item(&future, "iss"), "iss: sevak");
+    assert!(item(&future, "signature").starts_with("No signature"));
+    // Not a token, or nothing typed: one hint row.
+    assert_eq!(titles(&ask("")), ["Paste a JWT to decode it"]);
+    for bad in ["abc", "a.b.c", "e30.e30", "!!.!!.!!", "e30.W10.x"] {
+        assert_eq!(
+            titles(&ask(bad)),
+            ["That does not look like a JWT"],
+            "{bad}"
+        );
+    }
+}
+
+#[test]
+fn the_base_converter_converts_between_bases() {
+    let Some(py) = require_python() else { return };
+    let ask = |query: &str| ask(&py, "base-converter", "base.py", query);
+    for query in [
+        "255",
+        "0xff",
+        "0XFF",
+        "0b11111111",
+        "0o377",
+        "ff 16",
+        "11111111 2",
+        "377 8",
+        "2_5_5",
+    ] {
+        let items = ask(query);
+        assert_eq!(item(&items, "dec"), "255", "{query}");
+        assert_eq!(item(&items, "hex"), "0xff", "{query}");
+        assert_eq!(item(&items, "bin"), "0b11111111", "{query}");
+        assert_eq!(item(&items, "oct"), "0o377", "{query}");
+        assert_eq!(item(&items, "bin-grouped"), "1111 1111", "{query}");
+        assert_eq!(item(&items, "b36"), "73", "{query}");
+        assert_eq!(item(&items, "size"), "8 bits, 1 byte", "{query}");
+    }
+    let items = ask("-10");
+    assert_eq!(item(&items, "hex"), "-0xa");
+    assert_eq!(item(&items, "bin"), "-0b1010");
+    assert_eq!(item(&ask("0"), "bin"), "0b0");
+    assert_eq!(item(&ask("zz 36"), "dec"), "1295");
+    assert_eq!(item(&ask("256"), "hex-grouped"), "01 00");
+    // A huge number is refused rather than printed; so is nonsense.
+    let huge = "9".repeat(100);
+    for bad in [
+        huge.as_str(),
+        "xyz",
+        "12 99",
+        "0xfg",
+        "0b102",
+        "0xff 10",
+        "1 2 3",
+    ] {
+        assert_eq!(
+            titles(&ask(bad)),
+            ["That is not a number I can convert"],
+            "{bad}"
+        );
+    }
+    assert_eq!(titles(&ask("")), ["Type a number"]);
+}
+
+#[test]
+fn the_cron_explainer_explains_and_lists_future_runs() {
+    let Some(py) = require_python() else { return };
+    let ask = |query: &str| ask(&py, "cron-explainer", "cron.py", query);
+    for (expression, words) in [
+        ("*/15 * * * *", "Every 15 minutes"),
+        ("* * * * *", "Every minute"),
+        ("30 9 * * mon-fri", "At 09:30 on Monday to Friday"),
+        ("30 9 * * 1-5", "At 09:30 on Monday to Friday"),
+        ("0 0 * * 7", "At 00:00 on Sunday"),
+        ("0 9,17 * * 1", "At 09:00 and 17:00 on Monday"),
+        ("5 * * * *", "At minute 5 of every hour"),
+        ("0 0 1 * *", "At 00:00 on the 1st of the month"),
+        (
+            "0 12 1,15 jan,jul *",
+            "At 12:00 on the 1st and 15th of the month in January and July",
+        ),
+        ("@daily", "At 00:00"),
+        ("@hourly", "At minute 0 of every hour"),
+    ] {
+        let items = ask(expression);
+        assert_eq!(item(&items, "explain"), words, "{expression}");
+        assert_eq!(
+            items.len(),
+            6,
+            "{expression}: the explanation and five runs"
+        );
+    }
+    // Runs are in the future, in order, and match the schedule.
+    let items = ask("30 9 * * mon-fri");
+    let runs: Vec<String> = (0..5)
+        .map(|i| item(&items, &format!("next-{i}")).to_owned())
+        .collect();
+    // "Mon 2026-10-05 09:30": the date part sorts in time order.
+    let mut sorted = runs.clone();
+    sorted.sort_by_key(|run| run[4..].to_owned());
+    assert_eq!(runs, sorted);
+    for run in &runs {
+        assert!(run.ends_with(" 09:30"), "{run}");
+        assert!(!run.starts_with("Sat") && !run.starts_with("Sun"), "{run}");
+    }
+    // Day-of-month and weekday together run when either matches.
+    assert!(item(&ask("0 0 13 * fri"), "explain").contains("cron runs when either matches"));
+    // February 30th never happens.
+    assert_eq!(
+        item(&ask("0 0 30 2 *"), "never"),
+        "No run in the next 8 years"
+    );
+    for bad in [
+        "* * * *",
+        "60 * * * *",
+        "* 24 * * *",
+        "* * 0 * *",
+        "* * * 13 *",
+        "*/0 * * * *",
+        "a b c d e",
+        "5-1 * * * *",
+    ] {
+        assert_eq!(
+            titles(&ask(bad)),
+            ["That is not a valid cron expression"],
+            "{bad}"
+        );
+    }
+    assert_eq!(ask("").len(), 4);
+}
+
+#[test]
+fn the_regex_tester_lists_matches_and_groups() {
+    let Some(py) = require_python() else { return };
+    let ask = |query: &str| ask(&py, "regex-tester", "regex.py", query);
+    let items = ask(r"(?P<area>\d+)-(\d+) :: call 555-1234 or 1-2");
+    assert_eq!(item(&items, "count"), "2 matches");
+    assert_eq!(item(&items, "m0"), "555-1234");
+    assert_eq!(item(&items, "m0g1"), "555");
+    assert_eq!(item(&items, "m0g2"), "1234");
+    assert_eq!(item(&items, "m1"), "1-2");
+    let all = items[0]["action"]["text"].as_str().unwrap();
+    assert_eq!(all, "555-1234\n1-2");
+    let named = items.iter().find(|i| i["key"] == "m0g1").unwrap();
+    assert!(named["subtitle"].as_str().unwrap().contains("(area)"));
+    assert_eq!(item(&ask(r"(?i)HELLO :: say hello"), "count"), "1 match");
+    // The first " :: " splits pattern from text; a lone "::" works too.
+    assert_eq!(item(&ask(r"\w+::\w+ :: a::b"), "count"), "1 match");
+    assert_eq!(item(&ask("a|b::xxbxa"), "count"), "2 matches");
+    assert_eq!(titles(&ask("zzz :: abc")), ["No match"]);
+    // An optional group that did not take part has no value.
+    assert_eq!(item(&ask("a(b)? :: a"), "m0g1"), "(no value)");
+    // Invalid patterns are explained, never a crash.
+    assert!(titles(&ask("(oops :: abc"))[0].starts_with("Invalid pattern:"));
+    assert!(titles(&ask("[a-"))[0].starts_with("Invalid pattern:"));
+    assert_eq!(
+        titles(&ask("abc"))[0],
+        "Valid pattern. Add \" :: \" and some text to test it"
+    );
+    assert_eq!(
+        titles(&ask(""))[0],
+        "Type a pattern, then \" :: \", then the text"
+    );
+    let long = format!("a :: {}", "a".repeat(2001));
+    assert_eq!(
+        titles(&ask(&long))[0],
+        "Text is longer than 2000 characters"
+    );
+    // Many matches are capped, not dumped.
+    assert!(ask(&format!(". :: {}", "x".repeat(1500))).len() <= 50);
+}
+
+#[test]
+fn the_unicode_lookup_describes_characters_and_searches_names() {
+    let Some(py) = require_python() else { return };
+    let ask = |query: &str| ask(&py, "unicode-lookup", "unicode_lookup.py", query);
+    for query in ["U+1F600", "u+1f600", "0x1F600", "\\u{1F600}", "\u{1F600}"] {
+        let items = ask(query);
+        assert_eq!(item(&items, "name-1F600"), "GRINNING FACE", "{query}");
+        assert_eq!(item(&items, "char-1F600"), "\u{1F600}", "{query}");
+        assert_eq!(item(&items, "code-1F600"), "U+1F600", "{query}");
+        assert_eq!(item(&items, "utf8-1F600"), "F0 9F 98 80", "{query}");
+        assert_eq!(item(&items, "html-1F600"), "&#x1F600;", "{query}");
+        assert_eq!(item(&items, "js-1F600"), "\\u{1F600}", "{query}");
+        assert_eq!(item(&items, "py-1F600"), "\\U0001f600", "{query}");
+        assert_eq!(item(&items, "dec-1F600"), "128512", "{query}");
+    }
+    let items = ask("\u{e9}");
+    assert_eq!(item(&items, "name-E9"), "LATIN SMALL LETTER E WITH ACUTE");
+    assert_eq!(item(&items, "utf8-E9"), "C3 A9");
+    assert_eq!(item(&items, "nfd-E9"), "U+0065 + U+0301");
+    assert_eq!(
+        item(&ask("a"), "name-61"),
+        "LATIN SMALL LETTER A",
+        "one ASCII character is a lookup"
+    );
+    // Several pasted characters give one row each.
+    assert_eq!(ask("\u{2192}\u{2190}").len(), 2);
+    // A name search finds the obvious character first.
+    let hits = ask("right arrow");
+    assert!(
+        titles(&hits)[0].ends_with("Rightwards Arrow"),
+        "{:?}",
+        titles(&hits)
+    );
+    assert_eq!(hits[0]["action"]["text"], "\u{2192}");
+    assert!(ask("snowman")
+        .iter()
+        .any(|i| i["action"]["text"] == "\u{2603}"));
+    assert_eq!(titles(&ask("qqqq zzzz")), ["No character with that name"]);
+    assert_eq!(titles(&ask("U+110000")), ["Code points end at U+10FFFF"]);
+    assert_eq!(ask("").len(), 1);
+}
+
+#[test]
+fn the_http_status_reference_explains_codes_groups_and_words() {
+    let Some(py) = require_python() else { return };
+    let ask = |query: &str| ask(&py, "http-status", "status.py", query);
+    let items = ask("404");
+    assert_eq!(titles(&items), ["404 Not Found"]);
+    assert!(items[0]["subtitle"]
+        .as_str()
+        .unwrap()
+        .starts_with("Client error."));
+    assert_eq!(titles(&ask("418")), ["418 I'm a teapot"]);
+    assert_eq!(titles(&ask("teapot")), ["418 I'm a teapot"]);
+    for query in ["5", "5xx", "5x", "server"] {
+        let codes = titles(&ask(query));
+        assert!(codes.len() >= 6, "{query}");
+        assert!(
+            codes.iter().all(|t| t.starts_with('5')),
+            "{query}: {codes:?}"
+        );
+    }
+    let redirects = titles(&ask("redirect"));
+    assert!(redirects.contains(&"301 Moved Permanently".to_owned()));
+    assert!(redirects.contains(&"304 Not Modified".to_owned()));
+    // Words search names and meanings.
+    assert!(titles(&ask("timeout"))
+        .iter()
+        .any(|t| t == "504 Gateway Timeout"));
+    assert!(titles(&ask("rate limit"))
+        .iter()
+        .any(|t| t == "429 Too Many Requests"));
+    // A code that is not standard is said so, not guessed at.
+    assert!(titles(&ask("499"))[0].contains("not a standard client error code"));
+    assert_eq!(titles(&ask("xyzzy")), ["No status code matches"]);
+    assert_eq!(ask("").len(), 14);
+}
+
+#[test]
+fn the_port_reference_knows_common_ports() {
+    let Some(py) = require_python() else { return };
+    let ask = |query: &str| ask(&py, "port-reference", "ports.py", query);
+    assert_eq!(titles(&ask("443")), ["443  HTTPS (TCP)"]);
+    assert_eq!(ask("443")[0]["action"]["text"], "443");
+    assert_eq!(titles(&ask("postgres")), ["5432  PostgreSQL (TCP)"]);
+    assert!(titles(&ask("ssh")).iter().any(|t| t.starts_with("22 ")));
+    assert!(titles(&ask("dev server")).len() >= 3);
+    assert!(titles(&ask("5173"))[0].contains("Vite"));
+    // A number that is not listed is classified, not invented.
+    assert_eq!(titles(&ask("999"))[0], "999 is not in this list");
+    assert!(ask("999")[0]["subtitle"]
+        .as_str()
+        .unwrap()
+        .contains("well-known"));
+    assert!(ask("50000")[0]["subtitle"]
+        .as_str()
+        .unwrap()
+        .contains("ephemeral"));
+    assert!(ask("20000")[0]["subtitle"]
+        .as_str()
+        .unwrap()
+        .contains("registered"));
+    assert_eq!(titles(&ask("70000")), ["Ports go from 0 to 65535"]);
+    assert_eq!(
+        titles(&ask("nonesuch")),
+        ["No port with that name in the list"]
+    );
+    assert_eq!(ask("").len(), 11);
+}
+
+#[test]
+fn the_chmod_calculator_converts_octal_and_symbolic_modes() {
+    let Some(py) = require_python() else { return };
+    let ask = |query: &str| ask(&py, "chmod-calculator", "chmod.py", query);
+    for (query, octal, symbolic) in [
+        ("755", "755", "rwxr-xr-x"),
+        ("0644", "644", "rw-r--r--"),
+        ("rwxr-xr-x", "755", "rwxr-xr-x"),
+        ("-rw-r--r--", "644", "rw-r--r--"),
+        ("drwxr-xr-x", "755", "rwxr-xr-x"),
+        ("000", "000", "---------"),
+        ("4755", "4755", "rwsr-xr-x"),
+        ("rwSr--r--", "4644", "rwSr--r--"),
+        ("2775", "2775", "rwxrwsr-x"),
+        ("1777", "1777", "rwxrwxrwt"),
+        ("rwxrwxrwT", "1776", "rwxrwxrwT"),
+    ] {
+        let items = ask(query);
+        assert_eq!(item(&items, "octal"), octal, "{query}");
+        assert_eq!(item(&items, "symbolic"), symbolic, "{query}");
+        assert_eq!(
+            item(&items, "command"),
+            format!("chmod {octal} file"),
+            "{query}"
+        );
+    }
+    let items = ask("640");
+    assert_eq!(item(&items, "owner"), "Owner: read, write");
+    assert_eq!(item(&items, "group"), "Group: read");
+    assert_eq!(item(&items, "others"), "Others: nothing");
+    assert!(item(&ask("4755"), "special-4000").starts_with("setuid"));
+    assert!(item(&ask("1777"), "special-1000").starts_with("sticky"));
+    assert!(item(&ask("777"), "warn").starts_with("World-writable"));
+    // Digits out of range, wrong lengths, misplaced special letters and the like.
+    for bad in [
+        "888",
+        "75",
+        "75555",
+        "rwxrwxrw",
+        "rwxr-xr-q",
+        "rwtr-xr-x",
+        "rwxr-xr-s",
+        "u+x",
+    ] {
+        assert_eq!(
+            titles(&ask(bad)),
+            ["Type 755, 0644, 4755 or rwxr-xr-x"],
+            "{bad}"
+        );
+    }
+    assert_eq!(ask("").len(), 5);
+}
+
+#[test]
+fn the_date_calculator_counts_and_shifts_dates() {
+    let Some(py) = require_python() else { return };
+    let ask = |query: &str| ask(&py, "date-calculator", "days.py", query);
+    let items = ask("2026-01-01 2026-12-31");
+    assert_eq!(item(&items, "days"), "364 days");
+    assert_eq!(item(&items, "breakdown"), "11 months, 30 days");
+    assert_eq!(item(&items, "weeks"), "52 weeks and 0 days");
+    assert_eq!(item(&items, "business"), "260 weekdays (Monday to Friday)");
+    // Words, slashes, either order, and "to" all work.
+    for query in [
+        "2026-01-01 to 2026-12-31",
+        "2026/1/1 until 2026-12-31",
+        "2026-12-31 2026-01-01",
+    ] {
+        assert_eq!(item(&ask(query), "days"), "364 days", "{query}");
+    }
+    // Month arithmetic clamps to the end of a short month.
+    assert_eq!(
+        item(&ask("2026-01-31 2026-03-01"), "breakdown"),
+        "1 month, 1 day"
+    );
+    assert_eq!(
+        item(&ask("2024-02-29 2025-02-28"), "breakdown"),
+        "11 months, 30 days"
+    );
+    assert_eq!(
+        item(&ask("2000-01-01 2026-10-04"), "breakdown"),
+        "26 years, 9 months, 3 days"
+    );
+    assert_eq!(item(&ask("2026-05-05 2026-05-05"), "days"), "the same day");
+    // Adding and subtracting days.
+    let items = ask("2026-03-01 + 45");
+    assert_eq!(item(&items, "date"), "Wednesday 2026-04-15");
+    assert_eq!(item(&items, "iso"), "2026-04-15");
+    assert_eq!(item(&items, "week"), "Day 105 of 2026, ISO week 16");
+    assert_eq!(item(&ask("2026-03-01 - 1 day"), "iso"), "2026-02-28");
+    assert_eq!(item(&ask("2024-02-28 + 1"), "iso"), "2024-02-29");
+    // Relative to today: the answer depends on the clock, so check its shape.
+    let overview = ask("");
+    let today = item(&overview, "today");
+    assert!(today.contains(' ') && today.len() > 12, "{today}");
+    let plus = ask("+90");
+    assert!(item(&plus, "date").contains(" 20"));
+    assert!(plus[0]["subtitle"]
+        .as_str()
+        .unwrap()
+        .starts_with("90 days after "));
+    assert_eq!(ask("today")[0]["title"], "today");
+    assert_eq!(ask("tomorrow")[0]["title"], "in 1 day");
+    assert_eq!(ask("yesterday")[0]["title"], "1 day ago");
+    for bad in [
+        "soon",
+        "2026-13-01",
+        "2026-02-30",
+        "2026-01-01 2026-02-30",
+        "0000-01-01",
+    ] {
+        assert_eq!(titles(&ask(bad)), ["I could not read that"], "{bad}");
+    }
+    assert_eq!(item(&ask("+99999999"), "bad"), "I could not read that");
+}
+
+#[test]
+fn the_slugify_plugin_makes_slugs_and_counts_text() {
+    let Some(py) = require_python() else { return };
+    let ask = |query: &str| ask(&py, "slugify", "slug.py", query);
+    let items = ask("  Hello, World! Caf\u{e9} \u{2013} Stra\u{df}e  ");
+    assert_eq!(item(&items, "slug"), "hello-world-cafe-strasse");
+    assert_eq!(item(&items, "snake"), "hello_world_cafe_strasse");
+    assert_eq!(item(&items, "short"), "hello-world-cafe-strasse");
+    assert_eq!(item(&items, "filename"), "Hello-World-Cafe-Strasse");
+    assert_eq!(item(&items, "words"), "5 words");
+    assert_eq!(item(&items, "bytes"), "31 bytes in UTF-8");
+    assert_eq!(
+        item(&ask("one two three four five six seven eight"), "short"),
+        "one-two-three-four-five-six"
+    );
+    assert_eq!(item(&ask("a/b\\c:d*e?"), "filename"), "abcde");
+    assert_eq!(item(&ask("***"), "slug"), "(nothing left after cleaning)");
+    assert_eq!(item(&ask("***"), "filename"), "untitled");
+    assert_eq!(item(&ask("x"), "words"), "1 word");
+    assert_eq!(item(&ask("\u{4f60}\u{597d}"), "bytes"), "6 bytes in UTF-8");
+    assert_eq!(titles(&ask(""))[0], "Type or paste some text");
+    assert_eq!(
+        titles(&ask(&"a".repeat(5001)))[0],
+        "Text is longer than 5000 characters"
     );
 }

@@ -1,0 +1,25 @@
+# The manifest of the jwt native extension. Documented in
+# docs/writing-extensions-in-rust.md ("The manifest").
+
+protocol    = 1
+id          = "script:jwt"
+keyword     = "jwt"
+name        = "JWT decoder"
+description = "Type jwt and paste a token to read its header, claims and expiry. Decoded offline; the signature is not verified."
+
+[extension]
+version     = "0.1.0"
+author      = "Sevak"
+license     = "Apache-2.0"
+min_sevak   = "0.1.0"
+repository  = "https://github.com/ninad-k/Sevak/tree/main/examples/native/jwt"
+# It only reads the text you type. No network, no files, no other programs.
+permissions = []
+
+[extension.binaries]
+windows-x86_64  = "bin/jwt-windows-x86_64.exe"
+windows-aarch64 = "bin/jwt-windows-aarch64.exe"
+macos-x86_64    = "bin/jwt-macos-x86_64"
+macos-aarch64   = "bin/jwt-macos-aarch64"
+linux-x86_64    = "bin/jwt-linux-x86_64"
+linux-aarch64   = "bin/jwt-linux-aarch64"

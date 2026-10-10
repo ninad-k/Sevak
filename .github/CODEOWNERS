@@ -20,4 +20,16 @@
 /SECURITY.md @ninad-k
 /gallery/ @ninad-k
 
+# The gallery and its sources: anything here is installed by other people's
+# launchers, so every change needs an owner's review (see docs/marketplace/maintainers.md).
+# A pull request that adds code or a binary also needs the security review.
+/examples/ @ninad-k
+/templates/ @ninad-k
+/scripts/gallery-check*.mjs @ninad-k
+/crates/sevak-plugins/tests/gallery_content.rs @ninad-k
+/.github/workflows/gallery-*.yml @ninad-k
+/.github/labeler.yml @ninad-k
+/.github/PULL_REQUEST_TEMPLATE/ @ninad-k
+/.github/ISSUE_TEMPLATE/extension_submission.yml @ninad-k
+
 # Future: co-maintainers can be added as @ninad-k, @username for specific paths

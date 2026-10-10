@@ -854,6 +854,22 @@ mod tests {
         assert!(index.skipped.iter().any(|s| s.starts_with("future")));
     }
 
+    /// Fields this build does not know (the optional `deprecated` and
+    /// `replaced_by` of docs/marketplace/updating-and-removal.md) must not cost
+    /// an entry its place: the index format stays 2 and older builds keep working.
+    #[test]
+    fn fields_this_build_does_not_know_are_ignored() {
+        let mut entry = good_entry("old-tool");
+        entry["deprecated"] = serde_json::json!("Superseded by new-tool.");
+        entry["replaced_by"] = serde_json::json!("new-tool");
+        entry["some_future_field"] = serde_json::json!({"nested": [1, 2, 3]});
+        let text = serde_json::json!({"format": 2, "entries": [entry]}).to_string();
+        let index = parse_index(&text, &pin()).unwrap();
+        assert!(index.skipped.is_empty(), "{:?}", index.skipped);
+        assert_eq!(index.entries.len(), 1);
+        assert_eq!(index.entries[0].id, "old-tool");
+    }
+
     #[test]
     fn tags_are_kept_only_when_they_are_plain_labels() {
         let mut entry = good_entry("tagged");
@@ -1463,8 +1479,14 @@ mod tests {
         assert!(index.skipped.is_empty(), "{:?}", index.skipped);
         assert!(index.entries.len() >= 3);
         let kinds: HashSet<_> = index.entries.iter().map(|e| e.kind).collect();
-        assert_eq!(kinds.len(), 2, "both workflows and plugins are shown");
-        for entry in &index.entries {
+        assert_eq!(
+            kinds,
+            HashSet::from([Kind::Workflow, Kind::Plugin, Kind::Native]),
+            "workflows, script plugins and native extensions are shown"
+        );
+        // Native artifacts use the extensions installer; gallery_content's
+        // native_extensions_are_real_packages checks every platform package.
+        for entry in index.entries.iter().filter(|e| e.kind != Kind::Native) {
             // The source is the release's raw address of the committed package.
             let file = entry.source.rsplit('/').next().unwrap();
             assert!(

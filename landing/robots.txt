@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://ninad-k.github.io/Sevak/sitemap.xml
+Sitemap: https://ninad-k.github.io/Sevak/docs/sitemap.xml

@@ -1,0 +1,15 @@
+# Type "http" and a code or word: "http 404", "http redirect", "http 5xx" or "http timeout".
+#
+# A one-shot Python plugin (Python 3.8 or newer, standard library only) with a
+# built-in table of the standard HTTP status codes and what they mean. Offline;
+# writes no files. Enter copies the code and its name.
+protocol    = 1
+id          = "script:http-status"
+name        = "HTTP status codes (Python)"
+description = "http 404, http redirect, http timeout: what an HTTP status code means. Built-in table. Offline."
+keyword     = "http"
+mode        = "oneshot"
+script      = "status.py"
+
+# Python starts a little slower than the default 50 ms wait.
+timeout_ms  = 200

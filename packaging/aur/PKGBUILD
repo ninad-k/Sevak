@@ -3,7 +3,7 @@
 # and published by its release workflow; edit it there, not in the AUR.
 
 pkgname=sevak-bin
-pkgver={{version}}
+pkgver={{aur_version}}
 pkgrel=1
 pkgdesc="Keyboard-first quick launcher: apps, calculator, web and file search"
 arch=('x86_64')
@@ -12,7 +12,7 @@ license=('Apache-2.0')
 depends=('webkit2gtk-4.1' 'gtk3' 'glib2' 'libayatana-appindicator')
 provides=('sevak')
 conflicts=('sevak')
-source_x86_64=("https://github.com/ninad-k/Sevak/releases/download/v${pkgver}/Sevak_${pkgver}_amd64.deb")
+source_x86_64=("https://github.com/ninad-k/Sevak/releases/download/v${pkgver//_/-}/Sevak_${pkgver//_/-}_amd64.deb")
 sha256sums_x86_64=('{{sha256:deb}}')
 
 package() {

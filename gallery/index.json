@@ -320,6 +320,299 @@
         "needs-node",
         "developer"
       ]
+    },
+    {
+      "id": "jwt-decoder",
+      "kind": "plugin",
+      "name": "JWT decoder (Python)",
+      "description": "pyjwt <token> decodes a JSON Web Token's header, payload and expiry in plain language. Decode only, no signature check. Offline; needs Python 3.",
+      "author": "Sevak",
+      "version": "1.0",
+      "tags": [
+        "developer",
+        "security",
+        "needs-python"
+      ],
+      "source": "gallery/packages/jwt-decoder.zip",
+      "sha256": "5a1cf006e4326f796a40e0efec2d919be3d3e5169966336dc90a084657f25886",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/jwt-decoder"
+    },
+    {
+      "id": "base-converter",
+      "kind": "plugin",
+      "name": "Number base converter (Python)",
+      "description": "base 255, base 0xff or base ff 16: binary, octal, decimal and hexadecimal side by side. Offline; needs Python 3.",
+      "author": "Sevak",
+      "version": "1.0",
+      "tags": [
+        "developer",
+        "converter",
+        "needs-python"
+      ],
+      "source": "gallery/packages/base-converter.zip",
+      "sha256": "a369ca9a08f736efb252a7795dc6b45e3fd068613da628500528ae70e633da52",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/base-converter"
+    },
+    {
+      "id": "cron-explainer",
+      "kind": "plugin",
+      "name": "Cron explainer (Python)",
+      "description": "pycron 30 9 * * mon-fri says in words when a cron expression runs and lists its next five run times. Offline; needs Python 3.",
+      "author": "Sevak",
+      "version": "1.0",
+      "tags": [
+        "developer",
+        "devops",
+        "needs-python"
+      ],
+      "source": "gallery/packages/cron-explainer.zip",
+      "sha256": "05915af4baa3a76163c2ca381a46410ebb721a07c3d85b30d2221dfd0472e500",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/cron-explainer"
+    },
+    {
+      "id": "regex-tester",
+      "kind": "plugin",
+      "name": "Regex tester (Python)",
+      "description": "rx pattern :: text lists every match and capture group of a regular expression (Python syntax). Offline; needs Python 3.",
+      "author": "Sevak",
+      "version": "1.0",
+      "tags": [
+        "developer",
+        "text",
+        "needs-python"
+      ],
+      "source": "gallery/packages/regex-tester.zip",
+      "sha256": "37995370e69acb478f4f3ef66c11914dd706d2b66c0140a211076225b3ff4e38",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/regex-tester"
+    },
+    {
+      "id": "unicode-lookup",
+      "kind": "plugin",
+      "name": "Unicode lookup (Python)",
+      "description": "uni U+1F600, uni a pasted character or uni right arrow: code point, name, UTF-8 bytes, HTML entity and escapes. Offline; needs Python 3.",
+      "author": "Sevak",
+      "version": "1.0",
+      "tags": [
+        "developer",
+        "text",
+        "needs-python"
+      ],
+      "source": "gallery/packages/unicode-lookup.zip",
+      "sha256": "a5ced75603113e74712b6c9c42abd28ee23b248fd51aaff2761e087ec762de7b",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/unicode-lookup"
+    },
+    {
+      "id": "http-status",
+      "kind": "plugin",
+      "name": "HTTP status codes (Python)",
+      "description": "http 404, http redirect or http timeout explains what an HTTP status code means. Built-in table. Offline; needs Python 3.",
+      "author": "Sevak",
+      "version": "1.0",
+      "tags": [
+        "developer",
+        "reference",
+        "needs-python"
+      ],
+      "source": "gallery/packages/http-status.zip",
+      "sha256": "fa1984863723d885692b6be91e331b32fa5382d41be2301572137e8d48e79cfd",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/http-status"
+    },
+    {
+      "id": "port-reference",
+      "kind": "plugin",
+      "name": "Port reference (Python)",
+      "description": "port 5432 or port ssh: what a TCP/UDP port is normally used for, including common dev-server ports. Never scans. Offline; needs Python 3.",
+      "author": "Sevak",
+      "version": "1.0",
+      "tags": [
+        "developer",
+        "reference",
+        "needs-python"
+      ],
+      "source": "gallery/packages/port-reference.zip",
+      "sha256": "d84ee701e98b7cd0c9aaf50af9c044b3c023407eecb7d55086eb152eb1aec816",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/port-reference"
+    },
+    {
+      "id": "chmod-calculator",
+      "kind": "plugin",
+      "name": "chmod calculator (Python)",
+      "description": "chmod 755 or chmod rwxr-xr-x converts Unix permissions between octal and symbolic and explains each class. Calculates only. Offline; needs Python 3.",
+      "author": "Sevak",
+      "version": "1.0",
+      "tags": [
+        "developer",
+        "reference",
+        "needs-python"
+      ],
+      "source": "gallery/packages/chmod-calculator.zip",
+      "sha256": "3160ad90857298c0abbf0ae34b1e60ec129cf89c050387ce3ec2e8a6f60b020e",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/chmod-calculator"
+    },
+    {
+      "id": "date-calculator",
+      "kind": "plugin",
+      "name": "Date calculator (Python)",
+      "description": "days 2026-12-25, days +90 or days 2026-01-01 2026-12-31: days until or between dates, and a date plus or minus N days. Offline; needs Python 3.",
+      "author": "Sevak",
+      "version": "1.0",
+      "tags": [
+        "productivity",
+        "dates",
+        "needs-python"
+      ],
+      "source": "gallery/packages/date-calculator.zip",
+      "sha256": "d52a56637dc65b8a27610a57bd3626dd19d73c9fac1246280daa11578d061c77",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/date-calculator"
+    },
+    {
+      "id": "slugify",
+      "kind": "plugin",
+      "name": "Slugify and text stats (Python)",
+      "description": "slug Hello World! gives a URL slug and a safe file name, with character, word, byte and reading-time counts. Offline; needs Python 3.",
+      "author": "Sevak",
+      "version": "1.0",
+      "tags": [
+        "text",
+        "productivity",
+        "needs-python"
+      ],
+      "source": "gallery/packages/slugify.zip",
+      "sha256": "16543da63c536dd40e1437e1365dd66724563b21d43324361a3eb1f662daef31",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/slugify"
+    },
+    {
+      "id": "jwt",
+      "kind": "native",
+      "name": "JWT decoder",
+      "description": "Type jwt and paste a token to read its header, claims and expiry. Decoded offline; the signature is not verified.",
+      "author": "Sevak",
+      "version": "0.1.0",
+      "license": "Apache-2.0",
+      "tags": [
+        "native",
+        "developer",
+        "offline",
+        "security"
+      ],
+      "min_sevak": "0.1.0",
+      "permissions": [],
+      "repository": "https://github.com/ninad-k/Sevak/tree/main/examples/native/jwt",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/native/jwt",
+      "platforms": {
+        "linux-aarch64": {
+          "source": "gallery/extensions/jwt/jwt-0.1.0-linux-aarch64.sevakext",
+          "sha256": "3b557af762a855d13cc59620c90f2984c3b52d1f05b0ec8b511cb8bdae5eb82f"
+        },
+        "linux-x86_64": {
+          "source": "gallery/extensions/jwt/jwt-0.1.0-linux-x86_64.sevakext",
+          "sha256": "9532d3876c1c2cd701087ee282122cdfd84f00ac98a18fd0ccb65067c86390f9"
+        },
+        "macos-aarch64": {
+          "source": "gallery/extensions/jwt/jwt-0.1.0-macos-aarch64.sevakext",
+          "sha256": "6a0a33547affff9895d08479ff0da4d6dd9e8c5901a2def9367ea7b88a3b7239"
+        },
+        "macos-x86_64": {
+          "source": "gallery/extensions/jwt/jwt-0.1.0-macos-x86_64.sevakext",
+          "sha256": "01bcc7e85a7b3aec6a9a5f4553b72abbb853af2ddf43e59705ceff40700dc849"
+        },
+        "windows-aarch64": {
+          "source": "gallery/extensions/jwt/jwt-0.1.0-windows-aarch64.sevakext",
+          "sha256": "e325209588c65d6a8e63eeacb2d7db20cd70d31f8ac696882a2780d87e21fa24"
+        },
+        "windows-x86_64": {
+          "source": "gallery/extensions/jwt/jwt-0.1.0-windows-x86_64.sevakext",
+          "sha256": "5c975d32875ff4990a0c21481cc6285b2ab2fd35a58f989a646c26085cfb8f5f"
+        }
+      }
+    },
+    {
+      "id": "cron",
+      "kind": "native",
+      "name": "Cron explainer",
+      "description": "Type cron and an expression to read it in words and see the next five run times (UTC, or add an offset like +05:30).",
+      "author": "Sevak",
+      "version": "0.1.0",
+      "license": "Apache-2.0",
+      "tags": [
+        "native",
+        "developer",
+        "offline"
+      ],
+      "min_sevak": "0.1.0",
+      "permissions": [],
+      "repository": "https://github.com/ninad-k/Sevak/tree/main/examples/native/cron",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/native/cron",
+      "platforms": {
+        "linux-aarch64": {
+          "source": "gallery/extensions/cron/cron-0.1.0-linux-aarch64.sevakext",
+          "sha256": "9b29a62b51f55ec64ba343ec75ed9baf27da7f3a1ec093abf98ac0d91dc943d1"
+        },
+        "linux-x86_64": {
+          "source": "gallery/extensions/cron/cron-0.1.0-linux-x86_64.sevakext",
+          "sha256": "d305d65e158629c01bc60ea68efcf2bd54ae9f5d02dd4ba551d5f632b94cc65a"
+        },
+        "macos-aarch64": {
+          "source": "gallery/extensions/cron/cron-0.1.0-macos-aarch64.sevakext",
+          "sha256": "9bddd69552ed27d9480b6e1a7aadfeb774d819635f7ad0ee78681965b1946545"
+        },
+        "macos-x86_64": {
+          "source": "gallery/extensions/cron/cron-0.1.0-macos-x86_64.sevakext",
+          "sha256": "fb43e08475b78ffb4a8417cca7f1db9517fbffc6d4ad9ec32bb0f0fa84f98cd7"
+        },
+        "windows-aarch64": {
+          "source": "gallery/extensions/cron/cron-0.1.0-windows-aarch64.sevakext",
+          "sha256": "59eca403751537326b26edb23386dec72a38dea5ed2ac62dc5daba7035ea1628"
+        },
+        "windows-x86_64": {
+          "source": "gallery/extensions/cron/cron-0.1.0-windows-x86_64.sevakext",
+          "sha256": "ad82606a6cb47b89111717984bd347eb4f8252c52325334119879eda56ccd2ab"
+        }
+      }
+    },
+    {
+      "id": "regex",
+      "kind": "native",
+      "name": "Regex tester",
+      "description": "Type regex, a pattern, => and some text to see every match and capture group. Rust regex syntax, offline.",
+      "author": "Sevak",
+      "version": "0.1.0",
+      "license": "Apache-2.0",
+      "tags": [
+        "native",
+        "developer",
+        "offline"
+      ],
+      "min_sevak": "0.1.0",
+      "permissions": [],
+      "repository": "https://github.com/ninad-k/Sevak/tree/main/examples/native/regex",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/native/regex",
+      "platforms": {
+        "linux-aarch64": {
+          "source": "gallery/extensions/regex/regex-0.1.0-linux-aarch64.sevakext",
+          "sha256": "4d7cc0a0aec92e29ce7a08687b867435d2a59ae197b920fafa46b39b53e8c29f"
+        },
+        "linux-x86_64": {
+          "source": "gallery/extensions/regex/regex-0.1.0-linux-x86_64.sevakext",
+          "sha256": "f5eeb5111ff4c365afe01d7905cb871c93b1e6af788164546efeb5ef33fcbf74"
+        },
+        "macos-aarch64": {
+          "source": "gallery/extensions/regex/regex-0.1.0-macos-aarch64.sevakext",
+          "sha256": "032af8542d85df3533c22ae6ce5bd0702d43be5cd70a7a189f92cf90571ce884"
+        },
+        "macos-x86_64": {
+          "source": "gallery/extensions/regex/regex-0.1.0-macos-x86_64.sevakext",
+          "sha256": "c0415f1d11fafd6d03cfc088990214bac144c3bf18f2c34fc5f67995cd5b9f3c"
+        },
+        "windows-aarch64": {
+          "source": "gallery/extensions/regex/regex-0.1.0-windows-aarch64.sevakext",
+          "sha256": "23a4a3bf93b13c06396a5524be4ffcab5190e27396fbfafffcfbf9144f05609b"
+        },
+        "windows-x86_64": {
+          "source": "gallery/extensions/regex/regex-0.1.0-windows-x86_64.sevakext",
+          "sha256": "77731e45027f66c540d9e5e23a089abb1e8abc4c83b50a41e52ba7f90ce6119f"
+        }
+      }
     }
   ]
 }

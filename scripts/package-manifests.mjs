@@ -4,6 +4,7 @@
 //
 // Placeholders in the templates:
 //   {{version}}         the release version (no leading v)
+//   {{aur_version}}     the Arch pkgver (hyphens become underscores)
 //   {{date}}            today, YYYY-MM-DD
 //   {{file:KIND}}       the release asset of that kind (see ASSETS)
 //   {{sha256:KIND}}     its SHA-256, lowercase; {{SHA256:KIND}} uppercase (winget)
@@ -47,6 +48,8 @@ function render(template) {
     switch (key) {
       case "version":
         return version;
+      case "aur_version":
+        return version.replaceAll("-", "_");
       case "date":
         return new Date().toISOString().slice(0, 10);
       case "file":

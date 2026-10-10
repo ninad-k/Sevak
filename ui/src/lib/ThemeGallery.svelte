@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MarketplaceLinks from "./MarketplaceLinks.svelte";
   import { fetchThemeGallery, installGalleryTheme } from "./theme-ipc";
   import { GALLERY_INDEX_URL, type GalleryItem, type StoredTheme } from "./themes";
 
@@ -52,6 +53,7 @@
         data). Installing downloads one theme file and checks its SHA-256 against the list before
         saving it to your themes folder. Nothing is requested until you click.
       </p>
+      <MarketplaceLinks />
     </div>
     <button type="button" class="btn" disabled={loading} onclick={browse}>
       {loading ? "Loading…" : items ? "Refresh list" : "Browse online themes"}

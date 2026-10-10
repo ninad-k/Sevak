@@ -9,6 +9,7 @@
 [**Download Sevak**](https://github.com/ninad-k/Sevak/releases/latest) ·
 [**Website**](https://ninad-k.github.io/Sevak/) ·
 [Documentation](https://ninad-k.github.io/Sevak/docs/) ·
+[Marketplace](https://ninad-k.github.io/Sevak/marketplace/) ·
 [PDF manual](docs/pdf/Sevak-User-Guide.pdf) ·
 [Quick start](docs/quickstart.md) · [Help](docs/troubleshooting.md) ·
 [Contribute](CONTRIBUTING.md)
@@ -150,7 +151,9 @@ Sevak also includes:
   `sevak-ext` and submit them to the gallery. A native extension is a compiled
   program: it never runs before you allow it, and Sevak cannot sandbox it.
   [Browse and install →](docs/features/extensions.md) ·
-  [Write one →](docs/writing-extensions-in-rust.md)
+  [Marketplace →](https://ninad-k.github.io/Sevak/marketplace/) ·
+  [Write one →](docs/writing-extensions-in-rust.md) ·
+  [Publish to the gallery →](docs/marketplace/publishing.md)
 - **Custom hotkeys** — extra global keys that open Sevak with text typed in
   (`> `, `g `) or run a result directly.
 - **Themes** — light, dark or system, plus accent color, font, radius, opacity
@@ -169,7 +172,8 @@ Sevak also includes:
   restored scripts ask for approval again. Automatic backups are off by default.
   [Backup and restore →](docs/backup-and-restore.md)
 - **Tray access and launch at login** — keep Sevak available in the background.
-- **Optional update checks** — check at startup and daily; installation
+- **Optional update checks** — check at startup, every six hours, and when you
+  open the launcher if the last check is over an hour old; installation
   requires your agreement and verifies an update signature.
 
 [Explore the complete user guide →](docs/usage.md)
@@ -295,8 +299,9 @@ Every network request Sevak itself makes is in this list:
 - **Links you open.** Selecting a web search, a bookmark or any other link
   (including a Universal Actions web search) opens it in your browser, where
   the site receives your search terms.
-- **Update checks.** Release information is fetched from GitHub after startup
-  and once a day (one more small file if you choose the beta channel). Disable
+- **Update checks.** Release information is fetched from GitHub after startup,
+  every six hours, and when you open the launcher if the last check is over an
+  hour old (one more small file if you choose the beta channel). Disable
   them in **Settings → General** or set `general.check_for_updates = false`.
 - **Installing an update.** Its package is downloaded after you agree. Windows
   installation may also download WebView2 if it is missing.

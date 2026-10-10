@@ -1,0 +1,25 @@
+# The manifest of the regex native extension. Documented in
+# docs/writing-extensions-in-rust.md ("The manifest").
+
+protocol    = 1
+id          = "script:regex"
+keyword     = "regex"
+name        = "Regex tester"
+description = "Type regex, a pattern, => and some text to see every match and capture group. Rust regex syntax, offline."
+
+[extension]
+version     = "0.1.0"
+author      = "Sevak"
+license     = "Apache-2.0"
+min_sevak   = "0.1.0"
+repository  = "https://github.com/ninad-k/Sevak/tree/main/examples/native/regex"
+# It only reads the text you type. No network, no files, no other programs.
+permissions = []
+
+[extension.binaries]
+windows-x86_64  = "bin/regex-windows-x86_64.exe"
+windows-aarch64 = "bin/regex-windows-aarch64.exe"
+macos-x86_64    = "bin/regex-macos-x86_64"
+macos-aarch64   = "bin/regex-macos-aarch64"
+linux-x86_64    = "bin/regex-linux-x86_64"
+linux-aarch64   = "bin/regex-linux-aarch64"

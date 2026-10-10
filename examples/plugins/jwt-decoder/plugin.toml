@@ -1,0 +1,16 @@
+# Type "pyjwt" and paste a token: "pyjwt eyJhbGciOi...".
+#
+# A one-shot Python plugin (Python 3.8 or newer, standard library only) that
+# decodes a JSON Web Token's header and payload and explains exp, iat and nbf.
+# It never verifies the signature, never contacts anything and writes no file.
+# Enter copies the row you picked; Ctrl+T shows JSON in the text view.
+protocol    = 1
+id          = "script:jwt-decoder"
+name        = "JWT decoder (Python)"
+description = "pyjwt <token> decodes a JSON Web Token's header, payload and expiry. Decode only, no signature check. Offline."
+keyword     = "pyjwt"
+mode        = "oneshot"
+script      = "jwt.py"
+
+# Python starts a little slower than the default 50 ms wait.
+timeout_ms  = 200

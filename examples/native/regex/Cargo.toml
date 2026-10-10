@@ -1,0 +1,41 @@
+[package]
+name = "sevak-regex"
+description = "Sevak native extension: test a regular expression against sample text, offline."
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+authors = ["Sevak project"]
+rust-version = "1.95"
+publish = false
+
+# Its own workspace: this crate has its own Cargo.lock, so the program that is
+# published is built from exactly the dependencies listed there, whatever the
+# main workspace does.
+[workspace]
+
+[[bin]]
+name = "regex"
+path = "src/main.rs"
+
+[dependencies]
+sevak-extension-sdk = { path = "../../../crates/sevak-extension-sdk" }
+# MIT OR Apache-2.0. Matching runs in time linear in the text, so a pattern
+# cannot hang the program (no backtracking).
+regex = "1"
+
+[dev-dependencies]
+# tests/host.rs runs the built program through Sevak's real script-plugin host
+# and approval. Dev-only: none of this is in the program that ships.
+sevak-core = { path = "../../../crates/sevak-core" }
+sevak-platform = { path = "../../../crates/sevak-platform" }
+sevak-plugins = { path = "../../../crates/sevak-plugins" }
+tempfile = "3"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+debug = false
+# Not "abort": the SDK turns a panic into an error for that query.
+panic = "unwind"

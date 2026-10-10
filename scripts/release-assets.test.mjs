@@ -119,6 +119,28 @@ test("a consistent release verifies", () => {
   }
 });
 
+test("rollback accepts stable release assets with separately checksummed SBOMs", () => {
+  const r = release({ manifestName: "latest.json" });
+  try {
+    const sboms = ["sevak-sbom-rust.cdx.json", "sevak-sbom-npm.cdx.json"];
+    for (const name of sboms) writeFileSync(join(r.dir, name), `SBOM ${name}`);
+    const sbomSums = sboms.map((name) =>
+      `${createHash("sha256").update(readFileSync(join(r.dir, name))).digest("hex")}  ${name}`,
+    ).join("\n");
+    writeFileSync(join(r.dir, "SBOM-SHA256SUMS.txt"), `${sbomSums}\n`);
+
+    assert.deepEqual(verify(r.dir, VERSION, ["latest.json"]), []);
+
+    writeFileSync(join(r.dir, sboms[0]), "tampered SBOM");
+    assert.match(verify(r.dir, VERSION, ["latest.json"]).join("\n"), /sevak-sbom-rust\.cdx\.json: checksum does not match SBOM-SHA256SUMS\.txt/);
+
+    rmSync(join(r.dir, "SBOM-SHA256SUMS.txt"));
+    assert.match(verify(r.dir, VERSION, ["latest.json"]).join("\n"), /SBOM-SHA256SUMS\.txt is missing/);
+  } finally {
+    r.done();
+  }
+});
+
 test("a tampered asset, a missing signature or a stale manifest is caught", () => {
   const r = release();
   try {

@@ -118,9 +118,9 @@ issues and upgrade notes** for that release.
 ## Before promoting a beta
 
 Tick these before you run **Promote** (or, in the auto flow, before merging
-anything that touches the risk areas below). Detailed test cases live in the
-[test plan](https://github.com/ninad-k/Sevak/blob/main/docs/testing.md) once that
-page exists; until then this list is the plan.
+anything that touches the risk areas below). The detailed manual cases are in
+[Testing](testing.md#release-test-checklist); use the risk-area list here to
+choose the checks that apply to the release.
 
 **Always**
 

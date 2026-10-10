@@ -1,0 +1,38 @@
+[package]
+name = "sevak-cron"
+description = "Sevak native extension: explain a cron expression and list its next runs, offline."
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+authors = ["Sevak project"]
+rust-version = "1.95"
+publish = false
+
+# Its own workspace: this crate has its own Cargo.lock, so the program that is
+# published is built from exactly the dependencies listed there, whatever the
+# main workspace does.
+[workspace]
+
+[[bin]]
+name = "cron"
+path = "src/main.rs"
+
+[dependencies]
+sevak-extension-sdk = { path = "../../../crates/sevak-extension-sdk" }
+
+[dev-dependencies]
+# tests/host.rs runs the built program through Sevak's real script-plugin host
+# and approval. Dev-only: none of this is in the program that ships.
+sevak-core = { path = "../../../crates/sevak-core" }
+sevak-platform = { path = "../../../crates/sevak-platform" }
+sevak-plugins = { path = "../../../crates/sevak-plugins" }
+tempfile = "3"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+debug = false
+# Not "abort": the SDK turns a panic into an error for that query.
+panic = "unwind"

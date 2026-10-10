@@ -1,20 +1,39 @@
 name: Docs
 
 # Publishes the GitHub Pages site: the product page from landing/ at the root,
-# and the documentation built from docs/ under /docs/. Pull requests only
-# build (with --strict, so broken links fail the check).
+# the marketplace pages (generated from gallery/ by scripts/build-marketplace.mjs,
+# not committed) under /marketplace/, and the documentation built from docs/ under
+# /docs/. Pull requests only build (with --strict, so broken links fail the check).
 on:
   push:
     branches: [main]
     paths:
       - "docs/**"
       - "landing/**"
+      - "gallery/**"
+      - "examples/plugins/**"
+      - "examples/workflows/**"
+      - "examples/native/**/plugin.toml"
+      - "scripts/lib/gallery-manifests.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/build-marketplace.mjs"
+      - "scripts/lib/marketplace-assets.mjs"
       - "mkdocs.yml"
       - ".github/workflows/docs.yml"
   pull_request:
     paths:
       - "docs/**"
       - "landing/**"
+      - "gallery/**"
+      - "examples/plugins/**"
+      - "examples/workflows/**"
+      - "examples/native/**/plugin.toml"
+      - "scripts/lib/gallery-manifests.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/build-marketplace.mjs"
+      - "scripts/lib/marketplace-assets.mjs"
       - "mkdocs.yml"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
@@ -39,6 +58,13 @@ jobs:
           cache-dependency-path: docs/requirements.txt
       - run: pip install -r docs/requirements.txt
       - run: mkdocs build --strict --site-dir site/docs
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Generate the marketplace pages from the galleries
+        run: |
+          npm ci --ignore-scripts
+          node scripts/build-marketplace.mjs
       - name: Add the product page at the site root
         run: cp -r landing/. site/
       - uses: actions/upload-pages-artifact@v5

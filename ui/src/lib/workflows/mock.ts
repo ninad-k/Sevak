@@ -329,6 +329,18 @@ export function review(folder: string): Result<boolean> {
 // ---- the gallery ----------------------------------------------------------------
 // Use the shipped catalog so the browser preview stays in sync with packages.
 const installed = new Set<string>(["duckduckgo"]);
+type CatalogEntry = (typeof catalog.entries)[number];
+
+// JSON imports widen `kind` to string, so filtering by it alone does not
+// narrow away native entries, which use platforms instead of source/sha256.
+function isZipEntry(entry: CatalogEntry): entry is CatalogEntry & {
+  kind: GalleryKind;
+  source: string;
+  sha256: string;
+} {
+  return (entry.kind === "workflow" || entry.kind === "plugin")
+    && typeof entry.source === "string" && typeof entry.sha256 === "string";
+}
 
 export function gallery(): Result<Gallery> {
   return {
@@ -338,14 +350,15 @@ export function gallery(): Result<Gallery> {
       note: "Browser preview of the checkout catalog; released apps use their release catalog.",
       name: catalog.name,
       skipped: 0,
-      entries: catalog.entries.filter(entry => entry.kind !== "native").map(entry => ({ ...entry, source: `https://raw.githubusercontent.com/ninad-k/Sevak/main/${entry.source}`, kind: entry.kind as GalleryKind, installed: installed.has(entry.id) })),
+      entries: catalog.entries.filter(isZipEntry).map(entry => ({ ...entry, source: `https://raw.githubusercontent.com/ninad-k/Sevak/main/${entry.source}`, installed: installed.has(entry.id) })),
     },
   };
 }
 
 export function install(id: string): Result<InstalledEntry> {
-  const entry = catalog.entries.find(entry => entry.id === id && entry.kind !== "native");
+  const entry = catalog.entries.filter(isZipEntry).find(entry => entry.id === id);
   if (!entry) return { ok: false, error: "Reload the gallery; that package is no longer listed." };
   installed.add(id);
-  return { ok: true, value: { id, kind: entry.kind as GalleryKind, folder: id } };
+  const folder = "folder" in entry && typeof entry.folder === "string" ? entry.folder : id;
+  return { ok: true, value: { id, kind: entry.kind, folder } };
 }

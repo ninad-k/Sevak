@@ -1,0 +1,144 @@
+name: Gallery review comment
+
+# Posts the result of "Gallery review" on the pull request and sets the
+# gallery:* labels that say what kind of review it needs.
+#
+# A workflow_run workflow runs from the default branch with a token that can
+# write, even for a pull request from a fork. So it must never run anything from
+# the pull request: it does not check anything out, and it only downloads the
+# JSON report the (read-only) review workflow uploaded and reads it as data.
+# Every string in the report comes from the contributor's files, so the comment is
+# built from a fixed template, whitelisted words and code spans, never pasted whole.
+# The pull request is found from the commit SHA of the run, not from a number
+# inside the artifact, so the artifact cannot aim the comment at another pull request.
+
+on:
+  workflow_run:
+    workflows: ["Gallery review"]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  comment:
+    name: Comment and label
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Download the report
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: gallery-review
+          path: gallery-review
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Post the comment and set the labels
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const fs = require("fs");
+            const run = context.payload.workflow_run;
+            const { owner, repo } = context.repo;
+
+            // The report is data. Refuse a large or malformed one.
+            const file = "gallery-review/report.json";
+            if (!fs.existsSync(file) || fs.statSync(file).size > 512 * 1024) {
+              core.notice("No usable report; nothing to post.");
+              return;
+            }
+            let report;
+            try {
+              report = JSON.parse(fs.readFileSync(file, "utf8"));
+            } catch {
+              core.notice("The report is not valid JSON; nothing to post.");
+              return;
+            }
+            if (!report || typeof report !== "object" || Array.isArray(report)) {
+              core.notice("The report is not an object; nothing to post.");
+              return;
+            }
+
+            // The pull request is the open one whose head is the commit that was reviewed.
+            const { data: candidates } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+              owner, repo, commit_sha: run.head_sha,
+            });
+            const pr = candidates.find(
+              (p) => p.state === "open" && p.head.sha === run.head_sha && p.base.repo.full_name === `${owner}/${repo}`,
+            );
+            if (!pr) {
+              core.notice("No open pull request has this commit as its head; nothing to post.");
+              return;
+            }
+
+            // Text from the report: control and bidi characters out, backticks out,
+            // shortened, and shown only inside a code span (which keeps links and
+            // @mentions from being active).
+            const strip = /[\u0000-\u001f\u007f​-‏‪-‮⁦-⁩`]/g;
+            const span = (text, max = 300) => "`" + String(text).replace(strip, " ").slice(0, max) + "`";
+            const list = (items) =>
+              (Array.isArray(items) ? items : []).slice(0, 30).map((item) => `- ${span(item)}`);
+
+            const CHANGES = new Set(["new", "updated", "removed", "deprecated", "undeprecated"]);
+            const KINDS = new Set(["workflow", "plugin", "native", "theme"]);
+            const changes = (Array.isArray(report.changes) ? report.changes : [])
+              .filter((c) => c && CHANGES.has(c.change) && KINDS.has(c.kind))
+              .slice(0, 50);
+            const idOf = (c) => (/^[a-z0-9-]{1,48}$/.test(String(c.id)) ? String(c.id) : "(invalid id)");
+            const versionOf = (c) => (/^[0-9.]{1,20}$/.test(String(c.version ?? "")) ? String(c.version) : "");
+            const fromOf = (c) => (/^[0-9.]{1,20}$/.test(String(c.from ?? "")) ? String(c.from) : "");
+
+            const unavailable = report.unavailable === true;
+            const workflowPassed = run.conclusion === "success";
+            const ok = !unavailable && report.ok === true && workflowPassed;
+            const lines = [
+              "<!-- gallery-review -->",
+              "## Automated gallery review",
+              "",
+              unavailable ? "**Result: automated review unavailable.**" : (ok ? "**Result: passed.**" : "**Result: the checks found problems that must be fixed.**"),
+              "",
+            ];
+            if (changes.length > 0) {
+              lines.push("| Id | Change | Version | Needs security review |", "|---|---|---|---|");
+              for (const c of changes) {
+                const version = fromOf(c) ? `${fromOf(c)} → ${versionOf(c)}` : versionOf(c);
+                lines.push(`| \`${idOf(c)}\` | ${c.change} (${c.kind}) | ${version} | ${c.security_review === true ? "yes" : "no"} |`);
+              }
+              lines.push("");
+            }
+            if (!ok) lines.push("### Problems", "", ...list(report.problems), "");
+            if (!workflowPassed) lines.push("The review workflow did not complete successfully. Check the linked run for failed or cancelled checks.", "");
+            if (Array.isArray(report.warnings) && report.warnings.length > 0) {
+              lines.push("### Warnings for the reviewer", "", ...list(report.warnings), "");
+            }
+            lines.push(
+              `[Full report and test results](${run.html_url})`,
+              "",
+              "_This comment summarizes untrusted pull-request workflow output. Workflow changes can change that output; maintainers must inspect those changes as well as the submission. It is not a security review, and a green result does not mean an entry is safe. See [the review process](https://github.com/ninad-k/Sevak/blob/main/docs/marketplace/review-process.md)._",
+            );
+            const body = lines.join("\n");
+
+            // One comment per pull request, updated in place.
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number: pr.number, per_page: 100,
+            });
+            const mine = comments.find(
+              (c) => c.user?.login === "github-actions[bot]" && c.body?.startsWith("<!-- gallery-review -->"),
+            );
+            if (mine) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: mine.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body });
+            }
+
+            // Labels come from a fixed list, chosen by what the report says.
+            const labels = ["gallery:needs-review"];
+            if (changes.some((c) => c.change === "new")) labels.push("gallery:submission");
+            if (changes.some((c) => c.change !== "new")) labels.push("gallery:update");
+            if (changes.some((c) => c.security_review === true)) labels.push("gallery:security-review");
+            await github.rest.issues.addLabels({ owner, repo, issue_number: pr.number, labels });
