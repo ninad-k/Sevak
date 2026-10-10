@@ -114,6 +114,15 @@ async function show(value: Overview) {
   await waitFor(() => expect(screen.queryByText("Loading…")).toBeNull());
 }
 
+describe("marketplace links", () => {
+  it("offers the marketplace and the submission form without requesting anything", async () => {
+    await show(overview());
+    expect(screen.getByRole("button", { name: "Browse the marketplace" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Submit your extension" })).toBeTruthy();
+    expect(ipc.refreshCatalog).not.toHaveBeenCalled();
+  });
+});
+
 describe("before a list is loaded", () => {
   it("offers to load it, and requests nothing until asked", async () => {
     await show(overview());

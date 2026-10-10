@@ -3,6 +3,7 @@
   // Nothing is requested until "Load gallery" is pressed, and nothing is
   // downloaded until "Install" is pressed on an entry.
   import "./workflows.css";
+  import MarketplaceLinks from "../MarketplaceLinks.svelte";
   import {
     installGalleryEntry,
     loadGallery,
@@ -70,6 +71,7 @@
     Choose <strong>Load gallery</strong> to browse packages from GitHub, then install what you need.
     Script plugins ask for your permission before running. Themes are in Appearance → Theme editor.
   </p>
+  <MarketplaceLinks />
 
   {#if gallery === null}
     <div class="wf-toolbar">

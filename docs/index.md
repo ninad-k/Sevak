@@ -52,6 +52,13 @@ flowchart TD
     The [Settings window](settings.md), [themes](themes.md) and the complete
     [configuration file reference](configuration.md).
 
+-   **Add more**
+
+    ---
+
+    Browse the [marketplace](marketplace/index.md) of workflows, script plugins,
+    native extensions and themes, or publish your own.
+
 -   **When something is off**
 
     ---

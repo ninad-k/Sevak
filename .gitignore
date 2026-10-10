@@ -36,3 +36,8 @@ site/
 
 # Vitest coverage reports
 ui/coverage/
+
+# Marketplace website, generated from gallery/ by scripts/build-marketplace.mjs
+# (npm run marketplace); the Pages workflow builds it, it is not committed.
+/landing/marketplace/
+/landing/sitemap.xml

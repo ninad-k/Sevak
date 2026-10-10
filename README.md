@@ -9,6 +9,7 @@
 [**Download Sevak**](https://github.com/ninad-k/Sevak/releases/latest) ·
 [**Website**](https://ninad-k.github.io/Sevak/) ·
 [Documentation](https://ninad-k.github.io/Sevak/docs/) ·
+[Marketplace](https://ninad-k.github.io/Sevak/marketplace/) ·
 [PDF manual](docs/pdf/Sevak-User-Guide.pdf) ·
 [Quick start](docs/quickstart.md) · [Help](docs/troubleshooting.md) ·
 [Contribute](CONTRIBUTING.md)
@@ -150,6 +151,7 @@ Sevak also includes:
   `sevak-ext` and submit them to the gallery. A native extension is a compiled
   program: it never runs before you allow it, and Sevak cannot sandbox it.
   [Browse and install →](docs/features/extensions.md) ·
+  [Marketplace →](https://ninad-k.github.io/Sevak/marketplace/) ·
   [Write one →](docs/writing-extensions-in-rust.md) ·
   [Publish to the gallery →](docs/marketplace/publishing.md)
 - **Custom hotkeys** — extra global keys that open Sevak with text typed in
