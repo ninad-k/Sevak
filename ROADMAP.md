@@ -31,7 +31,9 @@
 - Music library browsing and filtering
 - Richer file search filters
 - Localisation for other languages
-- A larger community gallery with user-submitted workflows and plugins
+- A larger community gallery with user-submitted workflows and plugins (the submission and review process exists: [docs/marketplace](docs/marketplace/publishing.md))
+- Gallery revocation and deprecation notices in the app: today a removed entry stays listed in builds released before the removal and stays installed where it was installed, and the optional `deprecated` / `replaced_by` index fields are not shown. A fix would be a signed revocation list checked only when the user opens the gallery or the extensions page, plus a notice and an offer to uninstall. Not started; see [updating and removal](docs/marketplace/updating-and-removal.md#takedown)
+- Signed gallery indexes (see [Gallery trust](docs/security/gallery-trust.md#future-sign-the-indexes))
 
 ## How to propose a feature
 

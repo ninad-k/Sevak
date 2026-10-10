@@ -1,0 +1,128 @@
+name: Gallery submission
+description: Propose a workflow, script plugin, native extension or theme for the Sevak gallery
+title: "gallery: add <name>"
+labels: ["gallery", "gallery:submission", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for wanting to share something. Use this form to **propose** an entry and get early feedback. The listing itself arrives as a pull request: see [Publishing to the gallery](https://github.com/ninad-k/Sevak/blob/main/docs/marketplace/publishing.md) for the steps, and [How review works](https://github.com/ninad-k/Sevak/blob/main/docs/marketplace/review-process.md) for what happens next.
+
+        An entry reaches users with the **next release**, not when it is merged. Nothing is installed without the user clicking Install, and anything that runs code is allowed by the user first. Reviewers are volunteers; the response times in the review guide are goals, not promises.
+
+        Questions or early ideas belong in [Discussions](https://github.com/ninad-k/Sevak/discussions), not here. **Never put a secret in this form.** To report a vulnerability in an existing entry, use [private vulnerability reporting](https://github.com/ninad-k/Sevak/security/advisories/new).
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What are you submitting?
+      options:
+        - Workflow (a node graph; most run no code)
+        - Script plugin (a script run by Sevak, Python or Node.js)
+        - Native extension (a compiled Rust program)
+        - Theme (a colour palette)
+    validations:
+      required: true
+  - type: input
+    id: id
+    attributes:
+      label: Id
+      description: Lower case letters, digits and dashes, at most 48 characters. It becomes the folder name, so it cannot be a Windows device name such as `con`, `nul` or `com1`.
+      placeholder: my-extension
+    validations:
+      required: true
+  - type: input
+    id: name
+    attributes:
+      label: Name
+      description: What people see in the gallery, at most 60 characters.
+      placeholder: My extension
+    validations:
+      required: true
+  - type: input
+    id: description
+    attributes:
+      label: One-line description
+      description: What it does, in one sentence, at most 300 characters. A workflow that runs no code ends with "Runs no code."; one that runs a script says so ("after you allow it").
+    validations:
+      required: true
+  - type: input
+    id: repository
+    attributes:
+      label: Source repository
+      description: Where the complete source is. Required for native extensions, which are reviewed against it; for the others, the folder you will put under `examples/`.
+      placeholder: https://github.com/you/my-extension
+    validations:
+      required: true
+  - type: input
+    id: license
+    attributes:
+      label: Licence (SPDX identifier)
+      description: For example `MIT`, `Apache-2.0` or `MIT OR Apache-2.0`. It must allow the gallery to distribute it under Apache-2.0.
+      placeholder: MIT
+    validations:
+      required: true
+  - type: input
+    id: keyword
+    attributes:
+      label: Launcher keyword
+      description: What people type to reach it. It must not be used by a built-in, a search engine or another gallery entry. Leave blank for a theme.
+      placeholder: mytool
+  - type: checkboxes
+    id: permissions
+    attributes:
+      label: Declared permissions
+      description: What the entry can do beyond answering a query. Tick everything that applies; this becomes the entry's `permissions` list for native extensions and is checked against the code in review.
+      options:
+        - label: network (makes any network request)
+        - label: filesystem (reads or writes files outside its own data folder)
+        - label: subprocess (starts other programs)
+        - label: clipboard (reads or writes the clipboard)
+        - label: none of these
+  - type: checkboxes
+    id: platforms
+    attributes:
+      label: Platforms
+      description: Where it works. A native extension needs one build per platform listed.
+      options:
+        - label: Windows x86_64
+        - label: Windows aarch64
+        - label: macOS x86_64
+        - label: macOS aarch64 (Apple silicon)
+        - label: Linux x86_64
+        - label: Linux aarch64
+        - label: All of them (a workflow, script or theme that is not platform specific)
+  - type: checkboxes
+    id: needs
+    attributes:
+      label: What it needs installed
+      options:
+        - label: Python 3 (tag `needs-python`)
+        - label: Node.js 22 or newer (tag `needs-node`)
+        - label: Nothing
+  - type: textarea
+    id: behaviour
+    attributes:
+      label: Network, subprocess and file-write behaviour
+      description: Say exactly what it does. Which hosts does it contact and why? Which programs does it start? Which files does it write, and where? "None" is a fine and common answer, and a precise one is what the reviewer compares with the code.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it belongs in the gallery
+      description: Who is it for, and how is it different from what is already listed? Links to screenshots or a short recording help.
+  - type: checkboxes
+    id: attestations
+    attributes:
+      label: Before you submit
+      options:
+        - label: I wrote this, or I have the right to submit it under the licence above.
+          required: true
+        - label: The licence is compatible with Apache-2.0 (the gallery is distributed under it).
+          required: true
+        - label: It contains no secrets, API keys or personal data, and no telemetry, analytics or phone-home code.
+          required: true
+        - label: I have read the [acceptance rules](https://github.com/ninad-k/Sevak/blob/main/gallery/README.md#what-the-gallery-accepts) and the [review process](https://github.com/ninad-k/Sevak/blob/main/docs/marketplace/review-process.md).
+          required: true
+        - label: I understand that a maintainer may decline, ask for changes, or later remove an entry, and that an accepted entry ships with the next release.
+          required: true

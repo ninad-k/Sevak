@@ -5,10 +5,13 @@ contact_links:
     about: How do I...? Setup and usage questions get answered in Discussions.
   - name: Share an idea or show your setup
     url: https://github.com/ninad-k/Sevak/discussions
-    about: Early ideas, plugins and workflows. Open a feature request once an idea is concrete.
+    about: Early ideas, plugins and workflows. Open a feature request once an idea is concrete, or a gallery submission once you have something to list.
   - name: Report a security vulnerability
     url: https://github.com/ninad-k/Sevak/security/advisories/new
-    about: Please report security problems privately, not as a public issue.
+    about: Please report security problems privately, not as a public issue. This includes a gallery entry that is malicious, deceptive or unsafe.
+  - name: Publishing to the gallery
+    url: https://github.com/ninad-k/Sevak/blob/main/docs/marketplace/publishing.md
+    about: Step-by-step guide to publishing a workflow, script plugin, native extension or theme, from nothing to a pull request.
   - name: Installation help
     url: https://github.com/ninad-k/Sevak/blob/main/docs/install.md
     about: Installing on each OS, Wayland hotkeys, unsigned-app warnings and troubleshooting.

@@ -1,0 +1,174 @@
+name: Gallery review
+
+# The automated half of reviewing a gallery submission (docs/marketplace/review-process.md).
+# It checks files; it does not decide whether something is safe, a person does.
+#
+# Pull requests from forks are untrusted, so this workflow is built to be harmless
+# even if the pull request is hostile:
+#   * it runs on `pull_request` (never `pull_request_target`), so a fork gets a
+#     read-only token and no secrets;
+#   * `permissions` is read-only, nothing here can write to the repository, label,
+#     or comment (a separate workflow, gallery-review-comment.yml, does that and
+#     only reads the JSON report this one uploads);
+#   * the report is produced by the checker from the BASE branch, run over the
+#     contributor's files with `--root`, so a pull request cannot loosen the rules
+#     that judge it, and the checker only reads files, it never runs them;
+#   * the tests that do run the contributor's code (the node tests and the
+#     Rust gallery tests) are a separate job that produces no report;
+#   * credentials are not persisted into the checkouts and the Rust cache is
+#     restored from trusted runs but never saved, so a fork cannot poison it.
+on:
+  pull_request:
+    paths:
+      - "gallery/**"
+      - "examples/plugins/**"
+      - "examples/workflows/**"
+      - "scripts/gallery-check*.mjs"
+      - "scripts/tests/extensions.test.mjs"
+      - "crates/sevak-plugins/tests/gallery_content.rs"
+      - ".github/workflows/gallery-review*.yml"
+
+concurrency:
+  group: gallery-review-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  RUST_BACKTRACE: "1"
+
+jobs:
+  report:
+    name: Automated review report
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+    steps:
+      # The contributor's files: data to be read, nothing in it is executed here.
+      - name: Check out the pull request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: pr
+          persist-credentials: false
+
+      # The checker comes from the base branch.
+      - name: Check out the checker from the base branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: tools
+          sparse-checkout: scripts/gallery-check.mjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+
+      - name: Fetch the base commit to compare with
+        run: git -C pr fetch --no-tags --depth=1 origin "$BASE_SHA"
+
+      - name: Run the gallery checker
+        id: check
+        continue-on-error: true
+        run: |
+          checker=tools/scripts/gallery-check.mjs
+          # Until the base branch has a checker that can be pointed at another
+          # directory (--root), fall back to the pull request's own copy.
+          if ! grep -q -- '--root' "$checker"; then
+            echo "::notice::The base branch's checker has no --root option; using the pull request's copy."
+            checker=pr/scripts/gallery-check.mjs
+          fi
+          mkdir -p report
+          node "$checker" --root pr --base "$BASE_SHA" --summary report/report.md --json report/report.json
+
+      - name: Show the report
+        if: always()
+        run: |
+          if [ -f report/report.md ]; then
+            cat report/report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "The checker could not produce a report; see the log of the previous step." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # Only data leaves this job: a Markdown and a JSON file. The comment
+      # workflow reads the JSON and treats every string in it as untrusted.
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: gallery-review
+          path: report/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Fail if the checker found problems
+        if: steps.check.outcome == 'failure'
+        run: |
+          echo "::error::The gallery checker found problems; see the report in the job summary."
+          exit 1
+
+  tests:
+    name: Tests (Node and Rust)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+
+      - uses: ./.github/actions/setup-rust
+
+      # Restore only. The cache a fork's run could save would be read by later
+      # runs, so these runs never save one.
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: "false"
+
+      # node is called directly, not through `npm run`, so a changed
+      # package.json cannot add a step.
+      - name: Node tests of the checker
+        id: node-checker
+        continue-on-error: true
+        run: node --test scripts/gallery-check.test.mjs
+
+      - name: Node tests of the example extensions
+        id: node-extensions
+        continue-on-error: true
+        run: node --test scripts/tests/extensions.test.mjs
+
+      - name: Rust gallery content tests
+        id: rust
+        continue-on-error: true
+        env:
+          SEVAK_REQUIRE_PYTHON: "1"
+        run: cargo test -p sevak-plugins --test gallery_content
+
+      - name: Summarize
+        if: always()
+        env:
+          NODE_CHECKER: ${{ steps.node-checker.outcome }}
+          NODE_EXTENSIONS: ${{ steps.node-extensions.outcome }}
+          RUST: ${{ steps.rust.outcome }}
+        run: |
+          {
+            echo "## Gallery tests"
+            echo
+            echo "| Test | Result |"
+            echo "|---|---|"
+            echo "| \`node --test scripts/gallery-check.test.mjs\` | $NODE_CHECKER |"
+            echo "| \`node --test scripts/tests/extensions.test.mjs\` | $NODE_EXTENSIONS |"
+            echo "| \`cargo test -p sevak-plugins --test gallery_content\` | $RUST |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$NODE_CHECKER" != success ] || [ "$NODE_EXTENSIONS" != success ] || [ "$RUST" != success ]; then
+            echo "::error::A gallery test failed; see the steps above."
+            exit 1
+          fi

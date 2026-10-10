@@ -351,6 +351,10 @@ jobs:
 
 ## Submit it to the gallery
 
+The whole path, from a first pull request to what review looks like and how an
+entry is updated or removed, is in [Publishing to the gallery](marketplace/publishing.md)
+and [How review works](marketplace/review-process.md). In short:
+
 The gallery (Settings > Extensions) lists extensions kept in Sevak's own
 repository, because that is the only place Sevak downloads from (see
 [Gallery trust](security/gallery-trust.md)). To propose yours, open a pull

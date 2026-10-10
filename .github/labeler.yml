@@ -1,0 +1,34 @@
+# Path-based labels for pull requests, applied by .github/workflows/gallery-labels.yml
+# (actions/labeler). Labels are defined in .github/labels.json.
+#
+# A change to the gallery or its sources is queued for a human reviewer. Whether it
+# is a new entry or an update, and whether it runs code, is added later from the
+# automated review report (.github/workflows/gallery-review-comment.yml).
+
+gallery:
+  - changed-files:
+      - any-glob-to-any-file:
+          - gallery/**
+          - examples/**
+          - templates/**
+
+gallery:needs-review:
+  - changed-files:
+      - any-glob-to-any-file:
+          - gallery/**
+          - examples/**
+          - templates/**
+
+area:Themes:
+  - changed-files:
+      - any-glob-to-any-file:
+          - gallery/themes/**
+          - gallery/themes.json
+
+area:Plugins/Workflows:
+  - changed-files:
+      - any-glob-to-any-file:
+          - gallery/index.json
+          - gallery/packages/**
+          - gallery/extensions/**
+          - examples/**

@@ -15,6 +15,13 @@ are all welcome.
 - **New features and plugins:** open an issue first so we can agree on the
   approach before you spend time on it. Built-in plugins should be useful to
   most people, fast (they run on every keystroke) and work offline.
+- **Publishing a workflow, script plugin, native extension or theme to the
+  gallery:** follow [docs/marketplace/publishing.md](docs/marketplace/publishing.md)
+  and open a pull request with the
+  [gallery submission template](.github/PULL_REQUEST_TEMPLATE/gallery_submission.md)
+  (or a [submission issue](https://github.com/ninad-k/Sevak/issues/new?template=extension_submission.yml)
+  first). What happens next is in
+  [docs/marketplace/review-process.md](docs/marketplace/review-process.md).
 - **Questions and early ideas:** ask in
   [Discussions](https://github.com/ninad-k/Sevak/discussions) (Q&A for "how
   do I...?", Ideas for anything not yet concrete enough for a feature request).

@@ -133,5 +133,50 @@
     "name": "blocked",
     "color": "999999",
     "description": "Blocked by another issue or external dependency"
+  },
+  {
+    "name": "gallery",
+    "color": "5319e7",
+    "description": "Gallery: anything under gallery/ or examples/"
+  },
+  {
+    "name": "gallery:submission",
+    "color": "5319e7",
+    "description": "Gallery: a new entry"
+  },
+  {
+    "name": "gallery:update",
+    "color": "5319e7",
+    "description": "Gallery: a new version, fix or deprecation of an entry"
+  },
+  {
+    "name": "gallery:needs-review",
+    "color": "fbca04",
+    "description": "Gallery: waiting for a human reviewer"
+  },
+  {
+    "name": "gallery:security-review",
+    "color": "b60205",
+    "description": "Gallery: runs code or a binary; needs a security review"
+  },
+  {
+    "name": "gallery:approved",
+    "color": "0e8a16",
+    "description": "Gallery: reviewed and approved to merge"
+  },
+  {
+    "name": "gallery:changes-requested",
+    "color": "d93f0b",
+    "description": "Gallery: the author must change something"
+  },
+  {
+    "name": "gallery:rejected",
+    "color": "cccccc",
+    "description": "Gallery: declined; the reason is in the thread"
+  },
+  {
+    "name": "gallery:takedown",
+    "color": "ee0701",
+    "description": "Gallery: remove or revoke an entry (malicious, abusive or unsafe)"
   }
 ]

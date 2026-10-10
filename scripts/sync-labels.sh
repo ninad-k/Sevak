@@ -38,7 +38,7 @@ if ! gh auth status &> /dev/null; then
 fi
 
 # Get the repository (format: owner/repo, e.g., ninad-k/Sevak)
-REPO="$(gh repo view --json nameWithOwner --query nameWithOwner)"
+REPO="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
 echo "Syncing labels for $REPO..."
 
 # Read labels from JSON and sync each one
@@ -53,16 +53,9 @@ while IFS= read -r label_json; do
     COLOR=$(echo "$label_json" | jq -r '.color')
     DESCRIPTION=$(echo "$label_json" | jq -r '.description')
 
-    # Check if label already exists
-    if gh label view "$NAME" &> /dev/null; then
-        # Label exists: update it (--description and --color)
-        echo "Updating label: $NAME"
-        gh label edit "$NAME" --color "$COLOR" --description "$DESCRIPTION"
-    else
-        # Label does not exist: create it
-        echo "Creating label: $NAME"
-        gh label create "$NAME" --color "$COLOR" --description "$DESCRIPTION"
-    fi
+    # --force creates the label, or updates its color and description if it exists
+    echo "Syncing label: $NAME"
+    gh label create "$NAME" --color "$COLOR" --description "$DESCRIPTION" --force
 done < <(jq -c '.[]' "$LABELS_FILE")
 
 echo "Done. All labels are in sync."

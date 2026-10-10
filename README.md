@@ -150,7 +150,8 @@ Sevak also includes:
   `sevak-ext` and submit them to the gallery. A native extension is a compiled
   program: it never runs before you allow it, and Sevak cannot sandbox it.
   [Browse and install →](docs/features/extensions.md) ·
-  [Write one →](docs/writing-extensions-in-rust.md)
+  [Write one →](docs/writing-extensions-in-rust.md) ·
+  [Publish to the gallery →](docs/marketplace/publishing.md)
 - **Custom hotkeys** — extra global keys that open Sevak with text typed in
   (`> `, `g `) or run a result directly.
 - **Themes** — light, dark or system, plus accent color, font, radius, opacity
