@@ -230,9 +230,9 @@ jobs:
 
       - name: Verify Windows installer startup integration
         if: runner.os == 'Windows'
+        shell: bash
         run: |
           node --test scripts/installer.test.mjs scripts/installer-startup.test.mjs
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           pwsh -NoProfile -File scripts/test-windows-installer.ps1
 
   publish:
