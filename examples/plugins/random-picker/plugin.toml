@@ -1,0 +1,19 @@
+# Type "rand" for a coin flip, a d6 and a number from 1 to 100, or add a pattern:
+# "rand coin", "rand 2d6", "rand d20", "rand 3d8+2", "rand 1-1000", "rand 50",
+# "rand pick a, b, c" or "rand shuffle a, b, c".
+#
+# A one-shot Python plugin (Python 3.8 or newer, standard library only). It uses
+# the operating system's secure random source (the `secrets` module), prints the
+# results and nothing else, and never touches the network or any file. Results
+# re-roll on every keystroke, like the password generator, so Enter copies the
+# value shown on the row that is highlighted when you press it.
+protocol    = 1
+id          = "script:random-picker"
+name        = "Random picker (Python)"
+description = "rand flips a coin, rolls dice (rand 2d6), picks a number (rand 1-100) or a list item (rand pick a, b). Offline."
+keyword     = "rand"
+mode        = "oneshot"
+script      = "rand.py"
+
+# Python starts a little slower than the default 50 ms wait.
+timeout_ms  = 200

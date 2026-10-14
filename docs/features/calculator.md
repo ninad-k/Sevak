@@ -55,31 +55,42 @@ Type `<amount> <unit> (in|to|as|=|→) <target_unit>`.
 | Input | Result |
 |---|---|
 | `10 km in mi` | `6.213711922 mi` |
-| `72°F to C` | `22.22222222°C` |
+| `72°F to C` | `22.22222222 °C` |
 | `5'11" to cm` | `180.34 cm` |
 | `2 h 30 min in min` | `150 min` |
-| `1 acre in m²` | `4047 m²` |
+| `1 acre in m²` | `4046.856422 m²` |
 | `60 mph in km/h` | `96.56064 km/h` |
 | `5 GB in MiB` | `4768.371582 MiB` |
+| `100 Mbps in MB/s` | `12.5 MB/s` |
+| `30 mpg in L/100km` | `7.840486111 L/100km` |
+| `1 hp in kW` | `0.7456998716 kW` |
 
 Units work offline. Amounts can be expressions: `(2+3) km in m` = `5000 m`.
 
 **Supported categories:**
-- **Length:** m, km, cm, mm, mi, yd, ft, in, nmi (nautical mile), ly (light-year), au (astronomical unit)
-- **Mass:** kg, g, lb, oz (mass ounce), t (metric ton), ton (short ton)
-- **Temperature:** °C, °F, K (no expression allowed; just `32 f to c`)
-- **Volume:** L, ml, gal (US gallon), cup, tbsp (tablespoon), tsp (teaspoon), fl oz (fluid ounce), pt (US pint), qt (quart)
+- **Length:** m, km, cm, mm, mi, yd, ft, in, nmi (nautical mile), ly (light-year), au (astronomical unit), pc (parsec), furlong, chain, rod (also `pole`, `perch`), ftm (fathom), league, mil (also `thou`), hand
+- **Mass:** kg, g, lb, oz (mass ounce), t (metric ton), ton (short ton), ozt (troy ounce), slug
+- **Temperature:** °C, °F, K (the amount can be an expression, but there is no compound form like `1 c 2 c`)
+- **Volume:** L, ml, gal (US gallon), cup, tbsp (tablespoon), tsp (teaspoon), fl oz (fluid ounce), pt (US pint), qt (quart), gill, bbl (oil barrel, 42 US gallons), ac·ft (acre-foot)
   - Imperial: `imp gal`, `imp pt` for British units
 - **Area:** m², km², cm², ft², mi², acres, hectares
-- **Speed:** m/s, km/h, mph (miles per hour), knots, ft/min, any length/time combination (e.g., `mi/h`)
-- **Data:** B (byte), KB, MB, GB, TB, PB (powers of 1000); KiB, MiB, GiB, TiB, PiB (powers of 1024)
+- **Speed:** m/s, km/h, mph (miles per hour), knots, ft/min, any length/time combination (e.g., `mi/h`), Mach (340.29 m/s, sea level at 15 °C)
+- **Data:** B (byte), KB, MB, GB, TB, PB, EB, ZB (powers of 1000); KiB, MiB, GiB, TiB, PiB, EiB, ZiB (powers of 1024); nibble (4 bits)
   - Case matters: `MB` = megabyte, `Mb` = megabit; `kb`, `mb`, `gb` = bytes
-- **Time:** s, min, h, d, mo (month = 1/12 year), yr (year = 365.25 days)
-- **Pressure:** Pa, kPa, MPa, bar, atm, psi, torr
-- **Energy:** J, kJ, MJ, cal, Cal (food Calorie = kcal), kWh
+- **Data rate:** bps, kbps, Mbps, Gbps, Tbps (bits per second), and any data unit over any time unit (e.g., `MB/s`, `Mbit/s`, `MiB/s`, `GB/min`)
+  - `Mbps` = megabits per second; `MBps` = megabytes per second
+- **Time:** s, min, h, d, mo (month = 1/12 year), yr (year = 365.25 days), fortnight, millennium
+- **Pressure:** Pa, kPa, MPa, bar, atm, psi, torr, mmHg, inHg, inH2O, cmH2O
+- **Energy:** J, kJ, MJ, GJ, cal, Cal (food Calorie = kcal), kWh, BTU, thm (therm), ft·lbf (foot-pound), erg, tTNT (ton of TNT, 4.184 GJ)
+- **Power:** W, mW, kW, MW, GW, hp (mechanical horsepower), PS (metric horsepower), BTU/h, kcal/h, ft·lbf/s
+- **Frequency:** Hz, kHz, MHz, GHz, THz, rpm, bpm (rpm and bpm are 1/60 Hz)
+- **Force:** N, kN, MN, dyn, lbf, kgf (also `kp`), ozf
+- **Torque:** N·m (also `Nm`, `N m`), kN·m, lbf·ft (also `lb-ft`), lbf·in (also `in-lb`), kgf·m, dyn·cm
+- **Fuel economy:** km/L, L/100km (also `l/100 km`), mpg (US), mpg imp (also `mpg uk`)
+  - `L/100km` is inverted, so `0 L/100km` has no answer instead of infinity
 - **Angle:** ° `deg` `rad` (radian) `turn` (full rotation)
 
-**Compound units:** `10 km/h`, `5 sq ft`, `cm²`, `cubic m`, `m/s`, `miles per hour` all work.
+**Compound units:** `10 km/h`, `5 sq ft`, `cm²`, `cubic m`, `m/s`, `miles per hour`, `MB/s` all work.
 
 **Ambiguous cases:**
 - `oz` = mass ounce; `fl oz` = fluid ounce
@@ -87,6 +98,10 @@ Units work offline. Amounts can be expressions: `(2+3) km in m` = `5000 m`.
 - `°` or `deg` alone = angle; `°C` or `deg C` = temperature
 - `cal` = small calorie (4.184 J); `Cal` = food Calorie (kcal)
 - `t` = metric tonne; `ton` = US short ton
+- `c` = Celsius, so there is no speed of light; `kt` = knot
+- `kn` = knot; `kN` = kilonewton. `nm` = nanometer; `Nm` = newton-meter. `mW` = milliwatt; `MW` = megawatt; `mw` is not recognized
+- `ft·lbf` (`ft-lb`, foot-pound) = energy; `lbf·ft` (`lb-ft`, pound-foot) = torque. They are separate categories, so they do not convert into each other
+- `bbl` = oil barrel (158.99 L), not the 31.5 gallon liquid barrel
 
 Results keep up to 10 significant digits.
 
@@ -106,7 +121,7 @@ Rates come from the European Central Bank daily, updated at most once a day in t
 
 **Supported currencies:** 30+ major fiat currencies with EUR as the base. The subtitle shows the exchange rate and the ECB's publication date. Cryptocurrencies are not supported.
 
-##Options
+## Options
 
 | Setting | Default | What it does | Config section |
 |---|---|---|---|

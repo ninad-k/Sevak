@@ -1,0 +1,18 @@
+# Type "unit" and a quantity: "unit 5 km", "unit 5 km mi", "unit 72 F C", "unit 1 cup flour g"
+# or "unit 2rem px @ 18px".
+#
+# A one-shot Python plugin (Python 3.8 or newer, standard library only) that
+# converts length, area, volume, mass, temperature, speed, data, time, pressure,
+# energy, angle, power, frequency, force, torque, data rate and fuel economy,
+# cooking amounts by ingredient (cups to grams) and CSS/print sizes (px, pt, em).
+# Runs offline and writes no files. Enter copies the row you picked.
+protocol    = 1
+id          = "script:unit-converter"
+name        = "Unit converter (Python)"
+description = "unit 5 km, unit 72 F C, unit 1 cup flour g, unit 16px pt: length, mass, temperature, data, cooking, CSS sizes and more. Offline."
+keyword     = "unit"
+mode        = "oneshot"
+script      = "units.py"
+
+# Python starts a little slower than the default 50 ms wait.
+timeout_ms  = 200
