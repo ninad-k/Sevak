@@ -4,6 +4,6 @@
 # "Security and supply chain"). The toolchain-canary workflow warns when a newer
 # stable or beta would break the build.
 [toolchain]
-channel = "1.99.0"
+channel = "1.99.1"
 profile = "minimal"
 components = ["clippy", "rustfmt"]
