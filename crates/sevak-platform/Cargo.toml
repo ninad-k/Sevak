@@ -27,7 +27,7 @@ toml_edit.workspace = true
 plist = "1"
 
 [target.'cfg(windows)'.dependencies]
-winreg = "0.55"
+winreg = "0.56"
 windows = { workspace = true, features = [
     "ApplicationModel_Contacts",
     "Data_Pdf",
