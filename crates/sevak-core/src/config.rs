@@ -2510,7 +2510,9 @@ expand_in_terminals = true
         assert!(DEFAULT_CONFIG_TOML.contains("language = \"auto\""));
         let german = Config::from_toml_str("[general]\nlanguage = \" DE \"\n").unwrap();
         assert_eq!(german.normalized().general.language, "de");
-        let unknown = Config::from_toml_str("[general]\nhotkey = \"Alt+Space\"\nlanguage = \"tlh\"\n").unwrap();
+        let unknown =
+            Config::from_toml_str("[general]\nhotkey = \"Alt+Space\"\nlanguage = \"tlh\"\n")
+                .unwrap();
         let unknown = unknown.normalized();
         assert_eq!(unknown.general.language, "auto");
         assert_eq!(unknown.general.hotkey, "Alt+Space");

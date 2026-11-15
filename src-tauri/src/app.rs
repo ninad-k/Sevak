@@ -235,6 +235,7 @@ fn reload_config(app: &AppHandle, may_sync_startup: bool) {
     // The index is rebuilt in the background and swapped in when ready.
     search::reload(app, &state.config());
     expansion::apply(app);
+    tray::relabel(app);
 
     // Both the launcher and the settings window follow the status.
     if let Err(err) = app.emit(window::EVENT_STATUS, state.status()) {

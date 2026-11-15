@@ -23,6 +23,7 @@ pub mod hotkey_hook;
 pub mod icon_file;
 pub mod icon_theme;
 pub mod keyboard;
+pub mod locale;
 pub mod media;
 pub mod netpath;
 pub mod open;
