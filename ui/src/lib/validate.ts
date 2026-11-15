@@ -60,7 +60,10 @@ export type KeywordField =
   | "onepassword.keyword"
   | "dictionary.define_keyword"
   | "dictionary.spell_keyword"
-  | "ai.keyword";
+  | "ai.keyword"
+  | "ssh.keyword"
+  | "projects.keyword"
+  | "calendar.keyword";
 
 export interface ClipboardErrors {
   maxItems?: string;
@@ -79,6 +82,8 @@ export interface Problems {
   /** What is wrong with each field of the AI assistant page (the keyword is under `keywords`). */
   ai: AiProblems;
   windowGap?: string;
+  /** `[calendar] days` out of range. */
+  calendarDays?: string;
   fallback?: string;
   filesDepth?: string;
   /** Number of problems per section (hotkey problems are added by the form). */
@@ -99,6 +104,8 @@ export const MAX_CLIPBOARD_IMAGE_BYTES = 64 * 1024 * 1024;
 export const MAX_CACHE_MINUTES = 24 * 60;
 /** Largest gap between snapped windows, in pixels (as in Rust's `window_layout::MAX_GAP`). */
 export const MAX_WINDOW_GAP = 200;
+/** Largest `[calendar] days` (as in Rust's `config::MAX_CALENDAR_DAYS`). */
+export const MAX_CALENDAR_DAYS = 60;
 
 /** Keywords of built-in searches that cannot be changed, and what they open (as in Rust). */
 const FIXED_KEYWORDS: [string, string][] = [
@@ -135,6 +142,9 @@ const KEYWORDS: KeywordSpec[] = [
   { field: "dictionary.define_keyword", owner: "the dictionary", required: true, section: "integrations", read: (c) => c.dictionary.define_keyword },
   { field: "dictionary.spell_keyword", owner: "the spelling checker", required: true, section: "integrations", read: (c) => c.dictionary.spell_keyword },
   { field: "ai.keyword", owner: "the AI assistant", required: true, section: "ai", read: (c) => c.ai.keyword },
+  { field: "ssh.keyword", owner: "SSH hosts", required: true, section: "integrations", read: (c) => c.ssh.keyword },
+  { field: "projects.keyword", owner: "recent projects", required: true, section: "integrations", read: (c) => c.projects.keyword },
+  { field: "calendar.keyword", owner: "the calendar", required: true, section: "integrations", read: (c) => c.calendar.keyword },
 ];
 
 /** Every keyword of a built-in search (lowercased) and what answers it. */
@@ -327,6 +337,12 @@ export function validate(config: Config): Problems {
   if (!Number.isInteger(gap) || gap < 0 || gap > MAX_WINDOW_GAP) {
     problems.windowGap = `Enter a whole number from 0 to ${MAX_WINDOW_GAP}`;
     count.windows++;
+  }
+
+  const days = config.calendar.days;
+  if (!Number.isInteger(days) || days < 1 || days > MAX_CALENDAR_DAYS) {
+    problems.calendarDays = `Enter a whole number from 1 to ${MAX_CALENDAR_DAYS}`;
+    count.integrations++;
   }
 
   const missing = fallbackList(config.search.fallback_web_search).find(

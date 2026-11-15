@@ -131,6 +131,9 @@
     shell: { terminal: "", shell: "", keep_open: true },
     web_search: [],
     hotkey: [],
+    ssh: { keyword: "ssh", known_hosts: false },
+    projects: { keyword: "code", editors: [] },
+    calendar: { keyword: "cal", files: [], days: 7 },
   });
 
   const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;

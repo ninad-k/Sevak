@@ -32,4 +32,9 @@ export function tidyPluginSettings(config: Config): void {
   config.snippets.prefix = config.snippets.prefix.trim();
   config.shell.terminal = config.shell.terminal.trim();
   config.shell.shell = config.shell.shell.trim();
+  config.ssh.keyword = config.ssh.keyword.trim();
+  config.projects.keyword = config.projects.keyword.trim();
+  config.projects.editors = trimmed(config.projects.editors);
+  config.calendar.keyword = config.calendar.keyword.trim();
+  config.calendar.files = trimmed(config.calendar.files);
 }
