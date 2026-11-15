@@ -21,6 +21,19 @@ does not mean a release containing it is published yet.
 - Marketplace site, gallery packages, and in-app gallery and extension pages
   (integrated on this branch; availability in a published release follows the
   release process)
+- Startup status and one-click repair, preserving unrelated Settings drafts
+  and externally disabled entries during unrelated saves
+- Installer inspection reports, a disposable Windows VM acceptance suite,
+  and identifiable local test installers built from source snapshots
+- Extension deprecation/replacement warnings and authenticated revocation
+  notices, checked only on explicit gallery refresh; the advisory channel
+  requires maintainer publication and renewal
+- Publisher-signing configuration and verification gates (real Windows and
+  Apple credentials still need provisioning), and one CI matrix per PR update
+- Signed gallery indexes: releases sign `index.json` and `themes.json`, and
+  Sevak verifies each list against the embedded release key before reading it
+  (unsigned lists are accepted only from releases before signing began; see
+  [Gallery trust](security/gallery-trust.md#7-signed-indexes))
 
 ## Next (planned, awaiting resources)
 
@@ -42,8 +55,6 @@ does not mean a release containing it is published yet.
 - More community gallery themes, workflows, plugins and extensions (the initial
   marketplace, gallery packages, submission and review process exist; see
   [Publishing to the gallery](marketplace/publishing.md))
-- Gallery revocation and deprecation notices in the app: today a removed entry stays listed in builds released before the removal and stays installed where it was installed, and the optional `deprecated` / `replaced_by` index fields are not shown. A fix would be a signed revocation list checked only when the user opens the gallery or the extensions page, plus a notice and an offer to uninstall. Not started; see [updating and removal](marketplace/updating-and-removal.md#takedown)
-- Signed gallery indexes (see [Gallery trust](security/gallery-trust.md#future-sign-the-indexes))
 
 ## How to propose a feature
 

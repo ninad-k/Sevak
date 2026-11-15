@@ -803,6 +803,69 @@ fn links_inside_the_archive_are_refused() {
 }
 
 #[test]
+fn setuid_and_setgid_bits_in_the_archive_become_only_the_execute_flag() {
+    let files: [(&str, &str, &[u8]); 3] = [
+        ("plugins/hello/plugin.toml", "plugins", PLUGIN.as_bytes()),
+        ("plugins/hello/main.py", "plugins", b"print('hello')"),
+        ("plugins/hello/data.txt", "plugins", b"x"),
+    ];
+    let manifest = manifest_json(FORMAT_VERSION, &files);
+    let mut writer = ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    writer
+        .start_file("manifest.json", SimpleFileOptions::default())
+        .unwrap();
+    writer.write_all(&manifest).unwrap();
+    for ((path, _, data), mode) in files.iter().zip([0o644, 0o6755, 0o2644]) {
+        // The full mode, setuid and setgid included, as a hostile archive
+        // carries it (`unix_permissions` keeps only 0o777).
+        let options = SimpleFileOptions::default()
+            .system(zip::System::Unix)
+            .external_attributes((0o100_000 | mode) << 16);
+        writer.start_file(*path, options).unwrap();
+        writer.write_all(data).unwrap();
+    }
+    let bytes = writer.finish().unwrap().into_inner();
+    // The archive really carries the bits, so the test is not vacuous.
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes.as_slice())).unwrap();
+    let stored = zip
+        .by_name("plugins/hello/main.py")
+        .unwrap()
+        .external_attributes()
+        >> 16;
+    assert_eq!(stored & 0o7000, 0o6000, "{stored:o}");
+
+    let backup = read(&bytes).unwrap();
+    let executable = |path: &str| {
+        backup
+            .items
+            .iter()
+            .find(|i| i.path == path)
+            .unwrap()
+            .executable
+    };
+    assert!(executable("plugins/hello/main.py"));
+    assert!(!executable("plugins/hello/data.txt"));
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let target = Env::new();
+        restore(
+            &target.roots,
+            &backup,
+            &[Category::Plugins],
+            Mode::Replace,
+            &options(1),
+        )
+        .unwrap();
+        let mode =
+            |rel: &str| fs::metadata(target.path(rel)).unwrap().permissions().mode() & 0o7777;
+        assert_eq!(mode("plugins/hello/main.py"), 0o755);
+        assert_eq!(mode("plugins/hello/data.txt"), 0o644);
+    }
+}
+
+#[test]
 fn huge_files_and_zip_bombs_are_refused() {
     // One file over the per-file cap, tiny once compressed.
     let big = vec![0u8; 9 * 1024 * 1024];

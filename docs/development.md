@@ -113,7 +113,9 @@ embed `ui/dist`; `tauri build` enables it for you.
 
 ## Tests and lint
 
-CI runs these checks on Windows, macOS and Ubuntu 22.04. A Fedora container
+CI runs these checks for pull requests and pushes to `main` on Windows, macOS
+and Ubuntu 22.04. Feature-branch pushes do not launch a second duplicate matrix;
+use the workflow's manual run for a branch without a PR. A Fedora container
 also builds and tests the Rust workspace:
 
 ```sh
@@ -151,10 +153,26 @@ sign-in never opens the launcher. AppImages register their stable file path.
 Settings returns both the saved preference and a `startup` status object
 (`registered`, `enabled`, `error`). Do not infer successful registration from
 the preference alone: OS restrictions or an external disable can prevent
-startup. An explicit off-to-on change may re-enable an entry. Routine startup,
-index reload and unrelated saves preserve an external disable, while repairing
-a missing entry for a saved opt-in and refreshing an enabled entry's executable
-path after an install moves.
+startup. An explicit off-to-on change may re-enable an entry. Application
+startup and a manual index reload preserve an external disable, repair a
+missing entry for a saved opt-in, and refresh an enabled entry's executable
+path after an install moves. Settings saves instead use
+`app::reload_after_settings`: the startup transaction has already run if the
+checkbox changed, so this reload must not touch a disabled **or missing** entry.
+
+`get_startup_status` refreshes only the OS state. `repair_startup` is a separate,
+explicit Settings action (**Enable again** / **Repair startup**), offered when
+the saved opt-in is on but the entry is inactive or unreadable. It uses the
+platform transaction with explicit consent, verifies the OS accepted the
+registration, and leaves the configuration file unchanged. It rejects a saved
+opt-out, malformed/missing configuration, or a configuration changed during
+registration; a failed transaction restores the previous OS snapshot. No form
+draft is sent to either command.
+
+The frontend updates only its startup status after a check/repair, retaining
+other unsaved edits and their dirty baseline. An unsaved startup-switch change
+blocks repair; an in-flight check/repair blocks Save and Close and disables
+startup controls. Failed operations display their error and remain retryable.
 
 Linux `Hidden=true` overrides are treated as disabled even when the desktop
 manager leaves only a minimal `[Desktop Entry]` group without `Exec`. Windows
@@ -203,7 +221,7 @@ will restart Sevak after sign-in. Follow the dedicated cases in
 Coverage of the Rust crates uses `cargo-llvm-cov` (`cargo install --locked
 cargo-llvm-cov`, `rustup component add llvm-tools-preview`); the exact command and
 the current numbers are in [Testing](testing.md#coverage). CI runs `npm test` and the
-latency budget on Ubuntu on every push, and the `Coverage` workflow (pull requests,
+latency budget on Ubuntu for PRs and pushes to `main`, and the `Coverage` workflow (pull requests,
 weekly) and `Benchmark` workflow (weekly, manual) publish their tables in the job
 summary. Neither gates a merge.
 
@@ -255,14 +273,17 @@ Bundle settings are the `bundle` object in `src-tauri/tauri.conf.json`:
   (Categories, Keywords and a "Show or hide" action). Extra runtime dependencies
   (`libayatana-appindicator`, glib tools) are declared in `bundle.linux.deb.depends`
   and `bundle.linux.rpm.depends`.
-- macOS: the app runs as a menu-bar (accessory) app with no Dock icon. It is
-  ad-hoc signed (`bundle.macOS.signingIdentity: "-"`), not notarized.
+- macOS: the app runs as a menu-bar (accessory) app with no Dock icon. Local
+  builds are ad-hoc signed (`bundle.macOS.signingIdentity: "-"`). Releases can
+  use Developer ID and notarization through the publisher-signing configuration.
   `app.macOSPrivateApi` (and Tauri's `macos-private-api` feature) give the
   launcher its transparent window.
 - macOS: `src-tauri/Info.plist` is merged into the app's `Info.plist` by Tauri. It
   holds `NSContactsUsageDescription`; macOS ends an app that reads Contacts
   without it, so keep it while the contacts plugin uses the Contacts framework.
-- Installers are not code-signed yet.
+- Publisher signing is optional until maintainer credentials are provisioned;
+  partial configuration fails the release. See [Publisher signing](publisher-signing.md)
+  for Windows signing hooks, Apple notarization, and artifact verification.
 - `bundle.resources` installs `LICENSE` and `THIRD_PARTY_NOTICES.md` with the
   app. `THIRD_PARTY_NOTICES.md` is generated: run
   `node scripts/generate-third-party-notices.mjs` after any dependency change
@@ -279,6 +300,18 @@ Bundle settings are the `bundle` object in `src-tauri/tauri.conf.json`:
   inside the file and in `THIRD_PARTY_NOTICES.md`.
 
 ### The Windows installer
+
+For local Windows test packages, run `npm run build:test:windows -- --plan`, then
+`npm run build:test:windows` to build both installers with an identifiable
+development version. It stamps a separate source snapshot, keeps this checkout's
+version fields unchanged, and writes package hashes and a read-only validation
+report to `target/local-builds/<version>/`. `--prepare-only` checks the snapshot
+and version-stamping flow without compiling. Untracked files with secret-like
+names are left out and listed in the plan and `BUILD-INFO.json`; under
+`crates/`, `src-tauri/src/` or `ui/src/` they stop the build unless you pass
+`--allow-dropped-source-files`. See [Windows installer
+validation](installer-validation.md) for version overrides and the separately
+gated disposable-VM installation suite.
 
 Everything about the Windows installers is in `src-tauri/installer/`, wired up in
 `bundle.windows` of `src-tauri/tauri.conf.json`:
@@ -494,7 +527,10 @@ Dependabot (`.github/dependabot.yml`) opens one grouped pull request per month
 for minor and patch updates of Cargo, npm and GitHub Actions, and one pull
 request per major update. Third-party GitHub Actions are pinned to a commit SHA
 (`uses: owner/repo@<sha> # v1.2.3`; Dependabot keeps both in step). Actions owned
-by GitHub (`actions/*`, `github/*`) may use version tags.
+by GitHub (`actions/*`, `github/*`) may use version tags, except in workflows
+that handle signing keys (`extension-advisories.yml`), where every action is
+pinned by SHA. A project that publishes no `vX.Y.Z` tag (winget-releaser has
+only `v2`) is pinned to that tag's commit with `# v2`.
 
 ### The pinned toolchain
 

@@ -1,0 +1,102 @@
+name: Extension advisories
+
+# Maintainer-triggered publication only. The app fetches this mutable channel
+# solely when the user opens/refreshes the gallery, never in the background.
+#
+# The feed is signed with the updater private key, which also signs application
+# updates. So the key is only ever present in the `sign` job, which:
+#   - runs in the protected `extension-advisories` environment (maintainers
+#     must configure required reviewers and restrict it to `main`; see
+#     docs/releasing.md, "Extension advisories"),
+#   - has a read-only token, no caches and no install scripts, and
+#   - checks the minisign trusted comment names extension-revocations.json, so a
+#     feed signature can never be mistaken for an update signature.
+# The `publish` job holds the write token but never the key.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: extension-advisories
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  sign:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: extension-advisories
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # No dependency cache here: a poisoned cache must not run next to the key.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts
+      - name: Validate and prepare a 14-day advisory feed
+        run: |
+          node --test scripts/extension-advisories.test.mjs
+          node scripts/extension-advisories.mjs prepare gallery/revocations.json target/advisories/extension-revocations.json
+      - name: Sign exact feed bytes
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          test -n "$TAURI_SIGNING_PRIVATE_KEY" || { echo "::error::Missing updater signing key"; exit 1; }
+          npx tauri signer sign target/advisories/extension-revocations.json
+      - name: Check the signature is bound to the advisory file name
+        run: |
+          # The .sig is a base64-encoded minisign signature. Its signed trusted
+          # comment carries the signed file's name; requiring it here keeps
+          # advisory signatures distinguishable from application-update ones.
+          trusted=$(base64 -d target/advisories/extension-revocations.json.sig | grep '^trusted comment: ' || true)
+          case "$trusted" in
+            *"file:extension-revocations.json"*) echo "Trusted comment: ${trusted#trusted comment: }" ;;
+            *)
+              echo "::error::The advisory signature's trusted comment does not name extension-revocations.json: '$trusted'"
+              exit 1
+              ;;
+          esac
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: extension-advisories
+          if-no-files-found: error
+          retention-days: 1
+          path: |
+            target/advisories/extension-revocations.json
+            target/advisories/extension-revocations.json.sig
+
+  publish:
+    needs: sign
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create and update the advisory release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-rust
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: extension-advisories
+          path: target/advisories
+      - name: Verify with the app's trusted public key and parser
+        run: cargo run --locked -p sevak-plugins --example verify_extension_advisories -- target/advisories/extension-revocations.json target/advisories/extension-revocations.json.sig
+      - name: Publish advisory channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # A prerelease pointer must never become the latest application release.
+          # This dedicated channel must remain mutable so advisories can be renewed.
+          if ! gh release view extension-advisories --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create extension-advisories --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --latest=false --title "Extension security advisories" --notes "Signed extension advisories. This is not an application release. The feed expires after 14 days; maintainers must renew it."
+          fi
+          # Readers reject transient JSON/signature mismatches during replacement;
+          # their previous verified notices stay visible until a successful refresh.
+          gh release upload extension-advisories target/advisories/extension-revocations.json target/advisories/extension-revocations.json.sig --repo "$GITHUB_REPOSITORY" --clobber
+          echo "Published a verified 14-day extension advisory feed." >> "$GITHUB_STEP_SUMMARY"

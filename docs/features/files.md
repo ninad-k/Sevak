@@ -54,6 +54,36 @@ Several words must all match. Results are ordinary file results: ++enter++ opens
 
 Asking the index takes a moment, so it never holds up typing: for `ff`, matches from the `f` folder index appear immediately, and the index's results join the list when they arrive. A search that takes more than two seconds is given up. If there is no index to ask (the Windows Search service is stopped, `locate` is not installed), a "File index unavailable" row says what to do, and `ff` still shows the folder matches. Queries go only to that local index, never over the network.
 
+### Filters
+
+Add filters to any file search (`f`, `ff`, `in`, or a plain search when Files is global) to narrow it by type, size, date, place or kind. Filters can go anywhere in the query and can be combined; every one of them must match.
+
+| Filter | Finds | Example |
+|---|---|---|
+| `ext:` | files with one of these extensions | `f report ext:pdf`, `f ext:jpg,png` |
+| `type:` | files of a kind: `image`, `video`, `audio`, `doc`, `code`, `archive` (several: `type:image,video`) | `f holiday type:image` |
+| `size:` | file size, with `>`, `>=`, `<`, `<=`, `=`, a range `a..b` or `empty`; units `b`, `kb`, `mb`, `gb`, `tb` (1 kb = 1024 bytes) | `f size:>10mb`, `f log size:<500kb`, `f size:1mb..20mb` |
+| `modified:` | last change: `today`, `yesterday`, an age (`12h`, `7d`, `2w`, `1y`), or a date `2026-01-01`, month `2026-01` or year `2026` | `f modified:7d`, `f modified:>2026-01-01` |
+| `created:` | the same, for the creation time | `f created:today` |
+| `in:` or `folder:` | entries inside a folder: a path (`~/Projects`, `C:\Work`) or a folder name anywhere (`src`, `src/components`) | `f main in:~/Projects`, `f in:"~/My Projects"` |
+| `is:` | `is:folder` or `is:file` | `f photos is:folder` |
+| `"..."` | names containing the exact phrase | `f "annual report"` |
+| `-` | leaves out what follows: a filter, a word or a phrase | `f report -ext:tmp -draft` |
+
+Dates: `modified:7d` (or `<7d`) means changed in the last 7 days and `>7d` longer ago. With a date, `>2026-01-01` means after that day, `>=` from that day on, `<` before it and `<=` up to its end; `2025-12..2026-02` is a range of whole months. Days start at local midnight.
+
+`ext:`, `type:` and `size:` only match files. A query of filters alone (`f ext:pdf modified:7d`) lists the matching files newest first. While filters are active, each result's subtitle shows them after the folder, together with the size or date they looked at: `~/Documents · 12 MB · ext:pdf size:>10mb`. A filter that cannot work (`size:big`, `type:spreadsheet`, `ext:` with nothing after it) shows one row saying what would; ++enter++ copies that explanation. Only the words listed above are filters: other text with a colon (`12:30`, `c:temp`) is searched as typed, and `"ext:pdf"` in quotes is a plain phrase.
+
+How filters reach the index:
+
+| Search | What is filtered |
+|---|---|
+| `f` (folder index) | Everything, in memory: the index keeps each entry's size and dates. |
+| `ff` (whole disk) | The name words go to the OS index, plus the extension when exactly one is wanted (`ext:pdf` adds the word `pdf`). The rest is applied to the index's first 200 answers, so a filter that drops most of them can show fewer results than exist; add a name word to narrow the search. Size and date filters read each answer's details from the disk. `ff` with filters but no words (`ff size:>1gb`) searches the folder index only. |
+| `in` (contents) | The words go to the index as before; filters are applied to its first 200 answers. Filters without words find nothing. |
+
+Not every file system records creation times (some Linux ones do not); `created:` then finds nothing. Path browsing (`~/Documents/`) lists the folder as typed and takes no filters; use `in:` instead.
+
 ## How indexing vs. path-browsing is chosen
 
 ```mermaid
@@ -137,7 +167,7 @@ What to expect:
 
 ### How indexing works
 
-At startup and every few minutes, Sevak scans your configured directories and builds an index. Results from indexed search come back instantly.
+At startup and every few minutes, Sevak scans your configured directories and builds an index. Results from indexed search come back instantly. Each entry keeps its size and its modification and creation times, so [filters](#filters) never touch the disk while you type.
 
 **Pruned directories** (always skipped to save time):
 - `node_modules`, `.git`, `target`, `__pycache__`, `.cache`, `venv`, `.venv`, `appdata`
@@ -161,6 +191,8 @@ To search inside one of these, use path browsing or configure them as a separate
     Paths use forward slashes: `/home/name/documents/`. The `~` shortcut expands to your home. Root directories like `/etc/` and `/usr/` are not automatically indexed; add them to `[files] directories` if you need to search them.
 
 ## Tips and troubleshooting
+
+**A filter shows "Cannot use the filter":** The row's second line says what the filter accepts. See [Filters](#filters) for the full list.
 
 **Slow indexing:** The first index scan takes longer than refreshes. It runs in the background; you can keep using Sevak while it builds.
 

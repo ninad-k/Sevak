@@ -87,9 +87,12 @@ sign-in](install.md#start-sevak-after-sign-in) for controls and troubleshooting.
 The saved opt-in and the OS's effective startup state are separate. Disabling
 startup in Windows Startup apps or a Linux desktop's startup settings is
 respected during ordinary startup and unrelated Settings saves. To opt in
-again through Sevak, save `false`, then save `true`. A failed Settings save
-keeps the previous preference and shows the error; check the registration
-warning before assuming automatic launch is active.
+again through Sevak, use **Enable again** or **Repair startup** under **Settings
+→ General** while the saved preference is on. This explicit action leaves the
+configuration file and unsaved form edits unchanged. **Check status** refreshes
+the OS state without changing it. A failed repair or startup-setting save
+keeps the previous preference and reports the error; check the actual status
+before assuming automatic launch is active.
 
 ### [window]
 

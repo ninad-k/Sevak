@@ -285,6 +285,7 @@ pub fn gen_files(home: &Path, count: usize) -> Vec<FileEntry> {
                     path: dir.join(&name),
                     name,
                     is_dir: true,
+                    ..FileEntry::default()
                 }
             } else {
                 let name = format!(
@@ -298,6 +299,10 @@ pub fn gen_files(home: &Path, count: usize) -> Vec<FileEntry> {
                     path: dir.join(&name),
                     name,
                     is_dir: false,
+                    // Up to ~50 MB, changed over the 3 years before 2026.
+                    size: (i as u64 * 7919) % (50 << 20),
+                    modified: Some(1_672_531_200 + (i as i64 * 947) % (3 * 365 * 86_400)),
+                    created: None,
                 }
             }
         })
@@ -519,6 +524,12 @@ pub const QUERIES: &[(&str, &str, bool)] = &[
     ("path browse", "~/Documents/rep", true),
     ("calculator", "(12 + 8) * 3 / 4", true),
     ("unit conversion", "12 km in miles", true),
+    ("files: name + filters", "f invoice ext:pdf size:>1mb", true),
+    (
+        "files: filters only",
+        "f type:doc modified:>=2024-06 -in:archive",
+        true,
+    ),
 ];
 
 impl Fixture {

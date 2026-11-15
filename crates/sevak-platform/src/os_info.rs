@@ -10,7 +10,9 @@ use sevak_core::diagnostics::{osinfo, Identity, OsInfo};
 /// Asks the OS what it is. Never fails: what cannot be learned is left out.
 pub fn detect() -> OsInfo {
     let mut info = OsInfo::unknown();
-    info.kernel = sysinfo::System::kernel_version().filter(|kernel| !kernel.is_empty());
+    info.kernel = sysinfo::System::kernel_version()
+        .ok()
+        .filter(|kernel| !kernel.is_empty());
     platform_details(&mut info);
     info
 }
@@ -84,7 +86,7 @@ pub fn identity() -> Identity {
     }
     add(&mut identity.user_names, folder_name);
 
-    add(&mut identity.host_names, sysinfo::System::host_name());
+    add(&mut identity.host_names, sysinfo::System::host_name().ok());
     for name in ["COMPUTERNAME", "HOSTNAME"] {
         add(&mut identity.host_names, env(name));
     }

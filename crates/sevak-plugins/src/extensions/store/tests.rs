@@ -14,6 +14,7 @@ use crate::script::ScriptPluginHost;
 #[test]
 fn nothing_is_requested_until_the_catalog_is_loaded() {
     let world = World::new();
+    assert_eq!(world.store.advisory_status().state, "not_checked");
     assert!(world.store.current().is_none());
     assert!(world.store.load_cached().is_none());
     assert!(world.store.installed().is_empty());
@@ -24,6 +25,97 @@ fn nothing_is_requested_until_the_catalog_is_loaded() {
     let err = world.store.install("anything").unwrap_err();
     assert!(err.contains("Load the extension list"), "{err}");
     assert!(world.net.asked().is_empty());
+}
+
+fn revoke_during_download(world: &World, marker: &'static str) {
+    let store = Arc::downgrade(&world.store);
+    *world.net.on_get.lock().unwrap() = Some(Arc::new(move |url| {
+        if url.contains(marker) {
+            let store = store.upgrade().unwrap();
+            *store.advisories.lock().unwrap() = Advisories::fixture();
+        }
+    }));
+}
+
+#[test]
+fn revocation_during_download_prevents_workflow_and_legacy_gallery_commits() {
+    for legacy in [false, true] {
+        let world = World::new();
+        let zip = workflow_zip("docs", &[]);
+        world.publish(vec![workflow_entry(&world, "docs", "1.0", &zip)], vec![]);
+        world.store.refresh().unwrap();
+        let entry = world.store.current().unwrap().entries[0].clone();
+        revoke_during_download(&world, "/gallery/packages/docs.zip");
+        let result = if legacy {
+            world.store.install_gallery_entry(&entry)
+        } else {
+            world.store.install("docs")
+        };
+        assert!(result.unwrap_err().contains("revoked"));
+        assert!(!world.workflows().join("docs").exists());
+        assert!(world.store.installed().is_empty());
+    }
+}
+
+#[test]
+fn revocation_during_native_update_keeps_original_program_and_receipt() {
+    let world = World::new();
+    world.publish(vec![native_entry(&world, "0.1.0", b"old program")], vec![]);
+    world.store.refresh().unwrap();
+    world.store.install("tool").unwrap();
+    let old_receipts = std::fs::read(world.store.dirs.state.join(RECEIPTS_FILE)).unwrap();
+    world.publish(vec![native_entry(&world, "0.2.0", b"new program")], vec![]);
+    world.store.refresh().unwrap();
+    revoke_during_download(&world, "/gallery/extensions/tool/");
+    assert!(world.store.update("tool").unwrap_err().contains("revoked"));
+    assert_eq!(
+        std::fs::read(world.plugins().join("tool/bin/tool-linux")).unwrap(),
+        b"old program"
+    );
+    assert_eq!(
+        std::fs::read(world.store.dirs.state.join(RECEIPTS_FILE)).unwrap(),
+        old_receipts
+    );
+}
+
+#[test]
+fn revocation_during_theme_download_prevents_writes_including_appearance_commit() {
+    let world = World::new();
+    let (bytes, theme) = theme_fixture();
+    world.net.put("gallery/themes/Nord.toml", bytes);
+    world.publish(vec![], vec![theme]);
+    world.store.refresh().unwrap();
+    revoke_during_download(&world, "/gallery/themes/Nord.toml");
+    assert!(world.store.install("nord").unwrap_err().contains("revoked"));
+    assert!(!world
+        .store
+        .dirs
+        .config_dir
+        .join(theme_store::file_for("Nord"))
+        .exists());
+    assert!(world.store.installed().is_empty());
+    let mut wrote = false;
+    let result = world
+        .store
+        .commit_if_not_revoked(Subject::Theme, "nord", "", || {
+            wrote = true;
+            Ok(())
+        });
+    assert!(result.unwrap_err().contains("revoked"));
+    assert!(!wrote, "Appearance uses the same final commit guard");
+}
+
+#[test]
+fn new_legacy_gallery_installs_have_a_managed_receipt_and_uninstall_action() {
+    let world = World::new();
+    let zip = workflow_zip("docs", &[]);
+    world.publish(vec![workflow_entry(&world, "docs", "1.0", &zip)], vec![]);
+    world.store.refresh().unwrap();
+    let entry = world.store.current().unwrap().entries[0].clone();
+    world.store.install_gallery_entry(&entry).unwrap();
+    assert_eq!(world.store.installed()[0].id, "docs");
+    world.store.uninstall("docs").unwrap();
+    assert!(!world.workflows().join("docs").exists());
 }
 
 #[test]
@@ -40,7 +132,13 @@ fn loading_the_catalog_reads_both_lists_from_the_builds_release() {
     let view = world.store.refresh().unwrap();
     assert_eq!(
         world.net.asked(),
-        [url("gallery/index.json"), url("gallery/themes.json")]
+        [
+            revocations::SOURCE.to_owned(),
+            url("gallery/index.json"),
+            sig_url("index.json"),
+            url("gallery/themes.json"),
+            sig_url("themes.json"),
+        ]
     );
     assert_eq!(view.source, url("gallery/index.json"));
     assert!(!view.from_cache);
@@ -206,9 +304,103 @@ fn only_catalog_ids_can_be_installed() {
     }
     assert_eq!(
         world.net.asked().len(),
-        2,
-        "naming something outside the list requests nothing"
+        5,
+        "naming something outside the list requests nothing (the advisories, two lists, two signatures)"
     );
+}
+
+#[test]
+fn deprecated_new_installs_are_blocked_but_existing_installs_can_get_a_fix() {
+    let world = World::new();
+    let zip = workflow_zip("docs", &[]);
+    world.publish(vec![workflow_entry(&world, "docs", "1.0", &zip)], vec![]);
+    world.store.refresh().unwrap();
+    world.store.install("docs").unwrap();
+    let mut old = workflow_entry(&world, "docs", "1.1", &zip);
+    old["deprecated"] = json!("Use the newer tool.");
+    old["replaced_by"] = json!("new-tool");
+    world.publish(
+        vec![
+            old,
+            workflow_entry(&world, "new-tool", "1.0", &workflow_zip("new-tool", &[])),
+        ],
+        vec![],
+    );
+    let view = world.store.refresh().unwrap();
+    let docs = view.items.iter().find(|e| e.id == "docs").unwrap();
+    assert_eq!(docs.state, State::UpdateAvailable);
+    assert_eq!(docs.replaced_by.as_deref(), Some("new-tool"));
+    world.store.update("docs").unwrap();
+    assert_eq!(world.store.installed()[0].version, "1.1");
+    world.store.uninstall("docs").unwrap();
+    let before = world.net.asked();
+    assert!(world
+        .store
+        .install("docs")
+        .unwrap_err()
+        .contains("Deprecated"));
+    assert_eq!(
+        before,
+        world.net.asked(),
+        "refuse deprecated new installs before downloading"
+    );
+}
+
+#[test]
+fn signed_revocation_blocks_install_even_when_expired_and_offline() {
+    let world = World::new();
+    let zip = workflow_zip("docs", &[]);
+    world.publish(vec![workflow_entry(&world, "docs", "1.0", &zip)], vec![]);
+    world.store.refresh().unwrap();
+    *world.store.advisories.lock().unwrap() = Advisories::fixture();
+    assert_eq!(world.store.advisory_status().state, "stale");
+    let item = &world.store.current_view().unwrap().items[0];
+    assert_eq!(item.state, State::Unavailable);
+    assert!(item.revocation.is_some());
+    let before = world.net.asked();
+    assert!(world.store.install("docs").unwrap_err().contains("revoked"));
+    assert_eq!(world.net.asked(), before);
+    world.net.down();
+    assert!(world.store.refresh().is_err());
+    assert_eq!(world.store.advisory_status().state, "unavailable");
+    assert!(world.store.install("docs").unwrap_err().contains("revoked"));
+    assert!(world.store.installed().is_empty());
+}
+
+#[test]
+fn installed_revocation_survives_catalog_removal_and_can_be_uninstalled() {
+    let world = World::new();
+    let zip = workflow_zip("docs", &[]);
+    world.publish(vec![workflow_entry(&world, "docs", "1.0", &zip)], vec![]);
+    world.store.refresh().unwrap();
+    world.store.install("docs").unwrap();
+    *world.store.advisories.lock().unwrap() = Advisories::fixture();
+    world.publish(vec![], vec![]);
+    world.store.refresh().unwrap();
+    assert!(world.store.current_view().unwrap().items.is_empty());
+    let installed = world.store.installed();
+    assert!(installed[0].revocation.is_some());
+    assert!(world.workflows().join("docs").exists(), "no silent removal");
+    world.store.uninstall("docs").unwrap();
+    assert!(world.store.installed().is_empty());
+    assert!(!world.workflows().join("docs").exists());
+}
+
+#[test]
+fn revoked_installed_version_can_update_to_a_non_revoked_version() {
+    let world = World::new();
+    let zip = workflow_zip("docs", &[]);
+    world.publish(vec![workflow_entry(&world, "docs", "1.0", &zip)], vec![]);
+    world.store.refresh().unwrap();
+    world.store.install("docs").unwrap();
+    *world.store.advisories.lock().unwrap() = Advisories::fixture();
+    world.publish(vec![workflow_entry(&world, "docs", "1.1", &zip)], vec![]);
+    let view = world.store.refresh().unwrap();
+    assert_eq!(view.items[0].state, State::UpdateAvailable);
+    assert!(view.items[0].revocation.is_none());
+    assert!(world.store.installed()[0].revocation.is_some());
+    world.store.update("docs").unwrap();
+    assert!(world.store.installed()[0].revocation.is_none());
 }
 
 #[test]
@@ -820,4 +1012,175 @@ fn a_theme_the_user_already_has_counts_as_installed_but_is_not_removable() {
         .unwrap_err()
         .contains("did not install"));
     assert!(themes.join("Nord.toml").is_file());
+}
+
+// ---- review fixes: receipts, unrecorded copies, the advisory lock ------------
+
+thread_local! {
+    /// How often this thread read the receipts file (see `read_receipts`).
+    pub(super) static RECEIPT_READS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+fn notice(kind: Subject, id: &str, versions: &[&str]) -> Notice {
+    Notice {
+        kind,
+        id: id.to_owned(),
+        versions: versions.iter().map(|v| (*v).to_owned()).collect(),
+        reason: format!("Test notice for {id}."),
+        advisory_url: None,
+    }
+}
+
+#[test]
+fn the_catalog_view_reads_receipts_once_however_many_entries_are_deprecated() {
+    let world = World::new();
+    let zip = workflow_zip("docs", &[]);
+    let entries = (0..5)
+        .map(|i| {
+            let mut entry = workflow_entry(&world, &format!("old-{i}"), "1.0", &zip);
+            entry["deprecated"] = json!("Unmaintained.");
+            entry
+        })
+        .collect();
+    world.publish(entries, vec![]);
+    world.store.refresh().unwrap();
+    RECEIPT_READS.with(|reads| reads.set(0));
+    let view = world.store.current_view().unwrap();
+    assert_eq!(view.items.len(), 5);
+    assert!(view
+        .items
+        .iter()
+        .all(|item| item.state == State::Unavailable));
+    assert_eq!(RECEIPT_READS.with(|reads| reads.get()), 1);
+}
+
+#[test]
+fn a_slow_advisory_download_does_not_block_revocation_lookups() {
+    use std::sync::mpsc::channel;
+    use std::time::Duration;
+    let world = World::new();
+    let (entered, wait_entered) = channel();
+    let (release, wait_release) = channel::<()>();
+    let wait_release = Mutex::new(wait_release);
+    *world.net.on_get.lock().unwrap() = Some(Arc::new(move |url: &str| {
+        if url == revocations::SOURCE {
+            let _ = entered.send(());
+            let _ = wait_release.lock().unwrap().recv();
+        }
+    }));
+    let store = world.store.clone();
+    let refresh = std::thread::spawn(move || store.refresh_advisories());
+    wait_entered
+        .recv_timeout(Duration::from_secs(10))
+        .expect("the refresh reached the network");
+    let (done, wait_done) = channel();
+    let store = world.store.clone();
+    std::thread::spawn(move || {
+        let _ = store.revocation(Subject::Package, "docs", "1.0");
+        let _ = store.advisory_status();
+        let _ = done.send(());
+    });
+    let looked_up = wait_done.recv_timeout(Duration::from_secs(5));
+    release.send(()).unwrap();
+    refresh.join().unwrap();
+    assert!(
+        looked_up.is_ok(),
+        "lookups must not wait for the advisory download"
+    );
+    // The failed (unsigned) download still reports honestly afterwards.
+    assert_eq!(world.store.advisory_status().state, "unavailable");
+}
+
+#[test]
+fn appearance_theme_installs_get_a_receipt_so_later_notices_reach_them() {
+    let world = World::new();
+    let (bytes, theme) = theme_fixture();
+    world.net.put("gallery/themes/Nord.toml", bytes.clone());
+    world.publish(vec![], vec![theme]);
+    world.store.refresh().unwrap();
+    let entry = world.store.current().unwrap().themes[0].clone();
+    let text = theme_store::verify_download(&bytes, &entry.sha256).unwrap();
+    let stored = world
+        .store
+        .install_gallery_theme_text(&entry, &text, &Existing::Refuse)
+        .unwrap();
+    assert_eq!(stored.file, theme_store::file_for("Nord"));
+    let installed = world.store.installed();
+    assert_eq!(installed.len(), 1);
+    assert_eq!(installed[0].kind, ItemKind::Theme);
+    assert!(installed[0].revocation.is_none());
+    *world.store.advisories.lock().unwrap() = Advisories::fixture();
+    assert!(world.store.installed()[0].revocation.is_some());
+    assert!(
+        world.store.unrecorded_revoked().is_empty(),
+        "a recorded copy is reported once, through its receipt"
+    );
+    world.store.uninstall("nord").unwrap();
+    assert!(!world.store.dirs.config_dir.join(&stored.file).exists());
+}
+
+#[test]
+fn all_version_notices_flag_copies_without_a_receipt_and_say_where_they_are() {
+    let world = World::new();
+    let zip = workflow_zip("docs", &[]);
+    let (bytes, theme) = theme_fixture();
+    world.publish(
+        vec![workflow_entry(&world, "docs", "1.0", &zip)],
+        vec![theme],
+    );
+    world.store.refresh().unwrap();
+    // An install from before receipts, and a theme placed without one.
+    let entry = world.store.current().unwrap().entries[0].clone();
+    install_bytes_as(&entry, &zip, &world.store.dirs.dirs(), Mode::New, &|| {}).unwrap();
+    let text = String::from_utf8(bytes).unwrap();
+    theme_store::install_text(
+        &world.store.dirs.config_dir,
+        &text,
+        "Nord",
+        &Existing::Refuse,
+    )
+    .unwrap();
+    // A plugin folder named like a revoked id that is not in the catalog.
+    let stray = world.plugins().join("stray");
+    std::fs::create_dir_all(&stray).unwrap();
+    std::fs::write(stray.join("plugin.toml"), "id = \"script:stray\"").unwrap();
+    assert!(world.store.installed().is_empty());
+
+    // The version of an unrecorded copy is unknown: exact versions do not flag it.
+    *world.store.advisories.lock().unwrap() = Advisories::with_notices(vec![
+        notice(Subject::Package, "docs", &["1.0"]),
+        notice(Subject::Package, "stray", &["2.0"]),
+    ]);
+    assert!(world.store.unrecorded_revoked().is_empty());
+
+    *world.store.advisories.lock().unwrap() = Advisories::with_notices(vec![
+        notice(Subject::Package, "docs", &["*"]),
+        notice(Subject::Package, "stray", &["*"]),
+        notice(Subject::Theme, "nord", &["*"]),
+        notice(Subject::Package, "absent", &["*"]),
+    ]);
+    let found = world.store.unrecorded_revoked();
+    let summary: Vec<_> = found
+        .iter()
+        .map(|copy| (copy.id.as_str(), copy.kind, copy.name.as_str()))
+        .collect();
+    assert_eq!(
+        summary,
+        [
+            ("docs", ItemKind::Workflow, "DOCS"),
+            ("stray", ItemKind::Plugin, "stray"),
+            ("nord", ItemKind::Theme, "Nord"),
+        ]
+    );
+    assert_eq!(
+        found[0].path,
+        world.workflows().join("docs").display().to_string()
+    );
+    assert_eq!(found[1].path, stray.display().to_string());
+    assert!(found[2].path.ends_with("Nord.toml"));
+    assert!(found.iter().all(|copy| copy.revocation.versions == ["*"]));
+    assert!(
+        world.workflows().join("docs").exists(),
+        "never removed automatically"
+    );
 }

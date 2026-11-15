@@ -144,10 +144,20 @@ export interface PluginInfo {
   enabled: boolean;
 }
 
+export interface StartupStatus {
+  registered: boolean;
+  enabled: boolean;
+  /** The entry starts another copy of Sevak (portable or development build). */
+  other_copy?: boolean;
+  error: string | null;
+  /** The preference saved on disk now (the installer or CLI may change it); null if unreadable. */
+  saved?: boolean | null;
+}
+
 export interface SettingsDto {
   config: Config;
   /** OS registration, including startup disabled outside Sevak; separate from the saved preference. */
-  startup: { registered: boolean; enabled: boolean; error: string | null };
+  startup: StartupStatus;
   catalog: PluginInfo[];
   display: Status["display"];
   is_gnome: boolean;
@@ -185,6 +195,26 @@ export async function saveSettings(config: Config): Promise<string | null> {
   } catch (err) {
     console.warn("[ipc] save_settings failed:", err);
     return errorText(err);
+  }
+}
+
+/** Read the OS state without reloading (and discarding) the Settings draft. */
+export async function getStartupStatus(): Promise<StartupStatus> {
+  if (preview()) return { registered: false, enabled: false, error: "Startup status is available in the installed app.", saved: null };
+  try {
+    return await invoke<StartupStatus>("get_startup_status");
+  } catch (err) {
+    return { registered: false, enabled: false, error: errorText(err), saved: null };
+  }
+}
+
+/** Explicit opt-in to repair an existing saved startup preference, never a draft save. */
+export async function repairStartup(): Promise<{ status: StartupStatus; error: null } | { status: null; error: string }> {
+  if (preview()) return { status: null, error: "Start Sevak to repair your account's startup setting." };
+  try {
+    return { status: await invoke<StartupStatus>("repair_startup"), error: null };
+  } catch (err) {
+    return { status: null, error: errorText(err) };
   }
 }
 

@@ -12,6 +12,20 @@
   let notice = $state<string | null>(null);
   let noticeTimer: ReturnType<typeof setTimeout> | undefined;
 
+  // The file search filters (crates/sevak-plugins/src/files/filters.rs).
+  const FILTERS: [string, string][] = [
+    ["ext:pdf  ext:jpg,png", "Files with these extensions"],
+    ["type:image", "Also video, audio, doc, code, archive"],
+    ["size:>10mb  size:<500kb", "File size (also >=, <=, 1mb..20mb, empty)"],
+    ["modified:today  modified:7d", "Changed today, or in the last 7 days (>7d: longer ago)"],
+    ["modified:>2026-01-01", "Changed after that day (also >=, <, <=, 2026-01, 2026)"],
+    ["created:yesterday", "Created then, where the file system records it"],
+    ["in:~/Projects  in:src", "Inside that folder, or any folder of that name"],
+    ["is:folder  is:file", "Folders or files only"],
+    ['"annual report"', "The name contains the exact phrase"],
+    ["-ext:tmp  -draft", "Leave these out"],
+  ];
+
   async function make() {
     loading = true;
     error = null;
@@ -96,6 +110,24 @@
     Without opening Settings: run <code>sevak --diagnostics</code> in a terminal. That report is made
     from files only, so it works even when Sevak is not running.
   </p>
+
+  <section class="hp-cheats" aria-labelledby="hp-filters">
+    <h2 id="hp-filters">File search filters</h2>
+    <p class="hp-hint">
+      Add these to <code>f</code>, <code>ff</code> or <code>in</code> searches, in any order. Every
+      filter must match; <code>-</code> in front leaves out what follows.
+    </p>
+    <table class="hp-table">
+      <tbody>
+        {#each FILTERS as [example, meaning] (example)}
+          <tr>
+            <td><code>{example}</code></td>
+            <td>{meaning}</td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+  </section>
 </div>
 
 <style>
@@ -199,8 +231,30 @@
     line-height: 1.4;
   }
 
+  .hp-cheats h2 {
+    margin: 22px 0 4px;
+    font-size: 15px;
+    font-weight: 650;
+  }
+
+  .hp-table {
+    margin-top: 8px;
+    border-collapse: collapse;
+    font-size: 12.5px;
+  }
+
+  .hp-table td {
+    padding: 3px 14px 3px 0;
+    vertical-align: top;
+  }
+
+  .hp-table td:first-child {
+    white-space: pre;
+  }
+
   .hp-lead code,
-  .hp-hint code {
+  .hp-hint code,
+  .hp-table code {
     padding: 0 4px;
     border-radius: 4px;
     background: var(--kbd-bg);

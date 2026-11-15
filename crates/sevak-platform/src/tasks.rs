@@ -972,13 +972,23 @@ pub fn group_apps(pairs: impl IntoIterator<Item = (u32, String)>) -> Vec<Running
     apps
 }
 
+/// A fresh `sysinfo` process table. `sysinfo` 0.40 reports when it cannot read
+/// the OS's process list at all (for example an unsupported platform); that is
+/// an OS error for `operation`, not a silent empty list.
+pub(crate) fn process_table(operation: &'static str) -> Result<sysinfo::System> {
+    sysinfo::System::new().map_err(|err| PlatformError::Os {
+        operation,
+        message: format!("could not read the process list: {err}"),
+    })
+}
+
 /// Takes a sample of every process. Measures CPU use over a short interval, so
 /// it takes a quarter of a second: call it from a background thread.
 pub fn list_processes() -> Result<Vec<ProcessInfo>> {
-    use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, MINIMUM_CPU_UPDATE_INTERVAL};
+    use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, MINIMUM_CPU_UPDATE_INTERVAL};
 
     let kind = ProcessRefreshKind::nothing().with_cpu().with_memory();
-    let mut system = System::new();
+    let mut system = process_table("list processes")?;
     system.refresh_processes_specifics(ProcessesToUpdate::All, true, kind);
     std::thread::sleep(MINIMUM_CPU_UPDATE_INTERVAL);
     system.refresh_processes_specifics(ProcessesToUpdate::All, true, kind);
@@ -1307,13 +1317,13 @@ fn run_platform_task(task: &Task) -> Result<()> {
 /// Asks the app to close the way its own Quit does: SIGTERM to its processes.
 #[cfg(target_os = "linux")]
 fn quit_app(name: &str) -> Result<()> {
-    use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
+    use sysinfo::{Pid, ProcessesToUpdate, Signal};
 
     let app = list_running_apps()?
         .into_iter()
         .find(|app| app.name.eq_ignore_ascii_case(name))
         .ok_or_else(|| not_running(name))?;
-    let mut system = System::new();
+    let mut system = process_table("quit")?;
     system.refresh_processes(ProcessesToUpdate::All, true);
     let mut asked = 0;
     for pid in app.pids {
@@ -1374,10 +1384,10 @@ fn force_quit(name: &str) -> Result<()> {
 }
 
 fn kill_matching(name: &str, extra_pids: &[u32]) -> Result<()> {
-    use sysinfo::{ProcessesToUpdate, System};
+    use sysinfo::ProcessesToUpdate;
 
     let own = std::process::id();
-    let mut system = System::new();
+    let mut system = process_table("end process")?;
     system.refresh_processes(ProcessesToUpdate::All, true);
     let mut found = 0;
     let mut failed = 0;
