@@ -54,7 +54,7 @@
         "network": "Red",
         "appsPower": "Aplicaciones y energía",
         "commands": "Comandos",
-        "settingsPages": "Páginas de configuración"
+        "settingsPages": "Páginas de ajustes"
       },
       "tasks": {
         "darkMode": "Activar o desactivar el modo oscuro",
@@ -89,7 +89,7 @@
         "shutdown": "Apagar",
         "logout": "Cerrar sesión",
         "emptyTrash": "Vaciar la papelera",
-        "settings": "Todas las páginas de configuración",
+        "settings": "Todas las páginas de ajustes",
         "display": "Pantalla",
         "sound": "Sonido",
         "network": "Red",
@@ -401,7 +401,7 @@
       "label": "Buscar"
     },
     "results": "Resultados",
-    "hotkeyUnavailable": "El atajo \"{shortcut}\" no está disponible: {error}. Elige otro en Configuración (menú de la bandeja).",
+    "hotkeyUnavailable": "El atajo \"{shortcut}\" no está disponible: {error}. Elige otro en Ajustes (menú de la bandeja).",
     "indexing": "Indexando aplicaciones…",
     "largeType": "Texto grande",
     "workflowOutput": "Salida del flujo de trabajo",
@@ -1186,7 +1186,7 @@
         "fields": {
           "key": {
             "label": "Atajo",
-            "hint": "Como los atajos de Configuración. En Wayland usa en su lugar un disparador externo."
+            "hint": "Como los atajos de Ajustes. En Wayland usa en su lugar un disparador externo."
           }
         }
       },
@@ -1424,7 +1424,7 @@
   },
   "gallery": {
     "title": "Galería",
-    "lead": "Añade herramientas a tu lanzador con extensiones y flujos de trabajo listos para usar. Elige <strong>Cargar galería</strong> para explorar paquetes de GitHub y comprobar avisos de revocación firmados; luego instala lo que necesites. Los plugins de script piden tu permiso antes de ejecutarse. Los temas están en Apariencia → Editor de temas.",
+    "lead": "Añade herramientas a tu lanzador con extensiones y flujos de trabajo listos para usar. Elige <strong>Cargar galería</strong> para explorar paquetes de GitHub y comprobar avisos de revocación firmados; luego instala lo que necesites. Los complementos de script piden tu permiso antes de ejecutarse. Los temas están en Apariencia → Editor de temas.",
     "load": "Cargar galería",
     "fetches": "Descarga la lista y los avisos firmados de GitHub.",
     "entries": {
@@ -1439,7 +1439,7 @@
     "refreshFailed": "La actualización falló; se desconoce el estado actual de revocación. Los avisos mostrados antes siguen vigentes.",
     "statusUnknown": "Se desconoce el estado actual de revocación. Recarga para comprobar los avisos firmados sobre extensiones.",
     "installedWorkflow": "Instalado. Lo encontrarás en Flujos de trabajo; Sevak pregunta antes de ejecutar nada.",
-    "installedPlugin": "Instalado. Sevak pregunta antes de ejecutar el plugin; después aparece en Plugins.",
+    "installedPlugin": "Instalado. Sevak pregunta antes de ejecutar el complemento; después aparece en Complementos.",
     "search": "Buscar extensiones",
     "searchPlaceholder": "Nombre, palabra clave o lo que quieres hacer…",
     "type": "Tipo",
@@ -1489,7 +1489,7 @@
   },
   "extensions": {
     "title": "Extensiones",
-    "lead": "Flujos de trabajo, plugins de script, extensiones nativas y temas de la galería de Sevak. No se solicita nada mientras navegas por Configuración: <strong>Cargar</strong> descarga la lista una vez del repositorio de Sevak en GitHub y verifica los avisos de revocación firmados, e <strong>Instalar</strong> descarga ese paquete concreto, lo coteja con la suma de verificación de la lista y lo guarda en tu carpeta. Todo lo que instalas queda como <em>nuevo y no permitido</em>: Sevak te pide permiso antes de ejecutar nada de su contenido. No se envía ningún otro dato.",
+    "lead": "Flujos de trabajo, complementos de script, extensiones nativas y temas de la galería de Sevak. No se solicita nada mientras navegas por Ajustes: <strong>Cargar</strong> descarga la lista una vez del repositorio de Sevak en GitHub y verifica los avisos de revocación firmados, e <strong>Instalar</strong> descarga ese paquete concreto, lo coteja con la suma de verificación de la lista y lo guarda en tu carpeta. Todo lo que instalas queda como <em>nuevo y no permitido</em>: Sevak te pide permiso antes de ejecutar nada de su contenido. No se envía ningún otro dato.",
     "statusUnknown": "Se desconoce el estado actual de revocación. Carga o actualiza la lista para comprobar los avisos firmados sobre extensiones.",
     "tabs": "Extensiones",
     "discover": "Descubrir",
@@ -1507,7 +1507,7 @@
       "one": "La lista está cargada: {count} elemento.",
       "other": "La lista está cargada: {count} elementos."
     },
-    "installedTheme": "Se instaló el tema {name}. Elígelo en Configuración > Apariencia.",
+    "installedTheme": "Se instaló el tema {name}. Elígelo en Ajustes > Apariencia.",
     "installedItem": "Se instaló {name}. Si puede ejecutar código, no se ejecuta hasta que lo permitas: Sevak te lo preguntará a continuación.",
     "updated": "Se actualizó {name}. Sevak vuelve a preguntar si puede ejecutar código.",
     "removed": "Se quitó {name}.",
@@ -1573,8 +1573,8 @@
     "notLoadedYet": "La lista aún no se ha cargado en este equipo. Pulsa <strong>Cargar la lista</strong> para ver lo que hay disponible.",
     "alreadyInstalled": "Lo que ya instalaste está en {link}.",
     "checkAdvisories": "Comprobar avisos de extensiones",
-    "openPlugins": "Abrir la carpeta de plugins",
-    "installedNote": "Estos son los elementos instalados desde aquí. Los plugins y flujos de trabajo que añadiste a mano están en Plugins y Flujos de trabajo.",
+    "openPlugins": "Abrir la carpeta de complementos",
+    "installedNote": "Estos son los elementos instalados desde aquí. Los complementos y flujos de trabajo que añadiste a mano están en Complementos y Flujos de trabajo.",
     "refreshFailed": "No se pudo actualizar la galería: {error}. La lista de instalados y los avisos autenticados anteriormente siguen disponibles.",
     "unrecordedLabel": "Copias revocadas sin registro de instalación",
     "unrecordedRevoked": "Revocado en todas sus versiones: {reason}. Sevak no tiene registro de haber instalado este elemento ({kind}), así que no puede quitarlo desde aquí. Quítalo tú mismo:",
@@ -1599,7 +1599,7 @@
     },
     "kindPlural": {
       "workflow": "Flujos de trabajo",
-      "plugin": "Plugins de script",
+      "plugin": "Complementos de script",
       "native": "Extensiones nativas",
       "theme": "Temas"
     },
@@ -1753,11 +1753,11 @@
       },
       "surface": {
         "label": "Panel",
-        "hint": "Paneles de Configuración"
+        "hint": "Paneles de Ajustes"
       },
       "input_background": {
         "label": "Campo",
-        "hint": "Controles de formulario de Configuración"
+        "hint": "Controles de formulario de Ajustes"
       },
       "input_border": {
         "label": "Borde de campo",
@@ -1829,7 +1829,7 @@
       "iconSize": "Tamaño de los iconos",
       "iconSizeHint": "Tamaño de los iconos de los resultados",
       "windowWidth": "Ancho de la ventana",
-      "windowWidthHint": "Se usa mientras Configuración mantenga el ancho predeterminado; la vista previa se limita al espacio disponible aquí"
+      "windowWidthHint": "Se usa mientras Ajustes mantenga el ancho predeterminado; la vista previa se limita al espacio disponible aquí"
     },
     "editor": {
       "title": "Editor de temas",
