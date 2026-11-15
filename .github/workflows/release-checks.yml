@@ -11,6 +11,12 @@ on:
       - "scripts/updater-manifest.*"
       - "scripts/verify-release.*"
       - "scripts/release-assets.*"
+      - "scripts/release-signing.*"
+      - "scripts/verify-windows-signatures.ps1"
+      - "scripts/extension-advisories.*"
+      - "gallery/revocations.json"
+      - ".github/workflows/ci.yml"
+      - ".github/workflows/extension-advisories.yml"
       - ".github/release.yml"
       - ".github/workflows/release*.yml"
       - ".github/workflows/promote.yml"
@@ -56,7 +62,7 @@ jobs:
           python3 - <<'EOF'
           import subprocess, yaml
           failed = False
-          for name in ["release", "promote", "rollback", "pr-labels", "sbom", "attest"]:
+          for name in ["release", "promote", "rollback", "pr-labels", "sbom", "attest", "extension-advisories"]:
               doc = yaml.safe_load(open(f".github/workflows/{name}.yml", encoding="utf-8"))
               for job, spec in doc["jobs"].items():
                   for step in spec.get("steps", []):

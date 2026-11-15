@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --config ui/vite.config.ts",
     "build": "vite build --config ui/vite.config.ts",
+    "build:test:windows": "node scripts/build-test-windows.mjs",
     "check": "svelte-check --tsconfig ui/tsconfig.json",
     "test:extensions": "node --test scripts/tests/extensions.test.mjs",
     "icons": "node scripts/generate-icons.mjs",
