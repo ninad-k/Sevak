@@ -57,6 +57,9 @@
   const catalog = $derived(overview?.catalog ?? null);
   const shown = $derived(visibleItems(catalog?.items ?? [], filter, query));
   const installed = $derived(overview?.installed ?? []);
+  const unrecorded = $derived(overview?.unrecorded ?? []);
+  /** The replacement's name when the loaded list has it, otherwise its id. */
+  const replacementName = (id: string) => catalog?.items.find((i) => i.id === id)?.name ?? id;
   const updates = $derived(updateCount(installed));
 
   function take(result: Result<Overview>): boolean {
@@ -86,6 +89,9 @@
       notice = `The list is loaded: ${result.value.catalog?.items.length ?? 0} items.`;
     } else {
       loadError = result.error;
+      // Advisory refresh may have succeeded or failed before catalog loading.
+      // Read the resulting local status even if the pinned catalog is offline.
+      await reload();
     }
   }
 
@@ -191,11 +197,14 @@
   <p class="wf-lead">
     Workflows, script plugins, native extensions and themes from the Sevak gallery. Nothing is
     requested while you browse Settings: <strong>Load</strong> fetches the list once from the Sevak
-    repository on GitHub, and <strong>Install</strong> downloads that one package, checks it against
+    repository on GitHub and verifies signed revocation notices, and <strong>Install</strong> downloads that one package, checks it against
     the checksum in the list and puts it in your folder. Whatever you install is <em>new and not
     allowed</em>: Sevak asks for your permission before anything in it runs. No other data is sent.
   </p>
   <MarketplaceLinks />
+  <p class="wf-msg" class:warn={overview?.advisories?.state !== "verified"} role="status">
+    {overview?.advisories?.message ?? "Current revocation status is unknown. Load or refresh the list to check signed extension advisories."}
+  </p>
 
   <div class="tabs" role="tablist" aria-label="Extensions" tabindex="-1" onkeydown={onTabKey}>
     <button
@@ -239,7 +248,7 @@
   {:else if tab === "discover"}
     <div id="ext-panel-discover" role="tabpanel" aria-labelledby="ext-tab-discover">
       <div class="wf-toolbar">
-        <button type="button" class="wf-btn primary" disabled={loading} onclick={load}>
+        <button type="button" class="wf-btn primary" disabled={loading || busy !== null} onclick={load}>
           {loading ? "Loading…" : catalog ? "Refresh the list" : "Load the list"}
         </button>
         {#if catalog}
@@ -312,6 +321,8 @@
                       {/if}
                     </span>
                     <span class="wf-sub line">{item.description}</span>
+                    {#if item.deprecated}<span class="wf-sub line">Deprecated: {item.deprecated}{item.replaced_by ? ` Replacement: ${replacementName(item.replaced_by)}.` : ""}</span>{/if}
+                    {#if item.revocation}<span class="wf-msg error">Revoked: {item.revocation.reason}. This version cannot be installed.</span>{/if}
                     <span class="wf-sub line">
                       {#if item.author}by {item.author}{/if}
                       {#if item.kind === "native" && item.permissions.length > 0}
@@ -320,7 +331,7 @@
                       {#if item.unavailable}· {item.unavailable}{/if}
                     </span>
                   </button>
-                  {#if item.state === "available" || item.state === "update_available"}
+                  {#if !item.revocation && (item.state === "available" || item.state === "update_available")}
                     {#if item.kind === "native"}
                       <button
                         type="button"
@@ -403,7 +414,7 @@
                       {/if}
                     </dl>
                     <p class="wf-msg" class:warn={item.kind === "native"}>{installWarning(item)}</p>
-                    {#if item.state === "available" || item.state === "update_available"}
+                    {#if !item.revocation && (item.state === "available" || item.state === "update_available")}
                       <button
                         type="button"
                         class="wf-btn primary"
@@ -432,6 +443,7 @@
   {:else}
     <div id="ext-panel-installed" role="tabpanel" aria-labelledby="ext-tab-installed">
       <div class="wf-toolbar">
+        <button type="button" class="wf-btn" disabled={loading || busy !== null} onclick={load}>Check extension advisories</button>
         <button type="button" class="wf-btn" onclick={() => void openPluginsFolder()}>
           Open plugins folder
         </button>
@@ -440,6 +452,22 @@
           Plugins and Workflows.
         </span>
       </div>
+      {#if loadError}<p class="wf-msg warn" role="alert">Could not refresh the gallery: {loadError}. The installed list and previously authenticated notices remain available.</p>{/if}
+      {#if unrecorded.length > 0}
+        <ul class="rows" aria-label="Revoked copies without an install record">
+          {#each unrecorded as copy (`${copy.kind}:${copy.id}:${copy.path}`)}
+            <li class="wf-card">
+              <div class="wf-title">{copy.name}</div>
+              <p class="wf-msg error" role="alert">
+                Revoked in every version: {copy.revocation.reason}. Sevak has no record of installing this
+                {KIND_LABEL[copy.kind].toLowerCase()}, so it cannot remove it here. Remove it yourself:
+                <code class="wf-code">{copy.path}</code>
+              </p>
+              {#if copy.revocation.advisory_url}<p class="wf-sub">Advisory: {copy.revocation.advisory_url}</p>{/if}
+            </li>
+          {/each}
+        </ul>
+      {/if}
       {#if installed.length === 0}
         <p class="wf-sub">
           Nothing installed from the gallery yet. Open
@@ -470,6 +498,11 @@
                     {/each}
                   </div>
                   {#if item.problem}<p class="wf-msg error">{item.problem}</p>{/if}
+                  {#if item.deprecated}<p class="wf-msg warn">Deprecated: {item.deprecated}{item.replaced_by ? ` Replacement: ${replacementName(item.replaced_by)}.` : ""}</p>{/if}
+                  {#if item.revocation}
+                    <p class="wf-msg error" role="alert">Revoked version: {item.revocation.reason}. Uninstall this extension using the button beside it. It is not removed or disabled automatically.</p>
+                    {#if item.revocation.advisory_url}<p class="wf-sub">Advisory: {item.revocation.advisory_url}</p>{/if}
+                  {/if}
                   {#if item.program_sha256}
                     <div class="wf-sub">
                       Program SHA-256 <code class="wf-code hash">{item.program_sha256}</code>
@@ -486,7 +519,7 @@
                       onclick={() => update(item)}>{busy === item.id ? "Working…" : "Update"}</button
                     >
                   {/if}
-                  {#if item.can_review}
+                  {#if item.can_review && !item.revocation}
                     <button
                       type="button"
                       class="wf-btn small"

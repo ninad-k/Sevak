@@ -10,8 +10,10 @@ and for people judging the risk; the threat model links here.
 Both galleries are lists kept in Sevak's repository (`gallery/index.json` and
 `gallery/themes.json`) next to the files they list (`gallery/packages/*.zip`,
 `gallery/themes/*.toml`). Nothing is requested until the user presses **Load
-gallery** or **Browse online themes**, and nothing is downloaded until the user
-presses **Install** on an entry. An installed workflow or script plugin still
+gallery**, **Load the list**, **Refresh the list**, **Check extension advisories**,
+or **Browse online themes**. Catalog actions in Gallery and Extensions also
+request the signed advisory feed described below. Package bytes are downloaded
+only after **Install** or **Update**. An installed workflow or script plugin still
 has to be allowed in Sevak's own dialog before it runs.
 
 ## The rules
@@ -129,21 +131,99 @@ native extensions.
   build cannot be made to list or install something that was added later.
 - **Review is the human check.** Reviewers look for public source that builds the
   committed binaries, permissions that match the code, an open-source licence
-  and no obfuscation. A review is not an audit, and a signature is still in the
-  backlog (below).
+  and no obfuscation. A review is not an audit; package and catalog signatures
+  remain separate future work (below).
 - **Updates and removal** are the same code path as install for every kind:
   an update is written aside and swapped in as one step, with the old version put
   back if the swap fails, and removal deletes only what a receipt (the store's
   own record in the data folder) says it installed, only inside the managed
   folders, and only if the folder still holds a manifest.
 
+### 6. Signed revocation notices
+
+The package catalogs remain pinned to their release. A separate advisory channel
+lets builds with this feature learn about a removed package without changing that
+pin. Only an explicit **Load gallery**, **Load/Refresh the list**, launcher **Load
+the extension list**, or **Check extension advisories** requests these two assets
+(**Check extension advisories** is the same request as **Refresh the list**, so
+it then also reloads the pinned package and theme lists):
+
+```text
+https://github.com/ninad-k/Sevak/releases/download/extension-advisories/extension-revocations.json
+https://github.com/ninad-k/Sevak/releases/download/extension-advisories/extension-revocations.json.sig
+```
+
+There is no startup request, timer, installed-package upload, or request while
+typing. Simply opening Extensions reads local state. The theme editor's separate
+online gallery does not fetch this feed.
+
+- The two downloads run without holding the advisory state, so the pages'
+  lists never wait on the network; verification, the rollback check and the
+  swap happen afterwards, serialized with install commits.
+- The JSON is limited to **128 KiB** and the detached signature to **8 KiB**.
+  Sevak verifies the exact downloaded bytes with minisign before parsing them.
+  The trust anchor is the updater public key embedded when Sevak was built (a
+  copy in the sevak-plugins crate that a test keeps equal to
+  	auri.conf.json's plugins.updater.pubkey);
+  neither a downloaded document nor a local cache can supply another key. The
+  signature uses the Tauri signer's base64 format. Existing download-host and
+  redirect restrictions still apply.
+- The strict format-1 envelope carries Unix-second `issued_at`, `expires_at` and
+  up to 256 notices. Validity is at most 30 days; malformed metadata, unknown
+  fields and responses older than the verified saved copy are rejected. The
+  local clock only labels freshness: an authentic feed that looks expired or
+  is issued more than five minutes ahead is kept and enforced, but reported as
+  stale, so a wrong clock cannot switch revocations off. A package id has
+  one record containing exact versions, or a sole `"*"` for all versions.
+  Versions compare as semantic versions where both parse (`1.0` equals
+  `1.0.0`), otherwise exactly. `"*"` also covers any later fixed version,
+  so it blocks the update to the fix too; notices should list exact versions
+  unless no version may be installed. Theme notices carry `"kind": "theme"` and the sole `"*"`, and
+  never match a package of the same id (or the reverse). Reasons are bounded plain text; optional advisory links must be
+  Sevak GitHub security-advisory addresses.
+- The data folder's `extension-advisories.json` contains the original body and
+  signature. Reads are bounded, and the signature and schema are checked again
+  after restart. A failed download, signature mismatch, older response or
+  invalid response never replaces the previous verified notices. If writing the
+  cache fails, newly authenticated notices still apply in the current session
+  and the page explains that they could not be saved. **Previously
+  authenticated revocations remain effective after expiry**; the page labels
+  freshness unknown/stale rather than silently declaring a clean result.
+- A known revoked version cannot be installed or updated from these galleries.
+  Each install rechecks after downloading, and its final writes are serialized
+  with advisory replacement, so a newly learned notice cannot be bypassed by an
+  in-flight download. The separate Appearance theme gallery also enforces known
+  cached notices when installing, without fetching the feed itself, and records
+  the same receipt as Extensions, so later notices reach that copy.
+  The Installed tab warns about matching managed copies even if their entry is
+  no longer listed and offers **Uninstall**. An update to a version not covered
+  by the notice remains possible. Existing copies are never removed, disabled,
+  or executed by the advisory check. Manually installed or older Gallery copies
+  without an Extensions receipt need manual removal from their folder. Their
+  version is unknown, so the Installed tab lists those that a `"*"` notice
+  covers, with their path (a package folder by its catalog folder or id, a
+  theme file only while the theme list is loaded), and Gallery warns about any
+  notice for such a copy. New installs made from Gallery now receive the same
+  managed receipt as Extensions.
+- An unavailable or never-published feed displays **unknown** status. It does
+  not block all unrelated installs. Even a current verified feed only proves
+  who signed those notices, not that other extensions are safe. Offline users
+  cannot learn new notices; builds predating this feature cannot use it.
+
+Publication and expiry renewal are an explicit maintainer operation, documented
+in [Updating and removal](../marketplace/updating-and-removal.md#publish-and-renew-advisories).
+Shipping this code does not publish the channel. Until its first signed upload,
+users see unavailable/unknown status. The dedicated channel must remain mutable;
+ordinary application releases may remain immutable.
+
 ## What this does not protect against
 
-- **No signature yet.** The hash in an index comes from the same repository as
+- **No package/catalog signature yet.** The hash in an index comes from the same repository as
   the file it covers. An attacker who can publish a release (or move an
   existing tag) can change both. Pinning to a tag limits the window to
   published releases; it does not remove the trust in the repository and its
-  release process.
+  release process. The separate advisory signature does not authenticate those
+  indexes or prove that an installed program is harmless.
 - **Tags can be moved** unless the repository protects them. Protecting
   `v*` tags (and, where available, immutable releases) in the repository
   settings is part of what makes the pin meaningful; that setting is outside

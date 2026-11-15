@@ -15,6 +15,7 @@
 
 pub mod package;
 pub mod plugin;
+pub mod revocations;
 pub mod store;
 
 #[cfg(test)]
@@ -27,5 +28,5 @@ pub use package::{
 pub use plugin::{ExtensionsHost, ExtensionsPlugin, Hooks, Report};
 pub use store::{
     is_newer, Catalog, CatalogItem, CatalogView, ExtensionStore, InstalledItem, ItemKind, Outcome,
-    Quiesce, Receipt, SharedTransport, State, StoreDirs,
+    Quiesce, Receipt, SharedTransport, State, StoreDirs, UnrecordedCopy,
 };

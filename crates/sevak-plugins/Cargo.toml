@@ -79,4 +79,7 @@ regex = "1"
 sha2.workspace = true
 # The gallery downloads are held to an allow-list of parsed addresses.
 url.workspace = true
+# Authenticated extension advisories use the updater's existing minisign format.
+minisign-verify = "0.2.5"
+base64 = "0.22"
 

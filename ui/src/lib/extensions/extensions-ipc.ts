@@ -17,8 +17,19 @@ export type ItemKind = "workflow" | "plugin" | "native" | "theme";
 /** `available` can be installed, `update_available` has a newer version. */
 export type CatalogState = "available" | "installed" | "update_available" | "unavailable";
 
+export interface RevocationNotice { kind?: "theme"; id: string; versions: string[]; reason: string; advisory_url?: string | null }
+export interface AdvisoryStatus {
+  state: "not_checked" | "verified" | "stale" | "unavailable";
+  message: string;
+  issued_at: number | null;
+  expires_at: number | null;
+}
+
 /** Mirrors `sevak_plugins::extensions::CatalogItem`. */
 export interface CatalogItem {
+  deprecated?: string | null;
+  replaced_by?: string | null;
+  revocation?: RevocationNotice | null;
   id: string;
   kind: ItemKind;
   name: string;
@@ -65,6 +76,9 @@ export type InstalledStatus = "ready" | "waiting" | "disabled" | "broken" | "the
 
 /** Mirrors `InstalledRow` in `src-tauri/src/extensions.rs`. */
 export interface InstalledItem {
+  deprecated?: string | null;
+  replaced_by?: string | null;
+  revocation?: RevocationNotice | null;
   id: string;
   kind: ItemKind;
   name: string;
@@ -81,8 +95,20 @@ export interface InstalledItem {
   can_review: boolean;
 }
 
+/** Mirrors `sevak_plugins::extensions::UnrecordedCopy`: on disk, no receipt, revoked in every version. */
+export interface UnrecordedCopy {
+  id: string;
+  kind: ItemKind;
+  name: string;
+  /** The folder or theme file on disk. */
+  path: string;
+  revocation: RevocationNotice;
+}
+
 export interface Overview {
+  advisories?: AdvisoryStatus;
   installed: InstalledItem[];
+  unrecorded?: UnrecordedCopy[];
   catalog: Catalog | null;
   /** `<os>-<arch>`, the build a native extension needs. */
   platform: string;

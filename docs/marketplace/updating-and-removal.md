@@ -54,18 +54,28 @@ Add two optional fields to the entry in `gallery/index.json`:
 }
 ```
 
-- `deprecated` is a short reason (1 to 200 characters).
+- `deprecated` is a trimmed, plain-text reason (1 to 200 Unicode characters,
+  without control characters).
 - `replaced_by` is optional, needs `deprecated`, and must be the id of another entry
   in the index (the checker refuses a missing id and an entry that replaces itself,
-  and warns when the replacement is itself deprecated).
+  and warns when the replacement is itself deprecated). A workflow or script plugin
+  cannot name a native extension: the Gallery page does not list native extensions.
 
-**What this does today.** The index format stays 2, and older Sevaks keep working:
-the app reads entries into a fixed set of fields and ignores any other, which a
-test (`fields_this_build_does_not_know_are_ignored`) pins down. That also means
-**the app does not show or act on `deprecated` yet**. A deprecated entry is still
-listed and installable in the app. The fields are information for people (and for
-a gallery web page that chooses to show them); they are not enforcement. Showing
-them in the app is on the [roadmap](https://github.com/ninad-k/Sevak/blob/main/ROADMAP.md).
+**What users see.** Gallery and Extensions show the reason and the replacement's
+name (its id when the replacement is not listed).
+New installs of deprecated entries are refused before downloading. An existing
+Extensions installation can still update to a newer listed version, so a final
+fix can reach its users, with the warning remaining visible. Sevak does not
+silently install the replacement or remove the original. An invalid reason
+causes that entry to be skipped. An invalid `replaced_by` (missing, itself, not
+deprecated, or a native extension for a workflow or plugin) only drops the
+reference: the entry and its deprecation warning stay, so people who have it
+installed still see it, and the list reports the dropped reference.
+
+The index stays format 2. Deprecation changes reach a build through its pinned
+release catalog; older builds that do not implement these fields ignore them.
+Use a signed advisory for a security issue that needs to reach builds already
+released with advisory support.
 
 ## Remove an entry at the author's request
 
@@ -113,30 +123,71 @@ How it works:
    is fixed, submit again under the normal process (a new review, with the history
    in view). The id may be refused.
 
-!!! warning "What Sevak can and cannot do about a revoked entry today"
-    **There is no revocation mechanism in the app.** Sevak never checks in the
-    background ([Privacy](../privacy.md)), so it does not learn that an entry was
-    taken down. Today:
+!!! warning "Notices require an explicit check"
+    Builds with advisory support check a signed channel when users choose
+    **Load gallery**, **Load/Refresh the list**, or **Check extension advisories**
+    on the Installed tab. **Check extension advisories** runs the same request as
+    **Refresh the list**: it also reloads the package and theme lists. Opening the
+    page alone uses the local cache, and there is no background check. Known revoked versions cannot be installed or
+    updated from the gallery. The Installed tab shows the reason and an
+    **Uninstall** action for copies managed by Extensions, including entries
+    removed from the catalog. Themes installed from Appearance get the same
+    receipt. Older Gallery/manual copies without a receipt must be removed from
+    their installation folder: a `"*"` notice still flags them on the Installed
+    tab with their location (themes only once the list is loaded), and Gallery
+    warns about any notice for an entry whose installed version is unknown.
 
-    - A build released **before** the takedown keeps listing the entry, and can
-      still install it, because it reads the list at its own release tag. Updating
-      Sevak to a release after the takedown removes it from the list.
-    - A copy **already installed** keeps running (after the user allowed it).
-      Sevak does not remove or disable it. The user has to uninstall it, which is
-      why the advisory tells them to.
-    - The user's approval is bound to the exact bytes; it protects against a later
-      silent change, not against a bad original.
+    Installed copies are not automatically disabled or removed. A non-revoked
+    newer version can still be installed as an update. Existing approval remains
+    bound to the exact program bytes; it does not prove a bad original is safe.
+    Offline users and builds predating advisory support cannot learn new
+    notices. A missing, expired or failed feed is visibly **unknown**, and
+    previously authenticated notices remain effective. Unknown status does not
+    block every package or mean that an extension is safe.
 
-    As a last resort for a dangerous entry in an old release, a maintainer could
-    delete that release's tag. A build whose tag does not exist reads the latest
-    stable release's list instead ([Gallery trust, rule 3](../security/gallery-trust.md#3-builds-without-a-tag)).
-    That also removes the release and its pin for everything else in it, so it is
-    a destructive emergency measure, not a routine tool, and it has not been rehearsed.
+## Publish and renew advisories
 
-    A real fix is on the [roadmap](https://github.com/ninad-k/Sevak/blob/main/ROADMAP.md):
-    a signed revocation list that Sevak checks when the user opens the gallery or
-    the extensions page, with a notice and an offer to uninstall. It is **not built**,
-    and there is no date.
+The application verifies notices using its embedded updater public key. The
+maintainer publishes them separately from pinned package catalogs:
+
+1. Update `gallery/revocations.json` in a reviewed pull request. It contains
+   `{"format":1,"revocations":[]}` initially. Each notice has a gallery `id`
+   (lower case letters, digits, `-` and `_`), `versions` (exact versions or
+   the sole `"*"`), a plain-text `reason`, and optionally `advisory_url` pointing at
+   a Sevak GitHub security advisory. Add `"kind": "theme"` for a theme from the
+   theme gallery; themes have no versions, so they take the sole `"*"`. Package
+   and theme ids are separate: a notice for one never revokes the other.
+   Versions match as semantic versions where both sides parse (`1.0` is
+   `1.0.0`; build metadata is ignored, pre-releases are not), otherwise as
+   exact strings. `"*"` matches every version, **including a later fixed
+   one**, so it also blocks updating to the fix. List the exact affected
+   versions unless no version may be installed at all.
+2. Keep previous notices unless intentionally withdrawing them. A newer valid
+   signed feed replaces the previous set, so dropping an id withdraws its
+   notice. A takedown pull request alone does not publish a revocation.
+3. Run `node scripts/extension-advisories.mjs check gallery/revocations.json`.
+   Merge the reviewed source, then manually run the
+   [Extension advisories workflow](https://github.com/ninad-k/Sevak/actions/workflows/extension-advisories.yml)
+   from `main`. It prepares a **14-day** feed, signs the exact bytes using the
+   existing `TAURI_SIGNING_PRIVATE_KEY`, and runs the application's Rust verifier
+   with the embedded public key before uploading. A wrong key or invalid feed
+   fails before publication. No production key is generated by the tooling.
+4. The workflow publishes `extension-revocations.json` and its Tauri-format
+   `.sig` to the dedicated **extension-advisories** prerelease. This release is
+   a mutable channel, not the latest application release. Keep it exempt from
+   release immutability; stable application releases do not need to change.
+5. Run the same workflow **before expiry**, even when the notices are unchanged.
+   Renewal is manual; no scheduled publication is configured. Review its result
+   and the uploaded expiry. During asset replacement, clients reject a transient
+   JSON/signature mismatch and retain the previous authenticated notices.
+
+The source starts empty and these changes do not publish a feed. Until the first
+successful upload the app reports unavailable/unknown status. Oversized
+responses, invalid signatures and older feeds are rejected. A feed accepts at
+most 30 days of validity. The local clock never discards authentic notices: a
+feed that looks expired, or issued more than five minutes in the future, is
+still enforced and shown as stale. See [Gallery trust](../security/gallery-trust.md#6-signed-revocation-notices)
+for limits, cache rules and what the signature does not cover.
 
 ## Security reports
 
@@ -167,6 +218,6 @@ tell the entry's author as well.
 | I want to... | Do this | Effect |
 |---|---|---|
 | Ship a fix or feature | PR with a higher `version` and new package | users get it from the next release, after they click Update |
-| Mark it obsolete | add `deprecated` (and `replaced_by`) | information only; the app does not show it yet |
+| Mark it obsolete | add `deprecated` (and `replaced_by`) | warning and no fresh install; existing users can get a newer fix |
 | Withdraw my entry | PR removing the entry and files | gone from the next release; installed copies stay |
-| Report something dangerous | private vulnerability report | takedown and advisory; no in-app recall yet |
+| Report something dangerous | private vulnerability report | takedown and separately signed notice; user chooses Uninstall |

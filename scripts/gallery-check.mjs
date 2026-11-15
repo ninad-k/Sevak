@@ -243,7 +243,7 @@ function checkCommon(where, entry) {
 
   // Deprecation is optional and ignored by builds that do not know it.
   if (entry.deprecated !== undefined) {
-    if (typeof entry.deprecated !== "string" || !entry.deprecated.trim() || entry.deprecated.length > MAX_DEPRECATED_CHARS) {
+    if (typeof entry.deprecated !== "string" || !entry.deprecated.trim() || entry.deprecated !== entry.deprecated.trim() || [...entry.deprecated].length > MAX_DEPRECATED_CHARS || /[\x00-\x1f\x7f-\x9f]/.test(entry.deprecated)) {
       problem(where, `deprecated must be a short reason (1 to ${MAX_DEPRECATED_CHARS} characters)`);
     }
   }
@@ -339,6 +339,10 @@ const nativeDirs = new Map();
     const where = `index.json ${entry.id}`;
     if (!byId.has(entry.replaced_by)) {
       problem(where, `replaced_by names ${entry.replaced_by}, which is not in the index`);
+    } else if (byId.get(entry.replaced_by).kind === "native" && entry.kind !== "native") {
+      // The Gallery page does not list native extensions, so the app drops
+      // this replacement (crates/sevak-plugins/src/workflow/gallery.rs).
+      problem(where, `replaced_by names native extension ${entry.replaced_by}; a workflow or plugin needs a workflow or plugin replacement`);
     } else if (byId.get(entry.replaced_by).deprecated !== undefined) {
       warn(where, `its replacement ${entry.replaced_by} is deprecated too`);
     }
