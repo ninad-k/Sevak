@@ -131,8 +131,8 @@ native extensions.
   build cannot be made to list or install something that was added later.
 - **Review is the human check.** Reviewers look for public source that builds the
   committed binaries, permissions that match the code, an open-source licence
-  and no obfuscation. A review is not an audit; package and catalog signatures
-  remain separate future work (below).
+  and no obfuscation. A review is not an audit. The lists are signed (rule 7);
+  per-package signatures remain future work.
 - **Updates and removal** are the same code path as install for every kind:
   an update is written aside and swapped in as one step, with the old version put
   back if the swap fails, and removal deletes only what a receipt (the store's
@@ -216,14 +216,71 @@ Shipping this code does not publish the channel. Until its first signed upload,
 users see unavailable/unknown status. The dedicated channel must remain mutable;
 ordinary application releases may remain immutable.
 
+### 7. Signed indexes
+
+Since release **v0.14.1** (`SIGNED_SINCE` in
+`crates/sevak-plugins/src/index_signature.rs`) the release workflow signs both
+lists it publishes at the tag, with the updater key and the same Tauri signer
+flow as the advisory feed, and attaches the signatures to the release:
+
+```text
+https://raw.githubusercontent.com/ninad-k/Sevak/<tag>/gallery/index.json
+https://github.com/ninad-k/Sevak/releases/download/<tag>/index.json.sig
+https://raw.githubusercontent.com/ninad-k/Sevak/<tag>/gallery/themes.json
+https://github.com/ninad-k/Sevak/releases/download/<tag>/themes.json.sig
+```
+
+- **Checked before parsing.** Whenever Sevak reads a list (Gallery, Extensions,
+  `ext`, the theme editor's online gallery, and the latest-release fallback of
+  rule 3) it downloads the `.sig` of the same release next to it and verifies the
+  exact downloaded bytes before anything parses them. The check is the advisory
+  feed's minisign check with the same embedded updater key (rule 6); no download
+  or cache can supply another key. The list keeps its size limit (512 KiB for
+  `index.json`, 256 KiB for `themes.json`) and the signature is at most 8 KiB.
+- **Bound to the release and the list.** The workflow signs each file staged as
+  `<tag>-<file>` (`v0.15.0-index.json`), so the signed trusted comment carries
+  `file:v0.15.0-index.json`. Sevak requires exactly that field. A signature made
+  for another release, for the other list, for the advisory feed
+  (`file:extension-revocations.json`) or for an installer is refused, so an
+  attacker cannot pair an older signed list with a newer tag or swap the lists.
+- **Rollout policy.** A signature that is present is always verified; an
+  invalid, altered, oversized or wrongly bound signature is refused for every
+  tag. A missing signature (HTTP 404) is accepted only for tags **older than
+  `SIGNED_SINCE`**, which were published before lists were signed; the page then
+  does not call the list signed. For `SIGNED_SINCE` and every later tag a
+  missing signature is refused, so deleting the `.sig` from a release cannot turn
+  it back into an unsigned one. Any other failure to download the signature is an
+  error, never "unsigned".
+- **Saved copies.** The Extensions page saves each list with its signature
+  (`extensions-catalog.json`) and checks both again, with the same policy, when
+  it loads the saved copy. A copy saved by an older build has no signature, so it
+  is used only if its tag is older than `SIGNED_SINCE`; otherwise the page waits
+  for **Load the list**.
+- **What failure looks like.** A package list that fails is not loaded ("Could
+  not load the gallery: ..."); a theme list that fails is left out
+  ("Themes are not listed: ...") and the packages stay. Extensions shows
+  **Signed index** next to the source when the package list was verified.
+- **Hashes stay.** Every package and theme is still checked against the
+  SHA-256 in the list before anything is unpacked or written (rule 4). Signing
+  the list makes those hashes come from the holder of the release key rather
+  than from whoever can change the repository's tags.
+- **Release side.** `release.yml` signs in a job with a read-only token and no
+  caches (`sign-gallery`), checks the trusted comment, and a second job without
+  the key (`attach-gallery-signatures`) verifies each signature with
+  `cargo run -p sevak-plugins --example verify_gallery_index`, the app's own
+  verifier, policy and parsers, against the files committed at the release
+  commit, before attaching them to the draft. Publication waits for it. See
+  [Releasing](../releasing.md#gallery-index-signatures).
+
 ## What this does not protect against
 
-- **No package/catalog signature yet.** The hash in an index comes from the same repository as
-  the file it covers. An attacker who can publish a release (or move an
-  existing tag) can change both. Pinning to a tag limits the window to
-  published releases; it does not remove the trust in the repository and its
-  release process. The separate advisory signature does not authenticate those
-  indexes or prove that an installed program is harmless.
+- **The signing key and old releases.** A signed list (rule 7) is only as
+  trustworthy as the updater key and the release workflow that uses it: anyone
+  who can run that workflow with the key can sign a list. Releases older than
+  `SIGNED_SINCE` have unsigned lists, so for them an attacker who can move a
+  tag can still change a list and its hashes together; protecting tags matters
+  there. Neither signature proves that an installed program is harmless, and
+  packages carry no signature of their own beyond the signed list's hash.
 - **Tags can be moved** unless the repository protects them. Protecting
   `v*` tags (and, where available, immutable releases) in the repository
   settings is part of what makes the pin meaningful; that setting is outside
@@ -242,19 +299,3 @@ ordinary application releases may remain immutable.
   pastes into another app waits for approval, like one that runs a script, so
   some gallery workflows that run no code (`tidy-text`, `markdown-tools`) ask
   once after installing.
-
-## Future: sign the indexes
-
-The updater already verifies releases with a signing key
-(`TAURI_SIGNING_PRIVATE_KEY`). The same key (or a dedicated one) can sign the
-index files:
-
-1. The release workflow signs `index.json` and `themes.json` and publishes the
-   signature next to each (`index.json.minisig`).
-2. Sevak embeds the public key, downloads index and signature, and verifies
-   the signature **before parsing** the index.
-3. A build then trusts the key rather than the repository's branches and tags;
-   the hash in a signed index covers the package.
-
-The format number already allows this to be added without breaking older
-builds.

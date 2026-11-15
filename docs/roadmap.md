@@ -30,6 +30,10 @@ does not mean a release containing it is published yet.
   requires maintainer publication and renewal
 - Publisher-signing configuration and verification gates (real Windows and
   Apple credentials still need provisioning), and one CI matrix per PR update
+- Signed gallery indexes: releases sign `index.json` and `themes.json`, and
+  Sevak verifies each list against the embedded release key before reading it
+  (unsigned lists are accepted only from releases before signing began; see
+  [Gallery trust](security/gallery-trust.md#7-signed-indexes))
 
 ## Next (planned, awaiting resources)
 
@@ -51,7 +55,6 @@ does not mean a release containing it is published yet.
 - More community gallery themes, workflows, plugins and extensions (the initial
   marketplace, gallery packages, submission and review process exist; see
   [Publishing to the gallery](marketplace/publishing.md))
-- Signed gallery indexes (see [Gallery trust](security/gallery-trust.md#future-sign-the-indexes))
 
 ## How to propose a feature
 
