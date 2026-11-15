@@ -44,6 +44,7 @@
   import { displayAccelerator } from "./lib/accelerator";
   import { applyAppearance } from "./lib/appearance";
   import { applyTheme } from "./lib/theme";
+  import { LANGUAGES, resolveLanguage, setLanguage, t } from "./lib/i18n.svelte";
   import {
     MAX_DEPTH,
     MAX_WIDTH,
@@ -62,6 +63,7 @@
       launch_at_login: false,
       check_for_updates: true,
       update_channel: "stable",
+      language: "auto",
     },
     window: { width: 720 },
     linux: { wayland_use_xwayland: true },
@@ -359,6 +361,15 @@
   $effect(() => {
     if (ready) applyTheme(draft.appearance.theme);
   });
+
+  // Switch the language as soon as it is picked, like the theme.
+  $effect(() => {
+    if (ready) setLanguage(draft.general.language);
+  });
+  /** The language `auto` stands for on this computer, named in itself. */
+  const autoLanguageName = $derived(
+    LANGUAGES.find((l) => l.code === resolveLanguage("auto", typeof navigator === "undefined" ? [] : navigator.languages ?? []))?.name ?? "English",
+  );
 
   // The rest of the appearance (accent, fonts, custom stylesheet) follows the saved config.
   $effect(() => applyAppearance(status?.appearance));
@@ -663,6 +674,24 @@
         <fieldset class="panel-form" disabled={saving}>
         {#if active === "general"}
           <h1>General</h1>
+
+          <section class="group">
+            <div class="row">
+              <div class="label">
+                <label class="name" for="language">{t("language.label")}</label>
+                <span class="hint">{t("language.hint")}</span>
+                {#if draft.general.language !== "en"}
+                  <span class="hint">{t("language.reviewNote")}</span>
+                {/if}
+              </div>
+              <select id="language" class="input select" bind:value={draft.general.language}>
+                <option value="auto">{t("language.auto", { language: autoLanguageName })}</option>
+                {#each LANGUAGES as language (language.code)}
+                  <option value={language.code} lang={language.code}>{language.name}</option>
+                {/each}
+              </select>
+            </div>
+          </section>
 
           <section class="group">
             <div class="field">

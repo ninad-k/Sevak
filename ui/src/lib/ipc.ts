@@ -65,6 +65,8 @@ export interface Status {
   indexing: boolean;
   /** Snippet expansion as you type: running, or why not. */
   snippet_expansion: { active: boolean; problem: string | null };
+  /** `[general] language`: `auto` or a language code (see `i18n.svelte.ts`). */
+  language?: string;
 }
 
 export type ActionKind =

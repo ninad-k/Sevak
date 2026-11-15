@@ -1,0 +1,18 @@
+{
+  "_meta": { "status": "machine-drafted, needs native review" },
+  "common": {
+    "save": "Speichern",
+    "saving": "Wird gespeichert…",
+    "saved": "Gespeichert",
+    "cancel": "Abbrechen",
+    "close": "Schließen",
+    "remove": "Entfernen",
+    "loading": "Wird geladen…"
+  },
+  "language": {
+    "label": "Sprache",
+    "hint": "Die Sprache der Fenster und des Infobereich-Menüs von Sevak. Automatisch folgt deinem Betriebssystem. Ergebnisse von Plugins bleiben vorerst auf Englisch.",
+    "auto": "Automatisch ({language})",
+    "reviewNote": "Alle Sprachen außer Englisch sind maschinell erstellte Entwürfe und warten auf die Prüfung durch Muttersprachler."
+  }
+}

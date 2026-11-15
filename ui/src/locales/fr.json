@@ -1,0 +1,18 @@
+{
+  "_meta": { "status": "machine-drafted, needs native review" },
+  "common": {
+    "save": "Enregistrer",
+    "saving": "Enregistrement…",
+    "saved": "Enregistré",
+    "cancel": "Annuler",
+    "close": "Fermer",
+    "remove": "Retirer",
+    "loading": "Chargement…"
+  },
+  "language": {
+    "label": "Langue",
+    "hint": "La langue des fenêtres et du menu de la zone de notification de Sevak. Automatique suit votre système d'exploitation. Les résultats des plugins restent en anglais pour l'instant.",
+    "auto": "Automatique ({language})",
+    "reviewNote": "Les langues autres que l'anglais sont des brouillons traduits automatiquement, en attente de relecture par des locuteurs natifs."
+  }
+}

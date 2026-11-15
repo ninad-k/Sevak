@@ -47,6 +47,8 @@ export interface Config {
     check_for_updates: boolean;
     /** Release channel: "stable" (default) or "beta" (earlier, less tested builds). */
     update_channel: "stable" | "beta";
+    /** Interface language: "auto" (the OS language) or a code from `LANGUAGES` in i18n.svelte.ts. */
+    language: string;
   };
   window: { width: number };
   linux: { wayland_use_xwayland: boolean };

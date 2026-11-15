@@ -1,0 +1,18 @@
+{
+  "_meta": { "status": "machine-drafted, needs native review" },
+  "common": {
+    "save": "Guardar",
+    "saving": "Guardando…",
+    "saved": "Guardado",
+    "cancel": "Cancelar",
+    "close": "Cerrar",
+    "remove": "Quitar",
+    "loading": "Cargando…"
+  },
+  "language": {
+    "label": "Idioma",
+    "hint": "El idioma de las ventanas y del menú de la bandeja de Sevak. Automático sigue a tu sistema operativo. Por ahora, los resultados de los complementos siguen en inglés.",
+    "auto": "Automático ({language})",
+    "reviewNote": "Los idiomas distintos del inglés son borradores automáticos pendientes de revisión por hablantes nativos."
+  }
+}

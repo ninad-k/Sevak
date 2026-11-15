@@ -1,0 +1,18 @@
+{
+  "_meta": { "status": "source" },
+  "common": {
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "cancel": "Cancel",
+    "close": "Close",
+    "remove": "Remove",
+    "loading": "Loading…"
+  },
+  "language": {
+    "label": "Language",
+    "hint": "The language of Sevak's windows and tray menu. Automatic follows your operating system. Plugin results stay in English for now.",
+    "auto": "Automatic ({language})",
+    "reviewNote": "Languages other than English are machine-drafted and await review by native speakers."
+  }
+}

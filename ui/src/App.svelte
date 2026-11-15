@@ -10,6 +10,7 @@
   import { applyAppearance } from "./lib/appearance";
   import { parentPath } from "./lib/path";
   import { applyTheme } from "./lib/theme";
+  import { setLanguage } from "./lib/i18n.svelte";
   import {
     copyResult,
     execute,
@@ -1211,6 +1212,7 @@
         indexing = s.indexing;
         applyTheme(s.theme);
         applyAppearance(s.appearance);
+        setLanguage(s.language);
       }
     });
 
@@ -1222,6 +1224,7 @@
         indexing = s.indexing;
         applyTheme(s.theme);
         applyAppearance(s.appearance);
+        setLanguage(s.language);
       }),
       onIndex((state) => {
         indexing = state === "indexing";
