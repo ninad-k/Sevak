@@ -321,6 +321,8 @@ fn table_label(key: &str) -> String {
         "contacts" => "Contacts",
         "dictionary" => "Dictionary",
         "hotkey" => "Extra hotkeys",
+        "clock" => "World clock",
+        "passwords" => "Password generator",
         other => other,
     }
     .to_owned()

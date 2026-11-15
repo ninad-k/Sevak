@@ -35,6 +35,7 @@ use crate::{
     ShellPlugin, SnippetsPlugin, SystemPlugin, TasksPlugin, UuidPlugin, WebSearchPlugin,
     WindowManagerPlugin,
 };
+use crate::{ClockPlugin, PasswordPlugin};
 
 /// Builds the instances of one plugin family.
 ///
@@ -113,7 +114,8 @@ impl PluginRegistry {
     /// Apps, calculator, web search, files, bookmarks, system commands,
     /// automation tasks, media controls, window management, shell, clipboard history,
     /// snippets, emoji, Universal Actions, contacts, 1Password, the dictionary, the
-    /// example UUID plugin and the AI assistant, in that order.
+    /// example UUID plugin, the AI assistant, the world clock and the password
+    /// generator, in that order.
     /// Order matters only for tie-breaking and logging.
     pub fn builtin() -> Self {
         let mut registry = Self::new();
@@ -306,6 +308,23 @@ impl PluginRegistry {
                 ))]
             },
         ));
+        registry.register(PluginDescriptor::new(
+            "clock",
+            "World clock",
+            "Type `time` for the time in your cities, `time tokyo` for one place, or `time 3pm pst in ist` to convert; offline.",
+            |config, platform| vec![Arc::new(ClockPlugin::new(&config.clock, platform.clone()))],
+        ));
+        registry.register(PluginDescriptor::new(
+            "pwgen",
+            "Password generator",
+            "Type `pass` for a random password, `pass 24` for a longer one or `pass 6 words` for a passphrase; Enter copies it, kept out of clipboard history.",
+            |config, platform| {
+                vec![Arc::new(PasswordPlugin::new(
+                    &config.passwords,
+                    platform.clone(),
+                ))]
+            },
+        ));
         registry
     }
 
@@ -426,7 +445,9 @@ mod tests {
                 "1password",
                 "dict",
                 "uuid",
-                "ai"
+                "ai",
+                "clock",
+                "pwgen"
             ]
         );
     }
@@ -462,7 +483,9 @@ mod tests {
                 "dict",
                 "dict:spell",
                 "uuid",
-                "ai"
+                "ai",
+                "clock",
+                "pwgen"
             ]
         );
     }
@@ -496,7 +519,9 @@ mod tests {
                 "dict",
                 "dict:spell",
                 "uuid",
-                "ai"
+                "ai",
+                "clock",
+                "pwgen"
             ]
         );
     }
@@ -530,7 +555,9 @@ mod tests {
                 "1password",
                 "dict",
                 "dict:spell",
-                "ai"
+                "ai",
+                "clock",
+                "pwgen"
             ]
         );
     }
@@ -580,6 +607,8 @@ mod tests {
                 ("dict:spell", true),
                 ("uuid", true),
                 ("ai", true),
+                ("clock", true),
+                ("pwgen", true),
             ]
         );
     }

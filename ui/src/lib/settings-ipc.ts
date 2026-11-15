@@ -128,6 +128,10 @@ export interface Config {
   };
   /** The `>` command: which terminal and shell run it. */
   shell: { terminal: string; shell: string; keep_open: boolean };
+  /** The world clock (`time`): the cities a bare `time` lists. */
+  clock: { keyword: string; cities: string[] };
+  /** The password generator (`pass`): defaults for `length` (4-128) and passphrase `words` (2-20). */
+  passwords: { keyword: string; length: number; words: number; symbols: boolean };
   web_search: WebSearchEngine[];
   hotkey: HotkeyBinding[];
 }

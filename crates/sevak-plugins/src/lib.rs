@@ -25,6 +25,8 @@
 //! | `dict`           | [`DictionaryPlugin`] (also `dict:spell`) | `define`, `spell` | no |
 //! | `uuid`           | [`UuidPlugin`] (a tutorial example)     | `uuid`  | no     |
 //! | `ai`             | [`AiPlugin`] (opt-in AI assistant)      | `ai`    | no     |
+//! | `clock`          | [`ClockPlugin`] (world clock)           | `time`  | no     |
+//! | `pwgen`          | [`PasswordPlugin`] (password generator) | `pass`  | no     |
 //!
 //! Script plugins (`script:<name>`, from `<config dir>/plugins/`) are loaded by
 //! [`ScriptPluginHost`]; see [`script`].
@@ -45,6 +47,7 @@ pub mod bookmarks;
 pub mod calculator;
 pub mod clipboard_history;
 mod clipboard_store;
+pub mod clock;
 pub mod contacts;
 pub mod currency;
 pub mod dictionary;
@@ -60,6 +63,7 @@ pub mod net;
 pub mod onepassword;
 pub mod os_files;
 pub mod path_browse;
+pub mod pwgen;
 pub mod registry;
 pub mod script;
 pub mod selection;
@@ -82,6 +86,7 @@ pub use apps::AppsPlugin;
 pub use bookmarks::BookmarksPlugin;
 pub use calculator::CalculatorPlugin;
 pub use clipboard_history::ClipboardPlugin;
+pub use clock::ClockPlugin;
 pub use contacts::ContactsPlugin;
 pub use dictionary::DictionaryPlugin;
 pub use emoji::EmojiPlugin;
@@ -91,6 +96,7 @@ pub use keywords::{KeywordOwners, KeywordUse, OwnerKind};
 pub use media::MediaPlugin;
 pub use onepassword::OnePasswordPlugin;
 pub use os_files::{files_family, OsFilesPlugin};
+pub use pwgen::PasswordPlugin;
 pub use registry::{PluginDescriptor, PluginFactory, PluginInfo, PluginRegistry};
 pub use script::{ScriptPlugin, ScriptPluginHost};
 pub use selection::SelectionPlugin;
@@ -105,7 +111,7 @@ pub use workflow::WorkflowHost;
 /// Instantiates every enabled built-in plugin (`apps`, `calculator`, one
 /// `web:<keyword>` per `[[web_search]]` engine, `files`, `bookmarks`, `system`,
 /// `tasks`, `media`, `shell`, `clipboard`, `snippets`, `emoji`, `selection`,
-/// `contacts`, `1password`, `dict`, `uuid`, `ai`).
+/// `contacts`, `1password`, `dict`, `uuid`, `ai`, `clock`, `pwgen`).
 ///
 /// Shorthand for `PluginRegistry::builtin().instantiate(config, platform)`.
 ///
@@ -161,7 +167,9 @@ mod tests {
                 "dict",
                 "dict:spell",
                 "uuid",
-                "ai"
+                "ai",
+                "clock",
+                "pwgen"
             ]
         );
     }
@@ -194,7 +202,9 @@ mod tests {
                 "dict",
                 "dict:spell",
                 "uuid",
-                "ai"
+                "ai",
+                "clock",
+                "pwgen"
             ]
         );
     }

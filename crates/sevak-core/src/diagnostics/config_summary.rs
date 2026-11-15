@@ -148,6 +148,16 @@ const GROUPS: &[(&str, &[Field])] = &[
             ("ai.timeout_secs", Show::Value),
         ],
     ),
+    // How many cities, not which (they can say where the user's people are).
+    (
+        "World clock and password generator",
+        &[
+            ("clock.cities", Show::Count),
+            ("passwords.length", Show::Value),
+            ("passwords.words", Show::Value),
+            ("passwords.symbols", Show::Value),
+        ],
+    ),
 ];
 
 /// Top-level sections reported by custom code or deliberately left out; every
@@ -233,6 +243,8 @@ const KEYWORD_PATHS: &[&str] = &[
     "dictionary.define_keyword",
     "dictionary.spell_keyword",
     "ai.keyword",
+    "clock.keyword",
+    "passwords.keyword",
 ];
 
 /// The configurable keywords of `config`, as `(setting, keyword)`; a search

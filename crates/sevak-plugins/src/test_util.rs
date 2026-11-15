@@ -88,6 +88,8 @@ pub struct MockPlatform {
     pub definitions: Mutex<Vec<(String, String)>>,
     /// What `system_spelling` answers, by word.
     pub spellings: Mutex<Vec<(String, Spelling)>>,
+    /// Text put on the clipboard as a secret (`set_clipboard_text_private`).
+    pub private_clipboard: Mutex<Vec<String>>,
 }
 
 impl MockPlatform {
@@ -356,5 +358,10 @@ impl PlatformProvider for MockPlatform {
             .iter()
             .find(|(w, _)| w == word)
             .map(|(_, s)| s.clone())
+    }
+
+    fn set_clipboard_text_private(&self, text: &str) -> Result<()> {
+        self.private_clipboard.lock().unwrap().push(text.to_owned());
+        Ok(())
     }
 }

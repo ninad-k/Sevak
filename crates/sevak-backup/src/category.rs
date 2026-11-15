@@ -146,6 +146,8 @@ pub const SETTINGS_TABLES: &[&str] = &[
     "contacts",
     "dictionary",
     "window_management",
+    "clock",
+    "passwords",
 ];
 
 /// The `[[hotkey]]` entries: part of [`Category::Settings`].

@@ -129,6 +129,8 @@
     media: { keyword: "play", global: true, now_playing: true },
     window_management: { enabled: true, keyword: "win", switcher_keyword: "w", gap: 0, global: false },
     shell: { terminal: "", shell: "", keep_open: true },
+    clock: { keyword: "time", cities: [] },
+    passwords: { keyword: "pass", length: 20, words: 6, symbols: true },
     web_search: [],
     hotkey: [],
   });

@@ -2,6 +2,7 @@
   import { pickDirectory, pickFile, type Config } from "../settings-ipc";
   import { MAX_CACHE_MINUTES, type Problems } from "../validate";
   import Toggle from "../Toggle.svelte";
+  import ClockPasswordsSection from "./ClockPasswordsSection.svelte";
   import KeywordRow from "./KeywordRow.svelte";
   import ListEditor from "./ListEditor.svelte";
   import Row from "./Row.svelte";
@@ -222,4 +223,6 @@
       “Dictionary” is switched off under <strong>Plugins</strong>. Switch it on there as well.
     </p>
   {/if}
+
+  <ClockPasswordsSection bind:config {problems} {pluginOff} />
 </div>

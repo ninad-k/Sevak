@@ -760,7 +760,7 @@ mod tests {
     fn built_in_keywords_cannot_collide() {
         assert!(check(&Config::default()).is_ok());
         type Set = fn(&mut Config, &str);
-        let setters: [(&str, Set); 7] = [
+        let setters: [(&str, Set); 9] = [
             ("tasks", |c, k| c.tasks.keyword = k.into()),
             ("media", |c, k| c.media.keyword = k.into()),
             ("contacts", |c, k| c.contacts.keyword = k.into()),
@@ -768,6 +768,8 @@ mod tests {
             ("define", |c, k| c.dictionary.define_keyword = k.into()),
             ("spell", |c, k| c.dictionary.spell_keyword = k.into()),
             ("bookmarks", |c, k| c.bookmarks.keyword = k.into()),
+            ("clock", |c, k| c.clock.keyword = k.into()),
+            ("passwords", |c, k| c.passwords.keyword = k.into()),
         ];
         for (name, set) in setters {
             // A fixed keyword, another built-in one, a web engine's (any

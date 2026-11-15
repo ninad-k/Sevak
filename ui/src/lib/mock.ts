@@ -439,6 +439,8 @@ export function mockSettings(): SettingsDto {
         global: false,
       },
       shell: { terminal: "", shell: "", keep_open: true },
+      clock: { keyword: "time", cities: ["London", "New York", "Tokyo"] },
+      passwords: { keyword: "pass", length: 20, words: 6, symbols: true },
       web_search: [
         { keyword: "g", name: "Google", url: "https://www.google.com/search?q={query}" },
         { keyword: "yt", name: "YouTube", url: "https://www.youtube.com/results?search_query={query}" },

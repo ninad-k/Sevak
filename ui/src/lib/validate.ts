@@ -60,7 +60,9 @@ export type KeywordField =
   | "onepassword.keyword"
   | "dictionary.define_keyword"
   | "dictionary.spell_keyword"
-  | "ai.keyword";
+  | "ai.keyword"
+  | "clock.keyword"
+  | "passwords.keyword";
 
 export interface ClipboardErrors {
   maxItems?: string;
@@ -135,6 +137,8 @@ const KEYWORDS: KeywordSpec[] = [
   { field: "dictionary.define_keyword", owner: "the dictionary", required: true, section: "integrations", read: (c) => c.dictionary.define_keyword },
   { field: "dictionary.spell_keyword", owner: "the spelling checker", required: true, section: "integrations", read: (c) => c.dictionary.spell_keyword },
   { field: "ai.keyword", owner: "the AI assistant", required: true, section: "ai", read: (c) => c.ai.keyword },
+  { field: "clock.keyword", owner: "the world clock", required: true, section: "integrations", read: (c) => c.clock.keyword },
+  { field: "passwords.keyword", owner: "the password generator", required: true, section: "integrations", read: (c) => c.passwords.keyword },
 ];
 
 /** Every keyword of a built-in search (lowercased) and what answers it. */

@@ -105,6 +105,9 @@
   {:else if name === "sparkle"}
     <path d="M11 3.5 13 9l5.5 2-5.5 2-2 5.5L9 13 3.5 11 9 9Z" />
     <path d="M18.5 3v4M16.5 5h4" />
+  {:else if name === "clock"}
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3.5 2" />
   {:else}
     <path d="M9 3v4M15 3v4" />
     <path d="M6 7h12v4.5a6 6 0 0 1-12 0Z" />

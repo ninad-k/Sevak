@@ -26,7 +26,8 @@ pub const FIXED_KEYWORDS: &[(&str, &str)] = &[
 ];
 
 /// A keyword the user can change in `[files]`, `[bookmarks]`, `[tasks]`,
-/// `[media]`, `[window_management]`, `[contacts]`, `[onepassword]`, `[dictionary]` or `[ai]`.
+/// `[media]`, `[window_management]`, `[contacts]`, `[onepassword]`, `[dictionary]`, `[ai]`,
+/// `[clock]` or `[passwords]`.
 #[derive(Debug, Clone, Copy)]
 pub struct ConfigurableKeyword<'a> {
     /// How an error message names the setting ("files", "dictionary").
@@ -41,7 +42,7 @@ pub struct ConfigurableKeyword<'a> {
 
 /// Every configurable built-in keyword, as the config has it (untrimmed, and
 /// empty when the search is off).
-pub fn configurable_keywords(config: &Config) -> [ConfigurableKeyword<'_>; 13] {
+pub fn configurable_keywords(config: &Config) -> [ConfigurableKeyword<'_>; 15] {
     let entry = |label, keyword, owner| ConfigurableKeyword {
         label,
         keyword,
@@ -94,6 +95,12 @@ pub fn configurable_keywords(config: &Config) -> [ConfigurableKeyword<'_>; 13] {
             "the spelling checker",
         ),
         required("AI assistant", &config.ai.keyword, "the AI assistant"),
+        required("world clock", &config.clock.keyword, "the world clock"),
+        required(
+            "password generator",
+            &config.passwords.keyword,
+            "the password generator",
+        ),
     ]
 }
 

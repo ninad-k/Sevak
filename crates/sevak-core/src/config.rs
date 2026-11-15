@@ -377,6 +377,30 @@ expand_in_terminals = false
 # Safari, Arc, Zen, LibreWolf and Chromium count as browsers.
 expand_in_browsers = false
 
+[clock]
+# World clock and time zones, offline (the time-zone rules are built in):
+# "time" lists the cities below, "time tokyo" shows one city, and
+# "time 3pm pst in ist" or "time 14:30 berlin to new york" converts a time.
+# Enter copies the answer. Turn it off with "clock" in [plugins] disabled.
+keyword = "time"
+# Cities a bare "time" lists: city names ("Tokyo", "San Francisco"), time-zone
+# abbreviations ("IST") or IANA zone names ("Europe/Berlin").
+cities = ["London", "New York", "Tokyo"]
+
+[passwords]
+# Password generator, offline: "pass" makes a random password, "pass 24" one of
+# 24 characters, "pass 6 words" a passphrase and "pass pin" a number. Enter
+# copies it, marked so that clipboard histories (Sevak's, Windows Win+V and
+# others that honour the marker) leave it out. Generated passwords are never
+# stored or logged. Turn it off with "pwgen" in [plugins] disabled.
+keyword = "pass"
+# Characters in a password (4-128) and words in a passphrase (2-20).
+length = 20
+words = 6
+# Include symbols such as !#%+ in passwords ("pass nosymbols" leaves them out
+# once, "pass symbols" adds them once).
+symbols = true
+
 # Web search engines: type "<keyword> <terms>". "{query}" is replaced by the
 # URL-encoded terms. Defining any [[web_search]] entry replaces this list.
 [[web_search]]
@@ -446,6 +470,10 @@ pub struct Config {
     pub ai: AiConfig,
     /// `[snippets]`: expanding snippet keywords as you type.
     pub snippets: SnippetsConfig,
+    /// `[clock]`: the world clock and time-zone converter (`time`).
+    pub clock: ClockConfig,
+    /// `[passwords]`: the password generator (`pass`).
+    pub passwords: PasswordsConfig,
     /// `[[snippet]]` entries. Edited by hand only: saves from the settings
     /// window leave them untouched (see `merge_document`).
     pub snippet: Vec<Snippet>,
@@ -481,6 +509,8 @@ impl Default for Config {
             dictionary: DictionaryConfig::default(),
             ai: AiConfig::default(),
             snippets: SnippetsConfig::default(),
+            clock: ClockConfig::default(),
+            passwords: PasswordsConfig::default(),
             snippet: Vec::new(),
             web_search: WebSearchEngine::defaults(),
             hotkeys: Vec::new(),
@@ -1083,6 +1113,60 @@ impl Default for DictionaryConfig {
     }
 }
 
+/// The world clock and time-zone converter (`time`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ClockConfig {
+    pub keyword: String,
+    /// What a bare `time` lists: city names, zone abbreviations or IANA zone
+    /// names, resolved by the plugin (unknown ones are reported there).
+    pub cities: Vec<String>,
+}
+
+impl Default for ClockConfig {
+    fn default() -> Self {
+        Self {
+            keyword: "time".to_owned(),
+            cities: vec![
+                "London".to_owned(),
+                "New York".to_owned(),
+                "Tokyo".to_owned(),
+            ],
+        }
+    }
+}
+
+/// Shortest and longest generated password, in characters.
+pub const MIN_PASSWORD_LENGTH: usize = 4;
+pub const MAX_PASSWORD_LENGTH: usize = 128;
+/// Fewest and most words in a generated passphrase.
+pub const MIN_PASSPHRASE_WORDS: usize = 2;
+pub const MAX_PASSPHRASE_WORDS: usize = 20;
+
+/// The password generator (`pass`). Nothing it makes is stored.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PasswordsConfig {
+    pub keyword: String,
+    /// Characters in a password made by a bare `pass`.
+    pub length: usize,
+    /// Words in a passphrase made by `pass words`.
+    pub words: usize,
+    /// Include symbols in passwords unless the query says otherwise.
+    pub symbols: bool,
+}
+
+impl Default for PasswordsConfig {
+    fn default() -> Self {
+        Self {
+            keyword: "pass".to_owned(),
+            length: 20,
+            words: 6,
+            symbols: true,
+        }
+    }
+}
+
 /// When a typed keyword is replaced.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -1451,6 +1535,8 @@ impl Config {
             (&mut self.onepassword.keyword, "1p"),
             (&mut self.dictionary.define_keyword, "define"),
             (&mut self.dictionary.spell_keyword, "spell"),
+            (&mut self.clock.keyword, "time"),
+            (&mut self.passwords.keyword, "pass"),
         ] {
             *keyword = keyword.trim().to_owned();
             if keyword.is_empty() || keyword.contains(char::is_whitespace) {
@@ -1488,6 +1574,18 @@ impl Config {
             .cache_minutes
             .clamp(1, MAX_ONEPASSWORD_CACHE_MINUTES);
         self.ai = self.ai.normalized();
+        for city in &mut self.clock.cities {
+            *city = city.trim().to_owned();
+        }
+        self.clock.cities.retain(|city| !city.is_empty());
+        self.passwords.length = self
+            .passwords
+            .length
+            .clamp(MIN_PASSWORD_LENGTH, MAX_PASSWORD_LENGTH);
+        self.passwords.words = self
+            .passwords
+            .words
+            .clamp(MIN_PASSPHRASE_WORDS, MAX_PASSPHRASE_WORDS);
         self.snippets.prefix = self.snippets.prefix.trim().to_owned();
         self.snippets
             .ignore_apps
@@ -1738,6 +1836,36 @@ mod tests {
         assert_eq!(config.onepassword.keyword, "1p");
         assert_eq!(config.onepassword.cache_minutes, 1);
         assert_eq!(config.onepassword.op_path, "/bin/op");
+    }
+
+    #[test]
+    fn clock_and_passwords_are_normalized() {
+        let defaults = Config::default();
+        assert_eq!(defaults.clock.keyword, "time");
+        assert_eq!(defaults.clock.cities, ["London", "New York", "Tokyo"]);
+        assert_eq!(defaults.passwords.keyword, "pass");
+        assert_eq!(defaults.passwords.length, 20);
+        assert!(defaults.passwords.symbols);
+
+        let config = Config::from_toml_str(
+            "[clock]
+keyword = \" \"
+cities = [\" Paris \", \"\", \"Asia/Tokyo\"]
+             [passwords]
+keyword = \"two words\"
+length = 1000
+words = 0
+symbols = false
+",
+        )
+        .unwrap()
+        .normalized();
+        assert_eq!(config.clock.keyword, "time");
+        assert_eq!(config.clock.cities, ["Paris", "Asia/Tokyo"]);
+        assert_eq!(config.passwords.keyword, "pass");
+        assert_eq!(config.passwords.length, MAX_PASSWORD_LENGTH);
+        assert_eq!(config.passwords.words, MIN_PASSPHRASE_WORDS);
+        assert!(!config.passwords.symbols);
     }
 
     #[test]

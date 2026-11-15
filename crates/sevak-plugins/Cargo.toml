@@ -79,4 +79,9 @@ regex = "1"
 sha2.workspace = true
 # The gallery downloads are held to an allow-list of parsed addresses.
 url.workspace = true
+# The world clock (`time`): the IANA time-zone database compiled into the binary
+# (no data files at run time), and the name of this computer's own zone (already
+# in the tree through chrono's `clock` feature).
+chrono-tz = { version = "0.10", default-features = false, features = ["std"] }
+iana-time-zone = "0.1"
 
