@@ -118,6 +118,9 @@
       filter must match; <code>-</code> in front leaves out what follows.
     </p>
     <table class="hp-table">
+      <thead class="sr-only">
+        <tr><th scope="col">Filter</th><th scope="col">Meaning</th></tr>
+      </thead>
       <tbody>
         {#each FILTERS as [example, meaning] (example)}
           <tr>
@@ -169,7 +172,7 @@
 
   .hp-btn:focus-visible,
   .hp-report:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 

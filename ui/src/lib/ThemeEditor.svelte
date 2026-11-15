@@ -482,7 +482,7 @@
       </div>
 
       {#if palette}
-        <div class="checks" aria-label="Contrast">
+        <div class="checks" role="group" aria-label="Contrast">
           <ul>
             {#each checks as check (check.id)}
               <li class:fail={!check.aa}>
@@ -507,7 +507,7 @@
       <div class="row">
         <div class="label">
           <label class="name" for="theme-name">Name</label>
-          {#if nameError}<span class="msg error" role="alert">{nameError}</span>{/if}
+          {#if nameError}<span class="msg error" id="theme-name-error" role="alert">{nameError}</span>{/if}
         </div>
         <input
           id="theme-name"
@@ -518,6 +518,7 @@
           value={spec.name}
           placeholder="My theme"
           aria-invalid={!!nameError}
+          aria-describedby={nameError ? "theme-name-error" : undefined}
           oninput={(e) => {
             const value = e.currentTarget.value;
             edit("name", (s) => (s.name = value));
@@ -627,7 +628,7 @@
           <div class="label">
             <label class="name" for="theme-font">Font</label>
             <span class="hint">A comma-separated list, such as Fira Sans, sans-serif. Empty uses the system font.</span>
-            {#if fontError}<span class="msg error" role="alert">{fontError}</span>{/if}
+            {#if fontError}<span class="msg error" id="theme-font-error" role="alert">{fontError}</span>{/if}
             {#if fontNote}<span class="hint">{fontNote}</span>{/if}
           </div>
           <div class="font-controls">
@@ -641,6 +642,7 @@
               spellcheck="false"
               autocomplete="off"
               aria-invalid={!!fontError}
+              aria-describedby={fontError ? "theme-font-error" : undefined}
               oninput={(e) => {
                 const value = e.currentTarget.value;
                 edit("font", (s) => (s.font.family = value));
@@ -771,7 +773,7 @@
   }
 
   .theme:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 
@@ -1025,7 +1027,7 @@
   }
 
   .input:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: -1px;
   }
 
@@ -1073,7 +1075,7 @@
   }
 
   .btn:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 
@@ -1157,7 +1159,7 @@
   }
 
   .slider input[type="range"]:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 4px;
     border-radius: 4px;
   }

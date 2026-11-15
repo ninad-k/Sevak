@@ -156,6 +156,7 @@
         placeholder={provider.defaultModel}
         spellcheck="false"
         autocomplete="off"
+        aria-invalid={!!fieldProblems.model}
       />
     </Row>
     <Row
@@ -198,6 +199,7 @@
           spellcheck="false"
           autocomplete="off"
           aria-label="API key (write-only)"
+          aria-invalid={!!keyError}
         />
         <button
           type="button"
@@ -228,9 +230,11 @@
         rows="3"
         maxlength={MAX_SYSTEM_PROMPT_CHARS * 2}
         spellcheck="true"
+        aria-invalid={!!fieldProblems.systemPrompt}
+        aria-describedby={fieldProblems.systemPrompt ? "ai-system-error" : undefined}
       ></textarea>
       {#if fieldProblems.systemPrompt}
-        <span class="sp-msg error" role="alert">{fieldProblems.systemPrompt}</span>
+        <span class="sp-msg error" id="ai-system-error" role="alert">{fieldProblems.systemPrompt}</span>
       {/if}
     </div>
 

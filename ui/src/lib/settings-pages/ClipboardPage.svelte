@@ -29,7 +29,17 @@
   let phase = $state<Phase>("idle");
   let failure = $state("");
 
+  let clearButton: HTMLButtonElement | undefined = $state();
+  /** The confirm buttons went away while focused: give focus back to "Clear history…". */
+  let returnFocus = false;
+  $effect(() => {
+    if (phase === "confirm" || phase === "busy" || !clearButton || !returnFocus) return;
+    returnFocus = false;
+    clearButton.focus();
+  });
+
   async function clear() {
+    returnFocus = true;
     phase = "busy";
     const error = await clearClipboardHistory();
     if (error) {
@@ -180,10 +190,19 @@
       hint="Deletes every saved entry and the image files. This cannot be undone."
     >
       {#if phase === "confirm"}
-        <button type="button" class="sp-btn danger" onclick={clear}>Delete everything</button>
-        <button type="button" class="sp-btn" onclick={() => (phase = "idle")}>Cancel</button>
+        <!-- svelte-ignore a11y_autofocus -->
+        <button type="button" class="sp-btn danger" onclick={clear} autofocus>Delete everything</button>
+        <button
+          type="button"
+          class="sp-btn"
+          onclick={() => {
+            returnFocus = true;
+            phase = "idle";
+          }}>Cancel</button
+        >
       {:else}
         <button
+          bind:this={clearButton}
           type="button"
           class="sp-btn"
           disabled={phase === "busy"}

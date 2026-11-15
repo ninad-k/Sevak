@@ -411,7 +411,7 @@
     wrap?.scrollTo({
       left: Math.max(0, node.x - 80),
       top: Math.max(0, node.y - 80),
-      behavior: "smooth",
+      behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
     });
   }
 
@@ -578,6 +578,7 @@
             transform="translate({node.x} {node.y})"
             role="button"
             tabindex="0"
+            aria-pressed={selection?.kind === "node" && selection.id === node.id}
             aria-label="{nodeLabel(node)}, {def.label}{nodeProblems.length > 0
               ? `, ${nodeProblems.length} problem${nodeProblems.length === 1 ? '' : 's'}`
               : ''}"
@@ -812,6 +813,12 @@
     color: var(--fg);
     font-size: 13.5px;
     outline: none;
+  }
+
+  /* The editor itself takes focus (for its keys); show it when that was by keyboard. */
+  .editor:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: -2px;
   }
 
   .bar {

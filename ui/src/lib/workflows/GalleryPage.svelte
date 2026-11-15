@@ -180,7 +180,7 @@
               class="wf-btn small"
               class:primary={!entry.installed}
               disabled={entry.installed || installing !== null || !!entry.deprecated || !!entry.revocation}
-              aria-label={entry.installed ? `${entry.name} is installed` : `Install ${entry.name}`}
+              aria-label={entry.installed ? `${entry.name} is installed` : installing === entry.id ? `Installing ${entry.name}` : `Install ${entry.name}`}
               onclick={() => install(entry)}
             >
               {entry.installed ? "Installed" : installing === entry.id ? "Installing…" : "Install"}
@@ -226,7 +226,7 @@
   .description { margin: 12px 0; line-height: 1.6; flex: 1; }
   .package-details { margin: 12px 0; }
   .package-details summary { cursor: pointer; }
-  .package-details summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .package-details summary:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
   .checksum { overflow-wrap: anywhere; }
   .card-footer { display: flex; justify-content: flex-end; margin-top: 6px; }
   .empty { padding: 20px; }

@@ -634,7 +634,7 @@
   {:else if !ready}
     <div class="state" role="status">Loading…</div>
   {:else}
-    <div class="body">
+    <main class="body">
       <div class="sidebar" role="tablist" aria-orientation="vertical" aria-label="Settings sections">
         {#each sections as section, i (section.id)}
           <button
@@ -651,7 +651,8 @@
           >
             <span>{section.label}</span>
             {#if section.problems > 0}
-              <span class="dot" title="{section.problems} problem(s)" aria-label="{section.problems} problem(s)"></span>
+              <span class="dot" title="{section.problems} problem(s)" aria-hidden="true"></span>
+              <span class="sr-only">, {section.problems} problem{section.problems === 1 ? "" : "s"}</span>
             {/if}
           </button>
         {/each}
@@ -975,13 +976,15 @@
                   Offered when nothing else matches your query. config.toml can list several.
                 </span>
                 {#if problems.fallback}
-                  <span class="msg error" role="alert">{problems.fallback}</span>
+                  <span class="msg error" id="fallback-error" role="alert">{problems.fallback}</span>
                 {/if}
               </div>
               <select
                 id="fallback"
                 class="input select"
                 class:invalid={!!problems.fallback}
+                aria-invalid={!!problems.fallback}
+                aria-describedby={problems.fallback ? "fallback-error" : undefined}
                 bind:value={getFallback, setFallback}
               >
                 <option value="">None</option>
@@ -1182,8 +1185,9 @@
                     spellcheck="false"
                     autocomplete="off"
                     aria-invalid={!!errors.keyword}
+                    aria-describedby={errors.keyword ? `kw-${i}-error` : undefined}
                   />
-                  {#if errors.keyword}<span class="msg error" role="alert">{errors.keyword}</span>{/if}
+                  {#if errors.keyword}<span class="msg error" id="kw-{i}-error" role="alert">{errors.keyword}</span>{/if}
                 </div>
                 <div class="cell name-cell">
                   <label class="mini" for="nm-{i}">Name</label>
@@ -1196,8 +1200,9 @@
                     spellcheck="false"
                     autocomplete="off"
                     aria-invalid={!!errors.name}
+                    aria-describedby={errors.name ? `nm-${i}-error` : undefined}
                   />
-                  {#if errors.name}<span class="msg error" role="alert">{errors.name}</span>{/if}
+                  {#if errors.name}<span class="msg error" id="nm-{i}-error" role="alert">{errors.name}</span>{/if}
                 </div>
                 <button
                   type="button"
@@ -1219,8 +1224,9 @@
                   spellcheck="false"
                   autocomplete="off"
                   aria-invalid={!!errors.url}
+                  aria-describedby={errors.url ? `url-${i}-error` : undefined}
                 />
-                {#if errors.url}<span class="msg error" role="alert">{errors.url}</span>{/if}
+                {#if errors.url}<span class="msg error" id="url-{i}-error" role="alert">{errors.url}</span>{/if}
               </div>
             </section>
           {/each}
@@ -1266,7 +1272,7 @@
                 <label class="name" for="depth">Folder depth</label>
                 <span class="hint">How many levels below each folder are indexed.</span>
                 {#if problems.filesDepth}
-                  <span class="msg error" role="alert">{problems.filesDepth}</span>
+                  <span class="msg error" id="depth-error" role="alert">{problems.filesDepth}</span>
                 {/if}
               </div>
               <input
@@ -1279,6 +1285,7 @@
                 step="1"
                 bind:value={draft.files.max_depth}
                 aria-invalid={!!problems.filesDepth}
+                aria-describedby={problems.filesDepth ? "depth-error" : undefined}
               />
             </div>
 
@@ -1309,7 +1316,7 @@
                   <code>size:&gt;10mb</code> or <code>modified:7d</code> (see Help).
                 </span>
                 {#if problems.keywords["files.keyword"]}
-                  <span class="msg error" role="alert">{problems.keywords["files.keyword"]}</span>
+                  <span class="msg error" id="files-keyword-error" role="alert">{problems.keywords["files.keyword"]}</span>
                 {/if}
               </div>
               <input
@@ -1321,6 +1328,7 @@
                 spellcheck="false"
                 autocomplete="off"
                 aria-invalid={!!problems.keywords["files.keyword"]}
+                aria-describedby={problems.keywords["files.keyword"] ? "files-keyword-error" : undefined}
               />
             </div>
 
@@ -1351,7 +1359,7 @@
                   <label class="name" for="files-index-keyword">Whole-disk keyword</label>
                   <span class="hint">Empty turns off name search.</span>
                   {#if problems.keywords["files.index_keyword"]}
-                    <span class="msg error" role="alert">{problems.keywords["files.index_keyword"]}</span>
+                    <span class="msg error" id="files-index-keyword-error" role="alert">{problems.keywords["files.index_keyword"]}</span>
                   {/if}
                 </div>
                 <input
@@ -1359,6 +1367,7 @@
                   class="input number"
                   class:invalid={!!problems.keywords["files.index_keyword"]}
                   aria-invalid={!!problems.keywords["files.index_keyword"]}
+                  aria-describedby={problems.keywords["files.index_keyword"] ? "files-index-keyword-error" : undefined}
                   type="text"
                   bind:value={draft.files.index_keyword}
                   spellcheck="false"
@@ -1371,7 +1380,7 @@
                   <label class="name" for="files-content-keyword">Contents keyword</label>
                   <span class="hint">Empty turns off content search.</span>
                   {#if problems.keywords["files.content_keyword"]}
-                    <span class="msg error" role="alert">{problems.keywords["files.content_keyword"]}</span>
+                    <span class="msg error" id="files-content-keyword-error" role="alert">{problems.keywords["files.content_keyword"]}</span>
                   {/if}
                 </div>
                 <input
@@ -1379,6 +1388,7 @@
                   class="input number"
                   class:invalid={!!problems.keywords["files.content_keyword"]}
                   aria-invalid={!!problems.keywords["files.content_keyword"]}
+                  aria-describedby={problems.keywords["files.content_keyword"] ? "files-content-keyword-error" : undefined}
                   type="text"
                   bind:value={draft.files.content_keyword}
                   spellcheck="false"
@@ -1434,7 +1444,7 @@
         {/if}
         </fieldset>
       </div>
-    </div>
+    </main>
 
     <footer class="footer">
       <div class="links">
@@ -1532,7 +1542,7 @@
   }
 
   .tab:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: -2px;
   }
 
@@ -1722,7 +1732,7 @@
   }
 
   .input:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: -1px;
   }
 
@@ -1756,7 +1766,7 @@
   }
 
   .btn:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 
@@ -1818,7 +1828,7 @@
   }
 
   .segmented label:has(input:focus-visible) {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 1px;
   }
 
@@ -1857,7 +1867,7 @@
   }
 
   .slider input[type="range"]:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 4px;
     border-radius: 4px;
   }
@@ -1979,7 +1989,7 @@
   }
 
   .link:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
     border-radius: 3px;
   }
