@@ -18,6 +18,8 @@ permission dialogs of the OS, other people's apps receiving a paste. The
 | Rust integration tests | The real search engine and registry with a recording platform: keyword routing, secrets never leaking into global queries, Enter reaching the platform; script plugins and workflows with real child processes | `crates/sevak-plugins/tests/` | Every push |
 | UI unit tests | Accelerator parsing and identity, settings validation, path helpers, theme colour and contrast maths, theme JSON, workflow graph rules, a few components | `ui/src/**/*.test.ts` (Vitest) | Every push (`UI unit tests` job) |
 | Startup integration | Per-user registration, config persistence and rollback, background arguments; Settings toggle through real IPC wrappers with a mocked native bridge | Platform startup tests; `ui/src/Settings.startup.test.ts` | Rust and UI test jobs |
+| Startup CLI | The real `--set-startup` / `--startup-status` / `--refresh-startup` / `--remove-startup` against the OS's own startup store, including an entry the OS disabled | `scripts/test-startup-cli.mjs` | Every push (`Startup CLI` job: Windows, macOS, Ubuntu) |
+| End-to-end UI | The real debug app driven through WebDriver: launcher opens, calculator answers, Settings toggle and Cancel, Gallery stays unloaded | `e2e/` (WebdriverIO + tauri-driver) | Every push (`End-to-end UI` job: Windows, Ubuntu) |
 | Latency budget | The default engine over a large mock index answers typical queries in under 100 ms at p95 | `crates/sevak-plugins/tests/latency.rs` | Every push (`Search latency budget` job, optimized build) |
 | Benchmark | Precise latency numbers and startup index time | `crates/sevak-plugins/benches/` | Weekly and on demand (`Benchmark` workflow) |
 | Coverage | Which lines the tests run | `Coverage` workflow | Every pull request (report only) and weekly |
@@ -60,6 +62,8 @@ reproduces it.
 | `cargo test -p sevak-platform startup` | Startup registration helpers and integration cases without changing the host's real startup entries |
 | `npm run test:scripts` | Installer source and packaging contracts, including startup controls. On Windows with the Tauri NSIS toolchain, also compiles and executes startup policy and helper-receipt fixtures. Windows bundle/release jobs rerun these after building the installers. |
 | `pwsh -NoProfile -File scripts/test-windows-installer.ps1` | Windows only, after building the installers: inspect the compiled MSI and evaluate its real startup conditions without installing it. CI runs this after the bundle build. Use `-MsiPath <file>` to select a specific MSI. |
+| `node scripts/test-startup-cli.mjs` | After `cargo build -p sevak`: the headless startup commands against the real OS store (see [below](#startup-cli-check)) |
+| `npm ci --prefix e2e` then `npm run test:e2e` | End-to-end UI suite on Linux or Windows (see [below](#end-to-end-ui-tests)) |
 | `npm run test:watch` | Vitest in watch mode |
 | `npm run test:coverage` | UI tests with a coverage report in `ui/coverage/` |
 | `mkdocs build --strict` | Documentation build (needs `pip install -r docs/requirements.txt`) |
@@ -82,6 +86,76 @@ wrappers with a fake Tauri transport: toggling is only a draft until Save,
 successful saves reload the persisted choice, and native errors remain visible
 without a success toast. These are UI integration tests, not native desktop or
 reboot tests.
+
+### Startup CLI check
+
+`scripts/test-startup-cli.mjs` runs a built binary's startup commands with
+`--config <temp>/config.toml` and asserts both the exit codes (`--startup-status`:
+0 and `on`, or 1 and `off`) and what the OS stores:
+
+| OS | Artifact checked | "Disabled by the OS" case |
+|---|---|---|
+| Windows | `HKCU\...\CurrentVersion\Run\Sevak` (command line, `--background --config`) and `StartupApproved\Run\Sevak` | StartupApproved state 3, as Task Manager writes it |
+| macOS | `~/Library/LaunchAgents/Sevak.plist` (`Label`, `ProgramArguments`, `RunAtLoad`) | `launchctl disable gui/$UID/Sevak`, read back through `launchctl print-disabled` |
+| Linux | `$XDG_CONFIG_HOME/autostart/Sevak.desktop` (`Exec`, `X-GNOME-Autostart-enabled`) | `Hidden=true`, `X-GNOME-Autostart-enabled=false`, a Hidden-only tombstone |
+
+In each case an explicit `--set-startup on` must re-enable the entry, `off`
+must remove it, `--remove-startup` must remove it while keeping the saved
+preference, and the script removes everything it created. Its parsers have unit
+tests in `scripts/test-startup-cli.test.mjs` (part of `npm run test:scripts`).
+
+On Linux the autostart folder is a temp folder unless `--real-home` is passed
+(CI passes it). Windows and macOS have a single per-user store, so outside CI
+the script refuses to run unless you pass `--allow-real-startup`, and it always
+refuses if a Sevak `Run` value or LaunchAgent already exists. A leftover
+`StartupApproved` value on Windows is set aside and put back afterwards.
+
+```sh
+cargo build -p sevak
+node scripts/test-startup-cli.mjs --allow-real-startup   # Windows / macOS
+node scripts/test-startup-cli.mjs                        # Linux, isolated autostart folder
+```
+
+### End-to-end UI tests
+
+`e2e/` drives the real app through Tauri's WebDriver support
+([guide](https://v2.tauri.app/develop/tests/webdriver/)): WebdriverIO (pinned
+in `e2e/package.json`, its own lockfile) talks to `tauri-driver`, which starts
+the debug app under WebKitWebDriver on Linux or msedgedriver on Windows. macOS
+has no WKWebView driver, so the suite does not run there. The specs:
+
+- the launcher opens with the test profile (its log names the test `config.toml`);
+- typing `2+2` shows a calculator row titled `4`;
+- `sevak --settings` (forwarded to the running app) opens Settings, where
+  "Check for updates" is switched on and then cancelled: the window closes and
+  `config.toml` is byte-for-byte unchanged;
+- the Gallery page shows "Load gallery" and no entries, and the log shows the
+  gallery was never requested.
+
+The suite only types text and clicks; it never presses Enter, so no result
+runs. Every run uses a fresh profile (`SEVAK_CONFIG_DIR`, `SEVAK_DATA_DIR` and
+`--config`; on Linux also the XDG folders, so autostart is isolated too) with
+update checks, folder indexing, the app index, clipboard and contacts readers
+off. Before starting, it stops if Sevak is already running (the app is a single
+instance) and, on Windows outside CI, if Sevak is registered to start at
+sign-in: the registry cannot be isolated, and the test app's routine startup
+sync would remove that entry.
+
+To run it locally:
+
+```sh
+cargo install tauri-driver --version 2.1.0 --locked
+# Linux: install WebKitWebDriver (Debian/Ubuntu: webkit2gtk-driver)
+# Windows: put msedgedriver.exe matching your WebView2 runtime version on PATH,
+#          or set TAURI_NATIVE_DRIVER to its path
+npm ci --prefix e2e
+npm run test:e2e        # builds with `tauri build --debug --no-bundle` first
+```
+
+Set `SEVAK_E2E_BINARY` to test an already built app (CI does), and
+`SEVAK_E2E_PROFILE` to keep the profile and its logs in a known folder. On a
+Linux machine without a desktop, run it as
+`dbus-run-session -- xvfb-run -a npm run test:e2e`.
 
 ### Coverage
 
