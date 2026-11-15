@@ -10,7 +10,7 @@
   import { applyAppearance } from "./lib/appearance";
   import { parentPath } from "./lib/path";
   import { applyTheme } from "./lib/theme";
-  import { setLanguage } from "./lib/i18n.svelte";
+  import { setLanguage, t } from "./lib/i18n.svelte";
   import {
     copyResult,
     execute,
@@ -178,14 +178,14 @@
         ? [
             ...fileBuffer.actions.map((action) => ({
               label: action.label,
-              detail: action.destination ? "then choose a folder" : undefined,
+              detail: action.destination ? t("launcher.panel.thenChooseFolder") : undefined,
               modifier: null,
               index: null,
               bufferKey: action.key,
             })),
             {
-              label: "More file actions…",
-              detail: "open with, reveal, share…",
+              label: t("launcher.panel.moreFileActions"),
+              detail: t("launcher.panel.moreFileActionsDetail"),
               modifier: null,
               index: null,
               special: "buffer_more" as const,
@@ -202,8 +202,8 @@
               ...(isFileRow(current)
                 ? [
                     {
-                      label: "Add to file buffer",
-                      detail: `${altKey}↑ or ${altKey}↓`,
+                      label: t("launcher.panel.addToBuffer"),
+                      detail: t("launcher.panel.addToBufferDetail", { up: `${altKey}↑`, down: `${altKey}↓` }),
                       modifier: null,
                       index: null,
                       special: "buffer_add" as const,
@@ -213,7 +213,7 @@
               ...(fileBuffer.items.length > 0
                 ? [
                     {
-                      label: `File buffer actions (${fileBuffer.items.length})…`,
+                      label: t("launcher.panel.bufferActions", { count: fileBuffer.items.length }),
                       detail: `${altKey}→`,
                       modifier: null,
                       index: null,
@@ -261,7 +261,7 @@
         : undefined,
   );
   const panelLabel = $derived(
-    selection ? selection.title : bufferPanel ? "the file buffer" : (current?.title ?? ""),
+    selection ? selection.title : bufferPanel ? t("launcher.panel.theFileBuffer") : (current?.title ?? ""),
   );
 
   // The live region: result counts and views that replace the list. Debounced
@@ -274,7 +274,7 @@
         count: results.length,
         grid: gridMode,
         panelActions: panelShown ? panelEntries.length : null,
-        panelTitle: panelShown ? `Actions for ${panelLabel}` : undefined,
+        panelTitle: panelShown ? t("launcher.panel.actionsFor", { title: panelLabel }) : undefined,
         textView: textViewOpen,
         largeText: largeReady ? largeText : null,
         indexing: showIndexing || (indexing && results.length === 0),
@@ -405,9 +405,9 @@
 
   /** What Enter does for a Universal Actions entry, as one word. */
   function selectionVerb(action: SelectionActionDto): string {
-    if (action.window?.kind === "large_type") return "Show";
-    if (action.window?.kind === "search") return "Browse";
-    if (action.action === "paste_text") return "Replace";
+    if (action.window?.kind === "large_type") return t("launcher.verbs.show");
+    if (action.window?.kind === "search") return t("launcher.verbs.browse");
+    if (action.action === "paste_text") return t("launcher.verbs.replace");
     return verb(action);
   }
 
@@ -733,7 +733,7 @@
     } else if (path !== "") {
       to = { kind: "text", text: path };
     } else {
-      error = "Pick a folder first.";
+      error = t("launcher.pickFolderFirst");
       return;
     }
     error = null;
@@ -813,7 +813,7 @@
     panelOpen = false;
     const text = await textView(item.id, resultsTicket);
     if (mine !== textSeq) return;
-    textContent = text ?? { title: item.title, text: "There is nothing to show.", truncated: false };
+    textContent = text ?? { title: item.title, text: t("launcher.nothingToShow"), truncated: false };
   }
 
   /** Back to the list (Esc or Left); `refocus` puts the caret back in the search box. */
@@ -1161,24 +1161,24 @@
 
   function verb(item: ResultDto): string {
     if (destination && isFolderRow(item)) {
-      return destination.label.startsWith("Move") ? "Move here" : "Copy here";
+      return destination.key.startsWith("move") ? t("launcher.verbs.moveHere") : t("launcher.verbs.copyHere");
     }
-    if (item.plugin_id.startsWith("web:")) return "Search";
+    if (item.plugin_id.startsWith("web:")) return t("launcher.verbs.search");
     switch (item.action) {
       case "launch":
-        return "Launch";
+        return t("launcher.verbs.launch");
       case "copy_text":
-        return "Copy";
+        return t("launcher.verbs.copy");
       case "paste_text":
-        return "Paste";
+        return t("launcher.verbs.paste");
       case "custom":
-        return "Run";
+        return t("launcher.verbs.run");
       case "reveal_path":
-        return "Reveal";
+        return t("launcher.verbs.reveal");
       case "run_as_admin":
-        return "Run as admin";
+        return t("launcher.verbs.runAsAdmin");
       default:
-        return "Open";
+        return t("launcher.verbs.open");
     }
   }
 
@@ -1284,12 +1284,12 @@
         oninput={onInput}
         type="text"
         role="combobox"
-        placeholder="Type to search…"
+        placeholder={t("launcher.search.placeholder")}
         spellcheck="false"
         autocomplete="off"
         autocorrect="off"
         autocapitalize="off"
-        aria-label="Search"
+        aria-label={t("launcher.search.label")}
         aria-autocomplete="list"
         aria-haspopup="listbox"
         aria-expanded={comboExpanded}
@@ -1302,8 +1302,7 @@
 
     {#if hotkeyError}
       <div class="notice" role="status">
-        Shortcut "{shownAccelerator}" is unavailable: {hotkeyError}. Choose another one in
-        Settings (tray menu).
+        {t("launcher.hotkeyUnavailable", { shortcut: shownAccelerator, error: hotkeyError })}
       </div>
     {/if}
 
@@ -1335,7 +1334,7 @@
       class:compact={paneVisible}
       class:hidden={textViewOpen}
       role="listbox"
-      aria-label="Results"
+      aria-label={t("launcher.results")}
       bind:this={list}
     >
       {#each results as item, i (item.id)}
@@ -1375,16 +1374,16 @@
         class="panel"
         class:scroll={!!selection || bufferPanel}
         role="listbox"
-        aria-label="Actions for {panelLabel}"
+        aria-label={t("launcher.panel.actionsFor", { title: panelLabel })}
         bind:this={panelEl}
       >
         <div class="panel-title" aria-hidden="true">
           {#if selection}
             {selection.title}{#if selection.subtitle}: <span class="quote">{selection.subtitle}</span>{/if}
           {:else if bufferPanel}
-            File buffer: {fileBuffer.items.length === 1 ? "1 item" : `${fileBuffer.items.length} items`}
+            {t("launcher.panel.bufferTitle", { count: fileBuffer.items.length })}
           {:else}
-            Actions for {current?.title}
+            {t("launcher.panel.actionsFor", { title: current?.title ?? "" })}
           {/if}
         </div>
         {#each panelEntries as entry, k (k)}
@@ -1417,7 +1416,7 @@
       <div class="hints" aria-hidden="true">
         <span class="chips">
           {#if current.autocomplete}
-            <span class="chip"><kbd>Tab</kbd>Complete</span>
+            <span class="chip"><kbd>Tab</kbd>{t("launcher.hints.complete")}</span>
           {/if}
           {#each modifierHints as hint (hint.label)}
             {#if hint.modifier}
@@ -1425,17 +1424,17 @@
             {/if}
           {/each}
           {#if isFileRow(current) && !destination}
-            <span class="chip"><kbd>{altKey}↑↓</kbd>Collect</span>
+            <span class="chip"><kbd>{altKey}↑↓</kbd>{t("launcher.hints.collect")}</span>
           {/if}
         </span>
         {#if current.secondary.length > 0}
-          <span class="chip more"><kbd>→</kbd>Actions</span>
+          <span class="chip more"><kbd>→</kbd>{t("launcher.hints.actions")}</span>
         {/if}
       </div>
     {/if}
 
     {#if outputView}
-      <div class="output" role="region" aria-label={outputView.heading || "Workflow output"}>
+      <div class="output" role="region" aria-label={outputView.heading || t("launcher.workflowOutput")}>
         {#if outputView.heading}<div class="output-heading">{outputView.heading}</div>{/if}
         <pre class="output-text">{outputView.text}</pre>
       </div>
@@ -1445,13 +1444,13 @@
       <div class="error" role="alert">{error}</div>
     {/if}
     {#if showIndexing}
-      <div class="footer" role="status">Indexing applications…</div>
+      <div class="footer" role="status">{t("launcher.indexing")}</div>
     {/if}
 
     {#if largeReady && !largeFull}
       <!-- Window could not be stretched: show the text inside the launcher. -->
       <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-      <div class="large inline" role="dialog" aria-label="Large Type" tabindex="-1" onmousedown={(e) => e.preventDefault()} onclick={closeLargeType}>
+      <div class="large inline" role="dialog" aria-label={t("launcher.largeType")} tabindex="-1" onmousedown={(e) => e.preventDefault()} onclick={closeLargeType}>
         <div class="large-text" style:font-size="{largeFont}px">{largeText}</div>
       </div>
     {/if}
@@ -1459,7 +1458,7 @@
 
   {#if largeReady && largeFull}
     <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-    <div class="large full" role="dialog" aria-label="Large Type" tabindex="-1" onmousedown={(e) => e.preventDefault()} onclick={closeLargeType}>
+    <div class="large full" role="dialog" aria-label={t("launcher.largeType")} tabindex="-1" onmousedown={(e) => e.preventDefault()} onclick={closeLargeType}>
       <div class="large-text" style:font-size="{largeFont}px">{largeText}</div>
     </div>
   {/if}

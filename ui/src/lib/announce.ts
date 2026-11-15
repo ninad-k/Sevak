@@ -2,7 +2,10 @@
 // combobox whose `aria-activedescendant` names the selected row, so a screen
 // reader already reads the row the arrows move to; this adds what it cannot
 // see: how many results a search found, that a view opened in place of the
-// list, and that nothing matched. Pure, so the wording is unit-tested.
+// list, and that nothing matched. Pure, so the wording is unit-tested; the
+// words come from the `announce` messages of the current language.
+
+import { t } from "./i18n.svelte";
 
 export interface LauncherState {
   /** The text in the search box. */
@@ -23,19 +26,18 @@ export interface LauncherState {
   indexing: boolean;
 }
 
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-
 /** The sentence for the live region, or "" when there is nothing to say. */
 export function launcherAnnouncement(s: LauncherState): string {
-  if (s.largeText !== null) return `Large Type: ${s.largeText}. Press Escape to close.`;
-  if (s.textView) return "Text view. Up and Down scroll, Escape goes back to the results.";
+  if (s.largeText !== null) return t("announce.largeType", { text: s.largeText });
+  if (s.textView) return t("announce.textView");
   if (s.panelActions !== null) {
-    const title = s.panelTitle ? `${s.panelTitle}: ` : "";
-    return `${title}${plural(s.panelActions, "action", "actions")}. Escape closes.`;
+    return s.panelTitle
+      ? t("announce.panelTitled", { title: s.panelTitle, count: s.panelActions })
+      : t("announce.panel", { count: s.panelActions });
   }
   if (s.query.trim() === "") return "";
-  if (s.count === 0) return s.indexing ? "No results yet, still indexing applications." : "No results.";
-  return plural(s.count, s.grid ? "item" : "result", s.grid ? "items" : "results");
+  if (s.count === 0) return s.indexing ? t("announce.noResultsIndexing") : t("announce.noResults");
+  return t(s.grid ? "announce.items" : "announce.results", { count: s.count });
 }
 
 /**

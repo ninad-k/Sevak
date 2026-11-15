@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from "./i18n.svelte";
   // Grid View: results that are tiles (an emoji, an image, an icon and a short
   // label) laid out in rows. The keys (arrows, Enter, Tab ...) are handled by
   // App.svelte, which asks this component only for how many columns there are.
@@ -67,7 +68,7 @@
     class="grid"
     class:compact
     role="listbox"
-    aria-label="Results"
+    aria-label={t("launcher.results")}
     bind:this={grid}
   >
     {#each items as item, i (item.id)}
