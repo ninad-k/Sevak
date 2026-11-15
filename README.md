@@ -104,6 +104,8 @@ And more once you know the keys: preview a result, pick emoji from a grid, open 
 | Ask an AI assistant | `ai why is the sky blue` | Sends the question to the provider you chose (Ollama, OpenAI-compatible or Anthropic) and shows the answer; Enter copies it (opt-in, off by default) |
 | Pick an emoji | `:heart` or `emoji thumbs up` | Pastes the selected emoji from a grid |
 | Generate a UUID | `uuid ` or `uuid 5` | Copies a UUID when the plugin is enabled |
+| See the time anywhere, convert time zones | `time`, `time tokyo`, `time 3pm pst in ist` | Copies the [time or conversion](docs/features/clock.md), offline, daylight saving time included |
+| Generate a password or passphrase | `pass`, `pass 24`, `pass 6 words` | Copies it, kept out of clipboard history; shows its strength in bits ([details](docs/features/passwords.md)) |
 
 App results depend on what is installed. `f` covers the folders you choose and
 matches **names**; `ff` and `in` ask your OS file index for the whole disk and
@@ -289,6 +291,9 @@ These features stay on your computer and make no network request:
   words you look up are not saved.
 - The emoji picker, themes (built-in, edited, imported or exported) and the
   notifications and Large Type of workflows are local.
+- The world clock (`time`) and the password generator (`pass`) are offline.
+  Generated passwords are never stored, logged or kept in the search history,
+  and are copied marked as secret so clipboard histories leave them out.
 - The optional AI assistant (off by default, `[ai] enabled`) sends a question
   only when you press Enter on it; see the list below. Its questions and answers
   stay in memory and out of the logs, history and diagnostics, and API keys are

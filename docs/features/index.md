@@ -33,6 +33,8 @@ For optional additions, browse the [extensions catalog](../extensions.md).
 | Workflows | Your workflow's keyword, hotkey or trigger | (yours) | Run the workflow | [Workflows →](../workflows.md) |
 | Extensions store | `ext <name>`, `store <name>` | ext, store | Install or update it | [Extensions →](extensions.md) |
 | UUID generator | `uuid ` | uuid | Copy a generated UUID | — |
+| World clock | `time`, `time tokyo`, `time 3pm pst in ist` | time | Copy the time or the conversion | [World clock →](clock.md) |
+| Password generator | `pass`, `pass 24`, `pass 6 words` | pass | Copy it, kept out of clipboard history | [Passwords →](passwords.md) |
 
 ## How query routing works
 
