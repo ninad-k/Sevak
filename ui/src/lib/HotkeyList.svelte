@@ -104,7 +104,7 @@
       <button
         type="button"
         class="btn icon"
-        aria-label="Remove shortcut {binding.key}"
+        aria-label="Remove shortcut {binding.key.trim() || i + 1}"
         title="Remove"
         onclick={() => remove(i)}>✕</button
       >
@@ -137,8 +137,9 @@
           spellcheck="false"
           autocomplete="off"
           aria-invalid={!!rowErrors.value}
+          aria-describedby={rowErrors.value ? `hk-value-${i}-error` : undefined}
         />
-        {#if rowErrors.value}<span class="msg error" role="alert">{rowErrors.value}</span>{/if}
+        {#if rowErrors.value}<span class="msg error" id="hk-value-{i}-error" role="alert">{rowErrors.value}</span>{/if}
       </div>
     </div>
     {#if registration}
@@ -251,7 +252,7 @@
   }
 
   .input:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: -1px;
   }
 
@@ -296,7 +297,7 @@
   }
 
   .btn:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 

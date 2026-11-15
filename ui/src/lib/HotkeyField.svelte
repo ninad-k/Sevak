@@ -127,7 +127,7 @@
     spellcheck="false"
     autocomplete="off"
     aria-invalid={!!error}
-    aria-describedby={id ? `${id}-msg` : undefined}
+    aria-describedby={id && error && !recording ? `${id}-msg` : undefined}
   />
   <button
     bind:this={recordButton}
@@ -183,7 +183,7 @@
   }
 
   input:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: -1px;
   }
 
@@ -213,7 +213,7 @@
   }
 
   .record:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 
@@ -237,7 +237,7 @@
   }
 
   .presets:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 

@@ -188,7 +188,7 @@
 }
 
 .sp-input:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -1px;
 }
 
@@ -223,11 +223,12 @@
 }
 
 .sp-btn:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
-.sp-btn:disabled {
+.sp-btn:disabled,
+.sp-btn[aria-disabled="true"] {
   opacity: 0.5;
   cursor: default;
 }
@@ -332,7 +333,7 @@
 }
 
 .sp-key input:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -388,7 +389,7 @@
 }
 
 .sp-chip button:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
 }
 
 @media (max-width: 620px) {

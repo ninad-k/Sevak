@@ -44,7 +44,7 @@
     <div class="label">
       <label class="name" for="accent">Accent color</label>
       <span class="hint">Highlights and the selected row. Empty keeps the theme's own.</span>
-      {#if errors.accent}<span class="msg error" role="alert">{errors.accent}</span>{/if}
+      {#if errors.accent}<span class="msg error" id="accent-error" role="alert">{errors.accent}</span>{/if}
     </div>
     <div class="control">
       <input
@@ -64,6 +64,7 @@
         spellcheck="false"
         autocomplete="off"
         aria-invalid={!!errors.accent}
+        aria-describedby={errors.accent ? "accent-error" : undefined}
       />
       <button
         type="button"
@@ -96,7 +97,7 @@
     <div class="label">
       <label class="name" for="font-family">Font</label>
       <span class="hint">A comma-separated list, such as Fira Sans, sans-serif. Empty uses the system font.</span>
-      {#if errors.fontFamily}<span class="msg error" role="alert">{errors.fontFamily}</span>{/if}
+      {#if errors.fontFamily}<span class="msg error" id="font-family-error" role="alert">{errors.fontFamily}</span>{/if}
     </div>
     <input
       id="font-family"
@@ -107,6 +108,7 @@
       spellcheck="false"
       autocomplete="off"
       aria-invalid={!!errors.fontFamily}
+      aria-describedby={errors.fontFamily ? "font-family-error" : undefined}
     />
   </div>
 
@@ -165,7 +167,7 @@
         A CSS file inside the config folder that overrides the theme variables, such as
         <code>theme.css</code>. See docs/themes.md.
       </span>
-      {#if errors.customCss}<span class="msg error" role="alert">{errors.customCss}</span>{/if}
+      {#if errors.customCss}<span class="msg error" id="custom-css-error" role="alert">{errors.customCss}</span>{/if}
     </div>
     <input
       id="custom-css"
@@ -177,6 +179,7 @@
       spellcheck="false"
       autocomplete="off"
       aria-invalid={!!errors.customCss}
+      aria-describedby={errors.customCss ? "custom-css-error" : undefined}
     />
   </div>
 </section>
@@ -282,7 +285,7 @@
   }
 
   .input:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: -1px;
   }
 
@@ -307,7 +310,7 @@
   }
 
   .btn:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 
@@ -351,7 +354,7 @@
   }
 
   .slider input[type="range"]:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 4px;
     border-radius: 4px;
   }

@@ -34,6 +34,11 @@ does not mean a release containing it is published yet.
   Sevak verifies each list against the embedded release key before reading it
   (unsigned lists are accepted only from releases before signing began; see
   [Gallery trust](docs/security/gallery-trust.md#7-signed-indexes))
+- Accessibility review: the launcher search box is an ARIA combobox with a
+  live result count, Settings controls are named and linked to their error
+  messages, focus is managed and visible, built-in themes meet AA contrast,
+  and axe-core checks run in CI ([Accessibility](docs/accessibility.md)). Manual testing
+  with NVDA, VoiceOver and Orca is still recommended
 
 ## Next (planned, awaiting resources)
 
@@ -44,7 +49,6 @@ does not mean a release containing it is published yet.
 - macOS code signing and notarization
   - Needs Apple Developer account (paid)
 - Hand-testing on macOS and Linux desktops to ensure reliability
-- Accessibility review (screen reader support and testing)
 
 ## Later (under consideration)
 

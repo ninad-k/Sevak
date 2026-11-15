@@ -425,6 +425,36 @@ describe("theme JSON as the backend sends it (builtin-themes.json)", () => {
     }
   });
 
+  // The four pairs above are what the editor shows. These are the other text and
+  // focus colors the windows draw: status messages sit on the page and on the
+  // grouped panels (`surface`), a selected row's subtitle on the selection, and
+  // the keyboard focus outline (`--focus-ring`, the accent_strong) is a non-text
+  // indicator, which needs 3:1 (WCAG 1.4.11).
+  it("keeps status text, selected subtitles and the focus outline readable (AA)", () => {
+    const FOCUS_RING = 3;
+    for (const theme of themes) {
+      for (const mode of ["light", "dark"] as const) {
+        const palette = theme.spec[mode];
+        if (!palette) continue;
+        const color = (key: string) => parseColor(palette[key] ?? "")!;
+        const background = color("background");
+        const surface = blend(color("surface"), background);
+        const selection = blend(color("selection"), background);
+        const pairs: [string, string, ReturnType<typeof parseColor>, number][] = [];
+        for (const key of ["error", "warn", "ok", "subtext"]) {
+          pairs.push([key, "background", background, AA_NORMAL_TEXT]);
+          pairs.push([key, "surface", surface, AA_NORMAL_TEXT]);
+        }
+        pairs.push(["subtext", "selection", selection, AA_NORMAL_TEXT]);
+        pairs.push(["accent_strong", "background", background, FOCUS_RING]);
+        for (const [key, on, behind, need] of pairs) {
+          const ratio = contrastRatio(blend(color(key), behind!), behind!);
+          expect(ratio, `${theme.spec.name}/${mode}: ${key} on ${on} is ${ratio.toFixed(2)}`).toBeGreaterThanOrEqual(need);
+        }
+      }
+    }
+  });
+
   it("keeps sizes inside the slider limits", () => {
     const within = (value: number | null, [min, max]: readonly [number, number]) =>
       value === null || (value >= min && value <= max);

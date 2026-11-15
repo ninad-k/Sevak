@@ -163,10 +163,25 @@
   }
 
   function onTabKey(event: KeyboardEvent) {
-    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    const next =
+      event.key === "Home"
+        ? "discover"
+        : event.key === "End"
+          ? "installed"
+          : event.key === "ArrowLeft" || event.key === "ArrowRight"
+            ? tab === "discover"
+              ? "installed"
+              : "discover"
+            : null;
+    if (next === null) return;
     event.preventDefault();
-    tab = tab === "discover" ? "installed" : "discover";
-    queueMicrotask(() => document.getElementById(`ext-tab-${tab}`)?.focus());
+    showTab(next);
+  }
+
+  /** Switches tabs and puts the focus on the new tab (the old panel, focus and all, goes away). */
+  function showTab(next: typeof tab) {
+    tab = next;
+    queueMicrotask(() => document.getElementById(`ext-tab-${next}`)?.focus());
   }
 
   function onSearchKey(event: KeyboardEvent) {
@@ -338,6 +353,8 @@
                         type="button"
                         class="wf-btn small primary"
                         aria-label="Review {item.name} before {item.state === 'available' ? 'installing' : 'updating'}"
+                        aria-expanded={open}
+                        aria-controls="ext-detail-{item.id}"
                         onclick={() => (expanded = item.id)}>Review…</button
                       >
                     {:else}
@@ -345,7 +362,7 @@
                         type="button"
                         class="wf-btn small primary"
                         disabled={busy !== null}
-                        aria-label="{actionLabel(item)} {item.name}"
+                        aria-label="{busy === item.id ? 'Working on' : actionLabel(item)} {item.name}"
                         onclick={() => (item.state === "available" ? install(item) : update(item))}
                       >
                         {busy === item.id ? "Working…" : actionLabel(item)}
@@ -437,7 +454,7 @@
         <p class="wf-sub">
           The list has not been loaded on this computer yet. Press <strong>Load the list</strong> to
           see what is available. What you already installed is under
-          <button type="button" class="wf-link" onclick={() => (tab = "installed")}>Installed</button>.
+          <button type="button" class="wf-link" onclick={() => showTab("installed")}>Installed</button>.
         </p>
       {/if}
     </div>
@@ -472,7 +489,7 @@
       {#if installed.length === 0}
         <p class="wf-sub">
           Nothing installed from the gallery yet. Open
-          <button type="button" class="wf-link" onclick={() => (tab = "discover")}>Discover</button>
+          <button type="button" class="wf-link" onclick={() => showTab("discover")}>Discover</button>
           to browse.
         </p>
       {:else}
@@ -590,7 +607,7 @@
 
   .tab:focus-visible,
   .head:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 

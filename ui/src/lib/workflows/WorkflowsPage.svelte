@@ -2,7 +2,7 @@
   // Settings > Workflows: the installed workflows, "New from template", and the
   // visual builder (WorkflowEditor) for the one being edited.
   import "./workflows.css";
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import Toggle from "../Toggle.svelte";
   import WorkflowEditor from "./WorkflowEditor.svelte";
   import {
@@ -96,14 +96,26 @@
     await refresh();
   }
 
+  /** What had focus when the builder opened, to give focus back when it closes. */
+  let opener: HTMLElement | null = null;
+  let page: HTMLElement | undefined = $state();
+  $effect.pre(() => {
+    if (editing && !opener) opener = document.activeElement as HTMLElement | null;
+  });
+
   async function closeEditor(changed: boolean) {
     editing = null;
+    const back = opener;
+    opener = null;
     if (changed) await refresh();
+    await tick();
+    if (back?.isConnected && back !== document.body) back.focus();
+    else page?.querySelector<HTMLElement>("button:not(:disabled)")?.focus();
   }
 </script>
 
 <!-- The list stays out of reach (keyboard included) while the builder covers it. -->
-<div class="wf-page" inert={editing !== null}>
+<div class="wf-page" inert={editing !== null} bind:this={page}>
   <h1>Workflows</h1>
   <p class="wf-lead">
     A workflow chains a trigger (a keyword, a shortcut, Universal Actions or a command) to actions
@@ -138,6 +150,7 @@
             type="button"
             class="wf-btn small"
             disabled={busy !== null}
+            aria-label="Use this template: {template.name}"
             onclick={() => fromTemplate(template.id)}
           >
             {busy === template.id ? "Creating…" : "Use this"}
@@ -197,6 +210,7 @@
                   type="button"
                   class="wf-btn small primary"
                   disabled={busy !== null}
+                  aria-label="Review {row.name}"
                   onclick={() => review(row)}>Review…</button
                 >
               {/if}
@@ -211,6 +225,7 @@
                 type="button"
                 class="wf-btn small"
                 disabled={busy !== null}
+                aria-label="{row.error ? 'Fix' : 'Edit'} {row.name}"
                 onclick={() => edit(row.folder)}>{row.error ? "Fix…" : "Edit"}</button
               >
               <button

@@ -6,6 +6,7 @@
   import ResultRow from "./lib/ResultRow.svelte";
   import TextView from "./lib/TextView.svelte";
   import { displayAccelerator } from "./lib/accelerator";
+  import { debouncedAnnouncer, launcherAnnouncement } from "./lib/announce";
   import { applyAppearance } from "./lib/appearance";
   import { parentPath } from "./lib/path";
   import { applyTheme } from "./lib/theme";
@@ -54,6 +55,14 @@
   let results = $state<ResultDto[]>([]);
   /** The search that produced `results`, so Enter runs exactly what is shown. */
   let resultsTicket = 0;
+  /**
+   * Bumped when a new list replaces the rows. The rows' DOM ids carry it, so the
+   * search box's `aria-activedescendant` changes with every new list and a
+   * screen reader reads the newly selected row even when it is again row 0.
+   */
+  let resultsGen = $state(0);
+  /** What the screen-reader live region says (see lib/announce.ts). */
+  let announcement = $state("");
   let selected = $state(0);
   let error = $state<string | null>(null);
   let indexing = $state(false);
@@ -232,6 +241,45 @@
     ),
   );
   const hasQuery = $derived(query.trim() !== "");
+
+  /** The DOM id of result row (or tile) `i`, which `aria-activedescendant` names. */
+  function optionId(i: number): string {
+    return `result-${resultsGen}-${i}`;
+  }
+  /** The action panel is on screen (it gives way to Large Type). */
+  const panelShown = $derived(panelOpen && largeText === null && !!(selection || bufferPanel || current));
+  /** The popup the search box drives: the action panel, else the results. */
+  const comboExpanded = $derived(panelShown || (results.length > 0 && !textViewOpen));
+  const activeDescendant = $derived(
+    panelShown
+      ? panelEntries.length > 0
+        ? `action-${panelIndex}`
+        : undefined
+      : results.length > 0 && !textViewOpen
+        ? optionId(selected)
+        : undefined,
+  );
+  const panelLabel = $derived(
+    selection ? selection.title : bufferPanel ? "the file buffer" : (current?.title ?? ""),
+  );
+
+  // The live region: result counts and views that replace the list. Debounced
+  // so that typing does not queue one announcement per keystroke.
+  const announcer = debouncedAnnouncer((text) => (announcement = text));
+  $effect(() => {
+    announcer.update(
+      launcherAnnouncement({
+        query,
+        count: results.length,
+        grid: gridMode,
+        panelActions: panelShown ? panelEntries.length : null,
+        panelTitle: panelShown ? `Actions for ${panelLabel}` : undefined,
+        textView: textViewOpen,
+        largeText: largeReady ? largeText : null,
+        indexing: showIndexing || (indexing && results.length === 0),
+      }),
+    );
+  });
   // While the index is still filling, a query often yields nothing but the
   // "search the web" fallback; say why instead of looking like a miss.
   const showIndexing = $derived(
@@ -373,6 +421,7 @@
     if (mine !== searchSeq || found === null) return;
     results = forDestination(found.results);
     resultsTicket = found.ticket;
+    resultsGen++;
     selected = 0;
     panelOpen = false;
     if (list) list.scrollTop = 0;
@@ -398,6 +447,7 @@
       if (panelIndex >= panelEntries.length) panelIndex = 0;
     } else {
       selected = 0;
+      resultsGen++;
       // The row the panel was for is gone.
       panelOpen = false;
     }
@@ -873,7 +923,7 @@
     if (!reveal) return;
     await tick();
     if (gridMode) {
-      document.getElementById(`result-${selected}`)?.scrollIntoView({ block: "nearest" });
+      document.getElementById(optionId(selected))?.scrollIntoView({ block: "nearest" });
       return;
     }
     const row = list?.children[selected] as HTMLElement | undefined;
@@ -1205,6 +1255,7 @@
       });
 
     return () => {
+      announcer.cancel();
       resizeObserver.disconnect();
       for (const u of unlisteners) void u.then((fn) => fn());
     };
@@ -1221,7 +1272,7 @@
         src="/sevak-icon.png"
         width="28"
         height="28"
-        alt="Sevak"
+        alt=""
         draggable="false"
       />
       <input
@@ -1237,11 +1288,14 @@
         autocapitalize="off"
         aria-label="Search"
         aria-autocomplete="list"
-        aria-expanded={results.length > 0}
-        aria-controls="results"
-        aria-activedescendant={results.length > 0 ? `result-${selected}` : undefined}
+        aria-haspopup="listbox"
+        aria-expanded={comboExpanded}
+        aria-controls={panelShown ? "actions" : "results"}
+        aria-activedescendant={activeDescendant}
       />
     </div>
+    <!-- Always in the page, so screen readers notice when its text changes. -->
+    <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">{announcement}</div>
 
     {#if hotkeyError}
       <div class="notice" role="status">
@@ -1265,6 +1319,7 @@
         {selected}
         verb={current ? verb(current) : ""}
         compact={paneVisible}
+        idFor={optionId}
         bind:columns={gridCols}
         onhover={(i) => (selected = i)}
         onrun={(i) => void run(i)}
@@ -1284,7 +1339,7 @@
         <!-- The row itself lives in lib/ResultRow.svelte, shared with the theme editor's preview. -->
         {@const iconUrl = item.icon?.kind === "url" ? item.icon.url : null}
         <ResultRow
-          id="result-{i}"
+          id={optionId(i)}
           {item}
           index={i}
           selected={i === selected}
@@ -1311,19 +1366,16 @@
       />
     {/if}
 
-    {#if panelOpen && largeText === null && (selection || bufferPanel || current)}
+    {#if panelShown}
       <div
+        id="actions"
         class="panel"
         class:scroll={!!selection || bufferPanel}
-        role="menu"
-        aria-label="Actions for {selection
-          ? selection.title
-          : bufferPanel
-            ? 'the file buffer'
-            : current?.title}"
+        role="listbox"
+        aria-label="Actions for {panelLabel}"
         bind:this={panelEl}
       >
-        <div class="panel-title">
+        <div class="panel-title" aria-hidden="true">
           {#if selection}
             {selection.title}{#if selection.subtitle}: <span class="quote">{selection.subtitle}</span>{/if}
           {:else if bufferPanel}
@@ -1335,9 +1387,11 @@
         {#each panelEntries as entry, k (k)}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <div
+            id="action-{k}"
             class="action"
             class:selected={k === panelIndex}
-            role="menuitem"
+            role="option"
+            aria-selected={k === panelIndex}
             tabindex="-1"
             onmousemove={(e) => onPanelMove(e, k)}
             onmousedown={(e) => e.preventDefault()}

@@ -2,7 +2,7 @@
   // Settings > Backup & restore. Self-contained: it talks to the backend through
   // backup-ipc.ts and is not part of the settings form (nothing here is saved by
   // the Save button of the other pages).
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import Toggle from "../Toggle.svelte";
   import {
     applyRestore,
@@ -65,6 +65,7 @@
   let restoreMsg = $state<Msg | null>(null);
   let result = $state<RestoreResult | null>(null);
   let confirming = $state(false);
+  let restoreButton: HTMLButtonElement | undefined = $state();
   let previewSeq = 0;
 
   const restoreIds = $derived(inspected ? chosen(inspected.categories, rticks) : []);
@@ -496,7 +497,8 @@
             <p class="bk-msg warn">{warning}</p>
           {/each}
 
-          <div class="bk-preview" aria-live="polite">
+          <!-- Not a live region: it would read the whole list again on every change. -->
+          <div class="bk-preview">
             <h3>What would change</h3>
             {#each shown.categories.filter((c) => c.selected) as category (category.category)}
               <details class="bk-details" open={category.added + category.changed + category.removed > 0 && category.items.length <= 12}>
@@ -545,15 +547,25 @@
               {willRemove === 1 ? "it" : "them"} to the default). A safety copy is saved first, and
               “Undo restore” puts it back.
               <div class="bk-actions">
-                <button type="button" class="bk-btn primary" disabled={busy !== null} onclick={restoreNow}>
+                <!-- svelte-ignore a11y_autofocus -->
+                <button type="button" class="bk-btn primary" disabled={busy !== null} onclick={restoreNow} autofocus>
                   Replace now
                 </button>
-                <button type="button" class="bk-btn" onclick={() => (confirming = false)}>Cancel</button>
+                <button
+                  type="button"
+                  class="bk-btn"
+                  onclick={async () => {
+                    confirming = false;
+                    // The confirm block took the focus with it: back to the button that opened it.
+                    await tick();
+                    restoreButton?.focus();
+                  }}>Cancel</button
+                >
               </div>
             </div>
           {:else}
             <div class="bk-actions">
-              <button type="button" class="bk-btn primary" disabled={!canRestore} onclick={askOrRestore}>
+              <button bind:this={restoreButton} type="button" class="bk-btn primary" disabled={!canRestore} onclick={askOrRestore}>
                 {busy === "restore" ? "Restoring…" : mode === "replace" ? "Replace…" : "Restore"}
               </button>
             </div>
@@ -767,7 +779,7 @@
   }
 
   .bk-choice input:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 
@@ -796,7 +808,7 @@
   }
 
   .bk-details summary:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
     border-radius: 4px;
   }
@@ -863,7 +875,7 @@
 
   .bk-btn:focus-visible,
   .bk-input:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 

@@ -83,7 +83,7 @@
               type="button"
               class="btn"
               disabled={installing !== null}
-              aria-label="{item.installed ? 'Reinstall' : 'Install'} {item.name}"
+              aria-label="{installing === item.id ? 'Installing' : item.installed ? 'Reinstall' : 'Install'} {item.name}"
               onclick={() => install(item)}
             >
               {installing === item.id ? "Installing…" : item.installed ? "Reinstall" : "Install"}
@@ -204,7 +204,7 @@
   }
 
   .btn:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 

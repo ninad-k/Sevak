@@ -50,7 +50,7 @@
   <span class="tile">
     {#if item.glyph}
       <!-- A Grid View tile's picture (an emoji) when the row is shown in a list. -->
-      <span class="emoji">{item.glyph}</span>
+      <span class="emoji" aria-hidden="true">{item.glyph}</span>
     {:else if item.icon?.kind === "url" && !broken}
       <img
         src={item.icon.url}
