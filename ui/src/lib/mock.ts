@@ -448,6 +448,9 @@ export function mockSettings(): SettingsDto {
         { key: "Ctrl+Alt+T", query: "> " },
         { key: "Ctrl+Alt+F", run: "apps:firefox.desktop" },
       ],
+      ssh: { keyword: "ssh", known_hosts: false },
+      projects: { keyword: "code", editors: [] },
+      calendar: { keyword: "cal", files: [], days: 7 },
     },
     catalog: [
       { id: "apps", name: "Applications", description: "Launches installed applications.", keyword: null, enabled: true },

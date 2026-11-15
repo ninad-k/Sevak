@@ -407,6 +407,36 @@ url = "https://github.com/search?q={query}"
 # [[hotkey]]
 # key = "Ctrl+Alt+F"
 # run = "apps:firefox.desktop"
+
+[ssh]
+# "ssh <name>" lists the hosts in ~/.ssh/config (and the files it includes);
+# Enter opens a terminal running "ssh <host>" (see [shell]), Alt+Enter copies the
+# command. Only the config file is read, never a private key. To turn it off,
+# add "ssh" to [plugins] disabled.
+keyword = "ssh"
+# Also list hosts from ~/.ssh/known_hosts (hashed entries cannot be read and are
+# skipped).
+known_hosts = false
+
+[projects]
+# "code <name>" lists the folders and workspaces you opened recently in VS Code,
+# VS Code Insiders, VSCodium, Cursor and JetBrains IDEs; Enter opens one in the
+# editor it came from. Read from the editors' own files; nothing is sent anywhere.
+keyword = "code"
+# Editors to read: "vscode", "vscode-insiders", "vscodium", "cursor",
+# "jetbrains". [] reads every one that is installed.
+editors = []
+
+[calendar]
+# "cal" shows today's and upcoming events from local .ics files: "cal tomorrow",
+# "cal fri", "cal 2026-12-24", or "cal <text>" to find an event. No accounts and
+# no network: only the files and folders listed here are read.
+keyword = "cal"
+# .ics files, or folders of them (searched three levels deep), e.g.
+# ["~/calendar.ics", "~/.calendars"].
+files = []
+# How many days ahead "cal" shows (1-60).
+days = 7
 "##;
 
 pub const MAX_CLIPBOARD_ITEMS_LIMIT: usize = 5_000;
@@ -453,6 +483,12 @@ pub struct Config {
     /// Extra global hotkeys (`[[hotkey]]` tables).
     #[serde(rename = "hotkey")]
     pub hotkeys: Vec<HotkeyBinding>,
+    /// `[ssh]`: hosts from `~/.ssh/config` (`ssh <host>`).
+    pub ssh: SshConfig,
+    /// `[projects]`: recent editor projects (`code <name>`).
+    pub projects: ProjectsConfig,
+    /// `[calendar]`: events from local `.ics` files (`cal`).
+    pub calendar: CalendarConfig,
 }
 
 impl Default for Config {
@@ -484,6 +520,9 @@ impl Default for Config {
             snippet: Vec::new(),
             web_search: WebSearchEngine::defaults(),
             hotkeys: Vec::new(),
+            ssh: SshConfig::default(),
+            projects: ProjectsConfig::default(),
+            calendar: CalendarConfig::default(),
         }
     }
 }
@@ -1264,6 +1303,78 @@ impl Default for BookmarksConfig {
     }
 }
 
+/// The SSH hosts plugin (`ssh <host>`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SshConfig {
+    pub keyword: String,
+    /// Also list hosts from `~/.ssh/known_hosts` (hashed entries are skipped).
+    pub known_hosts: bool,
+}
+
+impl Default for SshConfig {
+    fn default() -> Self {
+        Self {
+            keyword: "ssh".to_owned(),
+            known_hosts: false,
+        }
+    }
+}
+
+/// The recent projects plugin (`code <name>`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ProjectsConfig {
+    pub keyword: String,
+    /// Editor ids to read (`vscode`, `vscode-insiders`, `vscodium`, `cursor`,
+    /// `jetbrains`); empty reads every one found.
+    pub editors: Vec<String>,
+}
+
+impl Default for ProjectsConfig {
+    fn default() -> Self {
+        Self {
+            keyword: "code".to_owned(),
+            editors: Vec::new(),
+        }
+    }
+}
+
+impl ProjectsConfig {
+    /// Whether the editor `id` is read: listed, or the list is empty.
+    pub fn reads(&self, id: &str) -> bool {
+        self.editors.is_empty()
+            || self
+                .editors
+                .iter()
+                .any(|entry| entry.trim().eq_ignore_ascii_case(id))
+    }
+}
+
+/// Largest `[calendar] days`.
+pub const MAX_CALENDAR_DAYS: u32 = 60;
+
+/// The calendar plugin (`cal`): events from local `.ics` files only.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CalendarConfig {
+    pub keyword: String,
+    /// `.ics` files and folders of them; `~` is the home folder.
+    pub files: Vec<String>,
+    /// How many days ahead `cal` shows (1 to [`MAX_CALENDAR_DAYS`]).
+    pub days: u32,
+}
+
+impl Default for CalendarConfig {
+    fn default() -> Self {
+        Self {
+            keyword: "cal".to_owned(),
+            files: Vec::new(),
+            days: 7,
+        }
+    }
+}
+
 /// One `[[snippet]]`: text pasted on demand, with placeholders expanded.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -1514,6 +1625,20 @@ impl Config {
             binding.key = binding.key.trim().to_owned();
         }
         self.hotkeys.retain(|binding| !binding.key.is_empty());
+        for (keyword, default) in [
+            (&mut self.ssh.keyword, "ssh"),
+            (&mut self.projects.keyword, "code"),
+            (&mut self.calendar.keyword, "cal"),
+        ] {
+            *keyword = keyword.trim().to_owned();
+            if keyword.is_empty() || keyword.contains(char::is_whitespace) {
+                *keyword = default.to_owned();
+            }
+        }
+        for list in [&mut self.projects.editors, &mut self.calendar.files] {
+            list.retain(|entry| !entry.trim().is_empty());
+        }
+        self.calendar.days = self.calendar.days.clamp(1, MAX_CALENDAR_DAYS);
         self
     }
 }
@@ -1738,6 +1863,47 @@ mod tests {
         assert_eq!(config.onepassword.keyword, "1p");
         assert_eq!(config.onepassword.cache_minutes, 1);
         assert_eq!(config.onepassword.op_path, "/bin/op");
+    }
+
+    #[test]
+    fn ssh_projects_and_calendar_defaults_and_normalizing() {
+        let defaults = Config::default();
+        assert_eq!(defaults.ssh.keyword, "ssh");
+        assert!(!defaults.ssh.known_hosts);
+        assert_eq!(defaults.projects.keyword, "code");
+        assert!(defaults.projects.reads("cursor"));
+        assert_eq!(defaults.calendar.keyword, "cal");
+        assert!(defaults.calendar.files.is_empty());
+        assert_eq!(defaults.calendar.days, 7);
+
+        let config = Config::from_toml_str(
+            "[ssh]
+keyword = \" \"
+[projects]
+keyword = \"two words\"
+editors = [\" VSCode \", \"\"]
+             [calendar]
+keyword = \" agenda \"
+files = [\"a.ics\", \" \"]
+days = 0
+",
+        )
+        .unwrap();
+        assert_eq!(config.ssh.keyword, "ssh");
+        assert_eq!(config.projects.keyword, "code");
+        assert_eq!(config.projects.editors, [" VSCode "]);
+        assert!(config.projects.reads("vscode"));
+        assert!(!config.projects.reads("jetbrains"));
+        assert_eq!(config.calendar.keyword, "agenda");
+        assert_eq!(config.calendar.files, ["a.ics"]);
+        assert_eq!(config.calendar.days, 1);
+        let config = Config::from_toml_str(
+            "[calendar]
+days = 1000
+",
+        )
+        .unwrap();
+        assert_eq!(config.calendar.days, MAX_CALENDAR_DAYS);
     }
 
     #[test]

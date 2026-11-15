@@ -130,6 +130,12 @@ export interface Config {
   shell: { terminal: string; shell: string; keep_open: boolean };
   web_search: WebSearchEngine[];
   hotkey: HotkeyBinding[];
+  /** `ssh <host>`: hosts from ~/.ssh/config (and known_hosts when on). */
+  ssh: { keyword: string; known_hosts: boolean };
+  /** `code <name>`: recent editor projects; `editors` empty reads every editor. */
+  projects: { keyword: string; editors: string[] };
+  /** `cal`: events from local .ics files and folders; `days` is 1-60. */
+  calendar: { keyword: string; files: string[]; days: number };
 }
 
 export interface PluginInfo {

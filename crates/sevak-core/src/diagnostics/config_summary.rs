@@ -148,6 +148,16 @@ const GROUPS: &[(&str, &[Field])] = &[
             ("ai.timeout_secs", Show::Value),
         ],
     ),
+    // How many calendar files, never their names or the events in them.
+    (
+        "SSH, projects and calendar",
+        &[
+            ("ssh.known_hosts", Show::Value),
+            ("projects.editors", Show::Value),
+            ("calendar.files", Show::Count),
+            ("calendar.days", Show::Value),
+        ],
+    ),
 ];
 
 /// Top-level sections reported by custom code or deliberately left out; every
@@ -233,6 +243,9 @@ const KEYWORD_PATHS: &[&str] = &[
     "dictionary.define_keyword",
     "dictionary.spell_keyword",
     "ai.keyword",
+    "ssh.keyword",
+    "projects.keyword",
+    "calendar.keyword",
 ];
 
 /// The configurable keywords of `config`, as `(setting, keyword)`; a search

@@ -3,6 +3,7 @@
   import { MAX_CACHE_MINUTES, type Problems } from "../validate";
   import Toggle from "../Toggle.svelte";
   import KeywordRow from "./KeywordRow.svelte";
+  import LocalSourcesSection from "./LocalSourcesSection.svelte";
   import ListEditor from "./ListEditor.svelte";
   import Row from "./Row.svelte";
   import type { Picker } from "./types";
@@ -222,4 +223,6 @@
       “Dictionary” is switched off under <strong>Plugins</strong>. Switch it on there as well.
     </p>
   {/if}
+
+  <LocalSourcesSection bind:config {problems} {pluginOff} />
 </div>

@@ -55,6 +55,9 @@ getrandom = "0.4"
 rusqlite = { version = "0.41", features = ["bundled"] }
 # Local date and time for snippet placeholders (no timezone database needed).
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+# IANA time zones for the calendar plugin's TZID times (MIT or Apache-2.0; the
+# zone data is compiled in, so nothing is read from the system or the network).
+chrono-tz = { version = "0.10", default-features = false, features = ["std"] }
 # Safari's `Bookmarks.plist` for the bookmarks plugin (a binary property list;
 # parsed on every OS so the reader is tested everywhere, used on macOS). Already
 # in the build through the platform crate and the Tauri stack.

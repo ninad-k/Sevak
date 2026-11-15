@@ -19,6 +19,11 @@ Sevak is local-first. Your data stays on your machine except when you explicitly
 - Usage statistics (how often you run each result)
 - Logs (for debugging)
 - Script plugins, workflows and their data
+- SSH hosts: read from `~/.ssh/config` (and the files it includes inside `~/.ssh`, plus `known_hosts` if you turn that on), in memory only; private keys are never opened ([details](features/ssh.md#privacy))
+- Recent projects: read from VS Code's, VS Code Insiders', VSCodium's, Cursor's and JetBrains IDEs' own recent lists in their settings folders (SQLite opened read-only, or a private copy deleted straight away), in memory only ([details](features/projects.md#privacy))
+- Calendar: only the `.ics` files and folders you list in `[calendar] files`, in memory only and kept out of the search history and usage statistics; no accounts, subscriptions or network ([details](features/calendar.md#privacy))
+
+These three read other programs' files only from inside the folder they are expected in (a symbolic link that leads elsewhere is not followed) and with a size limit.
 
 All data is stored in a single folder on your machine; none is uploaded anywhere. What Sevak defends against, and what it does not, is set out in the [threat model](security/threat-model.md).
 
