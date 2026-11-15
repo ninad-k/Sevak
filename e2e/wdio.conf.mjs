@@ -83,7 +83,10 @@ export const config = {
       maxInstances: 1,
       "tauri:options": {
         application: binary,
-        args: ["--config", profile.configFile],
+        // One `--config=PATH` argument: msedgedriver prefixes every argument
+        // that lacks one with `--` (it treats them as browser switches), so a
+        // separate path argument would arrive as `--D:\...` and be refused.
+        args: [`--config=${profile.configFile}`],
       },
     },
   ],
