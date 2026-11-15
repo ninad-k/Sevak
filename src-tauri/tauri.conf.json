@@ -70,9 +70,14 @@
         "installMode": "both",
         "template": "installer/installer.nsi",
         "installerHooks": "installer/hooks.nsh",
-        "languages": ["English"],
-        "customLanguageFiles": { "English": "installer/English.nsh" },
-        "displayLanguageSelector": false,
+        "languages": ["English", "German", "French", "Spanish"],
+        "customLanguageFiles": {
+          "English": "installer/English.nsh",
+          "German": "installer/German.nsh",
+          "French": "installer/French.nsh",
+          "Spanish": "installer/Spanish.nsh"
+        },
+        "displayLanguageSelector": true,
         "installerIcon": "icons/icon.ico",
         "uninstallerIcon": "icons/icon.ico",
         "sidebarImage": "installer/sidebar.bmp",
