@@ -21,7 +21,7 @@ permission dialogs of the OS, other people's apps receiving a paste. The
 | UI unit tests | Accelerator parsing and identity, settings validation, path helpers, theme colour and contrast maths, theme JSON, workflow graph rules, a few components | `ui/src/**/*.test.ts` (Vitest) | PRs and `main` (`UI unit tests` job) |
 | Startup integration | Per-user registration, config persistence and rollback, background arguments; Settings toggle through real IPC wrappers with a mocked native bridge | Platform startup tests; `ui/src/Settings.startup.test.ts` | Rust and UI test jobs |
 | Startup CLI | The real `--set-startup` / `--startup-status` / `--refresh-startup` / `--remove-startup` against the OS's own startup store, including an entry the OS disabled | `scripts/test-startup-cli.mjs` | PRs and `main` (`Startup CLI` job: Windows, macOS, Ubuntu) |
-| End-to-end UI | The real debug app driven through WebDriver: launcher opens, calculator answers, Settings toggle and Cancel, Gallery stays unloaded | `e2e/` (WebdriverIO + tauri-driver) | PRs and `main` (`End-to-end UI` job: required on Ubuntu; Windows runs but is not yet required, see [below](#end-to-end-ui-tests)) |
+| End-to-end UI | The real debug app driven through WebDriver: launcher opens, calculator answers, Settings toggle and Cancel, Gallery stays unloaded | `e2e/` (WebdriverIO + tauri-driver) | PRs and `main` (`End-to-end UI` job on Ubuntu and Windows) |
 | Latency budget | The default engine over a large mock index answers typical queries in under 100 ms at p95 | `crates/sevak-plugins/tests/latency.rs` | PRs and `main` (`Search latency budget` job, optimized build) |
 | Benchmark | Precise latency numbers and startup index time | `crates/sevak-plugins/benches/` | Weekly and on demand (`Benchmark` workflow) |
 | Coverage | Which lines the tests run | `Coverage` workflow | Every pull request (report only) and weekly |
@@ -131,10 +131,14 @@ node scripts/test-startup-cli.mjs                        # Linux, isolated autos
 
 ### End-to-end UI tests
 
-**Windows status:** the Windows job runs on every pull request but does not
-block merging yet. `msedgedriver` starts Sevak, but then reports
-"DevToolsActivePort file doesn't exist" when it attaches to the WebView2.
-The same specs are required on Ubuntu.
+**WebView2 arguments on Windows:** msedgedriver asks for a debugging port
+through `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`. WebView2 156 ignores that
+variable when the app names its own browser arguments (wry always does), so
+the session failed with "DevToolsActivePort file doesn't exist". Sevak now
+merges the variable into the arguments of every webview
+(`src-tauri/src/webview_args.rs`), as WebView2 157 does by itself. If that
+error comes back, check the `msedgewebview2.exe` command line for
+`--remote-debugging-port`.
 
 `e2e/` drives the real app through Tauri's WebDriver support
 ([guide](https://v2.tauri.app/develop/tests/webdriver/)): WebdriverIO (pinned

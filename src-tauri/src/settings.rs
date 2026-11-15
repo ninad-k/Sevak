@@ -49,7 +49,7 @@ pub fn open(app: &AppHandle) {
         .try_state::<AppState>()
         .map(|state| state.config().appearance.theme)
         .and_then(window_theme);
-    let result = WebviewWindowBuilder::new(
+    let mut builder = WebviewWindowBuilder::new(
         app,
         window::SETTINGS_LABEL,
         WebviewUrl::App(WINDOW_URL.into()),
@@ -62,8 +62,13 @@ pub fn open(app: &AppHandle) {
     .decorations(true)
     .always_on_top(false)
     .skip_taskbar(false)
-    .theme(theme)
-    .build();
+    .theme(theme);
+    // Must match the launcher's: WebView2 refuses a second webview on the
+    // same data folder with different arguments.
+    if let Some(args) = crate::webview_args::from_env() {
+        builder = builder.additional_browser_args(&args);
+    }
+    let result = builder.build();
     if let Err(err) = result {
         tracing::error!("could not open the settings window: {err}");
     }

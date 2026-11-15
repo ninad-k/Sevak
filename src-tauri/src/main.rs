@@ -25,6 +25,7 @@ mod takeover;
 mod themes;
 mod tray;
 mod updater;
+mod webview_args;
 mod window;
 mod workflows;
 
