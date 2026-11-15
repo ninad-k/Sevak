@@ -9,6 +9,7 @@ import {
   OUT,
   THEN,
   canConnect,
+  categoryLabel,
   inPoint,
   isStart,
   kindOf,
@@ -59,6 +60,21 @@ describe("the node catalog", () => {
     );
     expect(rustVariants.length).toBeGreaterThan(10);
     expect([...KINDS.map((k) => k.type)].sort()).toEqual([...rustVariants].sort());
+  });
+
+  it("finds a message for every label, summary, hint and option of the catalog", () => {
+    const words: string[] = [];
+    for (const kind of KINDS) {
+      words.push(kind.label, kind.summary);
+      for (const field of kind.fields) {
+        words.push(field.label, ...(field.hint ? [field.hint] : []));
+        for (const option of field.options ?? []) words.push(option.label);
+      }
+    }
+    for (const category of CATEGORIES) words.push(categoryLabel(category));
+    // A missing message comes back as its key.
+    expect(words.filter((text) => text.startsWith("workflows."))).toEqual([]);
+    expect(kindOf("transform").fields[0].options?.[0]).toEqual({ value: "set", label: "Set to the text" });
   });
 
   it("marks the nodes that run code as needing approval", () => {
