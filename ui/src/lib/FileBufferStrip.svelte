@@ -110,6 +110,7 @@
         <span
           class="bar"
           role="progressbar"
+          aria-label="{progress.label} progress"
           aria-valuemin="0"
           aria-valuemax="100"
           aria-valuenow={percent}

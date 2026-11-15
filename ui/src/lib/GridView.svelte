@@ -10,6 +10,7 @@
     selected,
     verb,
     compact = false,
+    idFor = (index: number) => `result-${index}`,
     columns = $bindable(1),
     onhover,
     onrun,
@@ -20,6 +21,8 @@
     verb: string;
     /** A preview pane is open: show fewer rows. */
     compact?: boolean;
+    /** DOM id of tile `index`, which the search box's `aria-activedescendant` names. */
+    idFor?: (index: number) => string;
     columns?: number;
     onhover: (index: number) => void;
     onrun: (index: number) => void;
@@ -71,7 +74,7 @@
       <!-- Keyboard handling lives on the window; tiles must not take focus from the input. -->
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <div
-        id="result-{i}"
+        id={idFor(i)}
         class="cell"
         class:selected={i === selected}
         role="option"
