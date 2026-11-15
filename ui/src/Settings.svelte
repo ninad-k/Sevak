@@ -1201,7 +1201,10 @@
             <div class="row">
               <div class="label">
                 <label class="name" for="files-keyword">Keyword</label>
-                <span class="hint">Type “keyword name” to search only files.</span>
+                <span class="hint">
+                  Type “keyword name” to search only files. Add filters such as <code>ext:pdf</code>,
+                  <code>size:&gt;10mb</code> or <code>modified:7d</code> (see Help).
+                </span>
                 {#if problems.keywords["files.keyword"]}
                   <span class="msg error" role="alert">{problems.keywords["files.keyword"]}</span>
                 {/if}
