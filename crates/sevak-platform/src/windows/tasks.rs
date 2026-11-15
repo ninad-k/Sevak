@@ -428,21 +428,21 @@ fn app_windows() -> Vec<(isize, u32)> {
     collected.windows
 }
 
-fn process_names() -> std::collections::HashMap<u32, String> {
-    use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
+fn process_names() -> Result<std::collections::HashMap<u32, String>> {
+    use sysinfo::{ProcessRefreshKind, ProcessesToUpdate};
 
-    let mut system = System::new();
+    let mut system = crate::tasks::process_table("list apps")?;
     system.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
-    system
+    Ok(system
         .processes()
         .iter()
         .map(|(pid, process)| (pid.as_u32(), process.name().to_string_lossy().into_owned()))
-        .collect()
+        .collect())
 }
 
 pub(crate) fn running_apps() -> Result<Vec<RunningApp>> {
     let own = std::process::id();
-    let names = process_names();
+    let names = process_names()?;
     Ok(group_apps(
         app_windows()
             .into_iter()
@@ -509,6 +509,7 @@ fn restart_explorer() -> Result<()> {
         .spawn(|| {
             std::thread::sleep(Duration::from_millis(2500));
             if !process_names()
+                .unwrap_or_default()
                 .values()
                 .any(|name| name.eq_ignore_ascii_case("explorer.exe"))
             {
