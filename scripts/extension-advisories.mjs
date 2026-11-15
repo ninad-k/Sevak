@@ -1,7 +1,7 @@
 // Prepare bounded data for the signed, opt-in extension advisory channel.
 // This does not sign or publish anything. The workflow verifies its signature
 // with the application's Rust verifier before uploading the two assets.
-import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync, writeFileSync, realpathSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -58,7 +58,7 @@ export function prepareAdvisories(source, { now = Math.floor(Date.now() / 1000),
   return bytes;
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && realpathSync(resolve(process.argv[1])) === realpathSync(fileURLToPath(import.meta.url))) {
   try {
     const [command, source, destination, days = "14"] = process.argv.slice(2);
     if (!["prepare", "check"].includes(command) || !source || (command === "prepare" && !destination)) throw new Error("Usage: extension-advisories.mjs prepare <source.json> <output.json> [days] | check <source.json>");

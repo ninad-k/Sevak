@@ -16,9 +16,9 @@
 //
 // Gallery entries are written by third parties, so every value is escaped
 // where it is put into HTML and only https:// addresses become links.
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { CSS, JS } from "./lib/marketplace-assets.mjs";
 import { manifestKeywords, workflowBehavior } from "./lib/gallery-manifests.mjs";
 
@@ -503,7 +503,7 @@ export function build({ root, out }) {
   return entries;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+if (process.argv[1] && realpathSync(resolve(process.argv[1])) === realpathSync(fileURLToPath(import.meta.url))) {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
   const at = process.argv.indexOf("--out");
   const out = resolve(root, at > 0 ? process.argv[at + 1] : "landing/marketplace");

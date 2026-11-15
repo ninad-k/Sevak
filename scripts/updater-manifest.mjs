@@ -9,9 +9,9 @@
 // <assets-dir> holds a release's files, each signed artifact next to its
 // `.sig`. The updater looks up `{os}-{arch}-{installer}` and then `{os}-{arch}`,
 // so every installer gets its own key and each OS gets a default.
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync, realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 // [file name pattern, manifest keys]. The first match for a key wins.
 export const TARGETS = [
@@ -70,6 +70,6 @@ function main(argv) {
   console.log(`${name}: ${Object.keys(result.platforms).join(", ")}`);
 }
 
-if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+if (process.argv[1] && realpathSync(resolve(process.argv[1])) === realpathSync(fileURLToPath(import.meta.url))) {
   main(process.argv.slice(2));
 }

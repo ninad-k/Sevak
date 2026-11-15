@@ -1,10 +1,10 @@
 // Build identifiable local installers from a source snapshot, without changing
 // working-tree versions, Git state, startup registration, or installed Sevak.
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { next, parse, previousTag, wixVersion } from "./release-version.mjs";
 
 const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
@@ -183,6 +183,6 @@ export function main(args = process.argv.slice(2), root = repositoryRoot) {
   }
 }
 
-if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+if (process.argv[1] && realpathSync(resolve(process.argv[1])) === realpathSync(fileURLToPath(import.meta.url))) {
   try { main(); } catch (error) { console.error(error.message); process.exitCode = 1; }
 }

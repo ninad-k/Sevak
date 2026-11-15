@@ -1,6 +1,6 @@
 // Prepare publisher-signing configuration without printing credentials. Updater
 // signatures are independent: this script configures Authenticode / Developer ID.
-import { appendFileSync, mkdirSync, writeFileSync, readdirSync } from "node:fs";
+import { appendFileSync, mkdirSync, writeFileSync, readdirSync, realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -93,7 +93,7 @@ export function verifyPublisherSigning(platform, env, root, run = execFileSync, 
   return { platform, status: "verified", verified: true };
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && realpathSync(resolve(process.argv[1])) === realpathSync(fileURLToPath(import.meta.url))) {
   try {
     const [command, argument] = process.argv.slice(2);
     const platform = process.env.RUNNER_OS ?? ({ win32: "Windows", darwin: "macOS", linux: "Linux" })[process.platform];
