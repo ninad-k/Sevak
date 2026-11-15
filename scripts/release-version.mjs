@@ -25,10 +25,10 @@
 // A beta is the version the next stable release would get, plus `-beta.N`
 // (N counts up from 1 per base version). Beta tags (`v1.3.0-beta.2`) never
 // move the stable baseline: `next` only looks at plain `vX.Y.Z` tags.
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const STABLE = /^(\d+)\.(\d+)\.(\d+)$/;
@@ -195,7 +195,7 @@ function set(version) {
 }
 
 const isMain =
-  process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url;
+  process.argv[1] && realpathSync(resolve(process.argv[1])) === realpathSync(fileURLToPath(import.meta.url));
 if (isMain) {
   const [command, arg, arg2] = process.argv.slice(2);
   if (command === "next") {

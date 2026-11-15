@@ -6,22 +6,24 @@ before a release. For setting up a development machine see
 
 ## The testing pyramid
 
-Most of Sevak is checked automatically on every push. A launcher also depends
+Most of Sevak is checked automatically on every pull request and push to `main`.
+Feature-branch pushes use the PR run instead of duplicating the full matrix;
+branches without a PR can use CI's manual run. A launcher also depends
 on things no test can see: the keyboard shortcut reaching it past the OS, the
 permission dialogs of the OS, other people's apps receiving a paste. The
 [release checklist](#release-test-checklist) covers that second kind.
 
 | Layer | What it checks | Where | Runs |
 |---|---|---|---|
-| Static checks | Formatting, clippy with warnings as errors, `svelte-check` type checking, `mkdocs build --strict` for broken links | `cargo fmt`, `cargo clippy`, `npm run check`, docs workflow | Every push (Windows, macOS, Ubuntu) |
-| Rust unit tests | Fuzzy matching, config parsing and comment-preserving saves, ranking, every plugin's logic (calculator, units, snippets, clipboard history, tasks, workflows ...), platform helpers | `#[cfg(test)]` modules in `crates/*/src` | Every push, on each OS (platform code runs on its own OS) |
-| Rust integration tests | The real search engine and registry with a recording platform: keyword routing, secrets never leaking into global queries, Enter reaching the platform; script plugins and workflows with real child processes | `crates/sevak-plugins/tests/` | Every push |
-| UI unit tests | Accelerator parsing and identity, settings validation, path helpers, theme colour and contrast maths, theme JSON, workflow graph rules, a few components | `ui/src/**/*.test.ts` (Vitest) | Every push (`UI unit tests` job) |
+| Static checks | Formatting, clippy with warnings as errors, `svelte-check` type checking, `mkdocs build --strict` for broken links | `cargo fmt`, `cargo clippy`, `npm run check`, docs workflow | PRs and `main` (Windows, macOS, Ubuntu); docs when relevant files change |
+| Rust unit tests | Fuzzy matching, config parsing and comment-preserving saves, ranking, every plugin's logic (calculator, units, snippets, clipboard history, tasks, workflows ...), platform helpers | `#[cfg(test)]` modules in `crates/*/src` | PRs and `main`, on each OS (platform code runs on its own OS) |
+| Rust integration tests | The real search engine and registry with a recording platform: keyword routing, secrets never leaking into global queries, Enter reaching the platform; script plugins and workflows with real child processes | `crates/sevak-plugins/tests/` | PRs and `main` |
+| UI unit tests | Accelerator parsing and identity, settings validation, path helpers, theme colour and contrast maths, theme JSON, workflow graph rules, a few components | `ui/src/**/*.test.ts` (Vitest) | PRs and `main` (`UI unit tests` job) |
 | Startup integration | Per-user registration, config persistence and rollback, background arguments; Settings toggle through real IPC wrappers with a mocked native bridge | Platform startup tests; `ui/src/Settings.startup.test.ts` | Rust and UI test jobs |
-| Latency budget | The default engine over a large mock index answers typical queries in under 100 ms at p95 | `crates/sevak-plugins/tests/latency.rs` | Every push (`Search latency budget` job, optimized build) |
+| Latency budget | The default engine over a large mock index answers typical queries in under 100 ms at p95 | `crates/sevak-plugins/tests/latency.rs` | PRs and `main` (`Search latency budget` job, optimized build) |
 | Benchmark | Precise latency numbers and startup index time | `crates/sevak-plugins/benches/` | Weekly and on demand (`Benchmark` workflow) |
 | Coverage | Which lines the tests run | `Coverage` workflow | Every pull request (report only) and weekly |
-| Build and packaging | The installers build on all three OSes and Fedora builds and tests | `bundle` and `fedora` jobs in `ci.yml` | Every push |
+| Build and packaging | The installers build on all three OSes and Fedora builds and tests | `bundle` and `fedora` jobs in `ci.yml` | PRs and `main` |
 | **Manual release test** | Everything that needs a real desktop, real apps, real permissions | [below](#release-test-checklist) | Before each release |
 
 ### What automated tests cannot tell you
@@ -58,6 +60,9 @@ reproduces it.
 | `npm test` | UI unit and component integration tests (Vitest, a few seconds) |
 | `npm test -- Settings.startup.test.ts` | Settings sign-in toggle, Save/reopen/disable, cancelled draft, OS failure/retry and registration warnings |
 | `cargo test -p sevak-platform startup` | Startup registration helpers and integration cases without changing the host's real startup entries |
+| `cargo test -p sevak-plugins --lib extensions::` | Extension package/store integration and authenticated advisory tests, including exact signatures, invalid metadata, rollback, stale cache, offline failures, revoked installs/uninstalls and deprecation updates |
+| `cargo test -p sevak-plugins --lib workflow::gallery::tests` | Pinned catalog parsing, validated lifecycle metadata and safe package installation |
+| `npm test -- ExtensionsPage.test.ts GalleryPage.lifecycle.test.ts` | Explicit advisory checks, unknown/error status, deprecation/replacement copy, revoked installed/uninstalled states and user-driven removal |
 | `npm run test:scripts` | Installer source and packaging contracts, including startup controls. On Windows with the Tauri NSIS toolchain, also compiles and executes startup policy and helper-receipt fixtures. Windows bundle/release jobs rerun these after building the installers. |
 | `pwsh -NoProfile -File scripts/test-windows-installer.ps1` | Windows only, after building the installers: inspect the compiled MSI and evaluate its real startup conditions without installing it. CI runs this after the bundle build. Use `-MsiPath <file>` to select a specific MSI. |
 | `npm run test:watch` | Vitest in watch mode |
@@ -82,6 +87,14 @@ wrappers with a fake Tauri transport: toggling is only a draft until Save,
 successful saves reload the persisted choice, and native errors remain visible
 without a success toast. These are UI integration tests, not native desktop or
 reboot tests.
+
+Advisory tests use a deterministic **insecure test-only** signing key and canned
+signatures under `crates/sevak-plugins/src/extensions/revocations/fixtures/`.
+They do not use the production key, publish a feed or request the network. The
+release verifier example uses only the application's embedded production public
+key: `cargo run --locked -p sevak-plugins --example verify_extension_advisories -- <json> <sig>`.
+Publication still needs a maintainer-run signing workflow and a successful
+manual gallery check against its uploaded feed.
 
 ### Coverage
 
@@ -281,9 +294,17 @@ knows what is checked by hand because it cannot be checked by a machine.
 
 #### Windows installer scenarios
 
-Run these against the branded Windows installer. They remain manual checks
-because packaging CI builds the installers but does not exercise their UI or
-installation behaviour on a real desktop.
+CI and Release inspect compiled packages and run actual MSI install, startup
+on/off, repair and uninstall checks on a disposable hosted Windows VM. The VM
+suite also runs after an artifact-inspection failure, and reports and MSI logs
+are uploaded whenever the run is not cancelled. A single-package run does not test a
+genuine version upgrade; that case is explicitly skipped. See
+[Windows installer validation](installer-validation.md) for safe VM invocations,
+NSIS acceptance, two-version upgrade tests and identifiable local test builds.
+
+The scenarios below still require desktop acceptance for wizard controls,
+alternate-user UAC, running-app behaviour and real restart/sign-in. Automated
+silent checks do not count as those manual passes.
 
 | ID | OS | Scenario | Steps | Expected | Sev |
 |---|---|---|---|---|---|
@@ -319,13 +340,15 @@ unit, integration or package-build tests alone does not complete these cases.
 | STA-1 **S** | W | Fresh EXE and MSI installs, first with startup unchecked, then checked | Sevak appears in Start → All apps and Settings → Apps → Installed apps in both cases. Startup defaults off; opting in adds a per-user Startup apps entry and General shows on. | Installer source contracts and native registration tests | S1 |
 | STA-2 **S** | all | Enable in General, Save, quit Sevak, restart and sign in; repeat after turning it off and saving | When on: one tray/menu-bar instance, launcher hidden, shortcut works. When off: no automatic process. On macOS/Linux use Settings after installation; no setup checkbox is expected. | Settings save/reopen and background command tests; restart is manual | S1 |
 | STA-3 | W | Install for all users and opt in as account A; sign in as B. Repeat installation where UAC uses another administrator's credentials | Only the desktop account that chose startup is opted in; no machine-wide Run entry or automatic opt-in for the administrator/B. | User-scope installer contracts; real account/UAC behavior is manual | S1 |
-| STA-4 | W, L | Enable and Save, disable Sevak through OS startup controls, then run Sevak manually and save an unrelated setting | OS disable is preserved; General warns that startup is disabled outside Sevak. Re-enable using the OS or off+Save then on+Save in Sevak. | Startup state preservation and UI warning tests | S2 |
+| STA-4 | W, L | Enable and Save, disable Sevak through OS startup controls, then run Sevak manually and save an unrelated setting | OS disable is preserved; General shows the actual disabled status. Choose **Enable again** explicitly to restore startup in one action; draft edits stay unsaved. | Startup transaction and Settings component tests; real OS controls are manual | S2 |
 | STA-5 | all | On a disposable profile, deny writes to startup registration, then try to enable/disable from General | Save displays an actionable error, keeps the prior persisted choice/registration, and does not show Saved. Fix access and retry; it succeeds. | Transaction rollback and UI failure/retry tests | S1 |
 | STA-6 | W | Upgrade an opted-in and an opted-out install interactively and silently; repeat with `/AUTOSTART=on\|off` (EXE) or `SEVAK_AUTOSTART=on\|off` (MSI) | Unchanged/unspecified startup is preserved; explicit choice updates the invoking user's setting. Start-now remains independent. Service-account deployment never opts all users in. | Installer source contracts; installed upgrade is manual | S2 |
 | STA-7 | W | Uninstall a copy with startup enabled; repeat with the entry pointing to a different Sevak install | Removes only this executable's entry for the invoking user. The other install's entry is kept. Upgrade/scope migration preserves the chosen startup behavior. | Ownership comparison/removal tests; uninstall is manual | S2 |
 | STA-8 | M, L | Enable startup after installing to Applications/a permanent AppImage path; inspect the entry and sign in again | User LaunchAgent or XDG autostart starts the installed path with background arguments. Linux desktop supports XDG autostart; no temporary AppImage mount path is stored. | Native entry format/path tests; desktop behavior is manual | S2 |
 | STA-9 | W | Move an install with an enabled entry, then with a Windows-disabled entry and custom `--config` argument; repeat an upgrade with no Run entry and an old saved opt-in | Existing registration follows the new executable while retaining arguments and disable state. An unchecked interactive choice with a missing entry saves off. Explicit preference/refresh happens before automatic launch. | Refresh fixtures, installer choice contracts and compiled MSI sequencing checks | S2 |
 | STA-10 | W, L | In a disposable Windows VM, reproduce the old machine-wide Sevak Run entry; on Linux, use a minimal `[Desktop Entry]` with `Hidden=true` | Windows reports the migration error and leaves machine-wide startup untouched; administrator cleanup is clearly described. Linux recognizes the minimal override as disabled and an explicit opt-in can re-enable it. | Legacy command and Hidden-only fixtures; real OS integration is manual | S2 |
+| STA-11 | all | With Settings open and startup saved on, remove the OS entry externally. Edit another preference, choose **Check status**, then **Repair startup** | Status shows the missing entry. One repair action restores it without saving the draft; unrelated saves alone do not recreate the entry. Changing the startup checkbox blocks repair until that choice is saved or reverted. | Read-only status, missing-entry repair and draft-preservation component tests; native desktop confirmation is manual | S2 |
+| STA-12 | all | Deny registration writes or change the saved config during repair, then retry after resolving the error | Repair reports the error, restores the prior registration and preserves config bytes; it never reports Saved. A successful retry shows enabled. | Backend transaction/rollback tests and component error/retry tests | S1 |
 
 #### Windows
 

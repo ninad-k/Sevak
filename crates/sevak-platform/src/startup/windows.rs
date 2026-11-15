@@ -147,11 +147,15 @@ fn refreshed_command(
         return Err("the startup entry points to a different application; its executable was left unchanged".to_owned());
     }
     let text = format!("{}{suffix}", quote(&command.executable.to_string_lossy()));
-    let value = text.to_reg_value();
-    Ok(RegValue {
+    Ok(owned(text.to_reg_value()))
+}
+
+/// A registry value that owns its bytes (winreg 0.56 lets one borrow them).
+fn owned(value: RegValue<'_>) -> RegValue<'static> {
+    RegValue {
         bytes: Cow::Owned(value.bytes.into_owned()),
         vtype: value.vtype,
-    })
+    }
 }
 
 impl Backend for Native {
@@ -169,6 +173,10 @@ impl Backend for Native {
         Ok(Status {
             registered: snapshot.run.is_some(),
             enabled: snapshot.run.is_some() && enabled_by_windows(snapshot.approved.as_ref())?,
+            other_copy: snapshot
+                .run
+                .as_ref()
+                .is_some_and(|value| !owned_by(value, &self.command)),
         })
     }
 
@@ -282,6 +290,38 @@ mod tests {
             &r"c:\new\sevak\sevak.exe --background".to_reg_value(),
             &command
         ));
+    }
+
+    #[test]
+    fn status_reports_an_entry_that_starts_another_copy() {
+        let native =
+            Native::new(LaunchCommand::new(r"C:\Apps\Sevak\sevak.exe".into(), None).unwrap())
+                .unwrap();
+        let status = |run: Option<&str>| {
+            native
+                .status(&Snapshot {
+                    run: run.map(|text| owned(text.to_reg_value())),
+                    approved: None,
+                })
+                .unwrap()
+        };
+        assert_eq!(status(None), Status::default());
+        assert_eq!(
+            status(Some(r#""C:\Apps\Sevak\sevak.exe" --background"#)),
+            Status {
+                registered: true,
+                enabled: true,
+                other_copy: false
+            }
+        );
+        assert_eq!(
+            status(Some(r#""D:\Portable\Sevak\sevak.exe" --background"#)),
+            Status {
+                registered: true,
+                enabled: true,
+                other_copy: true
+            }
+        );
     }
 
     #[test]

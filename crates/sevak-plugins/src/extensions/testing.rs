@@ -21,11 +21,14 @@ pub(crate) fn url(path: &str) -> String {
     format!("{RAW}{path}")
 }
 
+type DownloadHook = Arc<dyn Fn(&str) + Send + Sync>;
+
 /// A network that serves canned files and records what was asked for.
 #[derive(Default)]
 pub(crate) struct Fake {
     pub(crate) files: Mutex<HashMap<String, Result<Vec<u8>, FetchError>>>,
     pub(crate) requests: Mutex<Vec<String>>,
+    pub(crate) on_get: Mutex<Option<DownloadHook>>,
 }
 
 impl Fake {
@@ -54,6 +57,10 @@ impl Fake {
 impl Transport for Fake {
     fn get(&self, url: &str, max_bytes: usize) -> Result<Vec<u8>, FetchError> {
         self.requests.lock().unwrap().push(url.to_owned());
+        let hook = self.on_get.lock().unwrap().clone();
+        if let Some(hook) = hook {
+            hook(url);
+        }
         match self.files.lock().unwrap().get(url) {
             Some(Ok(body)) if body.len() > max_bytes => Err(FetchError::Failed(
                 "the download is larger than expected".to_owned(),
@@ -72,7 +79,7 @@ impl Transport for Fake {
 pub(crate) struct World {
     pub(crate) tmp: tempfile::TempDir,
     pub(crate) net: Arc<Fake>,
-    pub(crate) store: ExtensionStore,
+    pub(crate) store: Arc<ExtensionStore>,
     pub(crate) stopped: Arc<Mutex<Vec<String>>>,
 }
 
@@ -99,13 +106,13 @@ impl World {
         };
         let net = Arc::new(Fake::default());
         let transport: SharedTransport = net.clone();
-        let store = ExtensionStore::with(
+        let store = Arc::new(ExtensionStore::with(
             dirs,
             transport,
             Pin::new("v1.2.3"),
             platform(),
             sevak_version.to_owned(),
-        );
+        ));
         let stopped = Arc::new(Mutex::new(Vec::new()));
         let seen = stopped.clone();
         store.set_quiesce(Arc::new(move |id: &str| {
