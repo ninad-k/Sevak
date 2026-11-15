@@ -25,6 +25,9 @@
 //! | `dict`           | [`DictionaryPlugin`] (also `dict:spell`) | `define`, `spell` | no |
 //! | `uuid`           | [`UuidPlugin`] (a tutorial example)     | `uuid`  | no     |
 //! | `ai`             | [`AiPlugin`] (opt-in AI assistant)      | `ai`    | no     |
+//! | `ssh`            | [`SshPlugin`] (hosts in ~/.ssh/config)  | `ssh`   | no     |
+//! | `projects`       | [`ProjectsPlugin`] (recent editor projects) | `code` | no  |
+//! | `calendar`       | [`CalendarPlugin`] (local .ics files)   | `cal`   | no     |
 //!
 //! Script plugins (`script:<name>`, from `<config dir>/plugins/`) are loaded by
 //! [`ScriptPluginHost`]; see [`script`].
@@ -72,6 +75,11 @@ pub mod units;
 pub mod web_search;
 pub mod window_manager;
 pub mod workflow;
+// SSH hosts, recent editor projects and local calendars.
+pub mod calendar;
+mod local_source;
+pub mod projects;
+pub mod ssh;
 
 #[cfg(test)]
 mod test_util;
@@ -81,6 +89,7 @@ pub use ai::AiPlugin;
 pub use apps::AppsPlugin;
 pub use bookmarks::BookmarksPlugin;
 pub use calculator::CalculatorPlugin;
+pub use calendar::CalendarPlugin;
 pub use clipboard_history::ClipboardPlugin;
 pub use contacts::ContactsPlugin;
 pub use dictionary::DictionaryPlugin;
@@ -91,11 +100,13 @@ pub use keywords::{KeywordOwners, KeywordUse, OwnerKind};
 pub use media::MediaPlugin;
 pub use onepassword::OnePasswordPlugin;
 pub use os_files::{files_family, OsFilesPlugin};
+pub use projects::ProjectsPlugin;
 pub use registry::{PluginDescriptor, PluginFactory, PluginInfo, PluginRegistry};
 pub use script::{ScriptPlugin, ScriptPluginHost};
 pub use selection::SelectionPlugin;
 pub use shell::ShellPlugin;
 pub use snippets::SnippetsPlugin;
+pub use ssh::SshPlugin;
 pub use system::SystemPlugin;
 pub use tasks::TasksPlugin;
 pub use web_search::WebSearchPlugin;
@@ -105,7 +116,8 @@ pub use workflow::WorkflowHost;
 /// Instantiates every enabled built-in plugin (`apps`, `calculator`, one
 /// `web:<keyword>` per `[[web_search]]` engine, `files`, `bookmarks`, `system`,
 /// `tasks`, `media`, `shell`, `clipboard`, `snippets`, `emoji`, `selection`,
-/// `contacts`, `1password`, `dict`, `uuid`, `ai`).
+/// `contacts`, `1password`, `dict`, `uuid`, `ai`, `ssh`, `projects`,
+/// `calendar`).
 ///
 /// Shorthand for `PluginRegistry::builtin().instantiate(config, platform)`.
 ///
@@ -161,7 +173,10 @@ mod tests {
                 "dict",
                 "dict:spell",
                 "uuid",
-                "ai"
+                "ai",
+                "ssh",
+                "projects",
+                "calendar"
             ]
         );
     }
@@ -194,7 +209,10 @@ mod tests {
                 "dict",
                 "dict:spell",
                 "uuid",
-                "ai"
+                "ai",
+                "ssh",
+                "projects",
+                "calendar"
             ]
         );
     }

@@ -234,6 +234,13 @@ fn validate_limits(config: &Config) -> Result<(), String> {
     if let Some(problem) = config.ai.problem() {
         return Err(problem);
     }
+    let days = config.calendar.days;
+    let max_days = sevak_core::config::MAX_CALENDAR_DAYS;
+    if !(1..=max_days).contains(&days) {
+        return Err(format!(
+            "Calendar: the days ahead must be from 1 to {max_days}."
+        ));
+    }
     let gap = config.window_management.gap;
     if !(0..=sevak_core::window_layout::MAX_GAP).contains(&gap) {
         return Err(format!(
@@ -877,7 +884,20 @@ mod tests {
         config.bookmarks.browsers = vec!["zen".into()];
         config.bookmarks.keyword = "bm".into();
         config.snippets.ignore_apps = vec!["Terminal".into()];
+        config.ssh.keyword = "host".into();
+        config.ssh.known_hosts = true;
+        config.projects.keyword = "proj".into();
+        config.projects.editors = vec!["cursor".into()];
+        config.calendar.keyword = "agenda".into();
+        config.calendar.files = vec!["~/work.ics".into()];
+        config.calendar.days = 14;
         assert_eq!(check(&config), Ok(()));
+        config.calendar.days = 0;
+        assert!(check(&config).unwrap_err().contains("Calendar"));
+        config.calendar.days = 14;
+        config.calendar.keyword = "ssh".into();
+        config.ssh.keyword = "ssh".into();
+        assert!(check(&config).is_err());
     }
 
     #[test]
