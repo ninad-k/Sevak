@@ -36,7 +36,7 @@ LangString deleteAppData ${LANG_GERMAN} "Auch den Web-Cache löschen (deine Eins
 ; ---- Welcome and Finish pages ----------------------------------------------
 
 LangString sevakWelcomeTitle ${LANG_GERMAN} "Willkommen bei Sevak"
-LangString sevakWelcomeText ${LANG_GERMAN} "Sevak bedeutet $\"einer, der dient$\". Es ist ein Starter für die Tastatur: Drück eine Taste, tippe ein paar Buchstaben und öffne eine App, eine Datei, eine Rechnung oder eine Websuche.$\r$\n$\r$\nDein Desktop. Zu Diensten.$\r$\n$\r$\nDieser Assistent installiert Sevak ${VERSION}. Sevak sammelt keine Telemetriedaten.$\r$\n$\r$\nKlicke auf Weiter."
+LangString sevakWelcomeText ${LANG_GERMAN} "Sevak bedeutet $\"einer, der dient$\". Es ist ein Launcher für die Tastatur: Drück eine Taste, tippe ein paar Buchstaben und öffne eine App, eine Datei, eine Rechnung oder eine Websuche.$\r$\n$\r$\nDein Desktop. Zu Diensten.$\r$\n$\r$\nDieser Assistent installiert Sevak ${VERSION}. Sevak sammelt keine Telemetriedaten.$\r$\n$\r$\nKlicke auf Weiter."
 
 LangString sevakFinishTitle ${LANG_GERMAN} "Sevak ist bereit"
 LangString sevakFinishText ${LANG_GERMAN} "Sevak wartet still im Infobereich der Taskleiste.$\r$\n$\r$\nDrück Win+Leertaste, um es zu öffnen (ein vorhandenes Tastenkürzel bleibt erhalten). Klicke auf das Symbol im Infobereich für die Einstellungen.$\r$\n$\r$\nProbier: einen App-Namen, 12*7, f report, g rust."

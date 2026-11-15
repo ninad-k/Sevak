@@ -62,9 +62,10 @@ describe("locale catalogues", () => {
     expect(mismatched).toEqual([]);
   });
 
-  it.each(others)("%s is marked as awaiting native review", (lang) => {
-    expect((CATALOGUES[lang] as { _meta?: { status?: string } })._meta?.status).toBe(
-      "machine-drafted, needs native review",
+  it.each(others)("%s says whether a native speaker has reviewed it", (lang) => {
+    // docs/localisation.md: a reviewer replaces the draft marker with "reviewed".
+    expect(["machine-drafted, needs native review", "reviewed"]).toContain(
+      (CATALOGUES[lang] as { _meta?: { status?: string } })._meta?.status,
     );
   });
 
