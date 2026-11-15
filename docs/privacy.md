@@ -112,7 +112,35 @@ Only when you press **Load the list** on **Settings → Extensions**, or press E
 - **Install** and **Update** download that one package (for a native extension, the one build for your computer), checked against its checksum before anything is written; nothing runs until you allow it
 - Nothing is requested in the background or on startup
 
+Loading or refreshing either Gallery or Extensions also requests the signed
+extension advisories below. The Installed tab's **Check extension advisories**
+button uses the same refresh, including both pinned catalogs.
+
 See [Extensions](features/extensions.md).
+
+### Extension advisories
+
+An explicit gallery/list load, refresh, or **Check extension advisories** checks
+two fixed GitHub release assets:
+
+```text
+https://github.com/ninad-k/Sevak/releases/download/extension-advisories/extension-revocations.json
+https://github.com/ninad-k/Sevak/releases/download/extension-advisories/extension-revocations.json.sig
+```
+
+The first request is at most 128 KiB; its signature is at most 8 KiB. They send
+no installed extension list, version inventory, queries or other local data.
+GitHub receives the ordinary request/IP address and gallery user agent. Sevak
+verifies the exact bytes with its embedded updater public key and saves the
+signed copy in the data folder as `extension-advisories.json`. Local reads verify
+that signature again; opening the page, startup and background work make no
+advisory request. The theme editor's separate gallery does not request this feed.
+
+Known revoked versions cannot be installed; managed installed copies show a
+warning and **Uninstall** action. Missing, expired or failed checks report
+unknown status, while previously authenticated notices remain effective. No
+extension is automatically removed or disabled. See
+[Gallery trust](security/gallery-trust.md#6-signed-revocation-notices).
 
 All these galleries send nothing but the request itself (no cookies or identifiers beyond a `Sevak/<version> (gallery)` user agent). A build without a published release makes one more request, to GitHub's "latest release" link, to find out which release to read. Sevak never downloads plugins or workflows on its own.
 

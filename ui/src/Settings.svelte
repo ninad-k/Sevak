@@ -24,10 +24,12 @@
   import {
     closeSettings,
     getSettings,
+    getStartupStatus,
     openConfigFile,
     openLogDir,
     pickDirectory,
     restoreTakeover,
+    repairStartup,
     saveSettings,
     setupWaylandHotkey,
     takeOverHotkey,
@@ -37,6 +39,7 @@
     type Outcome,
     type PluginInfo,
     type SettingsDto,
+    type StartupStatus,
   } from "./lib/settings-ipc";
   import { displayAccelerator } from "./lib/accelerator";
   import { applyAppearance } from "./lib/appearance";
@@ -152,6 +155,9 @@
   let hotkeyError = $state<string | null>(null);
   let actionsHotkeyError = $state<string | null>(null);
   let saving = $state(false);
+  let startupBusy = $state<"check" | "repair" | null>(null);
+  let startupError = $state<string | null>(null);
+  let startupMessage = $state<string | null>(null);
   let saveError = $state<string | null>(null);
   let toastVisible = $state(false);
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
@@ -174,7 +180,19 @@
       (actionsHotkeyError ? 1 : 0) +
       hotkeyParseProblems,
   );
-  const canSave = $derived(ready && dirty && problemCount === 0 && !saving);
+  const canSave = $derived(ready && dirty && problemCount === 0 && !saving && startupBusy === null);
+  const startupDraftChanged = $derived(loaded !== null && draft.general.launch_at_login !== loaded.config.general.launch_at_login);
+  const otherCopyStartup = $derived(!!loaded && !loaded.startup.error && loaded.startup.registered && !!loaded.startup.other_copy);
+  const needsStartupRepair = $derived(!!loaded?.config.general.launch_at_login && (!!loaded.startup.error || !loaded.startup.enabled || otherCopyStartup));
+  const startupRepairLabel = $derived(loaded?.startup.registered && !loaded.startup.error && !otherCopyStartup ? "Enable again" : "Repair startup");
+  const startupStatusLabel = $derived.by(() => {
+    const startup = loaded?.startup;
+    if (!startup || startup.error) return "Unavailable";
+    if (otherCopyStartup) return "Registered for another copy of Sevak";
+    if (startup.enabled) return loaded?.config.general.launch_at_login ? "Enabled for your account" : "Enabled outside Sevak's saved setting";
+    if (startup.registered) return "Disabled outside Sevak";
+    return loaded?.config.general.launch_at_login ? "Entry missing" : "Off";
+  });
 
   const sections = $derived(
     (
@@ -382,10 +400,28 @@
       loadFailed = true;
       return;
     }
+    if (dto.startup.saved !== null && dto.startup.saved !== undefined) dto.config.general.launch_at_login = dto.startup.saved;
     loaded = dto;
     draft = clone(dto.config);
     baseline = JSON.stringify(dto.config);
     xwaylandAtOpen ??= dto.config.linux.wayland_use_xwayland;
+  }
+
+  /**
+   * Show a fresh OS status without discarding the draft. The installer or
+   * `--set-startup` may have changed the saved preference since Settings
+   * loaded: follow it, and move the switch too unless the user already did.
+   */
+  function applyStartupStatus(next: StartupStatus) {
+    if (!loaded) return;
+    loaded.startup = next;
+    const saved = next.saved;
+    if (saved === null || saved === undefined || saved === loaded.config.general.launch_at_login) return;
+    const untouched = draft.general.launch_at_login === loaded.config.general.launch_at_login;
+    loaded.config.general.launch_at_login = saved;
+    baseline = JSON.stringify(loaded.config);
+    if (untouched) draft.general.launch_at_login = saved;
+    startupMessage = `Your saved startup preference was changed outside Settings and is now ${saved ? "on" : "off"}.`;
   }
 
   function showToast() {
@@ -394,9 +430,19 @@
     toastTimer = setTimeout(() => (toastVisible = false), 2200);
   }
 
+  /** The form is disabled while saving; give focus back to where it was (Ctrl+S from a field). */
+  async function finishSaving(focused: HTMLElement | null) {
+    saving = false;
+    await tick();
+    if (focused?.isConnected && (!document.activeElement || document.activeElement === document.body)) focused.focus();
+  }
+
   async function save() {
     if (!canSave) return;
+    const focused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     saving = true;
+    startupError = null;
+    startupMessage = null;
     saveError = null;
     const payload = clone($state.snapshot(draft)) as Config;
     payload.general.hotkey = payload.general.hotkey.trim();
@@ -424,16 +470,46 @@
       url: engine.url.trim(),
     }));
     const error = await saveSettings(payload);
-    saving = false;
     if (error) {
       saveError = error;
+      await finishSaving(focused);
       return;
     }
     await load();
+    await finishSaving(focused);
     showToast();
   }
 
+  async function checkStartup() {
+    if (!loaded || saving || startupBusy) return;
+    startupBusy = "check";
+    startupError = null;
+    startupMessage = null;
+    applyStartupStatus(await getStartupStatus());
+    startupBusy = null;
+  }
+
+  async function enableStartupAgain() {
+    if (!loaded || saving || startupBusy || startupDraftChanged || !needsStartupRepair) return;
+    startupBusy = "repair";
+    startupError = null;
+    startupMessage = null;
+    const result = await repairStartup();
+    if (result.status) {
+      // Keep every unsaved field and the baseline. Repair never saves config.
+      loaded.startup = result.status;
+      startupMessage = "Startup enabled. Sevak will start in the background after sign-in.";
+    } else {
+      // A failed repair (or its rollback) may have changed the OS entry, and
+      // the saved preference may have changed outside Settings: show both.
+      applyStartupStatus(await getStartupStatus());
+      startupError = result.error;
+    }
+    startupBusy = null;
+  }
+
   async function cancel() {
+    if (saving || startupBusy) return;
     const error = await closeSettings();
     if (error) footerError = error;
   }
@@ -576,7 +652,9 @@
         {/each}
       </div>
 
-      <div id="panel" class="content" role="tabpanel" aria-labelledby="tab-{active}" bind:this={content}>
+      <div id="panel" class="content" role="tabpanel" aria-labelledby="tab-{active}" aria-busy={saving} bind:this={content}>
+        <!-- Saving reloads the form from disk; edits made meanwhile would be lost. -->
+        <fieldset class="panel-form" disabled={saving}>
         {#if active === "general"}
           <h1>General</h1>
 
@@ -740,19 +818,39 @@
                 {:else}
                   <span class="hint">Uses your desktop's autostart settings. Keep an AppImage in a permanent location.</span>
                 {/if}
-                {#if loaded?.startup.error}
-                  <span class="hint error" role="alert">Could not check startup: {loaded.startup.error}</span>
-                {:else if loaded?.config.general.launch_at_login && !loaded.startup.enabled}
-                  <span class="hint error" role="status">
-                    {loaded.startup.registered ? "Startup is disabled outside Sevak." : "Sevak's startup entry is missing."}
-                    Enable it in your system's startup settings, or turn this option off and Save, then on and Save again.
+                <div class="startup-state">
+                  <span class="startup-status" role="status" aria-live="polite">
+                    Startup status: {startupStatusLabel}
                   </span>
-                {/if}
+                  {#if startupError}
+                    <span class="hint error" role="alert">Could not enable startup: {startupError}</span>
+                  {:else if loaded?.startup.error}
+                    <span class="hint error" role="alert">Could not check startup: {loaded.startup.error}</span>
+                  {/if}
+                  {#if needsStartupRepair}
+                    <span class="hint">Your saved preference is on. {startupRepairLabel === "Enable again" ? "Enable again restores startup for this account." : "Repair startup registers this installed copy again."} This applies immediately and leaves other settings unchanged.</span>
+                  {/if}
+                  {#if needsStartupRepair && startupDraftChanged}
+                    <span class="hint">Save or undo your startup preference change before repairing.</span>
+                  {/if}
+                  {#if startupMessage}<span class="hint" role="status">{startupMessage}</span>{/if}
+                  <div class="startup-actions">
+                    {#if needsStartupRepair}
+                      <button type="button" class="btn" disabled={saving || startupBusy !== null || startupDraftChanged} onclick={enableStartupAgain}>
+                        {startupBusy === "repair" ? "Enabling…" : startupRepairLabel}
+                      </button>
+                    {/if}
+                    <button type="button" class="btn" disabled={saving || startupBusy !== null} onclick={checkStartup}>
+                      {startupBusy === "check" ? "Checking…" : "Check status"}
+                    </button>
+                  </div>
+                </div>
               </div>
               <Toggle
                 bind:checked={draft.general.launch_at_login}
                 label="Start Sevak when I sign in"
-                disabled={saving}
+                disabled={saving || startupBusy !== null}
+                onchange={() => { startupError = null; startupMessage = null; }}
               />
             </div>
 
@@ -1329,6 +1427,7 @@
             </div>
           </section>
         {/if}
+        </fieldset>
       </div>
     </div>
 
@@ -1351,7 +1450,7 @@
           Fix {problemCount} problem{problemCount === 1 ? "" : "s"} to save
         </span>
       {/if}
-      <button type="button" class="btn" onclick={cancel}>{dirty ? "Cancel" : "Close"}</button>
+      <button type="button" class="btn" disabled={saving || startupBusy !== null} onclick={cancel}>{dirty ? "Cancel" : "Close"}</button>
       <button type="button" class="btn primary" disabled={!canSave} onclick={save}>
         {saving ? "Saving…" : "Save"}
       </button>
@@ -1448,6 +1547,13 @@
     overflow-y: auto;
   }
 
+  .panel-form {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
   h1 {
     margin: 0 0 14px;
     font-size: 19px;
@@ -1494,6 +1600,17 @@
   .name {
     font-weight: 560;
   }
+
+  .startup-state {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 10px;
+  }
+
+  .startup-status { font-size: 12.5px; font-weight: 600; }
+
+  .startup-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
   .hint {
     margin: 0;

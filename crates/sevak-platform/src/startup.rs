@@ -2,12 +2,19 @@
 //!
 //! Settings and the installer use the same transaction: change the OS entry,
 //! persist the preference, and restore the previous entry if either step fails.
-//! Routine synchronization refreshes moved executables but respects an entry
-//! disabled through Windows Startup Apps, macOS launchctl, or Linux autostart.
+//! Routine synchronization points an entry at the running executable when it
+//! has moved, but respects an entry disabled through Windows Startup Apps,
+//! macOS launchctl, or Linux autostart: a disabled entry gets the new path
+//! and stays disabled.
+//!
+//! Transactions in one process are serialized, so a rollback can never
+//! overwrite a newer change made by another thread. Separate processes (the
+//! installer's `--set-startup`) are not coordinated with a running Sevak.
 
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use sevak_core::bounded_read::{read_to_string_capped, MAX_CONFIG_BYTES};
 use sevak_core::config::{Config, DEFAULT_CONFIG_TOML};
@@ -24,6 +31,18 @@ pub struct Status {
     /// An entry exists, even if the OS has disabled it.
     pub registered: bool,
     pub enabled: bool,
+    /// The entry starts a different executable, such as a portable or
+    /// development copy of Sevak. Explicit repair points it at this copy.
+    pub other_copy: bool,
+}
+
+/// Held for a whole snapshot, change, persist and rollback sequence.
+static TRANSACTION: Mutex<()> = Mutex::new(());
+
+fn transaction() -> MutexGuard<'static, ()> {
+    // A panic inside an earlier transaction leaves nothing to protect: every
+    // transaction starts from a fresh OS snapshot.
+    TRANSACTION.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 /// Injectable boundary: integration tests use an isolated backend and never
@@ -48,6 +67,7 @@ pub fn status(backend: &impl Backend) -> Result<Status, String> {
 }
 
 pub fn refresh(backend: &impl Backend) -> Result<(), String> {
+    let _transaction = transaction();
     let before = backend.snapshot()?;
     if !backend.status(&before)?.registered {
         return Ok(());
@@ -73,14 +93,72 @@ pub fn save_settings<B: Backend>(
     }
 }
 
+/// The preference saved on disk, which the installer and `--set-startup` may
+/// change while Sevak runs. A missing file means the default (off).
+pub fn saved_preference(config_file: &Path) -> Result<bool, String> {
+    let text = match read_to_string_capped(config_file, MAX_CONFIG_BYTES) {
+        Ok(text) => text,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => DEFAULT_CONFIG_TOML.to_owned(),
+        Err(error) => return Err(format!("Cannot read the saved startup preference: {error}")),
+    };
+    Config::from_toml_str(&text)
+        .map(|config| config.general.launch_at_login)
+        .map_err(|error| format!("Invalid saved settings: {error}"))
+}
+
+/// `(previous, wanted)` for a Settings save. Settings sends the whole form,
+/// including a startup switch it loaded before an outside change. A switch
+/// the user left alone keeps what is saved now, so a stale form never undoes
+/// an installer or CLI opt-out; a moved switch is compared with the saved value.
+pub fn settings_preference(loaded: bool, draft: bool, saved: Option<bool>) -> (bool, bool) {
+    match saved {
+        Some(saved) if draft == loaded => (saved, saved),
+        Some(saved) => (saved, draft),
+        None => (loaded, draft),
+    }
+}
+
+/// Explicit repair from Settings. Keep the saved opt-in and every other byte
+/// of the user's configuration unchanged; a draft is never supplied here.
+/// The second read detects an external settings change during registration
+/// and rolls the OS change back instead of overriding a newly withdrawn opt-in.
+pub fn repair(config_file: &Path, backend: &impl Backend) -> Result<Status, String> {
+    let existing = read_to_string_capped(config_file, MAX_CONFIG_BYTES)
+        .map_err(|error| format!("Cannot read the saved startup preference: {error}"))?;
+    let config = Config::from_toml_str(&existing)
+        .map_err(|error| format!("Cannot repair startup with invalid saved settings: {error}"))?;
+    if !config.general.launch_at_login {
+        return Err(
+            "Turn on Start Sevak when I sign in and save it before repairing startup.".to_owned(),
+        );
+    }
+    update(backend, true, true, || {
+        let current = read_to_string_capped(config_file, MAX_CONFIG_BYTES)
+            .map_err(|error| format!("Cannot verify the saved startup preference: {error}"))?;
+        if current != existing {
+            return Err("Saved settings changed during startup repair. Check your startup preference and try again.".to_owned());
+        }
+        Ok(())
+    })?;
+    // update verified both properties before its commit step. Do not perform
+    // another fallible OS read after that transaction has succeeded.
+    Ok(Status {
+        registered: true,
+        enabled: true,
+        other_copy: false,
+    })
+}
+
 /// Change startup and then commit a settings write. A failed OS operation is
-/// also rolled back because it may have partially changed an entry.
+/// also rolled back because it may have partially changed an entry. `persist`
+/// runs inside the transaction and must not start another one.
 pub fn update<B: Backend>(
     backend: &B,
     wanted: bool,
     explicit: bool,
     persist: impl FnOnce() -> Result<(), String>,
 ) -> Result<(), String> {
+    let _transaction = transaction();
     let before = backend.snapshot()?;
     let state = backend.status(&before)?;
     let change = if wanted {
@@ -88,6 +166,14 @@ pub fn update<B: Backend>(
     } else {
         state.registered
     };
+    // Disabled outside Sevak: keep it disabled, but make a later OS re-enable
+    // start this executable instead of a moved or removed one.
+    let retarget = !change && wanted && state.other_copy;
+    if retarget {
+        if let Err(error) = backend.refresh_target(&before) {
+            return Err(rollback_error(backend, &before, error));
+        }
+    }
     if change {
         let result = backend.set_enabled(wanted, explicit).and_then(|()| {
             let actual = status(backend)?;
@@ -102,7 +188,7 @@ pub fn update<B: Backend>(
         }
     }
     if let Err(error) = persist() {
-        return Err(if change {
+        return Err(if change || retarget {
             rollback_error(backend, &before, error)
         } else {
             error

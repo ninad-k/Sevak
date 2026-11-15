@@ -326,7 +326,8 @@ Every network request Sevak itself makes is in this list:
   its SHA-256 matches the one in the list.
 - **Workflow gallery.** Only when you press **Load gallery** (Settings →
   Gallery): one request for `gallery/index.json` from
-  `raw.githubusercontent.com`. **Install** on an entry downloads that one
+  `raw.githubusercontent.com`, plus the signed advisory JSON and signature
+  described below. **Install** on an entry downloads that one
   package, checked against the checksum in the index before anything is
   written, and an installed folder still has to be allowed before it runs.
 
@@ -336,7 +337,16 @@ Every network request Sevak itself makes is in this list:
   Sevak's repository at the tag of your Sevak version. **Install** downloads
   that one package, checked against its checksum, and anything that can run
   code still has to be allowed first. The list is saved locally so the page
-  works offline.
+  works offline. Loading or refreshing also checks the signed advisories below.
+
+- **Extension advisories.** Explicit gallery/list loads, refreshes, and
+  **Check extension advisories** request `extension-revocations.json` and its
+  `.sig` from the GitHub release channel `extension-advisories`. The exact bytes
+  are verified with the embedded updater public key and cached locally. Known
+  revoked versions cannot be installed; matching installed copies show a warning
+  and an Uninstall action. Missing, expired or failed checks show unknown status,
+  while earlier authenticated notices remain effective. Nothing is checked at
+  startup or in the background, and nothing is automatically removed.
 
 All the galleries send nothing but the request itself (no cookies or identifiers
 beyond a `Sevak/<version> (gallery)` user agent). Script plugins and workflows

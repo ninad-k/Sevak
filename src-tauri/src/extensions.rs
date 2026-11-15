@@ -6,10 +6,12 @@
 //! after a change (which makes it ask about a new extension) and opening the
 //! page from the launcher.
 //!
-//! Nothing here touches the network on its own: `extensions_refresh` runs when
-//! the user presses the page's button, and an install, update or removal only
-//! when they choose one. Opening the page reads local files (what is installed,
-//! and the list saved by an earlier load).
+//! Nothing here touches the network on its own: `extensions_refresh` (the
+//! signed extension advisories and their signature, then the package and theme
+//! lists) runs when the user presses Load / Refresh the list or Check extension
+//! advisories, and an install, update or removal only when they choose one.
+//! Opening the page reads local files (what is installed, and the list saved by
+//! an earlier load).
 
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -18,7 +20,7 @@ use sevak_core::config::Config;
 use sevak_platform::AppPaths;
 use sevak_plugins::extensions::{
     CatalogView, ExtensionStore, ExtensionsHost, Hooks, InstalledItem, ItemKind, Outcome, Report,
-    StoreDirs,
+    StoreDirs, UnrecordedCopy,
 };
 use sevak_plugins::keywords::KeywordOwners;
 use sevak_plugins::script::Scanned;
@@ -154,7 +156,11 @@ pub struct InstalledRow {
 
 #[derive(Serialize)]
 pub struct Overview {
+    pub advisories: sevak_plugins::extensions::revocations::Status,
     pub installed: Vec<InstalledRow>,
+    /// Copies on disk without a receipt that a signed notice revokes in every
+    /// version; the page says where they are so the user can remove them.
+    pub unrecorded: Vec<UnrecordedCopy>,
     /// The list loaded earlier (this session or saved by a previous one), if any.
     pub catalog: Option<CatalogView>,
     /// `<os>-<arch>`, the build a native extension needs.
@@ -262,7 +268,9 @@ fn overview(app: &AppHandle) -> Overview {
     // The list in memory, or the one saved by an earlier load. Local files only.
     let catalog = store.current_view().or_else(|| store.load_cached());
     Overview {
+        advisories: store.advisory_status(),
         installed: rows(app),
+        unrecorded: store.unrecorded_revoked(),
         catalog,
         platform: sevak_plugins::script::current_platform(),
         plugins_folder: state.paths.config_dir.join("plugins").display().to_string(),
@@ -283,9 +291,12 @@ pub async fn extensions_overview(app: AppHandle) -> Result<Overview, String> {
     blocking(move || Ok(overview(&app))).await
 }
 
-/// **The only request of the page.** Loads the gallery list: one `GET` of the
-/// package index and one of the theme index, at the release of this build, from
-/// the Sevak repository, when the user presses the button. Nothing is installed.
+/// **The page's only requests**, made when the user presses Load / Refresh the
+/// list or Check extension advisories (both call this): two `GET`s of the signed
+/// extension advisories (`extension-revocations.json` and its `.sig`, from the
+/// Sevak repository's `extension-advisories` release), then one of the package
+/// index and one of the theme index at the release of this build. Four requests
+/// in all; nothing is installed.
 #[tauri::command]
 pub async fn extensions_refresh(app: AppHandle) -> Result<Overview, String> {
     blocking(move || {
