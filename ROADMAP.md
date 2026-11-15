@@ -44,6 +44,13 @@ does not mean a release containing it is published yet.
   language setting that follows the OS by default
   ([Localisation](docs/localisation.md)). The non-English text is machine-drafted
   and awaits review by native speakers; plugin results stay in English
+- File search filters (`ext:`, `type:`, `size:`, `modified:`, `created:`,
+  `in:`, `is:`, negation and quoted phrases) ([File search](docs/features/files.md))
+- World clock and time-zone converter, password and passphrase generator,
+  SSH hosts from `~/.ssh/config`, recent VS Code and JetBrains projects, and
+  events from local `.ics` calendar files, all offline
+- End-to-end UI tests that drive the real app (Windows and Linux) and startup
+  checks against the real OS startup store on Windows, macOS and Linux in CI
 
 ## Next (planned, awaiting resources)
 
@@ -59,7 +66,6 @@ does not mean a release containing it is published yet.
 
 - Alfred Remote-style phone companion app (not actively planned)
 - Music library browsing and filtering
-- Richer file search filters
 - More community gallery themes, workflows, plugins and extensions (the initial
   marketplace, gallery packages, submission and review process exist; see
   [Publishing to the gallery](docs/marketplace/publishing.md))

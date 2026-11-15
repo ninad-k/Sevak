@@ -49,7 +49,7 @@
     "copyright": "Copyright © 2026 Ninad Kulkarni. Licensed under the Apache License 2.0.",
     "category": "Utility",
     "shortDescription": "Keyboard-first quick launcher",
-    "longDescription": "Sevak is a keyboard-first quick launcher. Press a hotkey, type, and launch apps, do quick math, search the web, or find files. Results are ranked by how often and how recently you use them, and built-in plugins are configured from a single TOML file.",
+    "longDescription": "Sevak is a keyboard-first quick launcher. Press a hotkey, type, and launch apps, do quick math, search the web, or find files with filters such as ext:pdf or modified:7d. It also shows world clocks, generates passwords, connects to SSH hosts, reopens recent editor projects and lists events from local calendar files. Results are ranked by how often and how recently you use them, the interface is available in several languages, and built-in plugins are configured from a single TOML file.",
     "homepage": "https://github.com/ninad-k/Sevak",
     "license": "Apache-2.0",
     "licenseFile": "../LICENSE",
