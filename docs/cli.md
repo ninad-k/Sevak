@@ -96,6 +96,10 @@ registration or save error fails the command and preserves the previous state.
 Use the helper from the account that should start Sevak; a machine-wide install
 does not make the opt-in apply to all users.
 
+In the app, **Settings → General → Enable again / Repair startup** repairs an
+inactive saved opt-in without changing the configuration file or saving other
+draft edits. See [startup status and repair](settings.md#start-sevak-when-i-sign-in).
+
 `--startup-status` reports the OS entry's state through its exit code (`0` on,
 `1` off, `2` error). `--remove-startup` is an installer cleanup command: it removes
 only the startup entry owned by this executable, so uninstalling a different
