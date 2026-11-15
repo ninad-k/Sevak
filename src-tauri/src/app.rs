@@ -12,8 +12,20 @@ use crate::state::AppState;
 use crate::{
     ai, autostart, backdrop, backup, commands, diagnostics, direct, expansion, extensions,
     file_buffer, hotkey, icons, search, selection, settings, takeover, themes, tray, updater,
-    window, workflows,
+    webview_args, window, workflows,
 };
+
+/// The generated context, with the windows from `tauri.conf.json` given the
+/// same WebView2 arguments as the windows Sevak opens itself.
+fn context() -> tauri::Context<tauri::Wry> {
+    let mut context = tauri::generate_context!();
+    if let Some(args) = webview_args::from_env() {
+        for window in &mut context.config_mut().app.windows {
+            window.additional_browser_args = Some(args.clone());
+        }
+    }
+    context
+}
 
 pub fn run(
     paths: AppPaths,
@@ -173,7 +185,7 @@ pub fn run(
             }
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(context())
         .context("failed to build the application")?
         .run(|_app, event| {
             // Sevak stays resident: only an explicit `exit(code)` quits.
