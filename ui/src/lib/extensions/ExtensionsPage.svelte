@@ -256,6 +256,7 @@
             {catalog.items.length} items
             {#if catalog.from_cache}· saved {ago(catalog.fetched_at)}{:else}· loaded {ago(catalog.fetched_at)}{/if}
             from <code class="wf-code">{hostOf(catalog.source)}</code>
+            {#if catalog.index_signature === "verified"}· <span title="The list's release signature was checked with Sevak's release key before it was read.">Signed index</span>{/if}
             {#if catalog.skipped > 0}· {catalog.skipped} left out (this Sevak does not understand them){/if}
           </span>
         {:else}

@@ -164,6 +164,14 @@ describe("before a list is loaded", () => {
     expect((await screen.findByRole("alert")).textContent).toContain("Showing the list saved 3 days ago");
     expect(screen.getByText("Docs search")).toBeTruthy();
   });
+
+  it("notes a signed index only when the release signature was verified", async () => {
+    await show(overview({ catalog: catalog([DOCS], { index_signature: "verified" }) }));
+    expect(screen.getByText("Signed index")).toBeTruthy();
+    cleanup();
+    await show(overview({ catalog: catalog([DOCS], { index_signature: "legacy_unsigned" }) }));
+    expect(screen.queryByText("Signed index")).toBeNull();
+  });
 });
 
 describe("browsing", () => {

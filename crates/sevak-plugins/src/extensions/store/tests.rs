@@ -135,7 +135,9 @@ fn loading_the_catalog_reads_both_lists_from_the_builds_release() {
         [
             revocations::SOURCE.to_owned(),
             url("gallery/index.json"),
-            url("gallery/themes.json")
+            sig_url("index.json"),
+            url("gallery/themes.json"),
+            sig_url("themes.json"),
         ]
     );
     assert_eq!(view.source, url("gallery/index.json"));
@@ -302,8 +304,8 @@ fn only_catalog_ids_can_be_installed() {
     }
     assert_eq!(
         world.net.asked().len(),
-        3,
-        "naming something outside the list requests nothing"
+        5,
+        "naming something outside the list requests nothing (the advisories, two lists, two signatures)"
     );
 }
 

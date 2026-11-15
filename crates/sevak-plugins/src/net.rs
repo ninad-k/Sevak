@@ -8,7 +8,9 @@
 //! requested, as the first request and at every redirect: the Sevak
 //! repository's raw files and release downloads, nothing else. The indexes are
 //! read from the tag of the running build ([`fetch_pinned`]), so a later change
-//! on `main` cannot alter what a shipped build installs.
+//! on `main` cannot alter what a shipped build installs, and each index is
+//! checked against the release's signature before it is parsed
+//! ([`crate::index_signature`]).
 //!
 //! The README's "Privacy and updates" lists every request Sevak makes; a new
 //! caller of [`fetch_https`] belongs there.
@@ -19,6 +21,8 @@ use std::time::Duration;
 
 use sevak_core::gallery_source::{self, Pin};
 use url::Url;
+
+use crate::index_signature::{self, IndexSignature};
 
 pub use sevak_core::checksum::{sha256_hex, verify_sha256};
 
@@ -172,6 +176,11 @@ pub struct Pinned {
     /// Set when the index is not from this build's own release: what happened,
     /// in words for the user.
     pub note: Option<String>,
+    /// The release's signature of `body` as downloaded (`None`: the release,
+    /// published before lists were signed, has none).
+    pub signature: Option<Vec<u8>>,
+    /// What the signature check found; a list that failed it is never returned.
+    pub status: IndexSignature,
 }
 
 /// Fetches `gallery/<file>` from the tag of the running build (`build`, from
@@ -182,6 +191,10 @@ pub struct Pinned {
 /// used instead and [`Pinned::note`] says so. The fallback is taken only when
 /// the tag is missing (404) or the build has none; a network failure is
 /// reported as it is, never answered with different content.
+///
+/// Whichever release is read, its signature (`<file>.sig` among the release's
+/// assets) is downloaded and checked against the exact bytes before they are
+/// returned ([`crate::index_signature::verify`]); a list that fails is an error.
 pub fn fetch_pinned(
     transport: &dyn Transport,
     build: Option<&Pin>,
@@ -191,13 +204,7 @@ pub fn fetch_pinned(
     let version = env!("CARGO_PKG_VERSION");
     if let Some(pin) = build {
         match transport.get(&pin.index_url(file), max_bytes) {
-            Ok(body) => {
-                return Ok(Pinned {
-                    pin: pin.clone(),
-                    body,
-                    note: None,
-                });
-            }
+            Ok(body) => return signed(transport, pin.clone(), file, body, None),
             Err(FetchError::NotFound) => {}
             Err(err) => return Err(format!("Could not load the gallery: {err}.")),
         }
@@ -234,10 +241,24 @@ pub fn fetch_pinned(
         "{why}, so the gallery of the latest release ({}) is shown. Its files are not from this build.",
         latest.tag()
     );
+    signed(transport, latest, file, body, Some(note))
+}
+
+fn signed(
+    transport: &dyn Transport,
+    pin: Pin,
+    file: &str,
+    body: Vec<u8>,
+    note: Option<String>,
+) -> Result<Pinned, String> {
+    let checked = index_signature::check_download(transport, &pin, file, body)
+        .map_err(|err| format!("Could not load the gallery: {err}."))?;
     Ok(Pinned {
-        pin: latest,
-        body,
-        note: Some(note),
+        pin,
+        body: checked.body,
+        note,
+        signature: checked.signature,
+        status: checked.status,
     })
 }
 
@@ -324,6 +345,7 @@ mod tests {
     }
 
     const RAW: &str = "https://raw.githubusercontent.com/ninad-k/Sevak";
+    const RELEASES: &str = "https://github.com/ninad-k/Sevak/releases/download";
 
     fn pin(tag: &str) -> Pin {
         Pin::new(tag).unwrap()
@@ -337,7 +359,11 @@ mod tests {
         assert_eq!(got.pin.tag(), "v1.2.3");
         assert_eq!(got.body, b"{}");
         assert_eq!(got.note, None);
-        assert_eq!(*fake.asked.borrow(), [url], "main is never asked for");
+        assert_eq!(
+            *fake.asked.borrow(),
+            [url, format!("{RELEASES}/v1.2.3/index.json.sig")],
+            "main is never asked for; the signature comes from the same release"
+        );
     }
 
     #[test]
@@ -353,7 +379,12 @@ mod tests {
         let note = got.note.unwrap();
         assert!(note.contains("v9.9.9") && note.contains("v1.4.0"), "{note}");
         assert!(note.contains("latest release"), "{note}");
-        assert_eq!(fake.asked.borrow().len(), 2);
+        assert_eq!(
+            fake.asked.borrow().last().unwrap(),
+            &format!("{RELEASES}/v1.4.0/index.json.sig"),
+            "the latest release's list is checked against that release's signature"
+        );
+        assert_eq!(fake.asked.borrow().len(), 3);
     }
 
     #[test]
@@ -366,7 +397,10 @@ mod tests {
         let got = fetch_pinned(&fake, None, "themes.json", 100).unwrap();
         assert_eq!(got.pin.tag(), "v1.4.0");
         assert!(got.note.unwrap().contains("not a released version"));
-        assert_eq!(*fake.asked.borrow(), [latest]);
+        assert_eq!(
+            *fake.asked.borrow(),
+            [latest, format!("{RELEASES}/v1.4.0/themes.json.sig")]
+        );
     }
 
     #[test]

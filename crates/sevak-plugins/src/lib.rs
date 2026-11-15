@@ -53,6 +53,7 @@ pub mod example_uuid;
 pub mod extensions;
 pub mod file_buffer;
 pub mod files;
+pub mod index_signature;
 pub mod keywords;
 mod live;
 pub mod media;

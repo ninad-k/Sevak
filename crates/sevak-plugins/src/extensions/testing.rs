@@ -21,6 +21,11 @@ pub(crate) fn url(path: &str) -> String {
     format!("{RAW}{path}")
 }
 
+/// Where the release publishes the signature of `gallery/<file>`.
+pub(crate) fn sig_url(file: &str) -> String {
+    format!("https://github.com/ninad-k/Sevak/releases/download/v1.2.3/{file}.sig")
+}
+
 type DownloadHook = Arc<dyn Fn(&str) + Send + Sync>;
 
 /// A network that serves canned files and records what was asked for.

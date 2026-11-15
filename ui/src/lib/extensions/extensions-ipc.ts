@@ -68,6 +68,8 @@ export interface Catalog {
   fetched_at: number;
   /** Read from the file saved by an earlier load, not just now. */
   from_cache: boolean;
+  /** The release signature check: `legacy_unsigned` for a release from before lists were signed. */
+  index_signature?: "verified" | "legacy_unsigned";
   items: CatalogItem[];
 }
 
