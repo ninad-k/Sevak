@@ -44,7 +44,7 @@
   import { displayAccelerator } from "./lib/accelerator";
   import { applyAppearance } from "./lib/appearance";
   import { applyTheme } from "./lib/theme";
-  import { LANGUAGES, formatList, formatNumber, resolveLanguage, setLanguage, t, tHtml } from "./lib/i18n.svelte";
+  import { LANGUAGES, currentLanguage, formatList, formatNumber, resolveLanguage, setLanguage, t, tHtml } from "./lib/i18n.svelte";
   import {
     MAX_DEPTH,
     MAX_WIDTH,
@@ -685,7 +685,7 @@
               <div class="label">
                 <label class="name" for="language">{t("language.label")}</label>
                 <span class="hint">{t("language.hint")}</span>
-                {#if draft.general.language !== "en"}
+                {#if currentLanguage() !== "en"}
                   <span class="hint">{t("language.reviewNote")}</span>
                 {/if}
               </div>
