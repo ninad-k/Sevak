@@ -40,6 +40,7 @@ const GROUPS: &[(&str, &[Field])] = &[
             ("general.check_for_updates", Show::Value),
             // The beta update channel (stable or beta).
             ("general.update_channel", Show::Value),
+            ("general.language", Show::Value),
             ("window.width", Show::Value),
             ("linux.wayland_use_xwayland", Show::Value),
         ],
