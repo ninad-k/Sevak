@@ -93,6 +93,8 @@ plugins:
         - writing-extensions-in-rust.md
         - development.md
         - releasing.md
+        - publisher-signing.md
+        - installer-validation.md
         - testing.md
         - brand.md
         - security/*
@@ -161,6 +163,8 @@ nav:
           - For maintainers: marketplace/maintainers.md
       - Development: development.md
       - Releasing: releasing.md
+      - Publisher signing: publisher-signing.md
+      - Installer validation: installer-validation.md
       - Testing: testing.md
       - Name and brand: brand.md
   - Design decisions:

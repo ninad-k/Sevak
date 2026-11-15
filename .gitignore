@@ -41,3 +41,7 @@ ui/coverage/
 # (npm run marketplace); the Pages workflow builds it, it is not committed.
 /landing/marketplace/
 /landing/sitemap.xml
+
+# Extra local build folders (CARGO_TARGET_DIR=target-native...) and command logs
+/target-*/
+/*.log

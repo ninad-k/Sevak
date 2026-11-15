@@ -2,9 +2,10 @@
 //! be installed with one click.
 //!
 //! Nothing here runs by itself. The settings window asks for the index when the
-//! user presses "Load gallery" and for a package when they press "Install";
-//! those two requests are the only network use (see the README's "Privacy and
-//! updates"). Each package is checked against the SHA-256 the index lists
+//! user presses "Load gallery" (which first checks the signed extension
+//! advisories, see [`crate::extensions::revocations`]) and for a package when
+//! they press "Install"; those are the only network use (see the README's
+//! "Privacy and updates"). Each package is checked against the SHA-256 the index lists
 //! before anything is written, unpacked with strict path rules, and installed
 //! into the workflows or plugins folder as a *new, unapproved* folder: the
 //! normal Allow dialog still decides whether it may run.
@@ -143,6 +144,10 @@ pub struct Entry {
     /// answering queries (`network`, `filesystem`, ...). Not enforced.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub permissions: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deprecated: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replaced_by: Option<String>,
 }
 
 impl Entry {
@@ -219,6 +224,37 @@ pub fn parse_index(text: &str, pin: &Pin) -> Result<Index, String> {
         }
         entries.push(entry);
     }
+    // References are checked after every entry is parsed. A bad reference only
+    // loses the reference: the entry, and its deprecation notice for people
+    // who already have it installed, stay.
+    let kinds: BTreeMap<String, Kind> = entries.iter().map(|e| (e.id.clone(), e.kind)).collect();
+    for entry in &mut entries {
+        let Some(replacement) = entry.replaced_by.as_deref() else {
+            continue;
+        };
+        let problem = if entry.deprecated.is_none() {
+            Some("replaced_by needs deprecated")
+        } else if replacement == entry.id {
+            Some("an entry cannot replace itself")
+        } else {
+            match kinds.get(replacement) {
+                None => Some("the replacement is not in the valid index"),
+                // The Gallery page does not list native extensions, so a
+                // workflow or script plugin could point at nothing there.
+                Some(Kind::Native) if entry.kind != Kind::Native => {
+                    Some("a native extension cannot replace a workflow or script plugin")
+                }
+                Some(_) => None,
+            }
+        };
+        if let Some(problem) = problem {
+            skipped.push(format!(
+                "{}: {problem}; kept without its replacement",
+                entry.id
+            ));
+            entry.replaced_by = None;
+        }
+    }
     Ok(Index {
         name: raw.name,
         source: pin.index_url(INDEX_FILE),
@@ -248,6 +284,15 @@ fn clean_tags(tags: &mut Vec<String>) {
 }
 
 fn check_entry(entry: &mut Entry, pin: &Pin) -> Result<(), String> {
+    if entry.deprecated.as_ref().is_some_and(|reason| {
+        reason.trim().is_empty()
+            || reason != reason.trim()
+            || reason.chars().count() > 200
+            || reason.chars().any(char::is_control)
+    }) {
+        return Err("deprecated must be a plain reason of 1 to 200 characters".into());
+    }
+    // `replaced_by` is checked in `parse_index`, against the whole index.
     let valid_id = |id: &str| {
         !id.is_empty()
             && id.len() <= 48
@@ -401,6 +446,11 @@ const NATIVE_ELSEWHERE: &str =
 
 /// Downloads `entry` and installs it (see [`install_bytes`]).
 pub fn install(entry: &Entry, dirs: &Dirs<'_>) -> Result<Installed, String> {
+    if let Some(reason) = &entry.deprecated {
+        return Err(format!(
+            "This entry is deprecated and is not offered for new installs: {reason}"
+        ));
+    }
     if entry.kind == Kind::Native {
         return Err(NATIVE_ELSEWHERE.to_owned());
     }
@@ -436,6 +486,9 @@ pub fn install_bytes_as(
     mode: Mode,
     before_swap: &dyn Fn(),
 ) -> Result<Installed, String> {
+    if mode == Mode::New && entry.deprecated.is_some() {
+        return Err("Deprecated entries are not offered for new installs.".into());
+    }
     if entry.kind == Kind::Native {
         return Err(NATIVE_ELSEWHERE.to_owned());
     }
@@ -778,6 +831,8 @@ mod tests {
             repository: None,
             min_sevak: None,
             permissions: Vec::new(),
+            deprecated: None,
+            replaced_by: None,
         }
     }
 
@@ -854,20 +909,82 @@ mod tests {
         assert!(index.skipped.iter().any(|s| s.starts_with("future")));
     }
 
-    /// Fields this build does not know (the optional `deprecated` and
-    /// `replaced_by` of docs/marketplace/updating-and-removal.md) must not cost
-    /// an entry its place: the index format stays 2 and older builds keep working.
+    /// Future fields remain forwards compatible; lifecycle fields are validated.
     #[test]
     fn fields_this_build_does_not_know_are_ignored() {
         let mut entry = good_entry("old-tool");
         entry["deprecated"] = serde_json::json!("Superseded by new-tool.");
         entry["replaced_by"] = serde_json::json!("new-tool");
         entry["some_future_field"] = serde_json::json!({"nested": [1, 2, 3]});
-        let text = serde_json::json!({"format": 2, "entries": [entry]}).to_string();
+        let text = serde_json::json!({"format": 2, "entries": [entry, good_entry("new-tool")]})
+            .to_string();
         let index = parse_index(&text, &pin()).unwrap();
         assert!(index.skipped.is_empty(), "{:?}", index.skipped);
-        assert_eq!(index.entries.len(), 1);
+        assert_eq!(index.entries.len(), 2);
         assert_eq!(index.entries[0].id, "old-tool");
+        assert_eq!(
+            index.entries[0].deprecated.as_deref(),
+            Some("Superseded by new-tool.")
+        );
+        assert_eq!(index.entries[0].replaced_by.as_deref(), Some("new-tool"));
+    }
+
+    #[test]
+    fn an_invalid_deprecation_reason_skips_the_entry() {
+        for reason in ["", " with spaces", "bad\ntext"] {
+            let mut entry = good_entry("old-tool");
+            entry["deprecated"] = serde_json::json!(reason);
+            entry["replaced_by"] = serde_json::json!("new-tool");
+            let text = serde_json::json!({"format": 2, "entries": [entry, good_entry("new-tool")]});
+            let index = parse_index(&text.to_string(), &pin()).unwrap();
+            assert_eq!(index.entries.len(), 1, "{reason:?}");
+            assert_eq!(index.entries[0].id, "new-tool");
+            assert_eq!(index.skipped.len(), 1);
+        }
+    }
+
+    /// Installed users must still see the deprecation when only the
+    /// replacement reference is wrong.
+    #[test]
+    fn a_bad_replacement_keeps_the_deprecated_entry_without_it() {
+        let native = serde_json::json!({
+            "id": "native-tool", "kind": "native", "name": "N", "version": "1.0.0",
+            "author": "a", "license": "MIT", "repository": "https://github.com/x/y",
+            "platforms": {"linux-x86_64": {
+                "source": "gallery/extensions/n.sevakext", "sha256": "b".repeat(64)}}
+        });
+        for (deprecated, replacement) in [
+            (Some("old"), "old-tool"),
+            (Some("old"), "missing"),
+            (Some("old"), "../new-tool"),
+            (Some("old"), "native-tool"),
+            (None, "new-tool"),
+        ] {
+            let mut entry = good_entry("old-tool");
+            if let Some(reason) = deprecated {
+                entry["deprecated"] = serde_json::json!(reason);
+            }
+            entry["replaced_by"] = serde_json::json!(replacement);
+            let text = serde_json::json!({"format": 2,
+                "entries": [entry, good_entry("new-tool"), native.clone()]});
+            let index = parse_index(&text.to_string(), &pin()).unwrap();
+            assert_eq!(index.entries.len(), 3, "{replacement}: {:?}", index.skipped);
+            let old = &index.entries[0];
+            assert_eq!(old.id, "old-tool");
+            assert_eq!(old.deprecated.as_deref(), deprecated);
+            assert_eq!(old.replaced_by, None, "{replacement}");
+            assert_eq!(index.skipped.len(), 1, "{replacement}");
+            assert!(index.skipped[0].contains("kept without its replacement"));
+        }
+        // A native extension may name another native one (both are in Extensions).
+        let mut native_old = native.clone();
+        native_old["id"] = serde_json::json!("native-old");
+        native_old["deprecated"] = serde_json::json!("old");
+        native_old["replaced_by"] = serde_json::json!("native-tool");
+        let text = serde_json::json!({"format": 2, "entries": [native_old, native]});
+        let index = parse_index(&text.to_string(), &pin()).unwrap();
+        assert!(index.skipped.is_empty(), "{:?}", index.skipped);
+        assert_eq!(index.entries[0].replaced_by.as_deref(), Some("native-tool"));
     }
 
     #[test]

@@ -1,23 +1,34 @@
 # Read-only integration checks against the compiled MSI. No installation,
 # registry mutation, app launch, or change to the user's Sevak configuration.
 # Run after `npm run tauri -- build --bundles nsis,msi` on Windows.
-param([string] $MsiPath)
+# Path parameters accept one wildcard pattern each (quote it, so the shell does
+# not expand it); a pattern must match exactly one file. Positional binding is
+# off so an unquoted glob that expanded to several files cannot spill into the
+# next parameter.
+[CmdletBinding(PositionalBinding=$false)]
+param(
+    [string] $MsiPath,
+    [string] $NsisPath,
+    [string] $BinaryPath,
+    [string] $ExpectedVersion,
+    [string] $ExpectedMsiVersion,
+    [string] $ReportPath = (Join-Path $PSScriptRoot '../target/installer-validation/artifacts.json')
+)
 $ErrorActionPreference = 'Stop'
-if (-not $MsiPath) {
-    $candidates = @(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot '../target/release/bundle/msi') -Filter '*.msi')
-    if ($candidates.Count -ne 1) { throw 'Build exactly one MSI, or supply -MsiPath.' }
-    $MsiPath = $candidates[0].FullName
-}
-$MsiPath = (Resolve-Path -LiteralPath $MsiPath).Path
-$installer = New-Object -ComObject WindowsInstaller.Installer
-$installer.UILevel = 2 # no installer UI while opening a read-only test session
-$database = $installer.OpenDatabase($MsiPath, 0)
-# IgnoreMachineState avoids depending on which Sevak version is installed.
-# Opening a package creates a session but does NOT run installation actions.
-$session = $installer.OpenPackage($MsiPath, 1)
+. (Join-Path $PSScriptRoot 'windows-installer-test-lib.ps1')
+$report = New-SevakValidationReport 'windows-installer-artifacts' 'read-only'
+$installer = $null; $database = $null; $session = $null
 $script:checks = 0
+$script:checkIds = @{}
+$failure = $null
 
-function Assert-That([bool] $condition, [string] $message) {
+# Same report schema as the VM suite: each check has an `id` and a `status`;
+# failures add `error`. The id comes from the stable description, never from
+# evaluated values, so it is the same whether the check passes or fails.
+function Assert-That([bool] $condition, [string] $message, [string] $Id = $message) {
+    $check = [ordered]@{id=(ConvertTo-SevakCheckId $Id $script:checkIds); status=$(if ($condition) {'passed'} else {'failed'})}
+    if (-not $condition) { $check.error = $message }
+    $report.checks.Add($check)
     if (-not $condition) { throw $message }
     $script:checks++
 }
@@ -47,13 +58,38 @@ function Check-Condition([string] $condition, [hashtable] $properties, [bool] $e
     foreach ($key in $properties.Keys) { $values[$key] = $properties[$key] }
     foreach ($key in $values.Keys) { $session.Property($key) = $values[$key] }
     $actual = $session.EvaluateCondition($condition)
-    Assert-That ($actual -eq [int]$expected) "$description (condition returned $actual): $condition"
+    Assert-That ($actual -eq [int]$expected) "$description (condition returned $actual): $condition" $description
 }
 
 try {
+    if (-not $MsiPath) {
+        $candidates = @(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot '../target/release/bundle/msi') -Filter '*.msi')
+        if ($candidates.Count -ne 1) { throw 'Build exactly one MSI, or supply -MsiPath.' }
+        $MsiPath = $candidates[0].FullName
+    }
+    $MsiPath = Resolve-SevakSinglePath $MsiPath 'MsiPath'
+    $report.artifacts += Get-SevakArtifact $MsiPath
+    foreach ($pair in @(@('nsis', $NsisPath, 'NsisPath'), @('binary', $BinaryPath, 'BinaryPath'))) {
+        if ($pair[1]) {
+            $artifact = Get-SevakArtifact (Resolve-SevakSinglePath $pair[1] $pair[2])
+            $report.artifacts += $artifact
+            Assert-That ($artifact.ProductName -eq 'Sevak') "$($pair[0]) identifies itself as Sevak."
+            if ($ExpectedVersion) {
+                Assert-That ($artifact.ProductVersion -eq $ExpectedVersion) "$($pair[0]) embeds expected version $ExpectedVersion."
+            }
+        } else {
+            $report.checks.Add(@{id="$($pair[0])-identity"; status='not_run'; reason='Artifact path not supplied.'})
+        }
+    }
+    $installer = New-Object -ComObject WindowsInstaller.Installer
+    $installer.UILevel = 2
+    $database = $installer.OpenDatabase($MsiPath, 0)
+    # IgnoreMachineState creates a read-only package session without running installation actions.
+    $session = $installer.OpenPackage($MsiPath, 1)
     $properties = @{}
     foreach ($row in (Read-Rows 'SELECT `Property`, `Value` FROM `Property`' 2)) { $properties[$row[0]] = $row[1] }
     Assert-That ($properties.ProductName -eq 'Sevak') 'Product must register as Sevak in Installed apps.'
+    if ($ExpectedMsiVersion) { Assert-That ($properties.ProductVersion -eq $ExpectedMsiVersion) "MSI embeds expected numeric version $ExpectedMsiVersion." }
     Assert-That ($properties.UpgradeCode -eq '{16B13FDE-6FA0-4BF2-836A-9AF38755BFEC}') 'MSI upgrade identity changed.'
     Assert-That (-not $properties.ContainsKey('SEVAK_STARTUP_CHECKED')) 'Fresh installs must not opt into startup by default.'
     Assert-That (-not $properties.ContainsKey('SEVAK_AUTOSTART')) 'Silent installs must preserve the preference by default.'
@@ -123,9 +159,20 @@ try {
     $cleanup = Condition-For 'SevakRemoveStartup' 'InstallExecuteSequence'
     Check-Condition $cleanup @{REMOVE='ALL'} $true 'Uninstall removes owned startup registration'
     Check-Condition $cleanup @{REMOVE='ALL'; UPGRADINGPRODUCTCODE='old'} $false 'Upgrade removal preserves startup'
-    Write-Output "PASS: $script:checks compiled MSI integration checks (no installation performed)."
+    $report.automaticStatus = 'passed'
+    Write-Output "PASS: $script:checks read-only artifact checks (no installation, restart, or UAC test performed). Report: $ReportPath"
+} catch {
+    $failure = $_
+    $report.automaticStatus = 'failed'
+    $report.errors += $_.Exception.Message
+    throw
 } finally {
-    [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($session)
-    [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($database)
-    [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($installer)
+    foreach ($obj in @($session, $database, $installer)) { if ($obj) { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($obj) } }
+    # A report that cannot be written must not replace the inspection failure
+    # being propagated; on an otherwise passing run it is itself the failure.
+    try { Save-SevakValidationReport $report $ReportPath }
+    catch {
+        if ($failure) { Write-Warning "Could not write the validation report ${ReportPath}: $($_.Exception.Message)" }
+        else { throw }
+    }
 }

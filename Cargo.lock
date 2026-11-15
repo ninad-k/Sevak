@@ -3996,10 +3996,12 @@ name = "sevak-plugins"
 version = "0.1.0"
 dependencies = [
  "arboard",
+ "base64 0.22.1",
  "chrono",
  "criterion",
  "flate2",
  "getrandom 0.4.3",
+ "minisign-verify",
  "miniz_oxide 0.9.1",
  "plist",
  "regex",
