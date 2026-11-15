@@ -2,10 +2,13 @@
   import { pickDirectory, pickFile, type Config } from "../settings-ipc";
   import { MAX_CACHE_MINUTES, type Problems } from "../validate";
   import Toggle from "../Toggle.svelte";
+  import ClockPasswordsSection from "./ClockPasswordsSection.svelte";
   import KeywordRow from "./KeywordRow.svelte";
+  import LocalSourcesSection from "./LocalSourcesSection.svelte";
   import ListEditor from "./ListEditor.svelte";
   import Row from "./Row.svelte";
   import type { Picker } from "./types";
+  import { t, tHtml } from "../i18n.svelte";
   import "./pages.css";
 
   let {
@@ -21,87 +24,65 @@
     pluginOff: (id: string) => boolean;
   } = $props();
 
-  const systemContacts = $derived(
-    platform === "macos"
-      ? "the Contacts app"
-      : platform === "windows"
-        ? "the Windows People store"
-        : "Evolution's local address books",
-  );
-
-  const vcardPickers: Picker[] = [
-    { label: "Add file…", run: () => pickFile("Choose a vCard file", ["vcf"]) },
-    { label: "Add folder…", run: () => pickDirectory("Choose a folder of vCard files") },
-  ];
+  const vcardPickers: Picker[] = $derived([
+    { label: t("pages.common.addFile"), run: () => pickFile(t("pages.integrations.pickVcard"), ["vcf"]) },
+    { label: t("pages.common.addFolder"), run: () => pickDirectory(t("pages.integrations.pickVcardFolder")) },
+  ]);
 </script>
 
 <div class="sp-page">
-  <h1>Integrations</h1>
-  <p class="sp-lead">
-    Search your contacts and 1Password logins, and look up words. Contacts and 1Password are off
-    until you turn them on; everything here stays on this computer.
-  </p>
+  <h1>{t("pages.integrations.title")}</h1>
+  <p class="sp-lead">{t("pages.integrations.lead")}</p>
 
-  <h2 class="sp-h2">Contacts</h2>
+  <h2 class="sp-h2">{t("pages.integrations.contactsTitle")}</h2>
   <p class="sp-sub">
-    Type <code>{config.contacts.keyword.trim() || "c"}</code> or <code>@</code> and part of a name,
-    address, number or company.
+    {@html tHtml("pages.integrations.contactsSub", { keyword: config.contacts.keyword.trim() || "c" })}
   </p>
   <div class="sp-group">
-    <Row label="Search contacts" hint="Off until you turn it on.">
-      <Toggle bind:checked={config.contacts.enabled} label="Search contacts" />
+    <Row label={t("pages.integrations.searchContacts")} hint={t("pages.common.offUntilOn")}>
+      <Toggle bind:checked={config.contacts.enabled} label={t("pages.integrations.searchContacts")} />
     </Row>
     <KeywordRow
       id="contacts-keyword"
       bind:value={config.contacts.keyword}
       error={problems.keywords["contacts.keyword"]}
-      hint="The @ keyword always works too."
+      hint={t("pages.integrations.contactsKeywordHint")}
     />
-    <Row label="Read the system address book">
-      {#snippet help()}
-        Also search {systemContacts}.
-        {#if platform === "macos"}
-          The first time you type the keyword, a row asks to allow access; until you do, only the
-          vCard files below are searched.
-        {:else if platform === "windows"}
-          If your account’s contacts are not in it, export a vCard file instead.
-        {:else}
-          Other address books: export a vCard file.
-        {/if}
-      {/snippet}
-      <Toggle bind:checked={config.contacts.use_system} label="Read the system address book" />
+    <Row
+      label={t("pages.integrations.systemContacts")}
+      hint={platform === "macos"
+        ? t("pages.integrations.systemContactsMac")
+        : platform === "windows"
+          ? t("pages.integrations.systemContactsWindows")
+          : t("pages.integrations.systemContactsLinux")}
+    >
+      <Toggle bind:checked={config.contacts.use_system} label={t("pages.integrations.systemContacts")} />
     </Row>
     <ListEditor
       id="contacts-vcards"
       bind:items={config.contacts.vcard_files}
-      label="vCard files and folders"
-      hint="Export a .vcf file from your address book, Outlook, Google Contacts or a phone. A folder adds every .vcf in it. Works everywhere without a permission."
+      label={t("pages.integrations.vcards")}
+      hint={t("pages.integrations.vcardsHint")}
       placeholder="~/contacts.vcf"
-      emptyText="None added."
+      emptyText={t("pages.common.noneAdded")}
       pickers={vcardPickers}
       mono
     />
   </div>
-  <p class="sp-note privacy">
-    <strong>Privacy:</strong> contacts are read into memory when Sevak starts and every ten minutes.
-    They are never written to disk, logged or sent anywhere, and searches here are kept out of the
-    search history.
-  </p>
+  <p class="sp-note privacy">{@html tHtml("pages.integrations.contactsPrivacy")}</p>
   {#if pluginOff("contacts")}
     <p class="sp-note warn" role="status">
-      “Contacts” is switched off under <strong>Plugins</strong>. Switch it on there as well.
+      {@html tHtml("pages.common.pluginOff", { name: t("pages.integrations.contactsPlugin") })}
     </p>
   {/if}
 
   <h2 class="sp-h2">1Password</h2>
   <p class="sp-sub">
-    Find a login by title or website: <code>{config.onepassword.keyword.trim() || "1p"} github</code>.
-    Sevak uses the official <code>op</code> command-line tool and never reads a password, a
-    one-time code or a note.
+    {@html tHtml("pages.integrations.opSub", { keyword: config.onepassword.keyword.trim() || "1p" })}
   </p>
   <div class="sp-group">
-    <Row label="Search 1Password logins" hint="Off until you turn it on.">
-      <Toggle bind:checked={config.onepassword.enabled} label="Search 1Password logins" />
+    <Row label={t("pages.integrations.searchOp")} hint={t("pages.common.offUntilOn")}>
+      <Toggle bind:checked={config.onepassword.enabled} label={t("pages.integrations.searchOp")} />
     </Row>
     <KeywordRow
       id="onepassword-keyword"
@@ -109,8 +90,8 @@
       error={problems.keywords["onepassword.keyword"]}
     />
     <Row
-      label="Path to op"
-      hint="Empty looks on PATH and in the usual install folders."
+      label={t("pages.integrations.opPath")}
+      hint={t("pages.integrations.opPathHint")}
       forId="op-path"
     >
       <input
@@ -126,14 +107,14 @@
         type="button"
         class="sp-btn"
         onclick={async () => {
-          const picked = await pickFile("Choose the 1Password CLI (op)");
+          const picked = await pickFile(t("pages.integrations.chooseOp"));
           if (picked) config.onepassword.op_path = picked;
-        }}>Browse…</button
+        }}>{t("pages.common.browse")}</button
       >
     </Row>
     <Row
-      label="Account"
-      hint="Which account to use when several are signed in: its address (my.1password.com), short name or ID. Empty uses op’s default."
+      label={t("pages.integrations.account")}
+      hint={t("pages.integrations.accountHint")}
       forId="op-account"
     >
       <input
@@ -147,8 +128,8 @@
       />
     </Row>
     <Row
-      label="Keep the list of logins"
-      hint="How long the list is kept in memory before it is refreshed. Refreshing may ask you to unlock 1Password."
+      label={t("pages.integrations.cache")}
+      hint={t("pages.integrations.cacheHint")}
       forId="op-cache"
       error={problems.cacheMinutes}
     >
@@ -163,63 +144,57 @@
         bind:value={config.onepassword.cache_minutes}
         aria-invalid={!!problems.cacheMinutes}
       />
-      <span class="sp-unit">minutes</span>
+      <span class="sp-unit">{t("pages.common.units.minutes")}</span>
     </Row>
   </div>
-  <p class="sp-note">
-    <strong>Needs the 1Password CLI:</strong> install <code>op</code> and, in the 1Password app, turn
-    on <em>Settings, Developer, Integrate with 1Password CLI</em>. <code>op</code> only runs when
-    you type the keyword followed by a space.
-  </p>
-  <p class="sp-note privacy">
-    <strong>Privacy:</strong> Sevak asks <code>op</code> for the list of logins (titles, vault
-    names, websites and usernames) and keeps it in memory only. What you search for here is kept out
-    of the search history. <code>op</code> talks to 1Password as it normally does; Sevak sends
-    nothing.
-  </p>
+  <p class="sp-note">{@html tHtml("pages.integrations.opNeedsCli")}</p>
+  <p class="sp-note privacy">{@html tHtml("pages.integrations.opPrivacy")}</p>
   {#if pluginOff("1password")}
     <p class="sp-note warn" role="status">
-      “1Password” is switched off under <strong>Plugins</strong>. Switch it on there as well.
+      {@html tHtml("pages.common.pluginOff", { name: "1Password" })}
     </p>
   {/if}
 
-  <h2 class="sp-h2">Dictionary and spelling</h2>
+  <h2 class="sp-h2">{t("pages.integrations.dictionaryTitle")}</h2>
   <p class="sp-sub">
-    Look up a word or fix its spelling, offline: <code>{config.dictionary.define_keyword.trim() || "define"} serendipity</code>,
-    <code>{config.dictionary.spell_keyword.trim() || "spell"} recieve</code>. Words you look up are not
-    saved.
+    {@html tHtml("pages.integrations.dictionarySub", {
+      define: config.dictionary.define_keyword.trim() || "define",
+      spell: config.dictionary.spell_keyword.trim() || "spell",
+    })}
   </p>
   <div class="sp-group">
     <KeywordRow
       id="define-keyword"
-      label="Definitions keyword"
+      label={t("pages.integrations.defineKeyword")}
       bind:value={config.dictionary.define_keyword}
       error={problems.keywords["dictionary.define_keyword"]}
     />
     <KeywordRow
       id="spell-keyword"
-      label="Spelling keyword"
+      label={t("pages.integrations.spellKeyword")}
       bind:value={config.dictionary.spell_keyword}
       error={problems.keywords["dictionary.spell_keyword"]}
     />
-    <Row label="Prefer the system dictionary">
+    <Row label={t("pages.integrations.preferSystem")}>
       {#snippet help()}
         {#if platform === "macos"}
-          Use the macOS Dictionary for definitions.
+          {t("pages.integrations.preferSystemMac")}
         {:else if platform === "windows"}
-          Use the Windows spell checker for spelling.
+          {t("pages.integrations.preferSystemWindows")}
         {:else}
-          Linux has no system dictionary Sevak can ask; it uses the bundled English dictionary and
-          the word lists in <code>/usr/share/hunspell</code>.
+          {@html tHtml("pages.integrations.preferSystemLinux")}
         {/if}
-        Off always uses the bundled English dictionary.
       {/snippet}
-      <Toggle bind:checked={config.dictionary.use_system} label="Prefer the system dictionary" />
+      <Toggle bind:checked={config.dictionary.use_system} label={t("pages.integrations.preferSystem")} />
     </Row>
   </div>
   {#if pluginOff("dict")}
     <p class="sp-note warn" role="status">
-      “Dictionary” is switched off under <strong>Plugins</strong>. Switch it on there as well.
+      {@html tHtml("pages.common.pluginOff", { name: t("pages.integrations.dictionaryPlugin") })}
     </p>
   {/if}
+
+  <LocalSourcesSection bind:config {problems} {pluginOff} />
+
+  <ClockPasswordsSection bind:config {problems} {pluginOff} />
 </div>

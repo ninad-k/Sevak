@@ -66,6 +66,7 @@ one you have. See [Releasing](releasing.md) for how releases move from beta to s
 
 | Page | What it asks |
 |---|---|
+| Installer language | Shown first: English, Deutsch, Español or Français (the setup offers the languages it has translations for; Sevak itself also has Hindi and follows your Windows language unless you choose one in **Settings → General**). |
 | Welcome, License | Nothing to decide: what Sevak is, and the Apache 2.0 licence. |
 | **Who is Sevak for?** | **Install for me only** (the default): no administrator permission, installs to `%LOCALAPPDATA%\Sevak`. Or **Install for all users on this PC**: Windows asks for administrator permission (UAC) and Sevak goes in `C:\Program Files\Sevak`. **Start Sevak when I sign in** is optional and applies only to the account running the wizard. |
 | **Sevak is already installed** | Only shown when Sevak is already there; see [Upgrading](#upgrading-and-reinstalling). |

@@ -87,6 +87,9 @@ pub struct Status {
     pub indexing: bool,
     /// Snippet expansion as you type: whether it is running, or why not.
     pub snippet_expansion: expansion::ExpansionStatus,
+    /// `[general] language` as configured (`auto` or a code); the frontend
+    /// resolves `auto` from the webview's languages.
+    pub language: String,
 }
 
 pub struct AppState {
@@ -189,6 +192,7 @@ impl AppState {
                 .clone(),
             indexing: self.search.is_indexing(),
             snippet_expansion: expansion::status(),
+            language: self.config().general.language,
         }
     }
 }

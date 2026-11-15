@@ -20,6 +20,7 @@
 
 .wf-lead code,
 .wf-hint code,
+.wf-sub > code,
 .wf-code {
   padding: 0 4px;
   border-radius: 4px;
@@ -62,7 +63,7 @@
 .wf-btn:focus-visible,
 .wf-input:focus-visible,
 .wf-link:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 

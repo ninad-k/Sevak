@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::io;
 
 use winreg::enums::{
@@ -15,8 +16,8 @@ pub struct Native {
 }
 
 pub struct Snapshot {
-    run: Option<RegValue>,
-    approved: Option<RegValue>,
+    run: Option<RegValue<'static>>,
+    approved: Option<RegValue<'static>>,
 }
 
 impl Native {
@@ -25,11 +26,11 @@ impl Native {
     }
 }
 
-fn read_value(key: &str) -> Result<Option<RegValue>, String> {
+fn read_value(key: &str) -> Result<Option<RegValue<'static>>, String> {
     read_value_at(&RegKey::predef(HKEY_CURRENT_USER), key)
 }
 
-fn read_value_at(root: &RegKey, key: &str) -> Result<Option<RegValue>, String> {
+fn read_value_at(root: &RegKey, key: &str) -> Result<Option<RegValue<'static>>, String> {
     match root
         .open_subkey_with_flags(key, KEY_QUERY_VALUE)
         .and_then(|key| key.get_raw_value(ENTRY_NAME))
@@ -123,7 +124,10 @@ fn check_legacy_machine_entry(command: &LaunchCommand) -> Result<(), String> {
     Ok(())
 }
 
-fn refreshed_command(value: &RegValue, command: &LaunchCommand) -> Result<RegValue, String> {
+fn refreshed_command(
+    value: &RegValue,
+    command: &LaunchCommand,
+) -> Result<RegValue<'static>, String> {
     use winreg::types::{FromRegValue, ToRegValue};
     let text = String::from_reg_value(value).map_err(|error| error.to_string())?;
     let (old_executable, suffix) = if let Some(quoted) = text.strip_prefix('"') {
@@ -142,7 +146,16 @@ fn refreshed_command(value: &RegValue, command: &LaunchCommand) -> Result<RegVal
     {
         return Err("the startup entry points to a different application; its executable was left unchanged".to_owned());
     }
-    Ok(format!("{}{suffix}", quote(&command.executable.to_string_lossy())).to_reg_value())
+    let text = format!("{}{suffix}", quote(&command.executable.to_string_lossy()));
+    Ok(owned(text.to_reg_value()))
+}
+
+/// A registry value that owns its bytes (winreg 0.56 lets one borrow them).
+fn owned(value: RegValue<'_>) -> RegValue<'static> {
+    RegValue {
+        bytes: Cow::Owned(value.bytes.into_owned()),
+        vtype: value.vtype,
+    }
 }
 
 impl Backend for Native {
@@ -160,6 +173,10 @@ impl Backend for Native {
         Ok(Status {
             registered: snapshot.run.is_some(),
             enabled: snapshot.run.is_some() && enabled_by_windows(snapshot.approved.as_ref())?,
+            other_copy: snapshot
+                .run
+                .as_ref()
+                .is_some_and(|value| !owned_by(value, &self.command)),
         })
     }
 
@@ -174,7 +191,7 @@ impl Backend for Native {
                 write_value(
                     APPROVED,
                     Some(&RegValue {
-                        bytes,
+                        bytes: bytes.into(),
                         vtype: REG_BINARY,
                     }),
                 )?;
@@ -222,7 +239,7 @@ mod tests {
             bytes[0] = state;
             assert_eq!(
                 enabled_by_windows(Some(&RegValue {
-                    bytes,
+                    bytes: bytes.into(),
                     vtype: REG_BINARY
                 }))
                 .unwrap(),
@@ -273,6 +290,38 @@ mod tests {
             &r"c:\new\sevak\sevak.exe --background".to_reg_value(),
             &command
         ));
+    }
+
+    #[test]
+    fn status_reports_an_entry_that_starts_another_copy() {
+        let native =
+            Native::new(LaunchCommand::new(r"C:\Apps\Sevak\sevak.exe".into(), None).unwrap())
+                .unwrap();
+        let status = |run: Option<&str>| {
+            native
+                .status(&Snapshot {
+                    run: run.map(|text| owned(text.to_reg_value())),
+                    approved: None,
+                })
+                .unwrap()
+        };
+        assert_eq!(status(None), Status::default());
+        assert_eq!(
+            status(Some(r#""C:\Apps\Sevak\sevak.exe" --background"#)),
+            Status {
+                registered: true,
+                enabled: true,
+                other_copy: false
+            }
+        );
+        assert_eq!(
+            status(Some(r#""D:\Portable\Sevak\sevak.exe" --background"#)),
+            Status {
+                registered: true,
+                enabled: true,
+                other_copy: true
+            }
+        );
     }
 
     #[test]

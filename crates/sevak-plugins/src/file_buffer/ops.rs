@@ -979,7 +979,7 @@ mod tests {
             if entry.is_file() {
                 entry.read_to_string(&mut text).unwrap();
             }
-            entries.push((entry.name().to_owned(), text));
+            entries.push((entry.name().unwrap().into_owned(), text));
         }
         entries.sort();
         entries

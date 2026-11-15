@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --config ui/vite.config.ts",
     "build": "vite build --config ui/vite.config.ts",
+    "build:test:windows": "node scripts/build-test-windows.mjs",
     "check": "svelte-check --tsconfig ui/tsconfig.json",
     "test:extensions": "node --test scripts/tests/extensions.test.mjs",
     "icons": "node scripts/generate-icons.mjs",
@@ -18,23 +19,26 @@
     "test": "vitest run --config ui/vitest.config.ts",
     "test:watch": "vitest --config ui/vitest.config.ts",
     "test:coverage": "vitest run --coverage --config ui/vitest.config.ts",
-    "test:scripts": "node --test \"scripts/*.test.mjs\""
+    "test:scripts": "node --test \"scripts/*.test.mjs\"",
+    "test:e2e": "npm --prefix e2e test",
+    "test:startup-cli": "node scripts/test-startup-cli.mjs"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.12.1"
+    "@tauri-apps/api": "^2.12.4"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
-    "@tauri-apps/cli": "^2.12.1",
+    "@tauri-apps/cli": "^2.12.4",
     "@testing-library/svelte": "^5.4.2",
     "@tsconfig/svelte": "^5.0.8",
-    "@vitest/coverage-v8": "^5.0.3",
-    "jsdom": "^30.1.1",
+    "@vitest/coverage-v8": "^5.0.5",
+    "axe-core": "^4.14.0",
+    "jsdom": "^30.1.3",
     "smol-toml": "1.9.1",
-    "svelte": "^5.57.1",
-    "svelte-check": "^4.7.6",
+    "svelte": "^5.57.3",
+    "svelte-check": "^4.7.7",
     "typescript": "^6.0.3",
-    "vite": "^8.3.2",
+    "vite": "^8.3.5",
     "vitest": "^5.0.3"
   }
 }

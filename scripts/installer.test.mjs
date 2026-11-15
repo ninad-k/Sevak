@@ -56,8 +56,11 @@ test("the installer images have the sizes NSIS and WiX expect", () => {
 test("the NSIS config points at files that exist", () => {
   const { nsis } = windows;
   assert.equal(nsis.installMode, "both");
-  assert.deepEqual(nsis.languages, ["English"]);
-  assert.equal(nsis.displayLanguageSelector, false);
+  // English first: it is the fallback. Hindi is not among the languages
+  // Tauri's NSIS bundler supports, so the installer leaves it out.
+  assert.deepEqual(nsis.languages, ["English", "German", "French", "Spanish"]);
+  assert.equal(nsis.displayLanguageSelector, true);
+  assert.deepEqual(Object.keys(nsis.customLanguageFiles).sort(), [...nsis.languages].sort());
   for (const path of [
     nsis.template,
     nsis.installerHooks,
@@ -87,6 +90,36 @@ test("English.nsh still has every string of Tauri's own", () => {
   const ours = strings(read("installer", "English.nsh"));
   for (const name of strings(read("installer", "upstream", "English.nsh"))) {
     assert.ok(ours.has(name), `upstream LangString ${name} is missing`);
+  }
+});
+
+// NSIS's own name for each language's ${LANG_...} constant.
+const LANG_IDS = { English: "ENGLISH", German: "GERMAN", French: "FRENCH", Spanish: "SPANISH" };
+
+/** LangString name -> { lang, variables } of a language file. */
+function langStrings(text) {
+  const out = new Map();
+  for (const [, name, lang, value] of text.matchAll(/^LangString\s+(\w+)\s+\$\{LANG_(\w+)\}\s+"(.*)"\s*$/gm)) {
+    const variables = [...value.matchAll(/\$\{\w+\}|\$\w+|\{\{\w+\}\}/g)].map((m) => m[0]).sort();
+    out.set(name, { lang, variables });
+  }
+  return out;
+}
+
+test("every installer language defines English.nsh's strings with the same variables", () => {
+  const english = langStrings(read("installer", "English.nsh"));
+  assert.ok(english.size > 50, `only ${english.size} English strings`);
+  for (const [language, file] of Object.entries(windows.nsis.customLanguageFiles)) {
+    const text = read(file);
+    const strings = langStrings(text);
+    // Every LangString line parsed (a stray quote would hide one).
+    assert.equal(strings.size, [...text.matchAll(/^LangString\s/gm)].length, `${file} has an unparsed LangString`);
+    assert.deepEqual([...strings.keys()].sort(), [...english.keys()].sort(), `${file} strings`);
+    for (const [name, { lang, variables }] of strings) {
+      assert.equal(lang, LANG_IDS[language], `${file}: ${name} is not \${LANG_${LANG_IDS[language]}}`);
+      assert.deepEqual(variables, english.get(name).variables, `${file}: ${name} variables`);
+    }
+    if (language !== "English") assert.match(text, /machine-drafted, needs native review/, file);
   }
 });
 

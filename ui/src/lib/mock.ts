@@ -363,6 +363,7 @@ export function mockSettings(): SettingsDto {
         launch_at_login: false,
         check_for_updates: true,
         update_channel: "stable",
+        language: "auto",
       },
       window: { width: 720 },
       linux: { wayland_use_xwayland: true },
@@ -439,6 +440,8 @@ export function mockSettings(): SettingsDto {
         global: false,
       },
       shell: { terminal: "", shell: "", keep_open: true },
+      clock: { keyword: "time", cities: ["London", "New York", "Tokyo"] },
+      passwords: { keyword: "pass", length: 20, words: 6, symbols: true },
       web_search: [
         { keyword: "g", name: "Google", url: "https://www.google.com/search?q={query}" },
         { keyword: "yt", name: "YouTube", url: "https://www.youtube.com/results?search_query={query}" },
@@ -448,6 +451,9 @@ export function mockSettings(): SettingsDto {
         { key: "Ctrl+Alt+T", query: "> " },
         { key: "Ctrl+Alt+F", run: "apps:firefox.desktop" },
       ],
+      ssh: { keyword: "ssh", known_hosts: false },
+      projects: { keyword: "code", editors: [] },
+      calendar: { keyword: "cal", files: [], days: 7 },
     },
     catalog: [
       { id: "apps", name: "Applications", description: "Launches installed applications.", keyword: null, enabled: true },

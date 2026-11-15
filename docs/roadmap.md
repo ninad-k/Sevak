@@ -21,6 +21,36 @@ does not mean a release containing it is published yet.
 - Marketplace site, gallery packages, and in-app gallery and extension pages
   (integrated on this branch; availability in a published release follows the
   release process)
+- Startup status and one-click repair, preserving unrelated Settings drafts
+  and externally disabled entries during unrelated saves
+- Installer inspection reports, a disposable Windows VM acceptance suite,
+  and identifiable local test installers built from source snapshots
+- Extension deprecation/replacement warnings and authenticated revocation
+  notices, checked only on explicit gallery refresh; the advisory channel
+  requires maintainer publication and renewal
+- Publisher-signing configuration and verification gates (real Windows and
+  Apple credentials still need provisioning), and one CI matrix per PR update
+- Signed gallery indexes: releases sign `index.json` and `themes.json`, and
+  Sevak verifies each list against the embedded release key before reading it
+  (unsigned lists are accepted only from releases before signing began; see
+  [Gallery trust](security/gallery-trust.md#7-signed-indexes))
+- Accessibility review: the launcher search box is an ARIA combobox with a
+  live result count, Settings controls are named and linked to their error
+  messages, focus is managed and visible, built-in themes meet AA contrast,
+  and axe-core checks run in CI ([Accessibility](accessibility.md)). Manual testing
+  with NVDA, VoiceOver and Orca is still recommended
+- Localisation: the launcher, Settings, tray menu and Windows setup in English,
+  Spanish, German and French, and the app (not the setup) in Hindi, with a
+  language setting that follows the OS by default
+  ([Localisation](localisation.md)). The non-English text is machine-drafted
+  and awaits review by native speakers; plugin results stay in English
+- File search filters (`ext:`, `type:`, `size:`, `modified:`, `created:`,
+  `in:`, `is:`, negation and quoted phrases) ([File search](features/files.md))
+- World clock and time-zone converter, password and passphrase generator,
+  SSH hosts from `~/.ssh/config`, recent VS Code and JetBrains projects, and
+  events from local `.ics` calendar files, all offline
+- End-to-end UI tests that drive the real app (Windows and Linux) and startup
+  checks against the real OS startup store on Windows, macOS and Linux in CI
 
 ## Next (planned, awaiting resources)
 
@@ -31,19 +61,14 @@ does not mean a release containing it is published yet.
 - macOS code signing and notarization
   - Needs Apple Developer account (paid)
 - Hand-testing on macOS and Linux desktops to ensure reliability
-- Accessibility review (screen reader support and testing)
 
 ## Later (under consideration)
 
 - Alfred Remote-style phone companion app (not actively planned)
 - Music library browsing and filtering
-- Richer file search filters
-- Localisation for other languages
 - More community gallery themes, workflows, plugins and extensions (the initial
   marketplace, gallery packages, submission and review process exist; see
   [Publishing to the gallery](marketplace/publishing.md))
-- Gallery revocation and deprecation notices in the app: today a removed entry stays listed in builds released before the removal and stays installed where it was installed, and the optional `deprecated` / `replaced_by` index fields are not shown. A fix would be a signed revocation list checked only when the user opens the gallery or the extensions page, plus a notice and an offer to uninstall. Not started; see [updating and removal](marketplace/updating-and-removal.md#takedown)
-- Signed gallery indexes (see [Gallery trust](security/gallery-trust.md#future-sign-the-indexes))
 
 ## How to propose a feature
 

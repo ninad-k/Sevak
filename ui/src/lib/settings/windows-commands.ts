@@ -2,36 +2,67 @@
 // Windows settings page. `key` is the layout's key in Rust (`Layout::key` and
 // `WindowCommand::key` in sevak-core's `window_layout`); it is also the last part
 // of the result id a global hotkey runs (`windows:<key>`). `typed` is what to
-// type after the keyword; the first spelling is the one shown.
+// type after the keyword; the first spelling is the one shown. `group` is an id;
+// `groupName` gives its heading in the UI language.
+
+import { t, type MessageKey } from "../i18n.svelte";
 
 export interface WindowCommandInfo {
   key: string;
   /** What to type after the keyword, shortest useful spelling first. */
   typed: string[];
-  label: string;
+  /** What the layout does, in the UI language (read through a getter). */
+  readonly label: string;
   group: "Halves" | "Quarters" | "Thirds" | "Size and place" | "Displays";
 }
 
+function command(key: string, typed: string[], group: WindowCommandInfo["group"]): WindowCommandInfo {
+  const label = `pages.windows.commands.${camelCase(key)}` as MessageKey;
+  return {
+    key,
+    typed,
+    group,
+    get label() {
+      return t(label);
+    },
+  };
+}
+
+const camelCase = (key: string) => key.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
+
+const GROUP_NAMES: Record<WindowCommandInfo["group"], MessageKey> = {
+  Halves: "pages.windows.groups.halves",
+  Quarters: "pages.windows.groups.quarters",
+  Thirds: "pages.windows.groups.thirds",
+  "Size and place": "pages.windows.groups.sizePlace",
+  Displays: "pages.windows.groups.displays",
+};
+
+/** The heading of a group in the UI language. */
+export function groupName(group: WindowCommandInfo["group"]): string {
+  return t(GROUP_NAMES[group]);
+}
+
 export const WINDOW_COMMANDS: WindowCommandInfo[] = [
-  { key: "left", typed: ["left"], label: "Left half of the screen", group: "Halves" },
-  { key: "right", typed: ["right"], label: "Right half of the screen", group: "Halves" },
-  { key: "top", typed: ["top"], label: "Top half of the screen", group: "Halves" },
-  { key: "bottom", typed: ["bottom"], label: "Bottom half of the screen", group: "Halves" },
-  { key: "top_left", typed: ["top left", "tl"], label: "Top left quarter", group: "Quarters" },
-  { key: "top_right", typed: ["top right", "tr"], label: "Top right quarter", group: "Quarters" },
-  { key: "bottom_left", typed: ["bottom left", "bl"], label: "Bottom left quarter", group: "Quarters" },
-  { key: "bottom_right", typed: ["bottom right", "br"], label: "Bottom right quarter", group: "Quarters" },
-  { key: "left_third", typed: ["left third"], label: "Left third", group: "Thirds" },
-  { key: "center_third", typed: ["center third"], label: "Middle third", group: "Thirds" },
-  { key: "right_third", typed: ["right third"], label: "Right third", group: "Thirds" },
-  { key: "left_two_thirds", typed: ["left two thirds"], label: "Left two thirds", group: "Thirds" },
-  { key: "right_two_thirds", typed: ["right two thirds"], label: "Right two thirds", group: "Thirds" },
-  { key: "maximize", typed: ["max"], label: "Fill the screen", group: "Size and place" },
-  { key: "almost_maximize", typed: ["almost-max"], label: "Fill most of the screen, with a margin", group: "Size and place" },
-  { key: "center", typed: ["center"], label: "Keep the size, center the window", group: "Size and place" },
-  { key: "restore", typed: ["restore"], label: "Back to where the window was before", group: "Size and place" },
-  { key: "next_display", typed: ["next display"], label: "Move to the next display", group: "Displays" },
-  { key: "previous_display", typed: ["previous display"], label: "Move to the previous display", group: "Displays" },
+  command("left", ["left"], "Halves"),
+  command("right", ["right"], "Halves"),
+  command("top", ["top"], "Halves"),
+  command("bottom", ["bottom"], "Halves"),
+  command("top_left", ["top left", "tl"], "Quarters"),
+  command("top_right", ["top right", "tr"], "Quarters"),
+  command("bottom_left", ["bottom left", "bl"], "Quarters"),
+  command("bottom_right", ["bottom right", "br"], "Quarters"),
+  command("left_third", ["left third"], "Thirds"),
+  command("center_third", ["center third"], "Thirds"),
+  command("right_third", ["right third"], "Thirds"),
+  command("left_two_thirds", ["left two thirds"], "Thirds"),
+  command("right_two_thirds", ["right two thirds"], "Thirds"),
+  command("maximize", ["max"], "Size and place"),
+  command("almost_maximize", ["almost-max"], "Size and place"),
+  command("center", ["center"], "Size and place"),
+  command("restore", ["restore"], "Size and place"),
+  command("next_display", ["next display"], "Displays"),
+  command("previous_display", ["previous display"], "Displays"),
 ];
 
 /** The groups in display order, with their commands. */

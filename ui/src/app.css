@@ -31,6 +31,12 @@
   --input-bg: #ffffff;
   --input-border: rgba(28, 27, 46, 0.22);
   --switch-off: rgba(28, 27, 46, 0.26);
+  /*
+   * Keyboard focus outline. The stronger accent shade, because the plain accent
+   * of the light theme is too pale on white (WCAG 1.4.11 asks 3:1). Every
+   * built-in theme's accent_strong passes; a custom stylesheet may override it.
+   */
+  --focus-ring: var(--accent-strong);
 
   color-scheme: light;
   font-family: system-ui, -apple-system, "Segoe UI", Ubuntu, Cantarell, "Noto Sans", sans-serif;
@@ -136,4 +142,30 @@ html.settings ::-webkit-scrollbar-thumb {
 
 html.settings ::-webkit-scrollbar-thumb:hover {
   background-clip: border-box;
+}
+
+/* Text for screen readers only (live announcements, extra labels). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The OS asked for less motion: no animated fades, slides or smooth scrolling. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

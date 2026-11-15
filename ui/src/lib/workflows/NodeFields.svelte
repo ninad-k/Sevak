@@ -4,6 +4,7 @@
   // the editor that owns the workflow does the mutation.
   import "./workflows.css";
   import { kindOf, type FieldDef, type WfNode } from "./model";
+  import { t, tHtml } from "../i18n.svelte";
 
   let {
     node,
@@ -62,11 +63,11 @@
     if (Number.isFinite(value)) onset(field.key, Math.trunc(value));
   }
 
-  const ACCEPTS = [
-    { value: "text", label: "Text" },
-    { value: "url", label: "Links" },
-    { value: "file", label: "Files and folders" },
-  ];
+  const ACCEPTS = $derived([
+    { value: "text", label: t("workflows.fields.acceptText") },
+    { value: "url", label: t("workflows.fields.acceptUrl") },
+    { value: "file", label: t("workflows.fields.acceptFile") },
+  ]);
 
   function toggleAccepts(kind: string, on: boolean) {
     const current: string[] = Array.isArray(node.accepts) ? node.accepts : [];
@@ -164,9 +165,9 @@
             onset(field.key, v === "default" ? undefined : v === "true");
           }}
         >
-          <option value="default">Use the [paste] setting</option>
-          <option value="true">Yes</option>
-          <option value="false">No</option>
+          <option value="default">{t("workflows.fields.pasteDefault")}</option>
+          <option value="true">{t("workflows.fields.yes")}</option>
+          <option value="false">{t("workflows.fields.no")}</option>
         </select>
       {:else if field.kind === "lines"}
         <textarea
@@ -195,8 +196,5 @@
   </div>
 {/each}
 {#if def.fields.length === 0}
-  <p class="wf-hint">
-    This trigger has no settings. Start it with <code>sevak --trigger &lt;folder&gt;/{node.id}</code>
-    (add some text after it to pass it in as <code>{"{query}"}</code>).
-  </p>
+  <p class="wf-hint">{@html tHtml("workflows.fields.noSettings", { id: node.id })}</p>
 {/if}

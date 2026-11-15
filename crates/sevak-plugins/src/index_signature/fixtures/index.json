@@ -1,0 +1,16 @@
+{
+  "format": 2,
+  "name": "Sevak gallery",
+  "entries": [
+    {
+      "id": "fixture-search",
+      "kind": "workflow",
+      "name": "Fixture search",
+      "description": "A TEST entry of a signed index.",
+      "author": "Sevak",
+      "version": "1.0",
+      "source": "gallery/packages/fixture-search.zip",
+      "sha256": "15b9f3726c402ec97fe731952a651ad5054af2977636c36884b2186e5413e09f"
+    }
+  ]
+}

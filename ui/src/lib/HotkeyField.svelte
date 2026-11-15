@@ -9,6 +9,7 @@
     stopHotkeyRecording,
     suspendHotkey,
   } from "./settings-ipc";
+  import { t, tHtml } from "./i18n.svelte";
 
   let {
     value = $bindable(""),
@@ -123,11 +124,11 @@
     bind:value
     class:invalid={!!error}
     readonly={recording}
-    placeholder={recording ? "Press the shortcut…" : "e.g. Super+Space"}
+    placeholder={recording ? t("hotkeys.field.placeholderRecording") : t("hotkeys.field.placeholder")}
     spellcheck="false"
     autocomplete="off"
     aria-invalid={!!error}
-    aria-describedby={id ? `${id}-msg` : undefined}
+    aria-describedby={id && error && !recording ? `${id}-msg` : undefined}
   />
   <button
     bind:this={recordButton}
@@ -137,11 +138,11 @@
     onclick={() => (recording ? stop() : void start())}
     onblur={stop}
   >
-    {recording ? "Press keys… (Esc to cancel)" : "Record"}
+    {recording ? t("hotkeys.field.recording") : t("hotkeys.field.record")}
   </button>
   {#if presets}
-    <select class="presets" aria-label="Preset shortcuts" value="" onchange={choosePreset}>
-      <option value="" disabled>Presets</option>
+    <select class="presets" aria-label={t("hotkeys.field.presetsLabel")} value="" onchange={choosePreset}>
+      <option value="" disabled>{t("hotkeys.field.presets")}</option>
       {#each PRESETS as preset (preset)}
         <option value={preset}>{displayAccelerator(preset, platform)}</option>
       {/each}
@@ -149,7 +150,7 @@
   {/if}
 </div>
 {#if shownAs && !recording}
-  <p class="shown">Shown on this computer as <span class="mono">{shownAs}</span></p>
+  <p class="shown">{@html tHtml("hotkeys.field.shownAs", { shortcut: shownAs })}</p>
 {/if}
 {#if recording && preview}
   <p class="live" role="status">{preview}</p>
@@ -183,7 +184,7 @@
   }
 
   input:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: -1px;
   }
 
@@ -213,7 +214,7 @@
   }
 
   .record:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 
@@ -237,7 +238,7 @@
   }
 
   .presets:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 
@@ -247,7 +248,7 @@
     color: var(--muted);
   }
 
-  .shown .mono {
+  .shown :global(code) {
     font-family: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
   }
 

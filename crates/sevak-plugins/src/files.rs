@@ -1,9 +1,14 @@
 //! File and folder search over a pre-built in-memory index, plus browsing of a
 //! typed path (`~/Documents/rep`), which lists that one directory live.
+//! Queries can carry filters (`report ext:pdf size:>1mb`); see [`filters`].
+
+pub mod filters;
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
-use std::time::Instant;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
+
+use chrono::{Local, TimeZone};
 
 use sevak_core::config::FilesConfig;
 use sevak_core::model::score;
@@ -14,6 +19,7 @@ use walkdir::{DirEntry, WalkDir};
 
 use crate::actions::execute_action;
 use crate::path_browse::{self, DirReader, PathQuery};
+use filters::{Candidate, FileQuery, FilterError};
 
 /// Hard limit on indexed entries, to bound memory and per-query work.
 pub const MAX_INDEX_ENTRIES: usize = 100_000;
@@ -41,11 +47,45 @@ const PREFIX_BONUS: f64 = 40.0;
 const BROWSE_FOLDER_BONUS: f64 = 2000.0;
 const BROWSE_MAX_MATCH: f64 = 1900.0;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Rows of a filter-only query (`f ext:pdf`, no name text) are newest first;
+/// this is the first row's score, each next one a little lower.
+const FILTER_ONLY_SCORE: f64 = 100.0;
+
+/// Whether folder names compare ignoring case in `in:` filters.
+pub(crate) const FOLD_CASE: bool = cfg!(any(windows, target_os = "macos"));
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct FileEntry {
     pub name: String,
     pub path: PathBuf,
     pub is_dir: bool,
+    /// Bytes; 0 for folders.
+    pub size: u64,
+    /// Last change and creation, in Unix seconds; `None` when unknown (or,
+    /// for `created`, not recorded by the file system).
+    pub modified: Option<i64>,
+    pub created: Option<i64>,
+}
+
+impl FileEntry {
+    fn candidate(&self) -> Candidate<'_> {
+        Candidate {
+            name: &self.name,
+            path: &self.path,
+            is_dir: self.is_dir,
+            size: Some(self.size),
+            modified: self.modified,
+            created: self.created,
+        }
+    }
+}
+
+/// Unix seconds of a file time (negative before 1970).
+pub(crate) fn unix_seconds(time: SystemTime) -> i64 {
+    match time.duration_since(UNIX_EPOCH) {
+        Ok(after) => i64::try_from(after.as_secs()).unwrap_or(i64::MAX),
+        Err(before) => -i64::try_from(before.duration().as_secs()).unwrap_or(i64::MAX),
+    }
 }
 
 /// Searches files and folders below the configured directories by name.
@@ -91,6 +131,15 @@ impl FilesPlugin {
     /// The home directory `~` expands to.
     pub(crate) fn home(&self) -> Option<&Path> {
         self.home.as_deref()
+    }
+
+    pub(crate) fn allow_network_paths(&self) -> bool {
+        self.config.allow_network_paths
+    }
+
+    /// Parses the filters in `input` (see [`filters`]) at the current local time.
+    pub(crate) fn parse_filters(&self, input: &str) -> Result<FileQuery, FilterError> {
+        filters::parse(input, &Local::now(), self.home.as_deref())
     }
 
     fn snapshot(&self) -> Arc<Vec<FileEntry>> {
@@ -211,6 +260,54 @@ impl FilesPlugin {
         .with_score(score::KEYWORD)
     }
 
+    /// A row saying why a filter cannot be used, and what would work. Enter
+    /// copies the explanation.
+    pub(crate) fn filter_error_row(error: &FilterError) -> ResultItem {
+        ResultItem::new(
+            "files",
+            "filter-invalid",
+            format!("Cannot use the filter {}", error.token),
+            Action::CopyText {
+                text: error.to_string(),
+            },
+        )
+        .with_subtitle(error.message.clone())
+        .with_icon(IconSource::builtin("file"))
+        .with_score(score::KEYWORD)
+    }
+
+    /// Adds what the filters looked at (size, dates) and the active filters
+    /// themselves to a row's subtitle: `~/Documents · 12 MB · ext:pdf size:>10mb`.
+    pub(crate) fn describe(item: &mut ResultItem, query: &FileQuery, entry: &Candidate<'_>) {
+        if query.is_plain() {
+            return;
+        }
+        let day = |seconds: i64| {
+            Local
+                .timestamp_opt(seconds, 0)
+                .earliest()
+                .map(|t| t.format("%Y-%m-%d").to_string())
+        };
+        let mut parts = vec![std::mem::take(&mut item.subtitle)];
+        if query.shows_size() && !entry.is_dir {
+            if let Some(size) = entry.size {
+                parts.push(filters::human_size(size));
+            }
+        }
+        if query.shows_modified() {
+            if let Some(date) = entry.modified.and_then(day) {
+                parts.push(format!("modified {date}"));
+            }
+        }
+        if query.shows_created() {
+            if let Some(date) = entry.created.and_then(day) {
+                parts.push(format!("created {date}"));
+            }
+        }
+        parts.push(query.summary());
+        item.subtitle = parts.join(" \u{b7} ");
+    }
+
     pub(crate) fn search(&self, input: &str) -> Vec<ResultItem> {
         let input = input.trim();
         let allow = self.config.allow_network_paths;
@@ -228,6 +325,15 @@ impl FilesPlugin {
         if input.chars().count() < MIN_QUERY_CHARS {
             return Vec::new();
         }
+        match self.parse_filters(input) {
+            Err(error) => vec![Self::filter_error_row(&error)],
+            Ok(query) if query.is_plain() => self.search_names(input),
+            Ok(query) => self.search_filtered(&query),
+        }
+    }
+
+    /// The index search without filters: fuzzy over names.
+    fn search_names(&self, input: &str) -> Vec<ResultItem> {
         let mut query = FuzzyQuery::for_paths(input);
         if query.is_empty() {
             return Vec::new();
@@ -253,6 +359,60 @@ impl FilesPlugin {
             .map(|(score, i)| {
                 let entry = &index[i];
                 self.row(&entry.name, entry.path.clone(), entry.is_dir, score)
+            })
+            .collect()
+    }
+
+    /// The index search with filters. Filters are checked first (no
+    /// allocation), then the name text; with no text, matches are listed
+    /// newest first.
+    fn search_filtered(&self, query: &FileQuery) -> Vec<ResultItem> {
+        let text = query.text.as_str();
+        let mut fuzzy = Some(FuzzyQuery::for_paths(text)).filter(|q| !q.is_empty());
+        if fuzzy.is_none() && !(text.is_empty() && query.can_list_without_text()) {
+            return Vec::new();
+        }
+        let index = self.snapshot();
+
+        let mut scored: Vec<(f64, usize)> = Vec::new();
+        for (i, entry) in index.iter().enumerate() {
+            if !query.passes_filters(&entry.candidate(), FOLD_CASE) {
+                continue;
+            }
+            let score = match fuzzy.as_mut() {
+                Some(fuzzy) => match fuzzy.score(&entry.name) {
+                    Some(s) => f64::from(s) + name_bonus(&entry.name, text),
+                    None => continue,
+                },
+                // Newest first; turned into small scores below.
+                None => entry.modified.unwrap_or(i64::MIN) as f64,
+            };
+            if !query.passes_words(&entry.name) {
+                continue;
+            }
+            scored.push((score, i));
+        }
+
+        let by_score_desc = |a: &(f64, usize), b: &(f64, usize)| b.0.total_cmp(&a.0);
+        if scored.len() > MAX_CANDIDATES {
+            scored.select_nth_unstable_by(MAX_CANDIDATES - 1, by_score_desc);
+            scored.truncate(MAX_CANDIDATES);
+        }
+        scored.sort_by(by_score_desc);
+
+        scored
+            .into_iter()
+            .enumerate()
+            .map(|(rank, (score, i))| {
+                let entry = &index[i];
+                let score = if fuzzy.is_some() {
+                    score
+                } else {
+                    FILTER_ONLY_SCORE - rank as f64 * 0.01
+                };
+                let mut item = self.row(&entry.name, entry.path.clone(), entry.is_dir, score);
+                Self::describe(&mut item, query, &entry.candidate());
+                item
             })
             .collect()
     }
@@ -357,10 +517,23 @@ fn scan(
             if entries.len() >= cap {
                 return (entries, true);
             }
+            let is_dir = entry.file_type().is_dir();
+            // Free on Windows (the directory listing has it); one `stat` elsewhere.
+            let (size, modified, created) = match entry.metadata() {
+                Ok(meta) => (
+                    if is_dir { 0 } else { meta.len() },
+                    meta.modified().ok().map(unix_seconds),
+                    meta.created().ok().map(unix_seconds),
+                ),
+                Err(_) => (0, None, None),
+            };
             entries.push(FileEntry {
                 name: entry.file_name().to_string_lossy().into_owned(),
-                is_dir: entry.file_type().is_dir(),
+                is_dir,
                 path: entry.into_path(),
+                size,
+                modified,
+                created,
             });
         }
     }
@@ -911,6 +1084,7 @@ mod tests {
                     path: PathBuf::from(format!("/home/u/Documents/dir{}/{name}", i % 500)),
                     name,
                     is_dir: i % 50 == 0,
+                    ..FileEntry::default()
                 }
             })
             .collect();
@@ -1148,5 +1322,225 @@ mod tests {
         let plugin = FilesPlugin::with_home(FilesConfig::default(), MockPlatform::empty(), None);
         let rows = plugin.query(r"\\server\share");
         assert!(rows.iter().all(|row| row.id != "path-refused"));
+    }
+
+    /// A home folder with a few kinds of files, sizes and ages, indexed.
+    fn filter_tree() -> (tempfile::TempDir, FilesPlugin) {
+        let home = tempfile::tempdir().unwrap();
+        let root = home.path();
+        let write = |rel: &str, bytes: usize| {
+            let path = root.join(rel);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(&path, vec![b'x'; bytes]).unwrap();
+        };
+        write("docs/report.pdf", 20 * 1024);
+        write("docs/report.txt", 10);
+        write("docs/old-report.pdf", 2048);
+        write("docs/reports/q1.md", 10);
+        write("photos/holiday.jpg", 3000);
+        write("photos/holiday.png", 3000);
+        write("Projects/app/src/main.rs", 100);
+        write("archive/report.zip", 500);
+        write("tmp/report.tmp", 1);
+        // 2020-01-01T00:00:00Z
+        let old = UNIX_EPOCH + std::time::Duration::from_secs(1_577_836_800);
+        fs::File::options()
+            .write(true)
+            .open(root.join("docs/old-report.pdf"))
+            .unwrap()
+            .set_modified(old)
+            .unwrap();
+
+        let config = FilesConfig {
+            directories: vec!["~".into()],
+            ..config_for(&[])
+        };
+        let plugin = indexed(config, Some(root.to_path_buf()));
+        (home, plugin)
+    }
+
+    fn sorted_titles(plugin: &FilesPlugin, query: &str) -> Vec<String> {
+        let mut found = titles(plugin, query);
+        found.sort();
+        found
+    }
+
+    #[test]
+    fn filters_narrow_the_index_search() {
+        let (_home, plugin) = filter_tree();
+        // (query, the titles found, sorted)
+        let cases: &[(&str, &[&str])] = &[
+            ("report ext:pdf", &["old-report.pdf", "report.pdf"]),
+            ("report EXT:.PDF", &["old-report.pdf", "report.pdf"]),
+            (
+                "report -ext:pdf -ext:tmp",
+                &["report.txt", "report.zip", "reports"],
+            ),
+            ("ext:jpg,png", &["holiday.jpg", "holiday.png"]),
+            ("type:image", &["holiday.jpg", "holiday.png"]),
+            ("type:archive", &["report.zip"]),
+            ("size:>10kb", &["report.pdf"]),
+            ("report size:<1kb ext:txt", &["report.txt"]),
+            ("ext:pdf modified:<2021-01-01", &["old-report.pdf"]),
+            ("ext:pdf modified:today", &["report.pdf"]),
+            ("ext:pdf modified:>365d", &["old-report.pdf"]),
+            ("in:~/Projects", &["app", "main.rs", "src"]),
+            ("in:src", &["main.rs"]),
+            ("in:\"~/Projects/app\" is:file", &["main.rs"]),
+            ("report is:folder", &["reports"]),
+            (
+                "rep in:docs is:file -ext:md",
+                &["old-report.pdf", "report.pdf", "report.txt"],
+            ),
+            ("\"old-report\"", &["old-report.pdf"]),
+            ("report -\"old\" ext:pdf", &["report.pdf"]),
+            ("size:empty", &[]),
+            ("-report", &[]),
+        ];
+        for (query, expected) in cases {
+            assert_eq!(sorted_titles(&plugin, query), *expected, "{query:?}");
+        }
+    }
+
+    #[test]
+    fn filter_only_queries_list_newest_first() {
+        let (_home, plugin) = filter_tree();
+        let found = plugin.query("ext:pdf");
+        assert_eq!(
+            found.iter().map(|r| r.title.as_str()).collect::<Vec<_>>(),
+            ["report.pdf", "old-report.pdf"]
+        );
+        assert!(found[0].score > found[1].score);
+        assert!(found[0].score <= FILTER_ONLY_SCORE);
+    }
+
+    #[test]
+    fn plain_queries_are_unchanged_by_filter_support() {
+        let (_home, plugin) = filter_tree();
+        let found = plugin.query("report");
+        assert!(found.len() >= 5);
+        // No filter: the subtitle is the folder alone.
+        let pdf = found.iter().find(|r| r.title == "report.pdf").unwrap();
+        assert_eq!(
+            pdf.subtitle,
+            Path::new("~").join("docs").display().to_string()
+        );
+    }
+
+    #[test]
+    fn the_subtitle_shows_active_filters_and_what_they_looked_at() {
+        let (_home, plugin) = filter_tree();
+        let found = plugin.query("report ext:pdf size:>10kb");
+        assert_eq!(found.len(), 1);
+        let docs = Path::new("~").join("docs").display().to_string();
+        assert_eq!(
+            found[0].subtitle,
+            format!("{docs} \u{b7} 20 KB \u{b7} ext:pdf size:>10kb")
+        );
+
+        let found = plugin.query("old-report modified:<2021-01-01");
+        assert_eq!(found.len(), 1);
+        assert!(
+            found[0].subtitle.contains("modified 2019-12-31")
+                || found[0].subtitle.contains("modified 2020-01-01"),
+            "{}",
+            found[0].subtitle
+        );
+        assert!(found[0].subtitle.ends_with("modified:<2021-01-01"));
+    }
+
+    #[test]
+    fn an_invalid_filter_is_one_row_that_says_what_works() {
+        let (_home, plugin) = filter_tree();
+        for (query, needle) in [
+            ("report size:huge", "size:>10mb"),
+            ("type:spreadsheet", "image, video, audio"),
+            ("report modified:someday", "2026-01-01"),
+            ("ext:", "ext:pdf"),
+        ] {
+            let rows = plugin.query(query);
+            assert_eq!(rows.len(), 1, "{query:?}: {rows:?}");
+            assert_eq!(rows[0].id, "files:filter-invalid");
+            assert!(
+                rows[0].title.starts_with("Cannot use the filter"),
+                "{query:?}"
+            );
+            assert!(
+                rows[0].subtitle.contains(needle),
+                "{query:?}: {}",
+                rows[0].subtitle
+            );
+            assert!(plugin.execute(&rows[0]).is_ok());
+        }
+    }
+
+    #[test]
+    fn creation_times_are_used_where_the_file_system_records_them() {
+        let (home, plugin) = filter_tree();
+        let recorded = fs::metadata(home.path().join("docs/report.pdf"))
+            .and_then(|m| m.created())
+            .is_ok();
+        let found = sorted_titles(&plugin, "report created:7d ext:pdf");
+        if recorded {
+            assert!(found.contains(&"report.pdf".to_owned()), "{found:?}");
+        } else {
+            assert!(found.is_empty(), "{found:?}");
+        }
+    }
+
+    #[test]
+    fn the_index_records_sizes_and_times() {
+        let (_home, plugin) = filter_tree();
+        let snapshot = plugin.snapshot();
+        let entry = |name: &str| snapshot.iter().find(|e| e.name == name).unwrap().clone();
+        assert_eq!(entry("report.pdf").size, 20 * 1024);
+        assert_eq!(entry("reports").size, 0);
+        assert_eq!(entry("old-report.pdf").modified, Some(1_577_836_800));
+        assert!(entry("report.pdf").modified.unwrap() > 1_577_836_800);
+    }
+
+    /// Filtered queries over the 100k cap; prints timings like the test above.
+    #[test]
+    fn filtered_query_timing_over_100k_entries() {
+        let entries: Vec<FileEntry> = (0..MAX_INDEX_ENTRIES)
+            .map(|i| {
+                let ext = ["pdf", "txt", "png", "rs"][i % 4];
+                let name = format!("file_{i}.{ext}");
+                FileEntry {
+                    path: PathBuf::from(format!("/home/u/Documents/dir{}/{name}", i % 500)),
+                    name,
+                    is_dir: false,
+                    size: (i as u64 % 1000) * 1024,
+                    modified: Some(1_700_000_000 + i as i64),
+                    created: None,
+                }
+            })
+            .collect();
+        let plugin = FilesPlugin::with_home(
+            FilesConfig::default(),
+            MockPlatform::empty(),
+            Some(PathBuf::from("/home/u")),
+        );
+        plugin.set_index(entries);
+        for query in [
+            "file ext:pdf",
+            "ext:pdf",
+            "type:image size:>500kb",
+            "in:dir7 modified:>2026-01-01",
+            "file_9 -ext:txt \"_9\"",
+        ] {
+            let _ = plugin.query(query);
+            let runs = 5;
+            let started = Instant::now();
+            let mut hits = 0;
+            for _ in 0..runs {
+                hits = plugin.query(query).len();
+            }
+            let per_query = started.elapsed() / runs;
+            println!(
+                "files query {query:?}: {:.2} ms/query ({hits} results, 100k entries)",
+                per_query.as_secs_f64() * 1000.0
+            );
+        }
     }
 }

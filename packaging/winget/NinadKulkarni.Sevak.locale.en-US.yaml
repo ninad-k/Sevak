@@ -12,9 +12,11 @@ LicenseUrl: https://github.com/ninad-k/Sevak/blob/main/LICENSE
 ShortDescription: Keyboard-first quick launcher for apps, calculations, web and file search.
 Description: |-
   Sevak is an open-source quick launcher. Press a hotkey, type a few letters, and launch apps,
-  do quick math, search the web or find files. Results are ranked by how often and how recently
-  you use them. It runs entirely on your machine with no telemetry and is configured from one
-  TOML file.
+  do quick math, search the web or find files with filters such as ext:pdf or modified:7d. It
+  also shows world clocks, generates passwords, connects to your SSH hosts, reopens recent
+  VS Code and JetBrains projects and lists events from local calendar files. Results are ranked
+  by how often and how recently you use them. It runs entirely on your machine with no
+  telemetry, is available in several languages and is configured from one TOML file.
 Moniker: sevak
 Tags:
   - launcher

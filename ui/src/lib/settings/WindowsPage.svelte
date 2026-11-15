@@ -5,7 +5,8 @@
   import KeywordRow from "../settings-pages/KeywordRow.svelte";
   import Row from "../settings-pages/Row.svelte";
   import Toggle from "../Toggle.svelte";
-  import { WINDOW_COMMANDS, commandGroups, hotkeyRun, typedCommand } from "./windows-commands";
+  import { WINDOW_COMMANDS, commandGroups, groupName, hotkeyRun, typedCommand } from "./windows-commands";
+  import { t, tHtml } from "../i18n.svelte";
   import "../settings-pages/pages.css";
 
   let {
@@ -27,36 +28,30 @@
 </script>
 
 <div class="sp-page">
-  <h1>Windows</h1>
-  <p class="sp-lead">
-    Snap, resize and move the window you were using without touching the mouse, and jump to any
-    open window by its title.
-  </p>
+  <h1>{t("pages.windows.title")}</h1>
+  <p class="sp-lead">{t("pages.windows.lead")}</p>
 
   <div class="sp-group">
-    <Row
-      label="Window management"
-      hint="Turns the layouts and the window switcher on or off together."
-    >
-      <Toggle bind:checked={config.window_management.enabled} label="Window management" />
+    <Row label={t("pages.windows.enable")} hint={t("pages.windows.enableHint")}>
+      <Toggle bind:checked={config.window_management.enabled} label={t("pages.windows.enable")} />
     </Row>
     <KeywordRow
       id="windows-keyword"
-      label="Layouts keyword"
+      label={t("pages.windows.layoutsKeyword")}
       bind:value={config.window_management.keyword}
       error={problems.keywords["window_management.keyword"]}
-      hint="Type the keyword and a space to list the layouts, then a layout such as left. Empty removes the keyword."
+      hint={t("pages.windows.layoutsHint")}
     />
     <KeywordRow
       id="windows-switcher-keyword"
-      label="Switcher keyword"
+      label={t("pages.windows.switcherKeyword")}
       bind:value={config.window_management.switcher_keyword}
       error={problems.keywords["window_management.switcher_keyword"]}
-      hint="Type the keyword and part of a window’s title or app to bring that window to the front. Empty turns the switcher off."
+      hint={t("pages.windows.switcherHint")}
     />
     <Row
-      label="Gap"
-      hint="Space in pixels between snapped windows and the edge of the screen (0 to {MAX_WINDOW_GAP}). Scaled on high-DPI displays."
+      label={t("pages.windows.gap")}
+      hint={t("pages.windows.gapHint", { max: MAX_WINDOW_GAP })}
       forId="windows-gap"
       error={problems.windowGap}
     >
@@ -74,52 +69,35 @@
       />
       <span class="sp-unit">px</span>
     </Row>
-    <Row
-      label="Show in ordinary searches"
-      hint="Also match layout names in plain searches such as “snap left” or “maximize”."
-    >
+    <Row label={t("pages.common.showInOrdinary")} hint={t("pages.windows.globalHint")}>
       <Toggle
         bind:checked={config.window_management.global}
-        label="Show layouts in ordinary searches"
+        label={t("pages.windows.globalToggle")}
         disabled={off}
       />
     </Row>
   </div>
 
   {#if platform === "windows"}
-    <p class="sp-note">
-      Windows that run as administrator cannot be moved by Sevak unless Sevak runs as administrator
-      too. The switcher lists the windows of the current virtual desktop.
-    </p>
+    <p class="sp-note">{t("pages.windows.noteWindows")}</p>
   {:else if platform === "macos"}
-    <p class="sp-note">
-      Needs <strong>Accessibility</strong> access for Sevak (System Settings, Privacy &amp;
-      Security, Accessibility). The first use also asks to allow controlling
-      <strong>System Events</strong>. Until both are granted, the keyword explains what is missing.
-    </p>
+    <p class="sp-note">{@html tHtml("pages.windows.noteMac")}</p>
   {:else}
-    <p class="sp-note">
-      Works in <strong>X11</strong> sessions with a window manager that follows the EWMH standard.
-      Wayland does not let applications move or list other windows, so there Sevak says so instead:
-      use your desktop’s own tiling shortcuts, or log in to an X11 session.
-    </p>
+    <p class="sp-note">{@html tHtml("pages.windows.noteLinux")}</p>
   {/if}
   {#if pluginOff("windows")}
     <p class="sp-note warn" role="status">
-      “Window management” is switched off under <strong>Plugins</strong>. Switch it on there as
-      well.
+      {@html tHtml("pages.common.pluginOff", { name: t("pages.windows.plugin") })}
     </p>
   {/if}
 
-  <h2 class="sp-h2">Cheat sheet</h2>
+  <h2 class="sp-h2">{t("pages.windows.cheatSheet")}</h2>
   <p class="sp-sub">
-    The layouts act on the window you were in before Sevak opened. Type
-    <code>{layoutsKeyword} </code> to list them, or <code>{switcherKeyword} </code> and part of a
-    title to switch.
+    {@html tHtml("pages.windows.cheatSheetSub", { layouts: layoutsKeyword, switcher: switcherKeyword })}
   </p>
   {#each groups as group (group.name)}
-    <div class="wm-sheet" role="group" aria-label={group.name}>
-      <h3 class="wm-group">{group.name}</h3>
+    <div class="wm-sheet" role="group" aria-label={groupName(group.name)}>
+      <h3 class="wm-group">{groupName(group.name)}</h3>
       <dl class="wm-list">
         {#each group.commands as command (command.key)}
           <div class="wm-item">
@@ -131,12 +109,9 @@
     </div>
   {/each}
 
-  <h2 class="sp-h2">Global shortcuts</h2>
+  <h2 class="sp-h2">{t("pages.windows.shortcutsTitle")}</h2>
   <p class="sp-note">
-    A layout can have a shortcut of its own: add a hotkey on the <strong>Hotkeys</strong> page that
-    runs the result <code>{hotkeyRun(WINDOW_COMMANDS[0])}</code>
-    (or <code>windows:maximize</code>, <code>windows:next_display</code> and so on; the name is the
-    layout’s key). The shortcut acts on the window that has focus when you press it.
+    {@html tHtml("pages.windows.shortcutsNote", { run: hotkeyRun(WINDOW_COMMANDS[0]) })}
   </p>
 </div>
 

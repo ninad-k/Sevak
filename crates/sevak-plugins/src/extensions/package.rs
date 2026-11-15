@@ -96,19 +96,28 @@ impl ExtensionPackage {
             let mut entry = archive
                 .by_index(index)
                 .map_err(|err| format!("the package is damaged: {err}"))?;
-            let path = clean_path(entry.name())?;
+            let path = clean_path(
+                &entry
+                    .name()
+                    .map_err(|err| format!("the package is damaged: {err}"))?,
+            )?;
             if entry.is_dir() {
                 continue;
             }
             if path.is_empty() {
                 return Err("a path in the package is not allowed".to_owned());
             }
-            if let Some(mode) = entry.unix_mode() {
-                // 0o120000: a symbolic link, which could point anywhere.
-                if mode & 0o170000 == 0o120000 {
-                    return Err("the package contains a link, which is not allowed".to_owned());
-                }
+            // A symbolic link could point anywhere. zip marks one by the Unix
+            // file type 0o120000; check that directly too, so a change in how
+            // zip reports links cannot let one through.
+            let link = entry
+                .unix_mode()
+                .is_some_and(|mode| mode & 0o170000 == 0o120000);
+            if link || entry.is_symlink() {
+                return Err("the package contains a link, which is not allowed".to_owned());
             }
+            // Only "is it executable" is kept: setuid, setgid and sticky bits,
+            // and every other permission in the archive, are dropped here.
             let executable = entry.unix_mode().is_some_and(|mode| mode & 0o111 != 0);
             if files.len() >= MAX_FILES {
                 return Err("the package has too many files".to_owned());
@@ -859,6 +868,52 @@ linux-x86_64 = "bin/rh-linux-x86_64"
         }
         let err = ExtensionPackage::read(&out.into_inner(), "").unwrap_err();
         assert!(err.contains("link"), "{err}");
+    }
+
+    #[test]
+    fn setuid_and_setgid_bits_in_a_package_only_mark_the_file_executable() {
+        let manifest = MANIFEST.as_bytes();
+        let entries: [(&str, &[u8], u32); 2] = [
+            ("plugin.toml", manifest, 0o2644),
+            ("bin/rh-linux-x86_64", b"ELF linux", 0o6755),
+        ];
+        let sums = checksums_for(&[(entries[0].0, entries[0].1), (entries[1].0, entries[1].1)]);
+        let mut out = Cursor::new(Vec::new());
+        {
+            let mut writer = zip::ZipWriter::new(&mut out);
+            for (name, data, mode) in entries {
+                // The full mode, setuid and setgid included, as a hostile
+                // archive carries it (`unix_permissions` keeps only 0o777).
+                let options = SimpleFileOptions::default()
+                    .system(zip::System::Unix)
+                    .external_attributes((0o100_000 | mode) << 16);
+                writer.start_file(name, options).unwrap();
+                writer.write_all(data).unwrap();
+            }
+            writer
+                .start_file(CHECKSUMS_FILE, SimpleFileOptions::default())
+                .unwrap();
+            writer.write_all(sums.as_bytes()).unwrap();
+            writer.finish().unwrap();
+        }
+        let bytes = out.into_inner();
+        let mut archive = zip::ZipArchive::new(Cursor::new(bytes.as_slice())).unwrap();
+        let stored = archive
+            .by_name("bin/rh-linux-x86_64")
+            .unwrap()
+            .external_attributes()
+            >> 16;
+        assert_eq!(stored & 0o7000, 0o6000, "{stored:o}");
+        drop(archive);
+        let package = ExtensionPackage::read(&bytes, "").unwrap();
+        let program = package.binary("linux-x86_64").unwrap();
+        assert!(program.executable);
+        let manifest = package
+            .files
+            .iter()
+            .find(|file| file.path == MANIFEST_FILE)
+            .unwrap();
+        assert!(!manifest.executable);
     }
 
     #[test]

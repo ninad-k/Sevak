@@ -855,8 +855,9 @@ fn a_script_node_that_times_out_takes_the_processes_it_started_with_it() {
     while changed.elapsed() < Duration::from_millis(500) {
         assert!(Instant::now() < deadline, "the script's child still runs");
         std::thread::sleep(Duration::from_millis(50));
+        // An unreadable or empty read (a rename in progress) is no change.
         let now = std::fs::read_to_string(&beat).unwrap_or_default();
-        if now != last {
+        if !now.is_empty() && now != last {
             last = now;
             changed = Instant::now();
         }

@@ -2,7 +2,7 @@
   // Settings > Workflows: the installed workflows, "New from template", and the
   // visual builder (WorkflowEditor) for the one being edited.
   import "./workflows.css";
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import Toggle from "../Toggle.svelte";
   import WorkflowEditor from "./WorkflowEditor.svelte";
   import {
@@ -19,6 +19,7 @@
     type WorkflowSummary,
   } from "./ipc";
   import { newWorkflow, normalize, type Workflow } from "./model";
+  import { t, tHtml } from "../i18n.svelte";
 
   let list = $state<WorkflowList | null>(null);
   let templates = $state<TemplateInfo[]>([]);
@@ -96,38 +97,46 @@
     await refresh();
   }
 
+  /** What had focus when the builder opened, to give focus back when it closes. */
+  let opener: HTMLElement | null = null;
+  let page: HTMLElement | undefined = $state();
+  $effect.pre(() => {
+    if (editing && !opener) opener = document.activeElement as HTMLElement | null;
+  });
+
   async function closeEditor(changed: boolean) {
     editing = null;
+    const back = opener;
+    opener = null;
     if (changed) await refresh();
+    await tick();
+    if (back?.isConnected && back !== document.body) back.focus();
+    else page?.querySelector<HTMLElement>("button:not(:disabled)")?.focus();
   }
 </script>
 
 <!-- The list stays out of reach (keyboard included) while the builder covers it. -->
-<div class="wf-page" inert={editing !== null}>
-  <h1>Workflows</h1>
-  <p class="wf-lead">
-    A workflow chains a trigger (a keyword, a shortcut, Universal Actions or a command) to actions
-    and outputs. Build one here, or drop a folder with a <code>workflow.toml</code> into the
-    workflows folder. A workflow that runs scripts or commands asks for your permission first.
-  </p>
+<div class="wf-page" inert={editing !== null} bind:this={page}>
+  <h1>{t("workflows.page.title")}</h1>
+  <p class="wf-lead">{@html tHtml("workflows.page.lead")}</p>
 
   <div class="wf-toolbar">
-    <button type="button" class="wf-btn primary" onclick={startBlank}>New workflow</button>
+    <button type="button" class="wf-btn primary" onclick={startBlank}>{t("workflows.page.newWorkflow")}</button>
     <button
       type="button"
       class="wf-btn"
       aria-expanded={showTemplates}
       onclick={() => (showTemplates = !showTemplates)}
     >
-      New from template…
+      {t("workflows.page.newFromTemplate")}
     </button>
     <button type="button" class="wf-btn" onclick={() => void openWorkflowsFolder()}>
-      Open workflows folder
+      {t("workflows.page.openFolder")}
     </button>
   </div>
 
   {#if showTemplates}
-    <section class="wf-card templates" aria-label="Templates">
+    <section class="wf-card templates" aria-label={t("workflows.page.templates")}>
       {#each templates as template (template.id)}
         <div class="wf-row tpl">
           <div class="wf-grow">
@@ -138,9 +147,10 @@
             type="button"
             class="wf-btn small"
             disabled={busy !== null}
+            aria-label={t("workflows.page.useTemplate", { name: template.name })}
             onclick={() => fromTemplate(template.id)}
           >
-            {busy === template.id ? "Creating…" : "Use this"}
+            {busy === template.id ? t("workflows.page.creating") : t("workflows.page.useThis")}
           </button>
         </div>
       {/each}
@@ -152,14 +162,11 @@
   {/if}
 
   {#if list === null}
-    <p class="wf-sub" role="status">Loading…</p>
+    <p class="wf-sub" role="status">{t("common.loading")}</p>
   {:else if list.workflows.length === 0}
-    <p class="wf-sub">
-      No workflows yet. Start with a template, or press New workflow. They live in
-      <code class="wf-code">{list.folder}</code>.
-    </p>
+    <p class="wf-sub">{@html tHtml("workflows.page.empty", { folder: list.folder })}</p>
   {:else}
-    <ul class="rows" aria-label="Installed workflows">
+    <ul class="rows" aria-label={t("workflows.page.installed")}>
       {#each list.workflows as row (row.folder)}
         <li class="wf-card">
           <div class="wf-row">
@@ -167,20 +174,20 @@
               <div class="wf-title">{row.name}</div>
               {#if row.description}<div class="wf-sub">{row.description}</div>{/if}
               <div class="chips">
-                <span class="wf-chip" title="The folder">{row.folder}</span>
+                <span class="wf-chip" title={t("workflows.page.folderTitle")}>{row.folder}</span>
                 {#each row.keywords as keyword (keyword)}
-                  <span class="wf-chip">keyword: {keyword}</span>
+                  <span class="wf-chip">{t("workflows.page.keyword", { keyword })}</span>
                 {/each}
-                {#if row.nodes > 0}<span class="wf-chip">{row.nodes} nodes</span>{/if}
+                {#if row.nodes > 0}<span class="wf-chip">{t("workflows.page.nodes", { count: row.nodes })}</span>{/if}
                 {#if row.warnings > 0}
-                  <span class="wf-chip warn">{row.warnings} warning{row.warnings === 1 ? "" : "s"}</span>
+                  <span class="wf-chip warn">{t("workflows.page.warnings", { count: row.warnings })}</span>
                 {/if}
                 {#if row.error}
-                  <span class="wf-chip error">Not loaded</span>
+                  <span class="wf-chip error">{t("workflows.page.notLoaded")}</span>
                 {:else if row.needs_approval && !row.approved}
-                  <span class="wf-chip warn">Waiting for your permission</span>
+                  <span class="wf-chip warn">{t("workflows.page.waiting")}</span>
                 {:else if row.needs_approval}
-                  <span class="wf-chip ok">Allowed to run code</span>
+                  <span class="wf-chip ok">{t("workflows.page.allowed")}</span>
                 {/if}
               </div>
               {#if row.error}<p class="wf-msg error">{row.error}</p>{/if}
@@ -188,7 +195,7 @@
                 <p class="wf-msg warn">{warning}</p>
               {/each}
               {#each row.hotkey_errors as problem (problem.key)}
-                <p class="wf-msg warn">The shortcut {problem.key} is not active: {problem.error}</p>
+                <p class="wf-msg warn">{t("workflows.page.hotkeyInactive", { key: problem.key, error: problem.error })}</p>
               {/each}
             </div>
             <div class="actions">
@@ -197,13 +204,14 @@
                   type="button"
                   class="wf-btn small primary"
                   disabled={busy !== null}
-                  onclick={() => review(row)}>Review…</button
+                  aria-label={t("workflows.page.reviewLabel", { name: row.name })}
+                  onclick={() => review(row)}>{t("workflows.page.review")}</button
                 >
               {/if}
               {#if !row.error}
                 <Toggle
                   checked={row.enabled}
-                  label="Enable {row.name}"
+                  label={t("workflows.page.enable", { name: row.name })}
                   onchange={(on) => toggle(row, on)}
                 />
               {/if}
@@ -211,14 +219,18 @@
                 type="button"
                 class="wf-btn small"
                 disabled={busy !== null}
-                onclick={() => edit(row.folder)}>{row.error ? "Fix…" : "Edit"}</button
+                aria-label={row.error
+                  ? t("workflows.page.fixLabel", { name: row.name })
+                  : t("workflows.page.editLabel", { name: row.name })}
+                onclick={() => edit(row.folder)}
+                >{row.error ? t("workflows.page.fix") : t("workflows.page.edit")}</button
               >
               <button
                 type="button"
                 class="wf-btn small danger"
                 disabled={busy !== null}
-                aria-label="Delete {row.name}"
-                onclick={() => remove(row)}>Delete</button
+                aria-label={t("workflows.page.deleteLabel", { name: row.name })}
+                onclick={() => remove(row)}>{t("workflows.page.delete")}</button
               >
             </div>
           </div>

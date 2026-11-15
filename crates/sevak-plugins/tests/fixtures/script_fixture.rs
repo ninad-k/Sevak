@@ -67,11 +67,16 @@ fn spawn_tree(dir: &str) {
 }
 
 /// Writes a growing counter to `<dir>/beat` every 20 ms for half a minute (so
-/// a failed test does not leave it running).
+/// a failed test does not leave it running). Each value is written to a
+/// temporary file and renamed over `beat`, so being killed mid-write never
+/// leaves `beat` empty.
 fn beat(dir: &str) {
     let path = std::path::Path::new(dir).join("beat");
+    let temp = std::path::Path::new(dir).join("beat.tmp");
     for n in 0..1500 {
-        let _ = std::fs::write(&path, n.to_string());
+        if std::fs::write(&temp, n.to_string()).is_ok() {
+            let _ = std::fs::rename(&temp, &path);
+        }
         std::thread::sleep(Duration::from_millis(20));
     }
 }

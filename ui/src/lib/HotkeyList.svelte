@@ -4,6 +4,7 @@
   import type { CustomHotkeyStatus } from "./ipc";
   import { validateHotkey, type HotkeyBinding } from "./settings-ipc";
   import type { HotkeyErrors } from "./validate";
+  import { t, tHtml } from "./i18n.svelte";
 
   let {
     bindings = $bindable(),
@@ -78,12 +79,9 @@
 </script>
 
 <p class="note">
-  Extra global shortcuts. A shortcut can open Sevak with text already typed in, such as
-  <code>g </code> or <code>&gt; </code>, or run a result directly without showing Sevak, using its
-  result id such as <code>apps:firefox.desktop</code>.
+  {@html tHtml("hotkeys.list.note")}
   {#if wayland}
-    On Wayland, run <code>sevak --setup-hotkey</code> (or use the button under General) after saving
-    to bind them in GNOME.
+    {@html tHtml("hotkeys.list.noteWayland")}
   {/if}
 </p>
 
@@ -93,7 +91,7 @@
   <section class="group entry">
     <div class="top">
       <div class="key">
-        <label class="mini" for="hk-{i}">Shortcut</label>
+        <label class="mini" for="hk-{i}">{t("hotkeys.list.shortcut")}</label>
         <HotkeyField
           id="hk-{i}"
           bind:value={binding.key}
@@ -104,27 +102,27 @@
       <button
         type="button"
         class="btn icon"
-        aria-label="Remove shortcut {binding.key}"
-        title="Remove"
+        aria-label={t("hotkeys.list.remove", { key: binding.key.trim() || String(i + 1) })}
+        title={t("common.remove")}
         onclick={() => remove(i)}>✕</button
       >
     </div>
     <div class="what">
       <div class="cell kind">
-        <label class="mini" for="hk-kind-{i}">Does</label>
+        <label class="mini" for="hk-kind-{i}">{t("hotkeys.list.does")}</label>
         <select
           id="hk-kind-{i}"
           class="input"
           value={kindOf(binding)}
           onchange={(e) => setKind(i, e.currentTarget.value as Kind)}
         >
-          <option value="query">Open Sevak with text</option>
-          <option value="run">Run a result</option>
+          <option value="query">{t("hotkeys.list.openWithText")}</option>
+          <option value="run">{t("hotkeys.list.runResult")}</option>
         </select>
       </div>
       <div class="cell grow">
         <label class="mini" for="hk-value-{i}">
-          {kindOf(binding) === "run" ? "Result id" : "Text"}
+          {kindOf(binding) === "run" ? t("hotkeys.list.resultId") : t("hotkeys.list.text")}
         </label>
         <input
           id="hk-value-{i}"
@@ -137,21 +135,22 @@
           spellcheck="false"
           autocomplete="off"
           aria-invalid={!!rowErrors.value}
+          aria-describedby={rowErrors.value ? `hk-value-${i}-error` : undefined}
         />
-        {#if rowErrors.value}<span class="msg error" role="alert">{rowErrors.value}</span>{/if}
+        {#if rowErrors.value}<span class="msg error" id="hk-value-{i}-error" role="alert">{rowErrors.value}</span>{/if}
       </div>
     </div>
     {#if registration}
-      <p class="msg warn" role="status">Could not be registered: {registration}</p>
+      <p class="msg warn" role="status">{t("hotkeys.list.notRegistered", { error: registration })}</p>
     {/if}
   </section>
 {/each}
 
 {#if bindings.length === 0}
-  <p class="empty">No extra shortcuts.</p>
+  <p class="empty">{t("hotkeys.list.empty")}</p>
 {/if}
 <div class="inline">
-  <button type="button" class="btn" onclick={add}>Add shortcut</button>
+  <button type="button" class="btn" onclick={add}>{t("hotkeys.list.add")}</button>
 </div>
 
 <style>
@@ -167,7 +166,7 @@
     font-size: 12.5px;
   }
 
-  code {
+  .note :global(code) {
     padding: 0 4px;
     border-radius: 4px;
     background: var(--kbd-bg);
@@ -251,7 +250,7 @@
   }
 
   .input:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: -1px;
   }
 
@@ -296,7 +295,7 @@
   }
 
   .btn:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 

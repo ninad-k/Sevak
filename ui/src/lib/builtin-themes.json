@@ -94,7 +94,7 @@
         "accent_strong": "#709dab",
         "background": "#2e3440",
         "border": "rgba(236, 239, 244, 0.12)",
-        "error": "#e5848d",
+        "error": "#ea8e96",
         "input_background": "rgba(236, 239, 244, 0.06)",
         "input_border": "rgba(236, 239, 244, 0.24)",
         "kbd_background": "rgba(236, 239, 244, 0.08)",

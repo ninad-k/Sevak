@@ -4,6 +4,15 @@
 // canvas needs. Whether a workflow is *valid* is decided by Rust
 // (`check_workflow`); the helpers here only keep the canvas from drawing
 // connections that cannot be right.
+//
+// The catalog's words (labels, summaries, hints, option names) live in the
+// locale files under `workflows.*`; the getters below look them up on every
+// read, so the builder follows a language change at once.
+
+import { t, type MessageKey } from "../i18n.svelte";
+
+/** A message under `workflows.`, for keys built from node types and field names. */
+const w = (key: string) => t(`workflows.${key}` as MessageKey);
 
 export type NodeType =
   | "keyword"
@@ -110,156 +119,171 @@ export interface KindDef {
   defaults: () => Record<string, unknown>;
 }
 
-const PLACEHOLDERS = "Placeholders: {query} and {var:name}.";
+/** A field as the catalog below writes it; `field()` adds the words. */
+type RawField = Omit<FieldDef, "label" | "hint" | "options"> & {
+  /** Where the field's words live under `workflows.`; default `kinds.<type>.fields.<key>`. */
+  text?: string;
+  /** `true`: its own `<text>.hint`; `"placeholders"`: the shared placeholder hint. */
+  hint?: true | "placeholders";
+  /** The option values; their labels are `workflows.options.<set>.<value>`. */
+  options?: { set: string; values: readonly string[] };
+};
+
+type RawKind = Omit<KindDef, "label" | "summary" | "fields"> & { fields: RawField[] };
+
+function field(type: NodeType, raw: RawField): FieldDef {
+  const { text, hint, options, ...rest } = raw;
+  const base = text ?? `kinds.${type}.fields.${raw.key}`;
+  const def = { ...rest } as FieldDef;
+  Object.defineProperty(def, "label", { enumerable: true, get: () => w(`${base}.label`) });
+  if (hint) {
+    Object.defineProperty(def, "hint", {
+      enumerable: true,
+      get: () => w(hint === "placeholders" ? "placeholders" : `${base}.hint`),
+    });
+  }
+  if (options) {
+    Object.defineProperty(def, "options", {
+      enumerable: true,
+      get: () => options.values.map((value) => ({ value, label: w(`options.${options.set}.${value}`) })),
+    });
+  }
+  return def;
+}
+
+function localize(raw: RawKind): KindDef {
+  const def = { ...raw, fields: raw.fields.map((f) => field(raw.type, f)) } as KindDef;
+  Object.defineProperty(def, "label", { enumerable: true, get: () => w(`kinds.${raw.type}.label`) });
+  Object.defineProperty(def, "summary", { enumerable: true, get: () => w(`kinds.${raw.type}.summary`) });
+  return def;
+}
 
 const TRANSFORM_OPS = [
-  ["set", "Set to the text"],
-  ["upper", "UPPER CASE"],
-  ["lower", "lower case"],
-  ["title", "Title Case"],
-  ["trim", "Trim spaces"],
-  ["url_encode", "URL-encode"],
-  ["url_decode", "URL-decode"],
-  ["base64_encode", "Base64 encode"],
-  ["base64_decode", "Base64 decode"],
-  ["replace", "Replace text"],
-  ["regex_replace", "Replace with a regular expression"],
-  ["first_line", "First line"],
-  ["split", "Split and take one part"],
+  "set",
+  "upper",
+  "lower",
+  "title",
+  "trim",
+  "url_encode",
+  "url_decode",
+  "base64_encode",
+  "base64_decode",
+  "replace",
+  "regex_replace",
+  "first_line",
+  "split",
 ] as const;
 
 const TESTS = [
-  ["equals", "equals"],
-  ["not_equals", "does not equal"],
-  ["contains", "contains"],
-  ["not_contains", "does not contain"],
-  ["starts_with", "starts with"],
-  ["ends_with", "ends with"],
-  ["matches", "matches the regular expression"],
-  ["is_empty", "is empty"],
-  ["not_empty", "is not empty"],
+  "equals",
+  "not_equals",
+  "contains",
+  "not_contains",
+  "starts_with",
+  "ends_with",
+  "matches",
+  "is_empty",
+  "not_empty",
 ] as const;
 
 const SYSTEM_COMMANDS = [
-  ["lock", "Lock"],
-  ["sleep", "Sleep"],
-  ["hibernate", "Hibernate"],
-  ["restart", "Restart (asks first)"],
-  ["shutdown", "Shut down (asks first)"],
-  ["logout", "Log out (asks first)"],
-  ["empty_trash", "Empty the trash (asks first)"],
+  "lock",
+  "sleep",
+  "hibernate",
+  "restart",
+  "shutdown",
+  "logout",
+  "empty_trash",
 ] as const;
 
-const opts = (pairs: readonly (readonly [string, string])[]) =>
-  pairs.map(([value, label]) => ({ value, label }));
-
-const PROGRAM_FIELDS: FieldDef[] = [
+const PROGRAM_FIELDS: RawField[] = [
   {
     key: "command",
-    label: "Program and arguments",
+    text: "program.command",
     kind: "lines",
     mono: true,
     optional: true,
-    hint: "One per line, the program first. Use this or the script below. No shell is used.",
+    hint: true,
   },
   {
     key: "script",
-    label: "Script file",
+    text: "program.script",
     kind: "text",
     mono: true,
     optional: true,
     placeholder: "main.py",
-    hint: "A file in the workflow's folder: .py, .ps1, .js, .sh or an executable.",
+    hint: true,
   },
 ];
 
-export const KINDS: KindDef[] = [
+export const KINDS: KindDef[] = (
+  [
   {
     type: "keyword",
-    label: "Keyword",
     category: "trigger",
-    summary: "Type a keyword (and some text) to start the workflow.",
     fields: [
-      { key: "keyword", label: "Keyword", kind: "text", mono: true, placeholder: "docs" },
+      { key: "keyword", kind: "text", mono: true, placeholder: "docs" },
       {
         key: "argument",
-        label: "Text after the keyword",
         kind: "select",
-        options: [
-          { value: "optional", label: "Optional" },
-          { value: "required", label: "Required" },
-          { value: "none", label: "None" },
-        ],
+        options: { set: "argument", values: ["optional", "required", "none"] },
       },
       {
         key: "subtitle",
-        label: "Second line of the result",
         kind: "text",
         optional: true,
-        hint: PLACEHOLDERS,
+        hint: "placeholders",
       },
     ],
     defaults: () => ({ keyword: "", argument: "optional", subtitle: "" }),
   },
   {
     type: "hotkey",
-    label: "Hotkey",
     category: "trigger",
-    summary: "A global shortcut starts the workflow.",
     fields: [
       {
         key: "key",
-        label: "Shortcut",
         kind: "text",
         mono: true,
         placeholder: "Ctrl+Alt+K",
-        hint: "Like the shortcuts in Settings. On Wayland use an external trigger instead.",
+        hint: true,
       },
     ],
     defaults: () => ({ key: "" }),
   },
   {
     type: "selection",
-    label: "Universal Actions",
     category: "trigger",
-    summary: "Appears in Universal Actions for the text, links or files you select.",
     fields: [
       {
         key: "accepts",
-        label: "Offer it for",
         kind: "accepts",
-        hint: "The selection becomes the argument (one link or path per line).",
+        hint: true,
       },
     ],
     defaults: () => ({ accepts: ["text", "url", "file"] }),
   },
   {
     type: "external",
-    label: "External trigger",
     category: "trigger",
-    summary: "Started from the command line or a desktop shortcut.",
     fields: [],
     defaults: () => ({}),
   },
   {
     type: "script_filter",
-    label: "Script filter",
     category: "input",
-    summary: "A keyword whose results come from a script (Alfred Script Filter JSON).",
     needsApproval: true,
     fields: [
-      { key: "keyword", label: "Keyword", kind: "text", mono: true, placeholder: "fruit" },
+      { key: "keyword", kind: "text", mono: true, placeholder: "fruit" },
       ...PROGRAM_FIELDS,
       {
         key: "args",
-        label: "Arguments before the typed text",
         kind: "lines",
         mono: true,
         optional: true,
       },
       {
         key: "timeout_ms",
-        label: "Wait for results (ms)",
         kind: "number",
         optional: true,
         min: 10,
@@ -268,7 +292,6 @@ export const KINDS: KindDef[] = [
       },
       {
         key: "hard_timeout_ms",
-        label: "Stop the script after (ms)",
         kind: "number",
         optional: true,
         min: 500,
@@ -280,37 +303,31 @@ export const KINDS: KindDef[] = [
   },
   {
     type: "run_script",
-    label: "Run script",
     category: "action",
-    summary: "Runs a program; what it prints becomes the argument.",
     needsApproval: true,
     fields: [
       ...PROGRAM_FIELDS,
       {
         key: "args",
-        label: "More arguments",
         kind: "lines",
         mono: true,
         optional: true,
-        hint: `One per line. ${PLACEHOLDERS}`,
+        hint: true,
       },
       {
         key: "stdin",
-        label: "Standard input",
         kind: "textarea",
         optional: true,
-        hint: PLACEHOLDERS,
+        hint: "placeholders",
       },
       {
         key: "env",
-        label: "Environment variables",
         kind: "env",
         optional: true,
-        hint: "NAME=value, one per line.",
+        hint: true,
       },
       {
         key: "timeout_ms",
-        label: "Stop it after (ms)",
         kind: "number",
         optional: true,
         min: 100,
@@ -319,113 +336,93 @@ export const KINDS: KindDef[] = [
       },
       {
         key: "log_stderr",
-        label: "Log its error output",
         kind: "checkbox",
         optional: true,
-        hint: "Off by default: it can contain your data.",
+        hint: true,
       },
     ],
     defaults: () => ({ command: [], script: "script.py" }),
   },
   {
     type: "open_url",
-    label: "Open URL",
     category: "action",
-    summary: "Opens a web or mail link. Placeholders are URL-encoded.",
     fields: [
       {
         key: "url",
-        label: "Link",
         kind: "text",
         mono: true,
         placeholder: "https://example.com/?q={query}",
-        hint: "Add |raw to a placeholder to leave it as it is: {var:site|raw}.",
+        hint: true,
       },
     ],
     defaults: () => ({ url: "https://" }),
   },
   {
     type: "open_file",
-    label: "Open file",
     category: "action",
-    summary: "Opens a file or folder with its default program.",
     needsApproval: true,
     fields: [
       {
         key: "path",
-        label: "Path",
         kind: "text",
         mono: true,
-        hint: `~ is your home folder; a relative path is inside the workflow's folder. ${PLACEHOLDERS}`,
+        hint: true,
       },
     ],
     defaults: () => ({ path: "{query}" }),
   },
   {
     type: "launch_app",
-    label: "Launch app",
     category: "action",
-    summary: "Starts an application by name or path.",
     needsApproval: true,
     fields: [
-      { key: "app", label: "Application", kind: "text", placeholder: "Firefox" },
+      { key: "app", kind: "text", placeholder: "Firefox" },
       {
         key: "args",
-        label: "Arguments",
         kind: "lines",
         mono: true,
         optional: true,
-        hint: "Used when the application is a path to a program.",
+        hint: true,
       },
     ],
     defaults: () => ({ app: "" }),
   },
   {
     type: "system_command",
-    label: "System command",
     category: "action",
-    summary: "Lock, sleep, restart and so on.",
     needsApproval: true,
     fields: [
-      { key: "command", label: "Command", kind: "select", options: opts(SYSTEM_COMMANDS) },
+      { key: "command", kind: "select", options: { set: "system", values: SYSTEM_COMMANDS } },
     ],
     defaults: () => ({ command: "lock" }),
   },
   {
     type: "terminal_command",
-    label: "Terminal command",
     category: "action",
-    summary: "Runs a command line in a terminal window.",
     needsApproval: true,
     fields: [
       {
         key: "command",
-        label: "Command line",
         kind: "textarea",
         mono: true,
-        hint: `${PLACEHOLDERS} Each one is inserted as one quoted word for your shell; {query|raw} inserts it as commands.`,
+        hint: true,
       },
     ],
     defaults: () => ({ command: "" }),
   },
   {
     type: "copy",
-    label: "Copy",
     category: "action",
-    summary: "Copies text to the clipboard.",
-    fields: [{ key: "text", label: "Text", kind: "textarea", hint: PLACEHOLDERS }],
+    fields: [{ key: "text", kind: "textarea", hint: "placeholders" }],
     defaults: () => ({ text: "{query}" }),
   },
   {
     type: "paste",
-    label: "Paste",
     category: "action",
-    summary: "Pastes text into the app you were using.",
     fields: [
-      { key: "text", label: "Text", kind: "textarea", hint: PLACEHOLDERS },
+      { key: "text", kind: "textarea", hint: "placeholders" },
       {
         key: "restore_clipboard",
-        label: "Put the earlier clipboard back",
         kind: "tristate",
         optional: true,
       },
@@ -434,119 +431,97 @@ export const KINDS: KindDef[] = [
   },
   {
     type: "set_variable",
-    label: "Set variable",
     category: "utility",
-    summary: "Stores a value for the nodes after it.",
     fields: [
-      { key: "name", label: "Name", kind: "text", mono: true, placeholder: "site" },
-      { key: "value", label: "Value", kind: "text", hint: PLACEHOLDERS },
+      { key: "name", kind: "text", mono: true, placeholder: "site" },
+      { key: "value", kind: "text", hint: "placeholders" },
     ],
     defaults: () => ({ name: "", value: "" }),
   },
   {
     type: "transform",
-    label: "Transform",
     category: "utility",
-    summary: "Changes the argument, or stores the result in a variable.",
     fields: [
-      { key: "op", label: "What to do", kind: "select", options: opts(TRANSFORM_OPS) },
-      { key: "input", label: "Input", kind: "text", hint: PLACEHOLDERS },
+      { key: "op", kind: "select", options: { set: "transform", values: TRANSFORM_OPS } },
+      { key: "input", kind: "text", hint: "placeholders" },
       {
         key: "find",
-        label: "Find / split at",
         kind: "text",
         mono: true,
         optional: true,
-        hint: "For replace, regular-expression replace and split.",
+        hint: true,
       },
       {
         key: "replace",
-        label: "Replace with",
         kind: "text",
         mono: true,
         optional: true,
-        hint: "A regular expression may use $1 for a group.",
+        hint: true,
       },
       {
         key: "index",
-        label: "Part to keep (split)",
         kind: "number",
         optional: true,
-        hint: "0 is the first part; -1 the last.",
+        hint: true,
       },
       {
         key: "into",
-        label: "Store in variable",
         kind: "text",
         mono: true,
         optional: true,
-        hint: "Leave empty to replace the argument.",
+        hint: true,
       },
     ],
     defaults: () => ({ op: "upper", input: "{query}" }),
   },
   {
     type: "conditional",
-    label: "Conditional",
     category: "utility",
-    summary: "Continues along then or else.",
     fields: [
-      { key: "left", label: "Text", kind: "text", hint: PLACEHOLDERS },
-      { key: "test", label: "Test", kind: "select", options: opts(TESTS) },
-      { key: "right", label: "Compared with", kind: "text", mono: true, optional: true },
-      { key: "ignore_case", label: "Ignore case", kind: "checkbox", optional: true },
+      { key: "left", kind: "text", hint: "placeholders" },
+      { key: "test", kind: "select", options: { set: "test", values: TESTS } },
+      { key: "right", kind: "text", mono: true, optional: true },
+      { key: "ignore_case", kind: "checkbox", optional: true },
     ],
     defaults: () => ({ left: "{query}", test: "equals", right: "" }),
   },
   {
     type: "delay",
-    label: "Delay",
     category: "utility",
-    summary: "Waits a moment (at most a minute).",
     fields: [
-      { key: "ms", label: "Wait (ms)", kind: "number", min: 0, max: 60000 },
+      { key: "ms", kind: "number", min: 0, max: 60000 },
     ],
     defaults: () => ({ ms: 500 }),
   },
   {
     type: "notification",
-    label: "Notification",
     category: "output",
-    summary: "Shows a system notification.",
     fields: [
-      { key: "heading", label: "Heading", kind: "text", optional: true },
-      { key: "body", label: "Text", kind: "textarea", hint: PLACEHOLDERS },
+      { key: "heading", kind: "text", optional: true },
+      { key: "body", kind: "textarea", hint: "placeholders" },
     ],
     defaults: () => ({ heading: "", body: "{query}" }),
   },
   {
     type: "large_type",
-    label: "Large Type",
     category: "output",
-    summary: "Shows text huge on screen.",
-    fields: [{ key: "text", label: "Text", kind: "textarea", hint: PLACEHOLDERS }],
+    fields: [{ key: "text", kind: "textarea", hint: "placeholders" }],
     defaults: () => ({ text: "{query}" }),
   },
   {
     type: "text_view",
-    label: "Text view",
     category: "output",
-    summary: "Shows text in the launcher window.",
     fields: [
-      { key: "heading", label: "Heading", kind: "text", optional: true },
-      { key: "text", label: "Text", kind: "textarea", hint: PLACEHOLDERS },
+      { key: "heading", kind: "text", optional: true },
+      { key: "text", kind: "textarea", hint: "placeholders" },
     ],
     defaults: () => ({ text: "{query}" }),
   },
-];
+  ] as RawKind[]
+).map(localize);
 
-export const CATEGORY_LABELS: Record<Category, string> = {
-  trigger: "Triggers",
-  input: "Inputs",
-  action: "Actions",
-  utility: "Utilities",
-  output: "Outputs",
-};
+/** A category's name, as the "Add a node" menu groups the kinds. */
+export const categoryLabel = (category: Category): string => w(`categories.${category}`);
 
 export const CATEGORIES: Category[] = ["trigger", "input", "action", "utility", "output"];
 
@@ -570,7 +545,7 @@ export const portOf = (conn: WfConnection) => conn.port ?? OUT;
 export function newWorkflow(): Workflow {
   return {
     format: 1,
-    name: "New workflow",
+    name: t("workflows.defaultName"),
     description: "",
     author: "",
     version: "",
@@ -692,17 +667,17 @@ export function canConnect(
 ): ConnectResult {
   const source = workflow.node.find((node) => node.id === from);
   const target = workflow.node.find((node) => node.id === to);
-  if (!source || !target) return { ok: false, reason: "That node does not exist." };
+  if (!source || !target) return { ok: false, reason: t("workflows.connect.missing") };
   if (isStart(target)) {
-    return { ok: false, reason: `A ${kindOf(target.type).label.toLowerCase()} has no input.` };
+    return { ok: false, reason: t("workflows.connect.noInput", { kind: kindOf(target.type).label }) };
   }
-  if (!outputPorts(source).includes(port)) return { ok: false, reason: "No such output." };
-  if (from === to) return { ok: false, reason: "A node cannot connect to itself." };
+  if (!outputPorts(source).includes(port)) return { ok: false, reason: t("workflows.connect.noOutput") };
+  if (from === to) return { ok: false, reason: t("workflows.connect.self") };
   if (workflow.connection.some((c) => c.from === from && portOf(c) === port && c.to === to)) {
-    return { ok: false, reason: "Already connected." };
+    return { ok: false, reason: t("workflows.connect.already") };
   }
   if (wouldLoop(workflow, from, to)) {
-    return { ok: false, reason: "That would make a loop." };
+    return { ok: false, reason: t("workflows.connect.loop") };
   }
   return { ok: true };
 }

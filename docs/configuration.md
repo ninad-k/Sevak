@@ -33,7 +33,7 @@ A minimal config works: missing fields use their defaults, so a nearly empty fil
 
 ### Keywords
 
-Every keyword is one word, and no two searches may share one: the configurable keywords (`[files]` `keyword` / `index_keyword` / `content_keyword`, `[bookmarks]`, `[tasks]`, `[media]`, `[window_management]` `keyword` / `switcher_keyword`, `[contacts]`, `[onepassword]`, `[dictionary]` `define_keyword` / `spell_keyword`, `[ai]`), the fixed ones (`>`, `cb`, `s`, `emoji`, `:`, `@`, `uuid`) and your web search keywords. Settings refuses to save a clash; in a hand-edited file a clashing keyword is ignored and logged. An empty keyword turns that keyword off.
+Every keyword is one word, and no two searches may share one: the configurable keywords (`[files]` `keyword` / `index_keyword` / `content_keyword`, `[bookmarks]`, `[tasks]`, `[media]`, `[window_management]` `keyword` / `switcher_keyword`, `[contacts]`, `[onepassword]`, `[dictionary]` `define_keyword` / `spell_keyword`, `[ai]`, `[ssh]`, `[projects]`, `[calendar]`, `[clock]`, `[passwords]`), the fixed ones (`>`, `cb`, `s`, `emoji`, `:`, `@`, `uuid`) and your web search keywords. Settings refuses to save a clash; in a hand-edited file a clashing keyword is ignored and logged. An empty keyword turns that keyword off.
 
 Keywords of [workflows](workflows.md) and [script plugins](features/script-plugins.md) are checked the same way but only produce a warning (in Settings and in the log), because both plugins then answer the keyword and show their results.
 
@@ -66,6 +66,7 @@ Main hotkeys and startup behaviour.
 | `launch_at_login` | boolean | `false` | Start Sevak in the background after this account signs in to Windows, macOS or Linux. Set in **Settings → General → Start Sevak when I sign in**, then **Save**; the Windows installer uses the same preference. An OS-level startup restriction can still prevent launch; Settings shows registration errors or a disabled/missing entry. |
 | `check_for_updates` | boolean | `true` | Check GitHub for a new version shortly after startup, every six hours, and whenever you open Sevak (if the last check is over an hour old). Updates are only installed after you confirm. Apart from optional currency rates, this is the only automatic network request. |
 | `update_channel` | `"stable"` or `"beta"` | `"stable"` | Which releases the update check follows. `"beta"` also offers pre-release builds (`X.Y.Z-beta.N`), which arrive earlier and may be less tested; Sevak then reads `latest-beta.json` from GitHub Releases as well as `latest.json` and offers the newer of the two. Switching back to `"stable"` never downgrades: Sevak waits for a stable version newer than the one installed. Any other value means `"stable"`. |
+| `language` | `"auto"`, `"en"`, `"es"`, `"de"`, `"fr"` or `"hi"` | `"auto"` | Language of the launcher, Settings and the tray menu. `"auto"` follows the operating system and falls back to English. Any other value means `"auto"`. Languages other than English are machine-drafted and await native review; plugin results stay in English. See [Localisation](localisation.md). |
 
 ```toml
 [general]
@@ -76,6 +77,7 @@ hide_on_blur = true
 launch_at_login = false
 check_for_updates = true
 update_channel = "stable"
+language = "auto"
 ```
 
 Startup is per user, including a Windows installation for all users. It does not
@@ -87,9 +89,12 @@ sign-in](install.md#start-sevak-after-sign-in) for controls and troubleshooting.
 The saved opt-in and the OS's effective startup state are separate. Disabling
 startup in Windows Startup apps or a Linux desktop's startup settings is
 respected during ordinary startup and unrelated Settings saves. To opt in
-again through Sevak, save `false`, then save `true`. A failed Settings save
-keeps the previous preference and shows the error; check the registration
-warning before assuming automatic launch is active.
+again through Sevak, use **Enable again** or **Repair startup** under **Settings
+→ General** while the saved preference is on. This explicit action leaves the
+configuration file and unsaved form edits unchanged. **Check status** refreshes
+the OS state without changing it. A failed repair or startup-setting save
+keeps the previous preference and reports the error; check the actual status
+before assuming automatic launch is active.
 
 ### [window]
 
@@ -168,7 +173,7 @@ Which plugins are active. Each built-in plugin can be disabled.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `disabled` | array of strings | `[]` | Plugin ids to turn off. Available ids: `"apps"`, `"calculator"`, `"web"` (all engines) or `"web:<keyword>"` (one engine), `"files"` (its instances `"files:names"` and `"files:content"` are the `ff` and `in` searches), `"bookmarks"`, `"system"`, `"tasks"` (automation tasks), `"media"` (media controls), `"windows"` (window layouts; `"windows:switch"` is the window switcher), `"shell"`, `"clipboard"`, `"snippets"`, `"emoji"` (the emoji picker; `"emoji:word"` and `"emoji:colon"` are its two keywords), `"selection"` (Universal Actions), `"contacts"`, `"1password"`, `"dict"` (`define` and `spell`), `"uuid"`, `"backup"` (the `backup settings` and `restore settings` [launcher commands](backup-and-restore.md#from-the-command-line-and-the-launcher)), `"script"` or `"script:<name>"` (script plugins) and `"workflow"` or `"workflow:<folder>"` ([workflows](workflows.md); each also has its own switch in **Settings → Workflows**). Example: `disabled = ["files", "web:yt"]` turns off file search and YouTube search. Unknown ids are ignored. |
+| `disabled` | array of strings | `[]` | Plugin ids to turn off. Available ids: `"apps"`, `"calculator"`, `"web"` (all engines) or `"web:<keyword>"` (one engine), `"files"` (its instances `"files:names"` and `"files:content"` are the `ff` and `in` searches), `"bookmarks"`, `"system"`, `"tasks"` (automation tasks), `"media"` (media controls), `"windows"` (window layouts; `"windows:switch"` is the window switcher), `"shell"`, `"clipboard"`, `"snippets"`, `"emoji"` (the emoji picker; `"emoji:word"` and `"emoji:colon"` are its two keywords), `"selection"` (Universal Actions), `"contacts"`, `"1password"`, `"dict"` (`define` and `spell`), `"uuid"`, `"clock"` (the world clock), `"pwgen"` (the password generator), `"backup"` (the `backup settings` and `restore settings` [launcher commands](backup-and-restore.md#from-the-command-line-and-the-launcher)), `"script"` or `"script:<name>"` (script plugins) and `"workflow"` or `"workflow:<folder>"` ([workflows](workflows.md); each also has its own switch in **Settings → Workflows**). Example: `disabled = ["files", "web:yt"]` turns off file search and YouTube search. Unknown ids are ignored. |
 
 ```toml
 [plugins]
@@ -509,6 +514,87 @@ expand_in_terminals = false
 expand_in_browsers = false
 ```
 
+### [ssh]
+
+[SSH hosts](features/ssh.md) (`ssh <host>`): the hosts in `~/.ssh/config` and the files it includes. Enter opens a terminal running `ssh <host>` (the `[shell]` terminal). Private keys are never read. Set it in **Settings → Integrations**.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `keyword` | string | `"ssh"` | Keyword to list the hosts. `""` keeps the default. |
+| `known_hosts` | boolean | `false` | Also list the hosts in `~/.ssh/known_hosts` (hashed entries are skipped). |
+
+```toml
+[ssh]
+keyword = "ssh"
+known_hosts = false
+```
+
+### [projects]
+
+[Recent projects](features/projects.md) (`code <name>`): folders and workspaces you opened recently in VS Code, VS Code Insiders, VSCodium, Cursor and JetBrains IDEs. Enter opens one in its editor. Set it in **Settings → Integrations**.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `keyword` | string | `"code"` | Keyword to list the projects. `""` keeps the default. |
+| `editors` | array of strings | `[]` | Editors to read: `"vscode"`, `"vscode-insiders"`, `"vscodium"`, `"cursor"`, `"jetbrains"`. `[]` reads every one found. |
+
+```toml
+[projects]
+keyword = "code"
+editors = []
+```
+
+### [calendar]
+
+[Calendar](features/calendar.md) (`cal`, `cal tomorrow`, `cal fri`): events from local `.ics` files. No accounts and no network. Set it in **Settings → Integrations**.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `keyword` | string | `"cal"` | Keyword for the agenda. `""` keeps the default. |
+| `files` | array of strings | `[]` | `.ics` files, or folders of them (searched three levels deep), e.g. `["~/calendar.ics", "~/.calendars"]`. |
+| `days` | integer | `7` | How many days ahead `cal` shows (1-60). |
+
+```toml
+[calendar]
+keyword = "cal"
+files = []
+days = 7
+```
+
+### [clock]
+
+The [world clock and time-zone converter](features/clock.md) (`time`), offline. On by default; turn it off with `"clock"` in `[plugins] disabled`. Set it in **Settings → Integrations**.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `keyword` | string | `"time"` | Keyword for the clock. Cannot be empty (an empty value means the default). |
+| `cities` | array of strings | `["London", "New York", "Tokyo"]` | What a bare `time` lists after the time here: city names (`"San Francisco"`), abbreviations (`"IST"`) or IANA zone names (`"Europe/Berlin"`). An entry that names no known place is shown as a warning row. |
+
+```toml
+[clock]
+keyword = "time"
+cities = ["London", "New York", "Tokyo"]
+```
+
+### [passwords]
+
+The [password generator](features/passwords.md) (`pass`), offline. On by default; turn it off with `"pwgen"` in `[plugins] disabled`. Set it in **Settings → Integrations**. Generated passwords are never stored or logged.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `keyword` | string | `"pass"` | Keyword for the generator. Cannot be empty. |
+| `length` | integer | `20` | Characters in a password made by a bare `pass` (4-128). `pass 24` asks for another length once. |
+| `words` | integer | `6` | Words in a passphrase made by `pass words` (2-20). |
+| `symbols` | boolean | `true` | Include symbols (`!#$%&*+-.:=?@^_~`) in passwords. `pass nosymbols` and `pass symbols` override it once. |
+
+```toml
+[passwords]
+keyword = "pass"
+length = 20
+words = 6
+symbols = true
+```
+
 ## [[snippet]]
 
 Snippets: text you paste often, with placeholders that expand.
@@ -591,6 +677,8 @@ Result ids:
 - System commands: `system:lock`, `system:sleep`, `system:restart`, `system:shutdown`, `system:logout`, `system:settings`, `system:settings:bluetooth`, `system:settings:wifi`, etc.
 - Snippets: `snippets:<name>`
 - Shell commands: `shell:<command>`
+- SSH hosts: `ssh:<alias>` (see [SSH hosts](features/ssh.md))
+- Recent projects: `projects:<editor>:<path>`, for a project that is in the editor's recent list
 - Automation tasks: `tasks:dark_mode`, `tasks:volume:30`, `tasks:keep_awake:45`, `tasks:kill:chrome.exe` (see [Automation tasks](features/tasks.md#bind-a-task-to-a-hotkey))
 - Window layouts: `windows:left`, `windows:maximize`, `windows:next_display` and so on (see [Window management](window-management.md#global-shortcuts-for-layouts)); they act on the window that has focus when the key is pressed
 - Workflows: `workflow:<folder>:run:<node id>`, the result a workflow's hotkey trigger runs; usually it is simpler to give the workflow its own hotkey trigger in the builder (see [Triggers](workflows.md#triggers))
@@ -678,6 +766,12 @@ check_for_updates = true
 # Switching back to "stable" never downgrades: Sevak waits for the next stable
 # version that is newer than the one you have.
 update_channel = "stable"
+
+# Language of Sevak's windows and tray menu: "auto" (follow the operating
+# system), "en" (English), "es" (Español), "de" (Deutsch), "fr" (Français) or
+# "hi" (हिन्दी). Languages other than English are machine-drafted and await
+# review by native speakers; plugin results stay in English for now.
+language = "auto"
 
 [window]
 # Width of the search window in logical pixels (400-1600).
@@ -995,6 +1089,30 @@ expand_in_terminals = false
 # Safari, Arc, Zen, LibreWolf and Chromium count as browsers.
 expand_in_browsers = false
 
+[clock]
+# World clock and time zones, offline (the time-zone rules are built in):
+# "time" lists the cities below, "time tokyo" shows one city, and
+# "time 3pm pst in ist" or "time 14:30 berlin to new york" converts a time.
+# Enter copies the answer. Turn it off with "clock" in [plugins] disabled.
+keyword = "time"
+# Cities a bare "time" lists: city names ("Tokyo", "San Francisco"), time-zone
+# abbreviations ("IST") or IANA zone names ("Europe/Berlin").
+cities = ["London", "New York", "Tokyo"]
+
+[passwords]
+# Password generator, offline: "pass" makes a random password, "pass 24" one of
+# 24 characters, "pass 6 words" a passphrase and "pass pin" a number. Enter
+# copies it, marked so that clipboard histories (Sevak's, Windows Win+V and
+# others that honour the marker) leave it out. Generated passwords are never
+# stored or logged. Turn it off with "pwgen" in [plugins] disabled.
+keyword = "pass"
+# Characters in a password (4-128) and words in a passphrase (2-20).
+length = 20
+words = 6
+# Include symbols such as !#%+ in passwords ("pass nosymbols" leaves them out
+# once, "pass symbols" adds them once).
+symbols = true
+
 # Web search engines: type "<keyword> <terms>". "{query}" is replaced by the
 # URL-encoded terms. Defining any [[web_search]] entry replaces this list.
 [[web_search]]
@@ -1025,4 +1143,34 @@ url = "https://github.com/search?q={query}"
 # [[hotkey]]
 # key = "Ctrl+Alt+F"
 # run = "apps:firefox.desktop"
+
+[ssh]
+# "ssh <name>" lists the hosts in ~/.ssh/config (and the files it includes);
+# Enter opens a terminal running "ssh <host>" (see [shell]), Alt+Enter copies the
+# command. Only the config file is read, never a private key. To turn it off,
+# add "ssh" to [plugins] disabled.
+keyword = "ssh"
+# Also list hosts from ~/.ssh/known_hosts (hashed entries cannot be read and are
+# skipped).
+known_hosts = false
+
+[projects]
+# "code <name>" lists the folders and workspaces you opened recently in VS Code,
+# VS Code Insiders, VSCodium, Cursor and JetBrains IDEs; Enter opens one in the
+# editor it came from. Read from the editors' own files; nothing is sent anywhere.
+keyword = "code"
+# Editors to read: "vscode", "vscode-insiders", "vscodium", "cursor",
+# "jetbrains". [] reads every one that is installed.
+editors = []
+
+[calendar]
+# "cal" shows today's and upcoming events from local .ics files: "cal tomorrow",
+# "cal fri", "cal 2026-12-24", or "cal <text>" to find an event. No accounts and
+# no network: only the files and folders listed here are read.
+keyword = "cal"
+# .ics files, or folders of them (searched three levels deep), e.g.
+# ["~/calendar.ics", "~/.calendars"].
+files = []
+# How many days ahead "cal" shows (1-60).
+days = 7
 ```

@@ -14,6 +14,7 @@ use sevak_core::theme_store::{
     self, Existing, GalleryEntry, StoredTheme, MAX_INDEX_BYTES, MAX_THEME_BYTES,
 };
 use sevak_platform::open;
+use sevak_plugins::extensions::revocations::Subject;
 use sevak_plugins::net;
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 use tauri_plugin_dialog::DialogExt;
@@ -249,6 +250,9 @@ pub async fn install_gallery_theme(
             .find(|entry| entry.id == id)
             .cloned()
             .ok_or("Open the gallery again; that theme is no longer in the list.")?;
+        let state = app.state::<AppState>();
+        let store = state.search.extensions.store();
+        store.check_revocation(Subject::Theme, &entry.id, "")?;
         let bytes = download(&entry.url, MAX_THEME_BYTES)?;
         let text = theme_store::verify_download(&bytes, &entry.sha256)?;
         let existing = if replace == Some(true) {
@@ -256,8 +260,9 @@ pub async fn install_gallery_theme(
         } else {
             Existing::Refuse
         };
-        let config_dir = app.state::<AppState>().paths.config_dir.clone();
-        let stored = theme_store::install_text(&config_dir, &text, &entry.name, &existing)?;
+        // The same final revocation check as Extensions, and a receipt, so a
+        // later signed notice reaches this copy and Extensions can remove it.
+        let stored = store.install_gallery_theme_text(&entry, &text, &existing)?;
         tracing::info!(theme = %entry.name, file = %stored.file, "installed a gallery theme");
         refresh_if_active(app, &stored.file);
         Ok(stored)

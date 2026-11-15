@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from "./i18n.svelte";
   // Grid View: results that are tiles (an emoji, an image, an icon and a short
   // label) laid out in rows. The keys (arrows, Enter, Tab ...) are handled by
   // App.svelte, which asks this component only for how many columns there are.
@@ -10,6 +11,7 @@
     selected,
     verb,
     compact = false,
+    idFor = (index: number) => `result-${index}`,
     columns = $bindable(1),
     onhover,
     onrun,
@@ -20,6 +22,8 @@
     verb: string;
     /** A preview pane is open: show fewer rows. */
     compact?: boolean;
+    /** DOM id of tile `index`, which the search box's `aria-activedescendant` names. */
+    idFor?: (index: number) => string;
     columns?: number;
     onhover: (index: number) => void;
     onrun: (index: number) => void;
@@ -64,14 +68,14 @@
     class="grid"
     class:compact
     role="listbox"
-    aria-label="Results"
+    aria-label={t("launcher.results")}
     bind:this={grid}
   >
     {#each items as item, i (item.id)}
       <!-- Keyboard handling lives on the window; tiles must not take focus from the input. -->
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <div
-        id="result-{i}"
+        id={idFor(i)}
         class="cell"
         class:selected={i === selected}
         role="option"
