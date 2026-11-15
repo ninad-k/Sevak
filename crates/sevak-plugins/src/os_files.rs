@@ -14,6 +14,12 @@
 //! is something to see (and something to fall back on when the OS index is
 //! missing) while the index is still working. Rows are the files plugin's own
 //! rows, so they open, show in folder and copy their path the same way.
+//!
+//! Filters (`ff report ext:pdf size:>1mb`, see [`crate::files::filters`]) work
+//! here too. Only the name words, plus a single wanted extension for `ff`,
+//! reach the index, which every backend understands the same way; the filters
+//! themselves are applied to the index's first [`FILTERED_LIMIT`] answers,
+//! reading the size and dates of each from the disk on the worker thread.
 
 use std::collections::HashSet;
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -25,10 +31,12 @@ use std::time::Duration;
 use sevak_core::{
     Action, Config, FuzzyQuery, IconSource, Plugin, PluginResult, ResultItem, ResultsNotifier,
 };
+use sevak_platform::netpath;
 use sevak_platform::os_search::search_words;
 use sevak_platform::{OsHit, OsSearchError, OsSearchKind, OsSearchRequest, PlatformProvider};
 
-use crate::files::{name_bonus, FilesPlugin, PRUNED_DIRS};
+use crate::files::filters::{Candidate, FileQuery};
+use crate::files::{name_bonus, unix_seconds, FilesPlugin, FOLD_CASE, PRUNED_DIRS};
 use crate::path_browse;
 use crate::script::delivery::{Begin, Delivery};
 
@@ -38,6 +46,8 @@ const SOFT_BUDGET: Duration = Duration::from_millis(80);
 const INDEX_TIMEOUT: Duration = Duration::from_secs(2);
 /// Rows shown for one search.
 const MAX_ROWS: usize = 50;
+/// Hits asked of the index when filters will drop some of them.
+pub const FILTERED_LIMIT: usize = 200;
 const MIN_NAME_CHARS: usize = 2;
 /// Inside-file searches on one or two letters match almost everything.
 const MIN_CONTENT_CHARS: usize = 3;
@@ -186,16 +196,24 @@ impl Inner {
     /// One search of the index, as result rows. Never panics and never fails:
     /// a missing or broken index is a row that says so.
     fn search(&self, input: &str) -> Vec<ResultItem> {
+        let query = match self.files.parse_filters(input) {
+            Ok(query) => query,
+            Err(error) => return vec![FilesPlugin::filter_error_row(&error)],
+        };
         let request = OsSearchRequest {
-            text: input.to_owned(),
+            text: query.index_words(self.kind == OsSearchKind::Names),
             kind: self.kind,
-            limit: MAX_ROWS,
+            limit: if query.is_plain() {
+                MAX_ROWS
+            } else {
+                FILTERED_LIMIT
+            },
             timeout: INDEX_TIMEOUT,
         };
         let answer = catch_unwind(AssertUnwindSafe(|| (self.backend)(&request)))
             .unwrap_or_else(|_| Err(OsSearchError::Failed("the search crashed".to_owned())));
         match answer {
-            Ok(hits) => self.rows(input, hits),
+            Ok(hits) => self.rows(&query, hits),
             Err(OsSearchError::Unavailable(reason)) => {
                 tracing::debug!(%reason, "OS file index unavailable");
                 vec![status_row(&reason)]
@@ -213,19 +231,46 @@ impl Inner {
         }
     }
 
-    fn rows(&self, input: &str, hits: Vec<OsHit>) -> Vec<ResultItem> {
-        let words = search_words(input);
+    /// The size and times of a hit, read from the disk only when a filter
+    /// needs them, and never for a network path that is turned off.
+    fn metadata(&self, hit: &OsHit, query: &FileQuery) -> (Option<u64>, Option<i64>, Option<i64>) {
+        let allow = self.files.allow_network_paths();
+        if !query.needs_metadata() || netpath::refusal(&hit.path.to_string_lossy(), allow).is_some()
+        {
+            return (None, None, None);
+        }
+        match std::fs::metadata(&hit.path) {
+            Ok(meta) => (
+                Some(if meta.is_dir() { 0 } else { meta.len() }),
+                meta.modified().ok().map(unix_seconds),
+                meta.created().ok().map(unix_seconds),
+            ),
+            Err(_) => (None, None, None),
+        }
+    }
+
+    fn rows(&self, query: &FileQuery, hits: Vec<OsHit>) -> Vec<ResultItem> {
+        let whole = query.text.as_str();
+        let words = search_words(whole);
         let mut queries: Vec<FuzzyQuery> = words.iter().map(|w| FuzzyQuery::for_paths(w)).collect();
-        let whole = input.trim();
         hits.into_iter()
             .filter(|hit| !is_noise(&hit.path, self.include_hidden, cfg!(target_os = "macos")))
-            .take(MAX_ROWS)
-            .enumerate()
-            .map(|(rank, hit)| {
+            .filter_map(|hit| {
                 let name = hit.path.file_name().map_or_else(
                     || hit.path.display().to_string(),
                     |n| n.to_string_lossy().into_owned(),
                 );
+                if query.is_plain() {
+                    return Some((hit, name, (None, None, None)));
+                }
+                let meta = self.metadata(&hit, query);
+                query
+                    .matches(&candidate(&hit, &name, meta), FOLD_CASE)
+                    .then_some((hit, name, meta))
+            })
+            .take(MAX_ROWS)
+            .enumerate()
+            .map(|(rank, (hit, name, meta))| {
                 let score = match self.kind {
                     OsSearchKind::Content => CONTENT_TOP_SCORE - rank as f64,
                     OsSearchKind::Names => {
@@ -243,11 +288,29 @@ impl Inner {
                 } else {
                     hit.path.display().to_string()
                 };
-                self.files
-                    .row(&name, hit.path, hit.is_dir, score)
-                    .with_autocomplete(completion)
+                let mut item = self
+                    .files
+                    .row(&name, hit.path.clone(), hit.is_dir, score)
+                    .with_autocomplete(completion);
+                FilesPlugin::describe(&mut item, query, &candidate(&hit, &name, meta));
+                item
             })
             .collect()
+    }
+}
+
+fn candidate<'a>(
+    hit: &'a OsHit,
+    name: &'a str,
+    (size, modified, created): (Option<u64>, Option<i64>, Option<i64>),
+) -> Candidate<'a> {
+    Candidate {
+        name,
+        path: &hit.path,
+        is_dir: hit.is_dir,
+        size,
+        modified,
+        created,
     }
 }
 
@@ -409,8 +472,22 @@ impl Plugin for OsFilesPlugin {
         if names && path_browse::parse(input, inner.files.home(), cfg!(windows)).is_some() {
             return inner.files.search(input);
         }
-        if input.chars().count() < self.min_chars() || search_words(input).is_empty() {
+        if input.chars().count() < self.min_chars() {
             return Vec::new();
+        }
+        let query = match inner.files.parse_filters(input) {
+            Ok(query) => query,
+            Err(error) => return vec![FilesPlugin::filter_error_row(&error)],
+        };
+        let index_text = query.index_words(names);
+        if index_text.chars().count() < self.min_chars() || search_words(&index_text).is_empty() {
+            // Nothing the index can search for (`ff size:>1gb`): the folder
+            // index still answers filters on their own.
+            return if names && !query.is_plain() {
+                inner.files.search(input)
+            } else {
+                Vec::new()
+            };
         }
 
         let folders = if names {
@@ -961,5 +1038,163 @@ mod tests {
         assert!(lock(&inner.queue).stopped);
         // The worker held one reference; once it exits only ours remains.
         wait_until("the worker to exit", || Arc::strong_count(&inner) == 1);
+    }
+
+    /// A fake index that records what it was asked for, text and limit, and
+    /// answers with `paths` (folders end in `/`).
+    /// What a recording fake was asked: the text and limit of each search.
+    type Asked = Arc<Mutex<Vec<(String, usize)>>>;
+
+    fn recording(paths: Vec<String>) -> (Arc<Backend>, Asked) {
+        let asked = Arc::new(Mutex::new(Vec::new()));
+        let seen = Arc::clone(&asked);
+        let backend: Arc<Backend> = Arc::new(move |request: &OsSearchRequest| {
+            lock(&seen).push((request.text.clone(), request.limit));
+            Ok(paths
+                .iter()
+                .map(|p| OsHit {
+                    is_dir: p.ends_with('/'),
+                    path: PathBuf::from(p.trim_end_matches('/')),
+                })
+                .collect())
+        });
+        (backend, asked)
+    }
+
+    fn filtered_plugin(kind: OsSearchKind, backend: Arc<Backend>) -> OsFilesPlugin {
+        let files = Arc::new(FilesPlugin::with_home(
+            FilesConfig::default(),
+            MockPlatform::empty(),
+            None,
+        ));
+        // Hidden folders are allowed: the test tree may sit below one.
+        OsFilesPlugin::new(kind, "ff", files, backend, true).with_budget(Duration::from_secs(5))
+    }
+
+    #[test]
+    fn filters_apply_to_index_hits_and_one_extension_reaches_the_index() {
+        let (backend, asked) = recording(vec![
+            doc("report.pdf"),
+            doc("report.txt"),
+            doc("reports/"),
+            doc("report.PDF.bak"),
+        ]);
+        let plugin = filtered_plugin(OsSearchKind::Names, backend);
+
+        let rows = settle(&plugin, "report ext:pdf");
+        assert_eq!(titles(&rows), ["report.pdf"]);
+        assert!(
+            rows[0].subtitle.ends_with("ext:pdf"),
+            "{}",
+            rows[0].subtitle
+        );
+        assert_eq!(
+            lock(&asked).clone(),
+            [("report pdf".to_owned(), FILTERED_LIMIT)]
+        );
+
+        assert_eq!(titles(&settle(&plugin, "report is:folder")), ["reports"]);
+        assert_eq!(
+            titles(&settle(&plugin, "report -ext:pdf -is:folder")),
+            ["report.txt", "report.PDF.bak"]
+        );
+        assert_eq!(
+            titles(&settle(&plugin, "report in:docs ext:txt")),
+            ["report.txt"]
+        );
+        // Several extensions cannot all be words: the name alone is sent.
+        let _ = settle(&plugin, "report ext:pdf,txt");
+        assert_eq!(lock(&asked).last().unwrap().0, "report");
+    }
+
+    #[test]
+    fn plain_whole_disk_queries_ask_as_before() {
+        let (backend, asked) = recording(vec![doc("report.pdf")]);
+        let plugin = filtered_plugin(OsSearchKind::Names, backend);
+        let rows = settle(&plugin, "report");
+        assert_eq!(
+            rows[0].subtitle,
+            Path::new(HOME).join("docs").display().to_string()
+        );
+        assert_eq!(lock(&asked).clone(), [("report".to_owned(), MAX_ROWS)]);
+    }
+
+    #[test]
+    fn contents_searches_get_no_extension_word_but_are_filtered() {
+        let (backend, asked) = recording(vec![doc("budget.xlsx"), doc("budget.txt")]);
+        let plugin = filtered_plugin(OsSearchKind::Content, backend);
+        assert_eq!(titles(&settle(&plugin, "budget ext:xlsx")), ["budget.xlsx"]);
+        assert_eq!(
+            lock(&asked).clone(),
+            [("budget".to_owned(), FILTERED_LIMIT)]
+        );
+        // Only filters: nothing to look for inside files.
+        assert!(plugin.query("ext:xlsx").is_empty());
+        assert_eq!(lock(&asked).len(), 1);
+    }
+
+    #[test]
+    fn an_invalid_filter_never_reaches_the_index() {
+        let (backend, asked) = recording(vec![doc("report.pdf")]);
+        let plugin = filtered_plugin(OsSearchKind::Names, backend);
+        let rows = plugin.query("report size:lots");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].id, "files:filter-invalid");
+        assert!(
+            rows[0].subtitle.contains("size:>10mb"),
+            "{}",
+            rows[0].subtitle
+        );
+        assert!(lock(&asked).is_empty());
+    }
+
+    #[test]
+    fn filters_without_words_use_the_folder_index_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let files = folder_index(dir.path(), &["big.pdf", "small.txt"]);
+        let (backend, asked) = recording(vec![doc("x.pdf")]);
+        let plugin = OsFilesPlugin::new(OsSearchKind::Names, "ff", files, backend, false);
+        let rows = plugin.query("size:<1kb is:file");
+        let mut found = titles(&rows);
+        found.sort_unstable();
+        assert_eq!(found, ["big.pdf", "small.txt"]);
+        assert!(lock(&asked).is_empty());
+    }
+
+    /// A temporary folder the noise filter lets through (Windows' temp folder
+    /// is inside `AppData`, which it drops).
+    fn visible_tempdir() -> tempfile::TempDir {
+        if cfg!(windows) {
+            tempfile::tempdir_in(env!("CARGO_MANIFEST_DIR")).unwrap()
+        } else {
+            tempfile::tempdir().unwrap()
+        }
+    }
+
+    #[test]
+    fn size_and_date_filters_read_the_hits_from_the_disk() {
+        let dir = visible_tempdir();
+        let big = dir.path().join("report-big.pdf");
+        let small = dir.path().join("report-small.pdf");
+        fs::write(&big, vec![0u8; 64 * 1024]).unwrap();
+        fs::write(&small, b"tiny").unwrap();
+        let gone = dir.path().join("report-gone.pdf");
+        let (backend, _) = recording(
+            [&big, &small, &gone]
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect(),
+        );
+        let plugin = filtered_plugin(OsSearchKind::Names, backend);
+
+        let rows = settle(&plugin, "report size:>10kb");
+        assert_eq!(titles(&rows), ["report-big.pdf"]);
+        assert!(rows[0].subtitle.contains("64 KB"), "{}", rows[0].subtitle);
+        // A vanished file has no size or date, so it fails such filters.
+        assert_eq!(
+            titles(&settle(&plugin, "report modified:today")),
+            ["report-big.pdf", "report-small.pdf"]
+        );
+        assert!(plugin.query("report modified:>30d").is_empty());
     }
 }
