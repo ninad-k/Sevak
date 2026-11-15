@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { debouncedAnnouncer, launcherAnnouncement, type LauncherState } from "./announce";
+import { setLanguage } from "./i18n.svelte";
 
 const base: LauncherState = {
   query: "fire",
@@ -34,6 +35,21 @@ describe("launcherAnnouncement", () => {
     expect(launcherAnnouncement({ ...base, textView: true, panelActions: 2 })).toMatch(/^Text view\./);
     expect(launcherAnnouncement({ ...base, textView: true, largeText: "42" })).toBe(
       "Large Type: 42. Press Escape to close.",
+    );
+  });
+});
+
+describe("launcherAnnouncement in another language", () => {
+  afterEach(() => setLanguage("en"));
+
+  it("speaks the current language with its plural rules and number format", () => {
+    setLanguage("de");
+    expect(launcherAnnouncement({ ...base, count: 1 })).toBe("1 Ergebnis");
+    expect(launcherAnnouncement({ ...base, count: 1200 })).toBe("1.200 Ergebnisse");
+    expect(launcherAnnouncement({ ...base, count: 0 })).toBe("Keine Ergebnisse.");
+    setLanguage("fr");
+    expect(launcherAnnouncement({ ...base, panelActions: 2, panelTitle: "Actions pour Firefox" })).toBe(
+      "Actions pour Firefox : 2 actions. Échap ferme.",
     );
   });
 });

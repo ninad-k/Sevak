@@ -3,6 +3,8 @@
 // sets. Rust (`sevak_core::theme_file`) validates everything again on save and
 // stays the authority; the checks here only give instant feedback.
 
+import { t } from "./i18n.svelte";
+
 export type Mode = "light" | "dark";
 
 /** Palette entry key -> normalized value (`#rrggbb`, `rgba(r, g, b, a)` or a shadow). */
@@ -71,28 +73,68 @@ export interface ColorField {
   optional?: boolean;
 }
 
+/** The palette keys. */
+type ColorKey =
+  | "background"
+  | "text"
+  | "subtext"
+  | "selection"
+  | "selection_text"
+  | "accent"
+  | "border"
+  | "shadow"
+  | "accent_strong"
+  | "on_accent"
+  | "tile"
+  | "kbd_background"
+  | "kbd_border"
+  | "surface"
+  | "input_background"
+  | "input_border"
+  | "switch_off"
+  | "warn"
+  | "error"
+  | "ok";
+
+/** A palette entry whose label and hint follow the UI language. */
+function colorField(key: ColorKey, cssVar: string, kind: ColorField["kind"], advanced: boolean, optional = false): ColorField {
+  return {
+    key,
+    cssVar,
+    kind,
+    advanced,
+    ...(optional ? { optional } : {}),
+    get label() {
+      return t(`appearance.colors.${key}.label`);
+    },
+    get hint() {
+      return t(`appearance.colors.${key}.hint`);
+    },
+  };
+}
+
 /** Every palette entry, in the order of theme files. Mirrors `COLOR_KEYS` in Rust. */
 export const COLOR_FIELDS: ColorField[] = [
-  { key: "background", cssVar: "--bg", label: "Background", hint: "The search bar", kind: "color", advanced: false },
-  { key: "text", cssVar: "--fg", label: "Text", hint: "Result titles and what you type", kind: "color", advanced: false },
-  { key: "subtext", cssVar: "--muted", label: "Subtext", hint: "Subtitles, hints, placeholder", kind: "color", advanced: false },
-  { key: "selection", cssVar: "--selected", label: "Selection", hint: "Background of the selected row", kind: "color", advanced: false },
-  { key: "selection_text", cssVar: "--selected-fg", label: "Selected text", hint: "Title of the selected row; empty follows Text", kind: "color", advanced: false, optional: true },
-  { key: "accent", cssVar: "--accent", label: "Accent", hint: "Caret, buttons, switches", kind: "color", advanced: false },
-  { key: "border", cssVar: "--border", label: "Border", hint: "Hairlines and the bar's outline", kind: "color", advanced: false },
-  { key: "shadow", cssVar: "--shadow", label: "Shadow", hint: "A box-shadow, e.g. 0 8px 28px rgba(0, 0, 0, 0.5), or none", kind: "shadow", advanced: false },
-  { key: "accent_strong", cssVar: "--accent-strong", label: "Accent (hover)", hint: "Hover and focus accent", kind: "color", advanced: true },
-  { key: "on_accent", cssVar: "--on-accent", label: "Text on accent", hint: "Text on an accent background", kind: "color", advanced: true },
-  { key: "tile", cssVar: "--tile", label: "Icon tile", hint: "Behind result icons", kind: "color", advanced: true },
-  { key: "kbd_background", cssVar: "--kbd-bg", label: "Key cap", hint: "Key hints such as Ctrl+1", kind: "color", advanced: true },
-  { key: "kbd_border", cssVar: "--kbd-border", label: "Key cap border", hint: "", kind: "color", advanced: true },
-  { key: "surface", cssVar: "--surface", label: "Panel", hint: "Panels in Settings", kind: "color", advanced: true },
-  { key: "input_background", cssVar: "--input-bg", label: "Field", hint: "Form controls in Settings", kind: "color", advanced: true },
-  { key: "input_border", cssVar: "--input-border", label: "Field border", hint: "", kind: "color", advanced: true },
-  { key: "switch_off", cssVar: "--switch-off", label: "Switch (off)", hint: "Toggle and slider tracks", kind: "color", advanced: true },
-  { key: "warn", cssVar: "--warn", label: "Warning", hint: "Notices", kind: "color", advanced: true },
-  { key: "error", cssVar: "--error", label: "Error", hint: "Error messages", kind: "color", advanced: true },
-  { key: "ok", cssVar: "--ok", label: "Success", hint: "Success marks", kind: "color", advanced: true },
+  colorField("background", "--bg", "color", false),
+  colorField("text", "--fg", "color", false),
+  colorField("subtext", "--muted", "color", false),
+  colorField("selection", "--selected", "color", false),
+  colorField("selection_text", "--selected-fg", "color", false, true),
+  colorField("accent", "--accent", "color", false),
+  colorField("border", "--border", "color", false),
+  colorField("shadow", "--shadow", "shadow", false),
+  colorField("accent_strong", "--accent-strong", "color", true),
+  colorField("on_accent", "--on-accent", "color", true),
+  colorField("tile", "--tile", "color", true),
+  colorField("kbd_background", "--kbd-bg", "color", true),
+  colorField("kbd_border", "--kbd-border", "color", true),
+  colorField("surface", "--surface", "color", true),
+  colorField("input_background", "--input-bg", "color", true),
+  colorField("input_border", "--input-border", "color", true),
+  colorField("switch_off", "--switch-off", "color", true),
+  colorField("warn", "--warn", "color", true),
+  colorField("error", "--error", "color", true),
+  colorField("ok", "--ok", "color", true),
 ];
 
 /** Limits of the sliders. Mirror `theme.rs` / `theme_file.rs`. */
@@ -300,10 +342,10 @@ export function contrastChecks(palette: Palette, defaults: Palette): ContrastChe
     return { id, label, ratio, aa: ratio >= AA_NORMAL_TEXT };
   };
   return [
-    pair("text", "Text on background", text, background),
-    pair("selection", "Selected row text on selection", selectionText, selection),
-    pair("subtext", "Subtext on background", get("subtext"), background),
-    pair("on_accent", "Text on accent buttons", get("on_accent"), get("accent")),
+    pair("text", t("appearance.contrast.text"), text, background),
+    pair("selection", t("appearance.contrast.selection"), selectionText, selection),
+    pair("subtext", t("appearance.contrast.subtext"), get("subtext"), background),
+    pair("on_accent", t("appearance.contrast.onAccent"), get("on_accent"), get("accent")),
   ];
 }
 
@@ -417,10 +459,10 @@ export const GALLERY_INDEX_URL =
 export function fontFamilyError(family: string): string | null {
   const text = family.trim();
   if (text === "") return null;
-  if (text.length > 200) return "At most 200 characters";
+  if (text.length > 200) return t("appearance.fontErrors.tooLong", { max: 200 });
   return /^[\p{L}\p{N} ,._'"-]+$/u.test(text)
     ? null
-    : "Only letters, digits, spaces and , . _ - are allowed";
+    : t("appearance.fontErrors.characters");
 }
 
 const GENERIC_FAMILIES = new Set([

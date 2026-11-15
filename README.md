@@ -177,6 +177,12 @@ Sevak also includes:
   restored scripts ask for approval again. Automatic backups are off by default.
   [Backup and restore →](docs/backup-and-restore.md)
 - **Tray access and launch at login** — keep Sevak available in the background.
+- **Languages** — the launcher, Settings and tray menu in English, Español,
+  Deutsch, Français and हिन्दी, following your system language or the one you
+  pick in Settings → General; the Windows setup offers English, German, French
+  and Spanish. Translations other than English are machine-drafted and await
+  native review, and plugin results stay in English for now
+  ([Localisation →](docs/localisation.md)).
 - **Optional update checks** — check at startup, every six hours, and when you
   open the launcher if the last check is over an hour old; installation
   requires your agreement and verifies an update signature.

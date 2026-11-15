@@ -20,6 +20,7 @@
 
 .wf-lead code,
 .wf-hint code,
+.wf-sub > code,
 .wf-code {
   padding: 0 4px;
   border-radius: 4px;

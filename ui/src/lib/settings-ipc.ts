@@ -4,6 +4,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { hasTauri, type Status, type ThemeSetting } from "./ipc";
+import { t } from "./i18n.svelte";
 
 import type { AiConfig } from "./ai";
 
@@ -47,6 +48,8 @@ export interface Config {
     check_for_updates: boolean;
     /** Release channel: "stable" (default) or "beta" (earlier, less tested builds). */
     update_channel: "stable" | "beta";
+    /** Interface language: "auto" (the OS language) or a code from `LANGUAGES` in i18n.svelte.ts. */
+    language: string;
   };
   window: { width: number };
   linux: { wayland_use_xwayland: boolean };
@@ -206,7 +209,7 @@ export async function saveSettings(config: Config): Promise<string | null> {
 
 /** Read the OS state without reloading (and discarding) the Settings draft. */
 export async function getStartupStatus(): Promise<StartupStatus> {
-  if (preview()) return { registered: false, enabled: false, error: "Startup status is available in the installed app.", saved: null };
+  if (preview()) return { registered: false, enabled: false, error: t("settings.startup.previewStatus"), saved: null };
   try {
     return await invoke<StartupStatus>("get_startup_status");
   } catch (err) {
@@ -216,7 +219,7 @@ export async function getStartupStatus(): Promise<StartupStatus> {
 
 /** Explicit opt-in to repair an existing saved startup preference, never a draft save. */
 export async function repairStartup(): Promise<{ status: StartupStatus; error: null } | { status: null; error: string }> {
-  if (preview()) return { status: null, error: "Start Sevak to repair your account's startup setting." };
+  if (preview()) return { status: null, error: t("settings.startup.previewRepair") };
   try {
     return { status: await invoke<StartupStatus>("repair_startup"), error: null };
   } catch (err) {

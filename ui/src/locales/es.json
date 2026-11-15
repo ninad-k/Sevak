@@ -1,0 +1,1896 @@
+{
+  "_meta": {
+    "status": "machine-drafted, needs native review"
+  },
+  "common": {
+    "save": "Guardar",
+    "saving": "Guardando…",
+    "saved": "Guardado",
+    "cancel": "Cancelar",
+    "close": "Cerrar",
+    "remove": "Quitar",
+    "loading": "Cargando…"
+  },
+  "language": {
+    "label": "Idioma",
+    "hint": "El idioma de las ventanas y del menú de la bandeja de Sevak. Automático sigue a tu sistema operativo. Por ahora, los resultados de los complementos siguen en inglés.",
+    "auto": "Automático ({language})",
+    "reviewNote": "Los idiomas distintos del inglés son borradores automáticos pendientes de revisión por hablantes nativos."
+  },
+  "pages": {
+    "common": {
+      "keyword": "Palabra clave",
+      "add": "Añadir",
+      "addTo": "Añadir a {label}",
+      "removeItem": "Quitar {item}",
+      "nothingAdded": "No se ha añadido nada.",
+      "noneAdded": "No se ha añadido ninguno.",
+      "otherEntries": "Otras entradas del archivo de configuración (esta lista no las conoce):",
+      "browse": "Examinar…",
+      "addFile": "Añadir archivo…",
+      "addFolder": "Añadir carpeta…",
+      "appName": "Nombre de la aplicación",
+      "noAppsIgnored": "No se ignora ninguna aplicación.",
+      "showInOrdinary": "Mostrar en las búsquedas normales",
+      "offUntilOn": "Desactivado hasta que lo actives.",
+      "pluginOff": "«{name}» está desactivado en <strong>Complementos</strong>. Actívalo también allí.",
+      "detectAutomatically": "Detectar automáticamente",
+      "units": {
+        "characters": "caracteres",
+        "words": "palabras",
+        "days": "días",
+        "minutes": "minutos",
+        "seconds": "segundos",
+        "tokens": "tokens",
+        "kb": "KB",
+        "mb": "MB"
+      }
+    },
+    "keys": {
+      "groups": {
+        "desktop": "Escritorio",
+        "filesClipboard": "Archivos y portapapeles",
+        "sound": "Sonido",
+        "network": "Red",
+        "appsPower": "Aplicaciones y energía",
+        "commands": "Comandos",
+        "settingsPages": "Páginas de ajustes"
+      },
+      "tasks": {
+        "darkMode": "Activar o desactivar el modo oscuro",
+        "showDesktop": "Mostrar el escritorio",
+        "hideOthers": "Ocultar las demás aplicaciones",
+        "minimizeAll": "Minimizar todas las ventanas",
+        "screenshot": "Hacer una captura de pantalla",
+        "restartShell": "Reiniciar el Explorador o el Finder",
+        "downloads": "Abrir la carpeta Descargas",
+        "recentFiles": "Abrir archivos recientes",
+        "emptyClipboard": "Vaciar el portapapeles",
+        "mute": "Silenciar",
+        "unmute": "Activar el sonido",
+        "volumeUp": "Subir el volumen",
+        "volumeDown": "Bajar el volumen",
+        "volume": "Ajustar el volumen",
+        "wifi": "Activar o desactivar el Wi-Fi",
+        "bluetooth": "Activar o desactivar el Bluetooth",
+        "flushDns": "Vaciar la caché de DNS",
+        "keepAwake": "Mantener el equipo despierto",
+        "stopKeepAwake": "Dejar de mantenerlo despierto",
+        "quitApp": "Cerrar una aplicación",
+        "forceQuitApp": "Forzar el cierre de una aplicación",
+        "kill": "Terminar un proceso (kill)",
+        "eject": "Expulsar una unidad"
+      },
+      "system": {
+        "lock": "Bloquear",
+        "sleep": "Suspender",
+        "hibernate": "Hibernar",
+        "restart": "Reiniciar",
+        "shutdown": "Apagar",
+        "logout": "Cerrar sesión",
+        "emptyTrash": "Vaciar la papelera",
+        "settings": "Todas las páginas de ajustes",
+        "display": "Pantalla",
+        "sound": "Sonido",
+        "network": "Red",
+        "apps": "Aplicaciones",
+        "notifications": "Notificaciones",
+        "power": "Energía",
+        "keyboard": "Teclado",
+        "mouse": "Ratón",
+        "privacy": "Privacidad",
+        "datetime": "Fecha y hora"
+      },
+      "safari": "Safari (macOS)"
+    },
+    "files": {
+      "bufferTitle": "Búfer de archivos",
+      "bufferSub": "Reúne varios archivos de los resultados con Alt+Down y luego muévelos, cópialos, comprímelos o envíalos a la papelera de una vez.",
+      "keepBuffer": "Conservar el búfer cuando Sevak se oculta",
+      "keepBufferHint": "Desactivado, el búfer se vacía cada vez que se cierra la barra de búsqueda.",
+      "keepBufferToggle": "Conservar el búfer de archivos cuando Sevak se oculta",
+      "bookmarksTitle": "Marcadores",
+      "bookmarksSub": "Busca en los marcadores de tus navegadores. Se leen del disco cuando buscas; no se envía nada a ninguna parte.",
+      "bookmarksKeywordHint": "Escribe «palabra clave término» para buscar solo en los marcadores. Si lo dejas vacío, se quita la palabra clave.",
+      "bookmarksGlobalHint": "Mostrar también los marcadores que coincidan en las búsquedas normales.",
+      "bookmarksGlobalToggle": "Mostrar los marcadores en las búsquedas normales",
+      "browsers": "Navegadores",
+      "browsersHint": "Marca los navegadores que quieres leer, con todos sus perfiles. Si no marcas ninguno, se leen todos los que Sevak encuentre. Safari solo existe en macOS, y allí Sevak necesita Acceso total al disco para leerlo.",
+      "bookmarksPlugin": "Marcadores"
+    },
+    "clock": {
+      "title": "Reloj mundial",
+      "sub": "La hora en cualquier lugar, sin conexión: <code>{keyword}</code> muestra tus ciudades, <code>{keyword} tokyo</code> muestra un lugar y <code>{keyword} 3pm pst in ist</code> convierte una hora, con el horario de verano incluido. Enter copia la respuesta.",
+      "cities": "Ciudades",
+      "citiesHint": "Lo que muestra la palabra clave sola, después de la hora local: una ciudad (San Francisco), una abreviatura (IST) o el nombre de una zona horaria (Europe/Berlin).",
+      "citiesPlaceholder": "Tokio",
+      "citiesEmpty": "No se ha añadido ninguna: solo se muestra la hora local.",
+      "plugin": "Reloj mundial"
+    },
+    "passwords": {
+      "title": "Generador de contraseñas",
+      "sub": "Contraseñas aleatorias creadas en este equipo: <code>{keyword}</code>, <code>{keyword} 24</code>, <code>{keyword} 6 words</code> o <code>{keyword} pin</code>. Enter copia una, marcada para que los historiales del portapapeles la omitan. Nada de lo generado se guarda ni se registra.",
+      "length": "Longitud de la contraseña",
+      "lengthHint": "Caracteres de una contraseña ({min}-{max}).",
+      "words": "Palabras de la frase de contraseña",
+      "wordsHint": "Palabras de una frase de contraseña ({min}-{max}).",
+      "symbols": "Incluir símbolos",
+      "symbolsHint": "Añade símbolos como !#%+ a las contraseñas (siempre se usan letras y números).",
+      "plugin": "Generador de contraseñas"
+    },
+    "ssh": {
+      "title": "Hosts SSH",
+      "sub": "Escribe <code>{keyword} web</code> para conectarte a un host de <code>~/.ssh/config</code> en un terminal (el elegido en Comandos de terminal).",
+      "knownHosts": "Mostrar también los hosts conocidos",
+      "knownHostsHint": "Hosts a los que ya te has conectado (de ~/.ssh/known_hosts). Las entradas con hash no se pueden leer y se omiten.",
+      "privacy": "<strong>Privacidad:</strong> solo se leen <code>~/.ssh/config</code>, los archivos que incluye dentro de <code>~/.ssh</code> y (si está activado) <code>known_hosts</code>, nunca una clave privada. No se envía nada a ninguna parte; <code>ssh</code> solo se ejecuta cuando pulsas Enter.",
+      "plugin": "Hosts SSH"
+    },
+    "projects": {
+      "title": "Proyectos recientes",
+      "sub": "Escribe <code>{keyword} sevak</code> para volver a abrir una carpeta o un espacio de trabajo en el editor con el que lo usaste por última vez.",
+      "editors": "Editores",
+      "editorsHint": "Si no marcas ninguno, se leen todos los editores instalados.",
+      "jetbrains": "IDE de JetBrains y Android Studio",
+      "privacy": "<strong>Privacidad:</strong> las listas de recientes de los propios editores se leen de sus carpetas de configuración y solo se guardan en memoria. Se omiten los proyectos remotos (SSH, WSL, contenedor) y los de recursos compartidos de red.",
+      "plugin": "Proyectos recientes"
+    },
+    "calendar": {
+      "title": "Calendario",
+      "sub": "Escribe <code>{keyword}</code> para hoy y los próximos días, <code>{keyword} tomorrow</code> o <code>{keyword} fri</code>. Los eventos provienen solo de archivos .ics de este equipo: sin cuentas ni red.",
+      "files": "Archivos y carpetas de calendario",
+      "filesHint": "Exporta un archivo .ics desde tu aplicación de calendario o indica una carpeta que llene una herramienta de sincronización (se busca hasta tres niveles de profundidad).",
+      "pickFile": "Elige un archivo de calendario",
+      "pickFolder": "Elige una carpeta de archivos de calendario",
+      "days": "Días por delante",
+      "daysHint": "Hasta cuántos días por delante muestra la agenda.",
+      "privacy": "<strong>Privacidad:</strong> los archivos se cargan en memoria al iniciar Sevak y en cada actualización. Los eventos nunca se escriben en otro sitio, ni se registran ni se envían, y no entran en el historial de búsqueda.",
+      "plugin": "Calendario"
+    },
+    "tasks": {
+      "title": "Tareas y multimedia",
+      "lead": "Acciones listas para usar del sistema operativo y los botones de lo que se esté reproduciendo.",
+      "tasksTitle": "Tareas de automatización",
+      "tasksSub": "Modo oscuro, volumen, capturas de pantalla, cerrar o matar una aplicación, expulsar una unidad, mantener el equipo despierto y más. Escribe el nombre de una tarea, o <code>{keyword} </code> para verlas todas.",
+      "confirm": "Preguntar antes de las tareas arriesgadas",
+      "confirmHint": "Pedir confirmación antes de forzar el cierre de una aplicación, terminar un proceso o reiniciar el Explorador o el Finder.",
+      "keywordHint": "Escribe la palabra clave y un espacio para ver las tareas. Si lo dejas vacío, se quita la palabra clave.",
+      "globalHint": "Buscar también los nombres de tareas en las búsquedas normales, como «dark mode» o «kill chrome».",
+      "globalToggle": "Mostrar las tareas en las búsquedas normales",
+      "offer": "Tareas disponibles",
+      "offerHint": "Desmarca una tarea para ocultarla. Solo se ofrecen las tareas que funcionan en este equipo.",
+      "noteWindows": "Para activar o desactivar el Wi-Fi o el Bluetooth, <em>Configuración, Privacidad y seguridad, Radios</em> debe permitir las aplicaciones de escritorio.",
+      "noteMac": "La primera vez que uses el modo oscuro, el volumen, cerrar u ocultar las demás, se pide permiso para controlar System Events; ocultar las demás y mostrar el escritorio también necesitan <strong>Accesibilidad</strong>.",
+      "noteLinux": "Las tareas que necesitan un programa auxiliar (<code>wmctrl</code>, <code>nmcli</code>, <code>udisksctl</code>…) no aparecen si no está instalado.",
+      "tasksPlugin": "Tareas de automatización",
+      "mediaTitle": "Controles multimedia",
+      "mediaSub": "Reproducir, pausar, siguiente y anterior para lo que se esté reproduciendo, sin cambiar al reproductor: escribe <code>pause</code> o <code>{keyword} </code>.",
+      "mediaKeywordHint": "Escribe la palabra clave y un espacio para ver los botones y la pista. Si lo dejas vacío, se quita la palabra clave.",
+      "mediaGlobalHint": "Buscar también «pause», «next track», etc. en las búsquedas normales.",
+      "mediaGlobalToggle": "Mostrar los controles multimedia en las búsquedas normales",
+      "nowPlaying": "Mostrar lo que se está reproduciendo",
+      "nowPlayingHint": "Una fila con el título, el artista y la aplicación. Se lee de tu reproductor cuando buscas y nunca se guarda ni se envía a ninguna parte.",
+      "mediaNoteLinux": "Necesita <strong><code>playerctl</code></strong>: los botones y la pista no se ofrecen hasta que esté instalado.",
+      "mediaNoteMac": "Los botones usan las teclas multimedia. La pista en reproducción solo se puede leer de Música y Spotify.",
+      "mediaNoteWindows": "Usa la sesión multimedia del sistema (la del control flotante de volumen) o, si no, las teclas multimedia.",
+      "mediaPlugin": "Controles multimedia"
+    },
+    "system": {
+      "title": "Sistema y terminal",
+      "lead": "Bloquea, suspende, reinicia y apaga desde la barra de búsqueda, y ejecuta comandos del shell en un terminal.",
+      "commandsTitle": "Comandos del sistema",
+      "commandsSub": "Escribe el nombre de un comando, como <code>lock</code> o <code>restart</code>, o el nombre de una página de configuración, como <code>bluetooth</code>.",
+      "confirm": "Preguntar antes de los comandos destructivos",
+      "confirmHint": "Pedir confirmación antes de reiniciar, apagar, cerrar sesión y vaciar la papelera. También se aplica a un atajo asignado a uno de ellos.",
+      "offer": "Comandos disponibles",
+      "offerHint": "Desmarca un comando o una página de configuración para ocultarlo. Solo se ofrecen los que existen en este equipo.",
+      "noteMac": "Reiniciar, apagar, cerrar sesión y vaciar la Papelera usan System Events y, la primera vez, necesitan el permiso de <strong>Accesibilidad</strong> para Sevak.",
+      "noteLinux": "Las páginas de configuración se abren con <code>gnome-control-center</code>, así que solo se ofrecen en GNOME.",
+      "commandsPlugin": "Comandos del sistema",
+      "terminalTitle": "Comandos de terminal",
+      "terminalSub": "Escribe <code>&gt; git status</code> y pulsa Enter para ejecutarlo en una ventana de terminal. No se ejecuta nada hasta que pulsas Enter.",
+      "terminal": "Terminal",
+      "terminalHint": "Un nombre de programa o una ruta completa, con argumentos opcionales, como {example}. Si lo dejas vacío, se detecta uno.",
+      "chooseTerminal": "Elige un programa de terminal",
+      "shell": "Shell",
+      "shellHint": "El programa que ejecuta el comando, como {example}. Si lo dejas vacío, se detecta uno.",
+      "shellHintMac": "No se usa en macOS: el terminal inicia tu shell de inicio de sesión, así que tus alias funcionan.",
+      "loginShell": "Tu shell de inicio de sesión",
+      "chooseShell": "Elige un programa de shell",
+      "keepOpen": "Mantener abierto el terminal",
+      "keepOpenHint": "Dejarlo en el prompt del shell cuando termine el comando. Desactivado, se cierra al acabar el comando.",
+      "history": "Los comandos recientes se vuelven a ofrecer desde el historial de uso de Sevak, que se queda en este equipo.",
+      "historyWindows": "Los comandos se ejecutan sin el perfil de tu shell, así que los alias y las funciones no están disponibles.",
+      "historyLinux": "Los comandos se ejecutan en el shell en modo no interactivo, así que los alias de <code>.bashrc</code> no suelen estar disponibles.",
+      "terminalPlugin": "Comandos de terminal"
+    },
+    "clipboard": {
+      "title": "Portapapeles y pegado",
+      "lead": "El historial del portapapeles te permite escribir <code>cb</code> para pegar algo que copiaste antes: texto, imágenes y archivos. Las opciones de pegado de abajo también se aplican a los fragmentos.",
+      "historyTitle": "Historial del portapapeles",
+      "keep": "Guardar un historial del portapapeles",
+      "keepHint": "Desactivado hasta que lo actives. Solo se recuerda lo que copies a partir de entonces.",
+      "privacy": "<strong>Privacidad:</strong> mientras esté activado, Sevak vigila el portapapeles y guarda lo que copias en este equipo, en su carpeta de datos local: el texto y las rutas de los archivos copiados en <code>clipboard-history.json</code>, y las imágenes como archivos PNG.",
+      "encrypted": "Los archivos se cifran para tu cuenta de Windows.",
+      "notEncrypted": "Los archivos <strong>no están cifrados</strong>.",
+      "notEncryptedUnix": "Los archivos <strong>no están cifrados</strong>; solo tu usuario puede leerlos.",
+      "neverRecorded": "No se envía nada a ninguna parte. Nunca se registra lo copiado en gestores de contraseñas ni en solicitudes de credenciales (ver abajo).",
+      "neverRecordedLinux": "No se envía nada a ninguna parte. Nunca se registra lo copiado en gestores de contraseñas ni en solicitudes de credenciales (ver abajo); en Linux, una copia solo se omite si la aplicación la marca como secreta, así que añade otras aplicaciones a Ignorar aplicaciones.",
+      "pluginOff": "«Historial del portapapeles» está desactivado en <strong>Complementos</strong>, así que <code>cb</code> no muestra nada. Actívalo también allí.",
+      "keepTitle": "Qué guardar",
+      "keepSub": "Esto se aplica mientras el historial esté activado.",
+      "items": "Número de elementos",
+      "itemsHint": "Las entradas más antiguas se descartan junto con sus archivos de imagen.",
+      "longestText": "Texto más largo",
+      "longestTextHint": "El texto más largo no se registra. De 1 a {max} KB.",
+      "encrypt": "Cifrar el historial",
+      "encryptHint": "Cifra el archivo del historial y las imágenes para tu cuenta de Windows. Otro usuario, otro equipo o una copia de seguridad no pueden leerlos.",
+      "encryptToggle": "Cifrar el historial del portapapeles",
+      "images": "Registrar imágenes",
+      "imagesHint": "Imágenes copiadas, guardadas como archivos PNG junto al historial.",
+      "largestImage": "Imagen más grande",
+      "largestImageHint": "No se registra una imagen cuyo PNG sea más grande. Hasta {max} MB.",
+      "files": "Registrar archivos",
+      "filesHint": "Archivos y carpetas copiados: solo se guardan sus rutas; los archivos se quedan donde están.",
+      "skipManagers": "Omitir los gestores de contraseñas",
+      "skipManagersHint": "No registrar nunca lo copiado en KeePass, 1Password, Bitwarden y aplicaciones similares, ni en las solicitudes de credenciales y frases de contraseña del sistema. Añade otras aplicaciones abajo.",
+      "skipManagersToggle": "Omitir los gestores de contraseñas y las solicitudes de credenciales",
+      "ignore": "Ignorar aplicaciones",
+      "ignoreHint": "Nunca se registra lo copiado en estas aplicaciones, como KeePassXC o 1Password. Nombres de programas o aplicaciones, sin distinguir mayúsculas.",
+      "deleteTitle": "Eliminar lo guardado",
+      "clear": "Borrar el historial del portapapeles",
+      "clearHint": "Elimina todas las entradas guardadas y los archivos de imagen. No se puede deshacer.",
+      "deleteEverything": "Eliminar todo",
+      "clearing": "Borrando…",
+      "clearButton": "Borrar el historial…",
+      "cleared": "Se ha eliminado el historial del portapapeles.",
+      "clearNote": "Esto se aplica de inmediato; no forma parte de Guardar. También puedes escribir <code>cb clear</code> en Sevak.",
+      "pastingTitle": "Pegado",
+      "restore": "Restaurar el portapapeles después de pegar",
+      "restoreHint": "Después de pegar una entrada del portapapeles o un fragmento, devuelve al portapapeles lo que había antes. Desactivado, se queda con el texto pegado.",
+      "restoreToggle": "Restaurar el portapapeles después de pegar",
+      "pasteNoteMac": "macOS solo pega si Sevak tiene el permiso de <strong>Accesibilidad</strong> (Ajustes del Sistema, Privacidad y seguridad). Sin él, Sevak copia la entrada en su lugar.",
+      "pasteNoteLinux": "En Wayland no se puede enviar un pegado a las aplicaciones, así que Sevak copia la entrada en su lugar.",
+      "pasteNoteWindows": "Las aplicaciones que se ejecutan como administrador no pueden recibir un pegado; Sevak copia la entrada en su lugar."
+    },
+    "integrations": {
+      "title": "Integraciones",
+      "lead": "Busca en tus contactos y en los inicios de sesión de 1Password, y consulta palabras. Contactos y 1Password están desactivados hasta que los actives; todo lo de aquí se queda en este equipo.",
+      "contactsTitle": "Contactos",
+      "contactsSub": "Escribe <code>{keyword}</code> o <code>@</code> y parte de un nombre, una dirección, un número o una empresa.",
+      "searchContacts": "Buscar contactos",
+      "contactsKeywordHint": "La palabra clave @ también funciona siempre.",
+      "systemContacts": "Leer la libreta de direcciones del sistema",
+      "systemContactsMac": "Buscar también en la aplicación Contactos. La primera vez que escribas la palabra clave, una fila te pedirá permitir el acceso; hasta entonces, solo se buscan los archivos vCard de abajo.",
+      "systemContactsWindows": "Buscar también en el almacén Contactos de Windows. Si los contactos de tu cuenta no están allí, exporta un archivo vCard.",
+      "systemContactsLinux": "Buscar también en las libretas de direcciones locales de Evolution. Para otras libretas, exporta un archivo vCard.",
+      "vcards": "Archivos y carpetas vCard",
+      "vcardsHint": "Exporta un archivo .vcf desde tu libreta de direcciones, Outlook, Google Contactos o un teléfono. Una carpeta añade todos los .vcf que contiene. Funciona en todas partes sin permisos.",
+      "pickVcard": "Elige un archivo vCard",
+      "pickVcardFolder": "Elige una carpeta de archivos vCard",
+      "contactsPrivacy": "<strong>Privacidad:</strong> los contactos se cargan en memoria al iniciar Sevak y cada diez minutos. Nunca se escriben en el disco, ni se registran ni se envían a ninguna parte, y estas búsquedas no entran en el historial de búsqueda.",
+      "contactsPlugin": "Contactos",
+      "opSub": "Encuentra un inicio de sesión por título o sitio web: <code>{keyword} github</code>. Sevak usa la herramienta oficial de línea de comandos <code>op</code> y nunca lee una contraseña, un código de un solo uso ni una nota.",
+      "searchOp": "Buscar inicios de sesión de 1Password",
+      "opPath": "Ruta a op",
+      "opPathHint": "Si lo dejas vacío, se busca en el PATH y en las carpetas de instalación habituales.",
+      "chooseOp": "Elige la CLI de 1Password (op)",
+      "account": "Cuenta",
+      "accountHint": "Qué cuenta usar cuando hay varias con la sesión iniciada: su dirección (my.1password.com), su nombre corto o su ID. Si lo dejas vacío, se usa la predeterminada de op.",
+      "cache": "Conservar la lista de inicios de sesión",
+      "cacheHint": "Cuánto tiempo se guarda la lista en memoria antes de actualizarla. Al actualizar, puede que se te pida desbloquear 1Password.",
+      "opNeedsCli": "<strong>Necesita la CLI de 1Password:</strong> instala <code>op</code> y, en la aplicación de 1Password, activa <em>Ajustes, Desarrollador, Integrar con la CLI de 1Password</em>. <code>op</code> solo se ejecuta cuando escribes la palabra clave seguida de un espacio.",
+      "opPrivacy": "<strong>Privacidad:</strong> Sevak pide a <code>op</code> la lista de inicios de sesión (títulos, nombres de bóvedas, sitios web y nombres de usuario) y solo la guarda en memoria. Lo que buscas aquí no entra en el historial de búsqueda. <code>op</code> se comunica con 1Password como siempre; Sevak no envía nada.",
+      "dictionaryTitle": "Diccionario y ortografía",
+      "dictionarySub": "Consulta una palabra o corrige su ortografía, sin conexión: <code>{define} serendipity</code>, <code>{spell} recieve</code>. Las palabras que consultas no se guardan.",
+      "defineKeyword": "Palabra clave de definiciones",
+      "spellKeyword": "Palabra clave de ortografía",
+      "preferSystem": "Preferir el diccionario del sistema",
+      "preferSystemMac": "Usar el Diccionario de macOS para las definiciones. Desactivado, siempre se usa el diccionario de inglés incluido.",
+      "preferSystemWindows": "Usar el corrector ortográfico de Windows para la ortografía. Desactivado, siempre se usa el diccionario de inglés incluido.",
+      "preferSystemLinux": "Linux no tiene un diccionario del sistema que Sevak pueda consultar; usa el diccionario de inglés incluido y las listas de palabras de <code>/usr/share/hunspell</code>. Desactivado, siempre se usa el diccionario de inglés incluido.",
+      "dictionaryPlugin": "Diccionario"
+    },
+    "ai": {
+      "title": "Asistente de IA",
+      "lead": "Escribe <code>{keyword}</code> y una pregunta en el lanzador, pulsa Enter y lee (o copia, o pega) la respuesta. Desactivado hasta que lo actives. Sevak nunca ejecuta lo que diga una respuesta: solo la muestra como texto.",
+      "whatIsSent": "<strong>Qué se envía:</strong>",
+      "notSent": "No se envía nada mientras escribes, al iniciar Sevak ni en segundo plano, y no hay telemetría. Las preguntas y respuestas solo se guardan en memoria: no se registran, no se escriben en el disco y no entran en tu historial de búsqueda.",
+      "use": "Usar el asistente de IA",
+      "keywordHint": "Escribe la palabra clave, un espacio y luego tu pregunta.",
+      "provider": "Proveedor",
+      "model": "Modelo",
+      "modelHint": "Si lo dejas vacío, se usa el predeterminado que se muestra. Los proveedores retiran modelos, así que escribe el nombre que quieras.",
+      "baseUrl": "URL base",
+      "baseUrlHint": "Si lo dejas vacío, se usa la predeterminada que se muestra. Apunta el proveedor compatible con OpenAI a otro servidor, como http://localhost:1234/v1 para LM Studio.",
+      "apiKey": "Clave de API",
+      "apiKeyHintRequired": "Solo escritura: pégala y pulsa Guardar clave. No se vuelve a mostrar nunca.",
+      "apiKeyHintOptional": "Opcional para un servidor en este equipo. Solo escritura: pégala y pulsa Guardar clave.",
+      "pasteKey": "Pega una clave de API",
+      "apiKeyAria": "Clave de API (solo escritura)",
+      "saveKey": "Guardar clave",
+      "notAKey": "Eso no parece una clave de API (sin espacios ni saltos de línea).",
+      "systemPrompt": "Prompt del sistema",
+      "systemPromptHint": "Se envía con cada pregunta para marcar el tono. No pongas secretos: también llega al proveedor.",
+      "longest": "Respuesta más larga",
+      "longestHint": "Lo que se pide al modelo, en tokens (de {min} a {max}). Aproximadamente 0,75 palabras cada uno. Las respuestas más largas cuestan más en los servicios de pago.",
+      "timeout": "Tiempo de espera",
+      "timeoutHint": "Cuánto esperar a la respuesta completa (de {min} a {max} segundos). Un modelo local puede necesitar tiempo para cargarse.",
+      "testing": "Probando…",
+      "test": "Probar la conexión",
+      "testHint": "Comprueba la dirección, la clave y el modelo con los valores de arriba (guardados o no). Lista los modelos del proveedor y no envía ninguna pregunta.",
+      "keyKept": "<strong>Dónde se guarda la clave:</strong> nunca en <code>config.toml</code>, nunca en una exportación de la configuración ni en el informe de diagnóstico, nunca en el registro.",
+      "savedKeyIs": "Una clave guardada está {protection}.",
+      "envVars": "Las variables de entorno <code>OPENAI_API_KEY</code> y <code>ANTHROPIC_API_KEY</code> se usan cuando no hay ninguna clave guardada aquí. Pulsa Guardar (abajo) para aplicar el resto de ajustes.",
+      "plugin": "Asistente de IA"
+    },
+    "windows": {
+      "title": "Ventanas",
+      "lead": "Ajusta, redimensiona y mueve la ventana que estabas usando sin tocar el ratón, y salta a cualquier ventana abierta por su título.",
+      "enable": "Gestión de ventanas",
+      "enableHint": "Activa o desactiva a la vez las distribuciones y el selector de ventanas.",
+      "layoutsKeyword": "Palabra clave de distribuciones",
+      "layoutsHint": "Escribe la palabra clave y un espacio para ver las distribuciones, y luego una distribución como left. Si lo dejas vacío, se quita la palabra clave.",
+      "switcherKeyword": "Palabra clave del selector",
+      "switcherHint": "Escribe la palabra clave y parte del título o de la aplicación de una ventana para traerla al frente. Si lo dejas vacío, se desactiva el selector.",
+      "gap": "Separación",
+      "gapHint": "Espacio en píxeles entre las ventanas ajustadas y el borde de la pantalla (de 0 a {max}). Se escala en pantallas de alta densidad.",
+      "globalHint": "Buscar también los nombres de distribuciones en las búsquedas normales, como «snap left» o «maximize».",
+      "globalToggle": "Mostrar las distribuciones en las búsquedas normales",
+      "noteWindows": "Sevak no puede mover las ventanas que se ejecutan como administrador, a menos que Sevak también se ejecute como administrador. El selector muestra las ventanas del escritorio virtual actual.",
+      "noteMac": "Necesita acceso de <strong>Accesibilidad</strong> para Sevak (Ajustes del Sistema, Privacidad y seguridad, Accesibilidad). El primer uso también pide permiso para controlar <strong>System Events</strong>. Hasta que concedas ambos, la palabra clave explica lo que falta.",
+      "noteLinux": "Funciona en sesiones <strong>X11</strong> con un gestor de ventanas que siga el estándar EWMH. Wayland no permite a las aplicaciones mover ni enumerar otras ventanas, así que allí Sevak te lo indica: usa los atajos de mosaico de tu escritorio o inicia una sesión X11.",
+      "plugin": "Gestión de ventanas",
+      "cheatSheet": "Chuleta",
+      "cheatSheetSub": "Las distribuciones actúan sobre la ventana en la que estabas antes de abrir Sevak. Escribe <code>{layouts} </code> para verlas, o <code>{switcher} </code> y parte de un título para cambiar de ventana.",
+      "shortcutsTitle": "Atajos globales",
+      "shortcutsNote": "Una distribución puede tener su propio atajo: añade uno en la página <strong>Atajos</strong> que ejecute el resultado <code>{run}</code> (o <code>windows:maximize</code>, <code>windows:next_display</code>, etc.; el nombre es la clave de la distribución). El atajo actúa sobre la ventana que tiene el foco cuando lo pulsas.",
+      "groups": {
+        "halves": "Mitades",
+        "quarters": "Cuartos",
+        "thirds": "Tercios",
+        "sizePlace": "Tamaño y posición",
+        "displays": "Pantallas"
+      },
+      "commands": {
+        "left": "Mitad izquierda de la pantalla",
+        "right": "Mitad derecha de la pantalla",
+        "top": "Mitad superior de la pantalla",
+        "bottom": "Mitad inferior de la pantalla",
+        "topLeft": "Cuarto superior izquierdo",
+        "topRight": "Cuarto superior derecho",
+        "bottomLeft": "Cuarto inferior izquierdo",
+        "bottomRight": "Cuarto inferior derecho",
+        "leftThird": "Tercio izquierdo",
+        "centerThird": "Tercio central",
+        "rightThird": "Tercio derecho",
+        "leftTwoThirds": "Dos tercios izquierdos",
+        "rightTwoThirds": "Dos tercios derechos",
+        "maximize": "Ocupar toda la pantalla",
+        "almostMaximize": "Ocupar casi toda la pantalla, con margen",
+        "center": "Mantener el tamaño y centrar la ventana",
+        "restore": "Volver a donde estaba la ventana",
+        "nextDisplay": "Mover a la pantalla siguiente",
+        "previousDisplay": "Mover a la pantalla anterior"
+      }
+    }
+  },
+  "launcher": {
+    "search": {
+      "placeholder": "Escribe para buscar…",
+      "label": "Buscar"
+    },
+    "results": "Resultados",
+    "hotkeyUnavailable": "El atajo \"{shortcut}\" no está disponible: {error}. Elige otro en Ajustes (menú de la bandeja).",
+    "indexing": "Indexando aplicaciones…",
+    "largeType": "Texto grande",
+    "workflowOutput": "Salida del flujo de trabajo",
+    "nothingToShow": "No hay nada que mostrar.",
+    "pickFolderFirst": "Elige primero una carpeta.",
+    "panel": {
+      "actionsFor": "Acciones para {title}",
+      "theFileBuffer": "el búfer de archivos",
+      "bufferTitle": {
+        "one": "Búfer de archivos: {count} elemento",
+        "other": "Búfer de archivos: {count} elementos"
+      },
+      "thenChooseFolder": "luego elige una carpeta",
+      "moreFileActions": "Más acciones de archivo…",
+      "moreFileActionsDetail": "abrir con, mostrar, compartir…",
+      "addToBuffer": "Añadir al búfer de archivos",
+      "addToBufferDetail": "{up} o {down}",
+      "bufferActions": "Acciones del búfer de archivos ({count})…"
+    },
+    "hints": {
+      "complete": "Completar",
+      "collect": "Reunir",
+      "actions": "Acciones"
+    },
+    "verbs": {
+      "show": "Mostrar",
+      "browse": "Explorar",
+      "replace": "Reemplazar",
+      "moveHere": "Mover aquí",
+      "copyHere": "Copiar aquí",
+      "search": "Buscar",
+      "launch": "Abrir",
+      "copy": "Copiar",
+      "paste": "Pegar",
+      "run": "Ejecutar",
+      "reveal": "Mostrar en carpeta",
+      "runAsAdmin": "Ejecutar como administrador",
+      "open": "Abrir"
+    },
+    "preview": {
+      "label": "Vista previa",
+      "startOnly": "Solo se muestra el principio.",
+      "emptyFolder": "Esta carpeta está vacía.",
+      "firstEntries": {
+        "one": "Se muestra la primera entrada.",
+        "other": "Se muestran las primeras {count} entradas."
+      },
+      "dimensions": "Dimensiones",
+      "modified": "Modificado",
+      "loading": "Cargando…",
+      "nothing": "No hay nada que previsualizar.",
+      "fullText": "Texto completo",
+      "close": "Cerrar"
+    },
+    "textView": {
+      "label": "Texto",
+      "truncated": "El texto es más largo de lo que se muestra.",
+      "loading": "Cargando…",
+      "scroll": "Desplazar",
+      "copy": "Copiar",
+      "run": "Ejecutar",
+      "back": "Volver"
+    },
+    "buffer": {
+      "label": "Búfer de archivos",
+      "strip": "Búfer",
+      "remove": "Quitar {name} del búfer",
+      "actions": "Acciones",
+      "clear": "Vaciar",
+      "destination": {
+        "one": "{count} elemento: escribe o navega hasta una carpeta.",
+        "other": "{count} elementos: escribe o navega hasta una carpeta."
+      },
+      "useFolder": "Usar carpeta",
+      "useTypedPath": "Usar ruta escrita",
+      "open": "Abrir",
+      "cancel": "Cancelar",
+      "step": "{done} de {total}",
+      "progress": "Progreso de {label}"
+    },
+    "ai": {
+      "providers": {
+        "ollama": {
+          "label": "Ollama (en este equipo)",
+          "blurb": "Un modelo que se ejecuta en este equipo. Nada sale de él, salvo que la URL base apunte a otro sitio."
+        },
+        "openai": {
+          "label": "Compatible con OpenAI (ChatGPT, OpenRouter, LM Studio…)",
+          "blurb": "OpenAI, o cualquier servidor que use la misma API: cambia la URL base."
+        },
+        "anthropic": {
+          "label": "Anthropic (Claude)",
+          "blurb": "La API Messages de Anthropic."
+        }
+      },
+      "disclosure": {
+        "addressFallback": "la dirección de URL base",
+        "local": "Cuando pulsas Enter en una pregunta, Sevak envía la pregunta que escribiste después de “{keyword} ” (o el texto que elegiste con “Ask AI about selection”), el prompt de sistema de abajo y el nombre del modelo a {where}, que es este equipo. Nada sale de él.",
+        "remote": "Cuando pulsas Enter en una pregunta, Sevak envía la pregunta que escribiste después de “{keyword} ” (o el texto que elegiste con “Ask AI about selection”), el prompt de sistema de abajo y el nombre del modelo a {where}, a través de internet. No se envía nada más: ni tu portapapeles, ni tus archivos, ni tu historial de búsqueda."
+      },
+      "problems": {
+        "tooLong": "Demasiado largo",
+        "atMostChars": "Como máximo {max} caracteres",
+        "wholeNumber": "Introduce un número entero entre {min} y {max}"
+      },
+      "baseUrl": {
+        "scheme": "La URL base debe empezar por http:// o https://",
+        "spaces": "La URL base no puede contener espacios",
+        "query": "La URL base no puede contener una consulta ni un fragmento",
+        "userInfo": "La URL base no puede contener un nombre de usuario ni una contraseña",
+        "address": "La URL base tiene una dirección no válida",
+        "noHost": "La URL base necesita un nombre de host",
+        "host": "La URL base tiene un nombre de host no válido",
+        "port": "La URL base tiene un puerto no válido"
+      },
+      "key": {
+        "stored": "Hay una clave guardada, {protection}.",
+        "env": "Se usa la variable de entorno {variable}. Una clave guardada aquí la sustituiría.",
+        "envUnnamed": "Se usa una variable de entorno. Una clave guardada aquí la sustituiría.",
+        "unreadable": "No se puede leer una clave guardada (la guardó otro usuario u otro equipo). Vuelve a introducirla.",
+        "noneWithEnv": "Aún no hay clave. Pega una aquí o define la variable de entorno {variable}.",
+        "none": "Aún no hay clave."
+      }
+    }
+  },
+  "announce": {
+    "largeType": "Texto grande: {text}. Pulsa Escape para cerrar.",
+    "textView": "Vista de texto. Arriba y Abajo desplazan, Escape vuelve a los resultados.",
+    "panel": {
+      "one": "{count} acción. Escape cierra.",
+      "other": "{count} acciones. Escape cierra."
+    },
+    "panelTitled": {
+      "one": "{title}: {count} acción. Escape cierra.",
+      "other": "{title}: {count} acciones. Escape cierra."
+    },
+    "noResults": "Sin resultados.",
+    "noResultsIndexing": "Aún no hay resultados, se siguen indexando las aplicaciones.",
+    "results": {
+      "one": "{count} resultado",
+      "other": "{count} resultados"
+    },
+    "items": {
+      "one": "{count} elemento",
+      "other": "{count} elementos"
+    }
+  },
+  "backup": {
+    "title": "Copia de seguridad y restauración",
+    "lead": "Guarda en un solo archivo tus ajustes, fragmentos, búsquedas web, temas, complementos de script y flujos de trabajo, y recupéralos en este u otro equipo. No se envía nada a ningún sitio.",
+    "loadFailed": "No se pudo cargar esta página: {error}",
+    "categories": {
+      "settings": {
+        "label": "Ajustes",
+        "description": "Tus atajos, la apariencia, la búsqueda y las opciones de los complementos, de config.toml. La sección de 1Password queda fuera."
+      },
+      "snippets": {
+        "label": "Fragmentos",
+        "description": "Tus fragmentos y las opciones de expansión de fragmentos."
+      },
+      "webSearch": {
+        "label": "Motores de búsqueda web",
+        "description": "Los motores de búsqueda web y sus palabras clave."
+      },
+      "themes": {
+        "label": "Temas",
+        "description": "Los archivos de tema y tu hoja de estilos personalizada."
+      },
+      "plugins": {
+        "label": "Complementos de script",
+        "description": "Los complementos de script y los instalados desde la galería, con sus scripts. Ejecutan código, así que Sevak te pide que vuelvas a permitir cada uno tras una restauración."
+      },
+      "workflows": {
+        "label": "Flujos de trabajo",
+        "description": "Los flujos de trabajo y los instalados desde la galería, con sus scripts. Sevak te pide que vuelvas a permitir cada uno que ejecute código tras una restauración."
+      }
+    },
+    "backUp": {
+      "heading": "Hacer copia",
+      "include": "Qué incluir",
+      "fileCount": {
+        "one": "{count} archivo",
+        "other": "{count} archivos"
+      },
+      "showContents": "Mostrar exactamente lo que se incluye ({size})",
+      "nothingYet": "Nada todavía.",
+      "leftOut": "Se excluye de config.toml a propósito: {sections}.",
+      "neverIncluded": "Nunca se incluye:",
+      "plainFile": "La copia es un archivo normal, <strong>sin cifrar</strong>: cualquiera que pueda abrirlo puede leer tus fragmentos y scripts. Sevak hace que solo tú puedas leerlo; guárdalo en un lugar de confianza.",
+      "saveAs": "Guardar copia como…",
+      "backingUp": "Haciendo copia…",
+      "now": "Hacer copia ahora",
+      "openFolder": "Abrir carpeta de copias",
+      "nowHint": "«Hacer copia ahora» guarda en <code>{folder}</code> sin preguntar.",
+      "savedTo": "Guardado en {path} ({size}).",
+      "lastManual": "Última copia: {when}, <code>{path}</code>",
+      "lastAuto": "Última copia automática: {when}, <code>{path}</code>",
+      "fileGone": "(el archivo ya no está ahí)",
+      "none": "Aún no se ha hecho ninguna copia."
+    },
+    "restore": {
+      "heading": "Restaurar",
+      "lead": "Elige un archivo de copia. Sevak lo comprueba y muestra qué cambiaría antes de cambiar nada. Primero se guarda una copia de seguridad de lo que se reemplaza, para que puedas deshacerlo.",
+      "checking": "Comprobando…",
+      "chooseAnother": "Elegir otra copia…",
+      "choose": "Elegir una copia…",
+      "restored": "Restaurado. Los nuevos ajustes ya están en uso.",
+      "nothingChanged": "No hacía falta cambiar nada.",
+      "undone": "Deshecho. Lo que reemplazó la restauración ha vuelto.",
+      "made": "Creada el {when} con Sevak {version} en {platform}",
+      "what": "Qué restaurar",
+      "how": "Cómo",
+      "merge": "Combinar",
+      "mergeHint": "Añade lo que tiene la copia y sobrescribe lo que tiene el mismo nombre o ajuste. Conserva todo lo demás que tengas.",
+      "replace": "Reemplazar",
+      "replaceHint": "Deja las categorías elegidas exactamente como en la copia: lo que la copia no tiene se elimina o vuelve a su valor predeterminado.",
+      "previewing": "Comprobando qué cambiaría…",
+      "wouldChange": "Qué cambiaría",
+      "nothingInBackup": "La copia no tiene nada de esto.",
+      "asksApproval": "pide aprobación",
+      "scriptsNeverTrusted": "<strong>Los scripts nunca se aprueban automáticamente.</strong> Tras la restauración, Sevak pregunta antes de ejecutar {names}. Los scripts que permitiste no forman parte de la copia.",
+      "allSame": "Todo lo elegido ya es igual: no hay nada que restaurar.",
+      "confirmReplace": {
+        "one": "<strong>Reemplazar eliminará {count} elemento</strong> que no está en la copia (o lo restablecerá a su valor predeterminado). Antes se guarda una copia de seguridad, y «Deshacer restauración» lo recupera.",
+        "other": "<strong>Reemplazar eliminará {count} elementos</strong> que no están en la copia (o los restablecerá a su valor predeterminado). Antes se guarda una copia de seguridad, y «Deshacer restauración» los recupera."
+      },
+      "replaceNow": "Reemplazar ahora",
+      "restoring": "Restaurando…",
+      "replaceEllipsis": "Reemplazar…",
+      "restoreButton": "Restaurar",
+      "restoredHeading": "Restaurado.",
+      "willAsk": "Sevak preguntará antes de ejecutar {names}.",
+      "undoable": "La última restauración ({when}) se puede deshacer. Recupera lo que se reemplazó: {categories}.",
+      "undoing": "Deshaciendo…",
+      "undo": "Deshacer restauración"
+    },
+    "summary": {
+      "added": {
+        "one": "{count} nuevo",
+        "other": "{count} nuevos"
+      },
+      "changed": {
+        "one": "{count} modificado",
+        "other": "{count} modificados"
+      },
+      "removed": {
+        "one": "{count} eliminado",
+        "other": "{count} eliminados"
+      },
+      "same": {
+        "one": "{count} igual",
+        "other": "{count} iguales"
+      },
+      "allSame": {
+        "one": "{count} ya igual",
+        "other": "{count} ya iguales"
+      },
+      "empty": "está vacía"
+    },
+    "change": {
+      "added": "Nuevo",
+      "changed": "Modificado",
+      "unchanged": "Igual",
+      "removed": "Eliminado",
+      "kept": "Se conserva"
+    },
+    "size": {
+      "bytes": "{size} B",
+      "kilobytes": "{size} KB",
+      "megabytes": "{size} MB"
+    },
+    "auto": {
+      "heading": "Copias automáticas",
+      "lead": "Desactivadas salvo que las actives. Sevak conserva las más recientes y solo borra copias automáticas antiguas; nunca toca los archivos que guardaste tú.",
+      "schedule": "Hacer copia",
+      "off": "Nunca",
+      "daily": "Cada día",
+      "weekly": "Cada semana",
+      "onUpdate": "También al actualizar Sevak",
+      "onUpdateToggle": "Hacer también una copia al actualizar Sevak",
+      "keep": "Conservar las más recientes",
+      "folder": "Carpeta",
+      "folderHint": "La usan las copias automáticas y «Hacer copia ahora». Déjala vacía para usar <code>{folder}</code>. Una ruta completa, o una que empiece por <code>~</code>.",
+      "saved": "Guardado.",
+      "cli": "Las mismas opciones están en <code>backup.toml</code>, junto a <code>config.toml</code>. Desde un terminal: <code>sevak --backup &lt;file&gt;</code>, <code>sevak --restore &lt;file&gt;</code>, <code>sevak --undo-restore</code>. En el lanzador: <code>backup settings</code>, <code>restore settings</code>."
+    }
+  },
+  "help": {
+    "title": "Ayuda",
+    "lead": "Cuando algo no funciona, este informe ayuda a averiguar por qué. Sevak no tiene telemetría, así que el informe solo existe aquí: se crea en este equipo, no se envía a ningún sitio y tú decides si lo compartes. Contiene la versión, tu sistema, qué funciones están activadas, qué complementos se cargaron y las últimas líneas del registro. No contiene lo que buscaste, tu portapapeles ni tus fragmentos, el contenido de scripts o flujos de trabajo, contactos ni contraseñas. Tu nombre de usuario, el nombre del equipo y tu carpeta personal se ocultan. Léelo antes de pegarlo en un informe de error en <code>github.com/ninad-k/Sevak/issues/new/choose</code>.",
+    "copy": "Copiar diagnóstico",
+    "saveAs": "Guardar como archivo…",
+    "openLogs": "Abrir carpeta de registros",
+    "making": "Creando…",
+    "refresh": "Actualizar",
+    "reportLabel": "El informe (solo lectura, exactamente lo que se copia o se guarda)",
+    "makingReport": "Creando el informe…",
+    "makeFailed": "No se pudo crear el informe: {error}",
+    "copied": "Copiado al portapapeles. Pégalo en tu informe de error.",
+    "copyFailed": "No se pudo copiar: {error}",
+    "savedTo": "Guardado en {path}.",
+    "cliHint": "Sin abrir los ajustes: ejecuta <code>sevak --diagnostics</code> en un terminal. Ese informe se crea solo a partir de archivos, así que funciona aunque Sevak no esté en ejecución.",
+    "filters": {
+      "heading": "Filtros de búsqueda de archivos",
+      "hint": "Añádelos a las búsquedas <code>f</code>, <code>ff</code> o <code>in</code>, en cualquier orden. Deben cumplirse todos los filtros; un <code>-</code> delante excluye lo que sigue.",
+      "filter": "Filtro",
+      "meaning": "Significado",
+      "ext": "Archivos con estas extensiones",
+      "type": "También video, audio, doc, code, archive",
+      "size": "Tamaño del archivo (también >=, <=, 1mb..20mb, empty)",
+      "modified": "Modificados hoy o en los últimos 7 días (>7d: hace más tiempo)",
+      "modifiedAfter": "Modificados después de ese día (también >=, <, <=, 2026-01, 2026)",
+      "created": "Creados en ese momento, si el sistema de archivos lo registra",
+      "in": "Dentro de esa carpeta, o de cualquier carpeta con ese nombre",
+      "is": "Solo carpetas o solo archivos",
+      "phrase": "El nombre contiene la frase exacta",
+      "exclude": "Excluir estos"
+    }
+  },
+  "marketplace": {
+    "prompt": "¿Quieres más o has creado la tuya?",
+    "browse": "Explorar el mercado",
+    "submit": "Enviar tu extensión",
+    "opensBrowser": "(se abre en tu navegador)"
+  },
+  "settings": {
+    "title": "Ajustes de Sevak",
+    "loadFailed": "No se pudieron cargar los ajustes. Cierra esta ventana y vuelve a intentarlo desde el menú de la bandeja.",
+    "sectionsLabel": "Secciones de los ajustes",
+    "sections": {
+      "general": "General",
+      "hotkeys": "Atajos",
+      "appearance": "Apariencia",
+      "search": "Búsqueda",
+      "plugins": "Complementos",
+      "workflows": "Flujos de trabajo",
+      "gallery": "Galería",
+      "extensions": "Extensiones",
+      "web": "Búsqueda web",
+      "files": "Archivos y marcadores",
+      "clipboard": "Portapapeles y pegado",
+      "tasks": "Tareas y multimedia",
+      "windows": "Ventanas",
+      "integrations": "Integraciones",
+      "ai": "Asistente de IA",
+      "system": "Sistema y terminal",
+      "linux": "Linux",
+      "backup": "Copia de seguridad",
+      "help": "Ayuda"
+    },
+    "problems": {
+      "one": "{count} problema",
+      "other": "{count} problemas"
+    },
+    "working": "Procesando…",
+    "footer": {
+      "openConfig": "Abrir el archivo de configuración",
+      "revealLogs": "Mostrar la carpeta de registros",
+      "fixProblems": {
+        "one": "Corrige {count} problema para guardar",
+        "other": "Corrige {count} problemas para guardar"
+      }
+    },
+    "general": {
+      "shortcut": "Atajo",
+      "shortcutWayland": "Wayland: el escritorio controla los atajos globales. Asigna esta tecla a <code>sevak --toggle</code> en los ajustes de tu escritorio, o deja que Sevak lo haga en GNOME.",
+      "shortcutHint": "Muestra y oculta Sevak desde cualquier lugar.",
+      "notRegistered": "No se pudo registrar este atajo: {error}",
+      "takeOver": "Dejar que Sevak use {shortcut}",
+      "restoreSpotlight": "Restaurar el atajo de Spotlight",
+      "restoreGnome": "Restaurar el atajo de fuentes de entrada de GNOME",
+      "settingUp": "Configurando…",
+      "setUpGnome": "Configurar el atajo de GNOME",
+      "actionsShortcut": "Atajo de Acciones universales",
+      "actionsHint": "Actúa sobre lo que tienes seleccionado en la aplicación que estás usando: texto, un enlace o archivos. Sevak copia la selección, te muestra qué puedes hacer con ella y restaura tu portapapeles. Déjalo vacío para desactivarlo.",
+      "actionsWayland": "En Wayland, configúralo con el botón de arriba (asigna <code>sevak --actions</code>).",
+      "acceptInjected": "Aceptar atajos enviados por otros programas",
+      "acceptInjectedHint": "Desactivado: solo cuentan las teclas que pulsas tú, así que ningún otro programa puede abrir Sevak enviando su atajo. Actívalo si AutoHotkey, PowerToys u otro reasignador de teclas escribe el atajo por ti.",
+      "clipboardFallback": "Usar el portapapeles si no se puede leer la selección",
+      "clipboardFallbackHint": "Wayland, ventanas de terminal y aplicaciones que Sevak quizá no pueda controlar: actúa sobre lo que haya en el portapapeles.",
+      "primarySelection": "Leer primero el texto resaltado (X11)",
+      "primarySelectionToggle": "Leer primero el texto resaltado",
+      "primarySelectionHint": "Acciones universales lee la selección PRIMARY, el texto que has resaltado, antes de pulsar Ctrl+C.",
+      "hideOnBlur": "Ocultar al perder el foco",
+      "hideOnBlurHint": "Cierra la barra de búsqueda cuando haces clic en otro sitio.",
+      "updates": "Buscar actualizaciones",
+      "updatesHint": "Busca al iniciar, cada seis horas y al abrirse si ha pasado más de una hora. Pregunta antes de instalar.",
+      "channel": "Canal de actualizaciones",
+      "channelHint": "Las versiones beta llegan antes y pueden estar menos probadas. Volver a Estable nunca baja de versión: recibes la siguiente versión estable.",
+      "stable": "Estable",
+      "beta": "Beta"
+    },
+    "startup": {
+      "name": "Iniciar Sevak al iniciar sesión",
+      "hint": "Se inicia en segundo plano para esta cuenta al iniciar sesión. Tu atajo abre el lanzador. Haz clic en Guardar para aplicarlo.",
+      "windowsHint": "También se gestiona en Configuración de Windows → Aplicaciones → Inicio.",
+      "macosHint": "macOS también puede restringir el inicio en Ajustes del Sistema → General → Ítems de inicio.",
+      "linuxHint": "Usa los ajustes de inicio automático de tu escritorio. Guarda la AppImage en una ubicación permanente.",
+      "status": "Estado del inicio: {status}",
+      "state": {
+        "unavailable": "No disponible",
+        "otherCopy": "Registrado para otra copia de Sevak",
+        "enabled": "Activado para tu cuenta",
+        "enabledOutside": "Activado fuera del ajuste guardado de Sevak",
+        "disabledOutside": "Desactivado fuera de Sevak",
+        "missing": "Falta la entrada",
+        "off": "Desactivado"
+      },
+      "couldNotEnable": "No se pudo activar el inicio: {error}",
+      "couldNotCheck": "No se pudo comprobar el inicio: {error}",
+      "needsEnableAgain": "Tu preferencia guardada está activada. Volver a activar restaura el inicio para esta cuenta. Se aplica de inmediato y no cambia los demás ajustes.",
+      "needsRepair": "Tu preferencia guardada está activada. Reparar el inicio vuelve a registrar esta copia instalada. Se aplica de inmediato y no cambia los demás ajustes.",
+      "saveFirst": "Guarda o deshaz el cambio de tu preferencia de inicio antes de repararlo.",
+      "enableAgain": "Volver a activar",
+      "repair": "Reparar el inicio",
+      "enabling": "Activando…",
+      "check": "Comprobar el estado",
+      "checking": "Comprobando…",
+      "enabledMessage": "Inicio activado. Sevak se iniciará en segundo plano al iniciar sesión.",
+      "changedOutsideOn": "Tu preferencia de inicio guardada se cambió fuera de los Ajustes y ahora está activada.",
+      "changedOutsideOff": "Tu preferencia de inicio guardada se cambió fuera de los Ajustes y ahora está desactivada.",
+      "previewStatus": "El estado del inicio está disponible en la aplicación instalada.",
+      "previewRepair": "Inicia Sevak para reparar el ajuste de inicio de tu cuenta."
+    },
+    "appearance": {
+      "theme": "Tema",
+      "themeHint": "Sistema sigue a tu sistema operativo.",
+      "system": "Sistema",
+      "light": "Claro",
+      "dark": "Oscuro",
+      "width": "Ancho de la ventana",
+      "widthHint": "Ancho de la barra de búsqueda.",
+      "pixels": "{value} px"
+    },
+    "search": {
+      "maxResults": "Número máximo de resultados",
+      "maxResultsHint": "Cuántas filas muestra la lista.",
+      "fallback": "Búsqueda web de reserva",
+      "fallbackHint": "Se ofrece cuando nada más coincide con tu consulta. config.toml puede indicar varias.",
+      "none": "Ninguna",
+      "missing": "{keyword} (no existe)",
+      "remember": "Recordar búsquedas",
+      "rememberHint": "Arriba y Abajo en una barra de búsqueda vacía recuperan lo último que ejecutaste. Se guarda solo en este equipo."
+    },
+    "plugins": {
+      "enable": "Activar {name}",
+      "webDescription": "Busca en {name} escribiendo `{example}`.",
+      "terms": "términos",
+      "currency": "Conversión de divisas",
+      "currencyHint": "Calculadora: “100 usd in eur”. Descarga en segundo plano los tipos de cambio diarios del Banco Central Europeo, como mucho una vez al día. Desactivado, Sevak no se conecta a internet.",
+      "currencyToggle": "Convertir divisas",
+      "expand": "Expandir fragmentos al escribir",
+      "expandHint": "Al escribir la palabra clave de un fragmento en cualquier aplicación, se sustituye por el texto del fragmento. Mientras esté activado, Sevak vigila tus pulsaciones en busca de la palabra clave: los últimos caracteres se guardan solo en memoria, nunca se guardan en disco, se registran ni se envían a ningún sitio, y se ignoran en las ventanas de Sevak, en los terminales y en los campos de contraseña que puede detectar. Necesita una palabra clave en al menos un <code>[[snippet]]</code>; no está disponible en Wayland.",
+      "prefix": "Prefijo de la palabra clave",
+      "prefixHint": "Se escribe antes de cada palabra clave, como <code>;</code>, para que <code>;sig</code> se expanda y un simple <code>sig</code> no. Vacío expande las palabras clave sin prefijo al principio de una palabra.",
+      "expandOn": "Expandir",
+      "expandOnHint": "Enseguida, o cuando a la palabra clave le sigue un espacio o un signo de puntuación (que se conserva).",
+      "immediate": "En cuanto se escribe",
+      "delimiter": "Tras un espacio o signo de puntuación",
+      "matchCase": "Distinguir mayúsculas",
+      "matchCaseHint": "Desactivado: tanto <code>SIG</code> como <code>sig</code> se expanden.",
+      "terminals": "Expandir en terminales",
+      "terminalsHint": "Las ventanas de terminal se omiten salvo que esto esté activado.",
+      "browsers": "Expandir en navegadores web",
+      "browsersHint": "Desactivado de forma predeterminada: un campo de contraseña de una página web no se distingue de otros cuadros de texto, así que una palabra clave escrita dentro de una contraseña se expandiría ahí.",
+      "browsersToggle": "Expandir fragmentos en navegadores web",
+      "ignoreApps": "No expandir nunca en estas aplicaciones",
+      "ignoreAppsHint": "No se vigila ni se expande nada mientras una de ellas tiene el foco, como KeePassXC. Nombres de programas o aplicaciones, sin distinguir mayúsculas.",
+      "appName": "Nombre de la aplicación",
+      "noIgnoredApps": "No se ignora ninguna aplicación.",
+      "note": "Los motores de búsqueda web se editan en “Búsqueda web”. Los cambios se aplican al guardar."
+    },
+    "web": {
+      "note": "Escribe una palabra clave y tus términos, como <code>g rust traits</code>. <code>{query}</code> en la URL se sustituye por lo que escribes.",
+      "keyword": "Palabra clave",
+      "name": "Nombre",
+      "url": "URL",
+      "remove": "Quitar {name}",
+      "engine": "motor",
+      "empty": "No hay motores. La búsqueda web está desactivada hasta que añadas uno.",
+      "add": "Añadir motor"
+    },
+    "files": {
+      "folders": "Carpetas en las que buscar",
+      "foldersHint": "Se pueden buscar los archivos y carpetas que haya dentro de estas.",
+      "noFolders": "Todavía no hay carpetas.",
+      "removeFolder": "Quitar {path}",
+      "addFolder": "Añadir carpeta…",
+      "depth": "Profundidad de carpetas",
+      "depthHint": "Cuántos niveles por debajo de cada carpeta se indexan.",
+      "hidden": "Incluir archivos ocultos",
+      "hiddenHint": "Archivos y carpetas que empiezan por punto.",
+      "network": "Permitir rutas de red",
+      "networkHint": "Windows: usa rutas <code>\\\\server\\share</code> y unidades de red asignadas. Desactivado, Sevak nunca se conecta a ellas, porque Windows inicia sesión en un equipo con solo consultar su ruta.",
+      "keyword": "Palabra clave",
+      "keywordHint": "Escribe “palabra-clave nombre” para buscar solo archivos. Añade filtros como <code>ext:pdf</code>, <code>size:&gt;10mb</code> o <code>modified:7d</code> (consulta la Ayuda).",
+      "global": "Mostrar en los resultados generales",
+      "globalHint": "Muestra también los archivos que coincidan en las búsquedas normales, con menos prioridad.",
+      "globalToggle": "Mostrar archivos en los resultados generales",
+      "wholeDisk": "Buscar en todo el disco",
+      "wholeDiskHint": "Escribe “{indexKeyword} nombre” para encontrar archivos en cualquier lugar, o “{contentKeyword} palabras” para buscar dentro de ellos, mediante el índice de archivos de tu propio equipo (Windows Search, Spotlight, locate o Tracker). Nada sale de tu equipo.",
+      "keywordPlaceholder": "palabra-clave",
+      "indexKeyword": "Palabra clave para todo el disco",
+      "indexKeywordHint": "Vacío desactiva la búsqueda por nombre.",
+      "contentKeyword": "Palabra clave para el contenido",
+      "contentKeywordHint": "Vacío desactiva la búsqueda en el contenido."
+    },
+    "linux": {
+      "xwayland": "Usar XWayland en Wayland",
+      "xwaylandHint": "Las ventanas nativas de Wayland no pueden colocarse solas, así que Sevak se dibuja a través de XWayland para quedarse centrado y poder recibir lo que escribes.",
+      "restart": "Reinicia Sevak para aplicarlo."
+    }
+  },
+  "hotkeys": {
+    "field": {
+      "placeholder": "p. ej., Super+Space",
+      "placeholderRecording": "Pulsa el atajo…",
+      "record": "Grabar",
+      "recording": "Pulsa las teclas… (Esc para cancelar)",
+      "presetsLabel": "Atajos predefinidos",
+      "presets": "Predefinidos",
+      "shownAs": "En este equipo se muestra como <code>{shortcut}</code>",
+      "keyUnusable": "Esa tecla no se puede usar.",
+      "needsModifier": "Mantén pulsada Ctrl, Alt, Shift o Super junto con la tecla."
+    },
+    "list": {
+      "note": "Atajos globales adicionales. Un atajo puede abrir Sevak con texto ya escrito, como <code>g </code> o <code>&gt; </code>, o ejecutar directamente un resultado sin mostrar Sevak, mediante su id de resultado, como <code>apps:firefox.desktop</code>.",
+      "noteWayland": "En Wayland, ejecuta <code>sevak --setup-hotkey</code> (o usa el botón de General) después de guardar para asignarlos en GNOME.",
+      "shortcut": "Atajo",
+      "remove": "Quitar el atajo {key}",
+      "does": "Acción",
+      "openWithText": "Abrir Sevak con texto",
+      "runResult": "Ejecutar un resultado",
+      "resultId": "Id del resultado",
+      "text": "Texto",
+      "notRegistered": "No se pudo registrar: {error}",
+      "empty": "No hay atajos adicionales.",
+      "add": "Añadir atajo"
+    }
+  },
+  "validate": {
+    "required": "Obligatorio",
+    "noSpaces": "Sin espacios",
+    "webKeyword": "Ya es una palabra clave de búsqueda web",
+    "usedBy": "Ya la usa {owner}",
+    "engineUsedBy": "La usa {owner}",
+    "alreadyUsed": "Ya está en uso",
+    "sameAsMain": "Igual que el atajo principal",
+    "sameAsActions": "Igual que el atajo de Acciones universales",
+    "resultId": "Introduce un id de resultado",
+    "color": "Usa #rrggbb, #rgb o rgb(r, g, b)",
+    "fontFamily": "Solo se permiten letras, dígitos, espacios y , . _ -",
+    "insideConfig": "Debe ser una ruta dentro de la carpeta de configuración",
+    "urlScheme": "Debe empezar por http:// o https://",
+    "urlQuery": "Debe contener {query}",
+    "size": "Introduce un tamaño mayor que 0 y de hasta {max}",
+    "wholeNumber": "Introduce un número entero de {min} a {max}",
+    "fallbackGone": "El motor «{keyword}» ya no existe.",
+    "owner": {
+      "terminal": "los comandos de terminal",
+      "clipboard": "el historial del portapapeles",
+      "snippets": "los fragmentos",
+      "emoji": "el selector de emojis",
+      "contacts": "los contactos",
+      "uuid": "el generador de UUID",
+      "files": "la búsqueda de archivos",
+      "indexFiles": "la búsqueda de archivos en todo el disco",
+      "contentFiles": "la búsqueda en el contenido de archivos",
+      "bookmarks": "los marcadores",
+      "tasks": "las tareas de automatización",
+      "media": "los controles multimedia",
+      "windowLayouts": "las disposiciones de ventanas",
+      "windowSwitcher": "el selector de ventanas",
+      "onepassword": "1Password",
+      "dictionary": "el diccionario",
+      "spelling": "el corrector ortográfico",
+      "ai": "el asistente de IA",
+      "ssh": "los hosts SSH",
+      "projects": "los proyectos recientes",
+      "calendar": "el calendario",
+      "clock": "el reloj mundial",
+      "passwords": "el generador de contraseñas"
+    }
+  },
+  "workflows": {
+    "page": {
+      "title": "Flujos de trabajo",
+      "lead": "Un flujo de trabajo une un disparador (una palabra clave, un atajo, Acciones universales o un comando) con acciones y salidas. Crea uno aquí o coloca una carpeta con un <code>workflow.toml</code> en la carpeta de flujos de trabajo. Un flujo de trabajo que ejecuta scripts o comandos te pide permiso antes.",
+      "newWorkflow": "Nuevo flujo de trabajo",
+      "newFromTemplate": "Nuevo a partir de plantilla…",
+      "openFolder": "Abrir la carpeta de flujos de trabajo",
+      "templates": "Plantillas",
+      "useTemplate": "Usar esta plantilla: {name}",
+      "useThis": "Usar esta",
+      "creating": "Creando…",
+      "empty": "Aún no hay flujos de trabajo. Empieza con una plantilla o pulsa Nuevo flujo de trabajo. Se guardan en <code>{folder}</code>.",
+      "installed": "Flujos de trabajo instalados",
+      "folderTitle": "La carpeta",
+      "keyword": "palabra clave: {keyword}",
+      "nodes": {
+        "one": "{count} nodo",
+        "other": "{count} nodos"
+      },
+      "warnings": {
+        "one": "{count} advertencia",
+        "other": "{count} advertencias"
+      },
+      "notLoaded": "No cargado",
+      "waiting": "Esperando tu permiso",
+      "allowed": "Puede ejecutar código",
+      "hotkeyInactive": "El atajo {key} no está activo: {error}",
+      "review": "Revisar…",
+      "reviewLabel": "Revisar {name}",
+      "enable": "Activar {name}",
+      "fix": "Corregir…",
+      "fixLabel": "Corregir {name}",
+      "edit": "Editar",
+      "editLabel": "Editar {name}",
+      "delete": "Eliminar",
+      "deleteLabel": "Eliminar {name}"
+    },
+    "editor": {
+      "region": "Editor de flujos de trabajo",
+      "back": "← Flujos de trabajo",
+      "untitled": "Sin título",
+      "folder": "carpeta: {folder}",
+      "notSaved": "aún sin guardar",
+      "unsavedChanges": "cambios sin guardar",
+      "problemsToFix": {
+        "one": "{count} problema por resolver",
+        "other": "{count} problemas por resolver"
+      },
+      "addNode": "Añadir un nodo",
+      "addNodeOption": "Añadir un nodo…",
+      "tidy": "Ordenar",
+      "tidyTitle": "Colocar los cuadros en columnas",
+      "unsavedBanner": "Tienes cambios sin guardar.",
+      "discard": "Descartarlos",
+      "keepEditing": "Seguir editando",
+      "canvas": "Lienzo del flujo de trabajo. Los cuadros son nodos; arrastra desde un punto del borde derecho de un cuadro hasta otro cuadro para conectarlos.",
+      "nodeAria": "{label}, {kind}",
+      "nodeAriaProblems": {
+        "one": "{label}, {kind}, {count} problema",
+        "other": "{label}, {kind}, {count} problemas"
+      },
+      "portTitle": "Arrastra hasta otro cuadro para conectar ({port})",
+      "properties": "Propiedades",
+      "needsApproval": "Esto ejecuta código o comandos, así que Sevak te pide que permitas el flujo de trabajo antes.",
+      "label": "Etiqueta",
+      "keywordTitleHint": "Se muestra como título del resultado; puede usar {query}.",
+      "portThen": "Si es verdadero, ir a",
+      "portElse": "Si no, ir a",
+      "portNext": "Siguiente",
+      "removeConnectionTo": "Quitar la conexión con {node}",
+      "connectPort": "Conectar {port} con",
+      "connectTo": "Conectar con…",
+      "id": "Id",
+      "externalStarts": "<code>sevak --trigger {path}</code> lo inicia.",
+      "idHint": "Da nombre al nodo en el archivo.",
+      "idHintHotkey": "Da nombre al nodo en el archivo y en el id de resultado del atajo.",
+      "deleteNode": "Eliminar nodo",
+      "connection": "Conexión",
+      "deleteConnection": "Eliminar conexión",
+      "workflow": "Flujo de trabajo",
+      "name": "Nombre",
+      "description": "Descripción",
+      "author": "Autor",
+      "version": "Versión",
+      "variables": "Variables",
+      "variableName": "Nombre de la variable",
+      "namePlaceholder": "nombre",
+      "valuePlaceholder": "valor",
+      "valueOf": "Valor de {name}",
+      "valueOfUnnamed": "Valor de la variable",
+      "removeVariable": "Quitar la variable {name}",
+      "addVariable": "Añadir una variable",
+      "variablesHint": "Cada ejecución empieza con estas: <code>{var:name}</code>, y como variable de entorno para los scripts.",
+      "help": "Arrastra un cuadro para moverlo. Arrastra desde el punto de su borde derecho hasta otro cuadro para conectarlos. Haz clic en un cuadro o una línea y pulsa Supr para quitarlo. Ctrl+S guarda.",
+      "problems": "Problemas",
+      "saved": "Guardado.",
+      "savedNeedsAllow": "Guardado. Sevak te pedirá que lo permitas antes de que ejecute nada.",
+      "badId": "Un id usa de 1 a 40 letras, dígitos, guiones o guiones bajos.",
+      "idTaken": "Otro nodo ya tiene ese id."
+    },
+    "fields": {
+      "acceptText": "Texto",
+      "acceptUrl": "Enlaces",
+      "acceptFile": "Archivos y carpetas",
+      "pasteDefault": "Usar el ajuste de [paste]",
+      "yes": "Sí",
+      "no": "No",
+      "noSettings": "Este disparador no tiene ajustes. Inícialo con <code>sevak --trigger &lt;carpeta&gt;/{id}</code> (añade texto después para pasarlo como <code>{query}</code>)."
+    },
+    "connect": {
+      "missing": "Ese nodo no existe.",
+      "noInput": "Un nodo «{kind}» no tiene entrada.",
+      "noOutput": "No existe esa salida.",
+      "self": "Un nodo no puede conectarse consigo mismo.",
+      "already": "Ya están conectados.",
+      "loop": "Eso crearía un bucle."
+    },
+    "defaultName": "Nuevo flujo de trabajo",
+    "placeholders": "Marcadores: {query} y {var:name}.",
+    "categories": {
+      "trigger": "Disparadores",
+      "input": "Entradas",
+      "action": "Acciones",
+      "utility": "Utilidades",
+      "output": "Salidas"
+    },
+    "options": {
+      "argument": {
+        "optional": "Opcional",
+        "required": "Obligatorio",
+        "none": "Ninguno"
+      },
+      "transform": {
+        "set": "Sustituir por el texto",
+        "upper": "MAYÚSCULAS",
+        "lower": "minúsculas",
+        "title": "Tipo Título",
+        "trim": "Quitar espacios",
+        "url_encode": "Codificar para URL",
+        "url_decode": "Decodificar de URL",
+        "base64_encode": "Codificar en Base64",
+        "base64_decode": "Decodificar Base64",
+        "replace": "Reemplazar texto",
+        "regex_replace": "Reemplazar con una expresión regular",
+        "first_line": "Primera línea",
+        "split": "Dividir y tomar una parte"
+      },
+      "test": {
+        "equals": "es igual a",
+        "not_equals": "no es igual a",
+        "contains": "contiene",
+        "not_contains": "no contiene",
+        "starts_with": "empieza por",
+        "ends_with": "termina en",
+        "matches": "coincide con la expresión regular",
+        "is_empty": "está vacío",
+        "not_empty": "no está vacío"
+      },
+      "system": {
+        "lock": "Bloquear",
+        "sleep": "Suspender",
+        "hibernate": "Hibernar",
+        "restart": "Reiniciar (pregunta antes)",
+        "shutdown": "Apagar (pregunta antes)",
+        "logout": "Cerrar sesión (pregunta antes)",
+        "empty_trash": "Vaciar la papelera (pregunta antes)"
+      }
+    },
+    "program": {
+      "command": {
+        "label": "Programa y argumentos",
+        "hint": "Uno por línea, primero el programa. Usa esto o el script de abajo. No se usa ninguna shell."
+      },
+      "script": {
+        "label": "Archivo de script",
+        "hint": "Un archivo de la carpeta del flujo de trabajo: .py, .ps1, .js, .sh o un ejecutable."
+      }
+    },
+    "kinds": {
+      "keyword": {
+        "label": "Palabra clave",
+        "summary": "Escribe una palabra clave (y algo de texto) para iniciar el flujo de trabajo.",
+        "fields": {
+          "keyword": {
+            "label": "Palabra clave"
+          },
+          "argument": {
+            "label": "Texto después de la palabra clave"
+          },
+          "subtitle": {
+            "label": "Segunda línea del resultado"
+          }
+        }
+      },
+      "hotkey": {
+        "label": "Atajo",
+        "summary": "Un atajo global inicia el flujo de trabajo.",
+        "fields": {
+          "key": {
+            "label": "Atajo",
+            "hint": "Como los atajos de Ajustes. En Wayland usa en su lugar un disparador externo."
+          }
+        }
+      },
+      "selection": {
+        "label": "Acciones universales",
+        "summary": "Aparece en Acciones universales para el texto, los enlaces o los archivos que selecciones.",
+        "fields": {
+          "accepts": {
+            "label": "Ofrecerlo para",
+            "hint": "La selección se convierte en el argumento (un enlace o una ruta por línea)."
+          }
+        }
+      },
+      "external": {
+        "label": "Disparador externo",
+        "summary": "Se inicia desde la línea de comandos o un acceso directo del escritorio.",
+        "fields": {}
+      },
+      "script_filter": {
+        "label": "Filtro de script",
+        "summary": "Una palabra clave cuyos resultados vienen de un script (JSON de Script Filter de Alfred).",
+        "fields": {
+          "keyword": {
+            "label": "Palabra clave"
+          },
+          "args": {
+            "label": "Argumentos antes del texto escrito"
+          },
+          "timeout_ms": {
+            "label": "Esperar resultados (ms)"
+          },
+          "hard_timeout_ms": {
+            "label": "Detener el script tras (ms)"
+          }
+        }
+      },
+      "run_script": {
+        "label": "Ejecutar script",
+        "summary": "Ejecuta un programa; lo que imprime se convierte en el argumento.",
+        "fields": {
+          "args": {
+            "label": "Más argumentos",
+            "hint": "Uno por línea. Marcadores: {query} y {var:name}."
+          },
+          "stdin": {
+            "label": "Entrada estándar"
+          },
+          "env": {
+            "label": "Variables de entorno",
+            "hint": "NOMBRE=valor, una por línea."
+          },
+          "timeout_ms": {
+            "label": "Detenerlo tras (ms)"
+          },
+          "log_stderr": {
+            "label": "Registrar su salida de error",
+            "hint": "Desactivado por defecto: puede contener tus datos."
+          }
+        }
+      },
+      "open_url": {
+        "label": "Abrir URL",
+        "summary": "Abre un enlace web o de correo. Los marcadores se codifican para URL.",
+        "fields": {
+          "url": {
+            "label": "Enlace",
+            "hint": "Añade |raw a un marcador para dejarlo tal cual: {var:site|raw}."
+          }
+        }
+      },
+      "open_file": {
+        "label": "Abrir archivo",
+        "summary": "Abre un archivo o una carpeta con su programa predeterminado.",
+        "fields": {
+          "path": {
+            "label": "Ruta",
+            "hint": "~ es tu carpeta personal; una ruta relativa está dentro de la carpeta del flujo de trabajo. Marcadores: {query} y {var:name}."
+          }
+        }
+      },
+      "launch_app": {
+        "label": "Abrir aplicación",
+        "summary": "Inicia una aplicación por su nombre o su ruta.",
+        "fields": {
+          "app": {
+            "label": "Aplicación"
+          },
+          "args": {
+            "label": "Argumentos",
+            "hint": "Se usan cuando la aplicación es la ruta de un programa."
+          }
+        }
+      },
+      "system_command": {
+        "label": "Comando del sistema",
+        "summary": "Bloquear, suspender, reiniciar, etc.",
+        "fields": {
+          "command": {
+            "label": "Comando"
+          }
+        }
+      },
+      "terminal_command": {
+        "label": "Comando de terminal",
+        "summary": "Ejecuta una línea de comandos en una ventana de terminal.",
+        "fields": {
+          "command": {
+            "label": "Línea de comandos",
+            "hint": "Marcadores: {query} y {var:name}. Cada uno se inserta como una sola palabra entrecomillada para tu shell; {query|raw} lo inserta como comandos."
+          }
+        }
+      },
+      "copy": {
+        "label": "Copiar",
+        "summary": "Copia texto al portapapeles.",
+        "fields": {
+          "text": {
+            "label": "Texto"
+          }
+        }
+      },
+      "paste": {
+        "label": "Pegar",
+        "summary": "Pega texto en la aplicación que estabas usando.",
+        "fields": {
+          "text": {
+            "label": "Texto"
+          },
+          "restore_clipboard": {
+            "label": "Restaurar el portapapeles anterior"
+          }
+        }
+      },
+      "set_variable": {
+        "label": "Definir variable",
+        "summary": "Guarda un valor para los nodos siguientes.",
+        "fields": {
+          "name": {
+            "label": "Nombre"
+          },
+          "value": {
+            "label": "Valor"
+          }
+        }
+      },
+      "transform": {
+        "label": "Transformar",
+        "summary": "Cambia el argumento o guarda el resultado en una variable.",
+        "fields": {
+          "op": {
+            "label": "Qué hacer"
+          },
+          "input": {
+            "label": "Entrada"
+          },
+          "find": {
+            "label": "Buscar / dividir en",
+            "hint": "Para reemplazar, reemplazar con expresión regular y dividir."
+          },
+          "replace": {
+            "label": "Reemplazar por",
+            "hint": "Una expresión regular puede usar $1 para un grupo."
+          },
+          "index": {
+            "label": "Parte que conservar (dividir)",
+            "hint": "0 es la primera parte; -1, la última."
+          },
+          "into": {
+            "label": "Guardar en la variable",
+            "hint": "Déjalo vacío para reemplazar el argumento."
+          }
+        }
+      },
+      "conditional": {
+        "label": "Condicional",
+        "summary": "Continúa por then o por else.",
+        "fields": {
+          "left": {
+            "label": "Texto"
+          },
+          "test": {
+            "label": "Prueba"
+          },
+          "right": {
+            "label": "Comparado con"
+          },
+          "ignore_case": {
+            "label": "Ignorar mayúsculas y minúsculas"
+          }
+        }
+      },
+      "delay": {
+        "label": "Pausa",
+        "summary": "Espera un momento (como mucho un minuto).",
+        "fields": {
+          "ms": {
+            "label": "Esperar (ms)"
+          }
+        }
+      },
+      "notification": {
+        "label": "Notificación",
+        "summary": "Muestra una notificación del sistema.",
+        "fields": {
+          "heading": {
+            "label": "Encabezado"
+          },
+          "body": {
+            "label": "Texto"
+          }
+        }
+      },
+      "large_type": {
+        "label": "Texto grande",
+        "summary": "Muestra texto enorme en la pantalla.",
+        "fields": {
+          "text": {
+            "label": "Texto"
+          }
+        }
+      },
+      "text_view": {
+        "label": "Vista de texto",
+        "summary": "Muestra texto en la ventana del lanzador.",
+        "fields": {
+          "heading": {
+            "label": "Encabezado"
+          },
+          "text": {
+            "label": "Texto"
+          }
+        }
+      }
+    }
+  },
+  "gallery": {
+    "title": "Galería",
+    "lead": "Añade herramientas a tu lanzador con extensiones y flujos de trabajo listos para usar. Elige <strong>Cargar galería</strong> para explorar paquetes de GitHub y comprobar avisos de revocación firmados; luego instala lo que necesites. Los complementos de script piden tu permiso antes de ejecutarse. Los temas están en Apariencia → Editor de temas.",
+    "load": "Cargar galería",
+    "fetches": "Descarga la lista y los avisos firmados de GitHub.",
+    "entries": {
+      "one": "{count} entrada de <code>{host}</code>",
+      "other": "{count} entradas de <code>{host}</code>"
+    },
+    "skipped": {
+      "one": "{count} omitida (esta versión de Sevak no la entiende)",
+      "other": "{count} omitidas (esta versión de Sevak no las entiende)"
+    },
+    "reload": "Recargar",
+    "refreshFailed": "La actualización falló; se desconoce el estado actual de revocación. Los avisos mostrados antes siguen vigentes.",
+    "statusUnknown": "Se desconoce el estado actual de revocación. Recarga para comprobar los avisos firmados sobre extensiones.",
+    "installedWorkflow": "Instalado. Lo encontrarás en Flujos de trabajo; Sevak pregunta antes de ejecutar nada.",
+    "installedPlugin": "Instalado. Sevak pregunta antes de ejecutar el complemento; después aparece en Complementos.",
+    "search": "Buscar extensiones",
+    "searchPlaceholder": "Nombre, palabra clave o lo que quieres hacer…",
+    "type": "Tipo",
+    "allTypes": "Todos los tipos",
+    "extensions": "Extensiones",
+    "workflows": "Flujos de trabajo",
+    "availability": "Disponibilidad",
+    "allPackages": "Todos los paquetes",
+    "notInstalled": "No instalados",
+    "installed": "Instalado",
+    "shownOf": {
+      "one": "{shown} de {count} paquete",
+      "other": "{shown} de {count} paquetes"
+    },
+    "listLabel": "Entradas de la galería",
+    "kindWorkflow": "Flujo de trabajo",
+    "kindPlugin": "Extensión · plugin de script",
+    "deprecated": "Obsoleto: {reason}",
+    "deprecatedReplaced": "Obsoleto: {reason} Sustituto: {name}.",
+    "listedRevoked": "Versión publicada revocada: {reason}. Esta versión no se puede instalar.",
+    "unknownCheck": "Se desconoce tu versión instalada; revisa sus archivos y elimina su carpeta si está afectada.",
+    "unknownCheckAt": "Se desconoce tu versión instalada; revisa sus archivos en {path} y elimina su carpeta si está afectada.",
+    "unrecordedRevoked": "Se desconoce tu versión instalada (se instaló sin dejar registro). Un aviso firmado revoca {versions}: {reason}. Revisa sus archivos y elimina su carpeta si está afectada.",
+    "unrecordedRevokedAt": "Se desconoce tu versión instalada (se instaló sin dejar registro en {path}). Un aviso firmado revoca {versions}: {reason}. Revisa sus archivos y elimina su carpeta si está afectada.",
+    "everyVersion": "todas las versiones",
+    "versions": {
+      "one": "la versión {list}",
+      "other": "las versiones {list}"
+    },
+    "installedRevoked": "Versión instalada revocada: {reason}. Quita esta copia en Extensiones → Instalado.",
+    "by": "de {author}",
+    "version": "versión {version}",
+    "details": "Detalles del paquete",
+    "source": "Origen:",
+    "project": "Proyecto:",
+    "detailsNote": "Solo se descarga cuando lo instalas. Sevak comprueba la suma de verificación del paquete antes de instalarlo.",
+    "install": "Instalar",
+    "installing": "Instalando…",
+    "installAria": "Instalar {name}",
+    "installingAria": "Instalando {name}",
+    "installedAria": "{name} está instalado",
+    "emptyGallery": "La galería aún no tiene paquetes",
+    "emptyGalleryHint": "Recarga más tarde para ver si hay paquetes nuevos.",
+    "noMatches": "No hay extensiones que coincidan",
+    "noMatchesHint": "Prueba otra búsqueda o restablece los filtros.",
+    "resetFilters": "Restablecer filtros"
+  },
+  "extensions": {
+    "title": "Extensiones",
+    "lead": "Flujos de trabajo, complementos de script, extensiones nativas y temas de la galería de Sevak. No se solicita nada mientras navegas por Ajustes: <strong>Cargar</strong> descarga la lista una vez del repositorio de Sevak en GitHub y verifica los avisos de revocación firmados, e <strong>Instalar</strong> descarga ese paquete concreto, lo coteja con la suma de verificación de la lista y lo guarda en tu carpeta. Todo lo que instalas queda como <em>nuevo y no permitido</em>: Sevak te pide permiso antes de ejecutar nada de su contenido. No se envía ningún otro dato.",
+    "statusUnknown": "Se desconoce el estado actual de revocación. Carga o actualiza la lista para comprobar los avisos firmados sobre extensiones.",
+    "tabs": "Extensiones",
+    "discover": "Descubrir",
+    "installed": "Instalado",
+    "installedCount": "Instalado ({count})",
+    "updates": {
+      "one": "{count} actualización",
+      "other": "{count} actualizaciones"
+    },
+    "updatesAvailable": {
+      "one": "{count} actualización disponible",
+      "other": "{count} actualizaciones disponibles"
+    },
+    "loaded": {
+      "one": "La lista está cargada: {count} elemento.",
+      "other": "La lista está cargada: {count} elementos."
+    },
+    "installedTheme": "Se instaló el tema {name}. Elígelo en Ajustes > Apariencia.",
+    "installedItem": "Se instaló {name}. Si puede ejecutar código, no se ejecuta hasta que lo permitas: Sevak te lo preguntará a continuación.",
+    "updated": "Se actualizó {name}. Sevak vuelve a preguntar si puede ejecutar código.",
+    "removed": "Se quitó {name}.",
+    "refresh": "Actualizar la lista",
+    "load": "Cargar la lista",
+    "items": {
+      "one": "{count} elemento",
+      "other": "{count} elementos"
+    },
+    "savedAgo": "guardada {ago}",
+    "loadedAgo": "cargada {ago}",
+    "fromHost": "de <code>{host}</code>",
+    "signedIndex": "Índice firmado",
+    "signedIndexTitle": "La firma de versión de la lista se comprobó con la clave de versiones de Sevak antes de leerla.",
+    "skipped": {
+      "one": "{count} omitido (esta versión de Sevak no lo entiende)",
+      "other": "{count} omitidos (esta versión de Sevak no los entiende)"
+    },
+    "fetches": "Descarga la lista de GitHub (raw.githubusercontent.com).",
+    "unreachable": "No se pudo acceder a la galería: {error}",
+    "showingSaved": "Se muestra la lista guardada {ago}.",
+    "manageInstalled": "Aún puedes gestionar lo instalado en Instalado.",
+    "themesError": "Los temas no aparecen: {error}",
+    "search": "Buscar extensiones",
+    "searchPlaceholder": "Busca por nombre, autor o lo que hace",
+    "show": "Mostrar",
+    "allKinds": "Todos los tipos",
+    "nothing": "No hay coincidencias.",
+    "listLabel": "Elementos de la galería",
+    "updateFrom": "Actualizar desde {version}",
+    "deprecated": "Obsoleto: {reason}",
+    "deprecatedReplaced": "Obsoleto: {reason} Sustituto: {name}.",
+    "revoked": "Revocado: {reason}. Esta versión no se puede instalar.",
+    "by": "de {author}",
+    "declares": "declara: {list}",
+    "reviewBeforeInstall": "Revisar {name} antes de instalarlo",
+    "reviewBeforeUpdate": "Revisar {name} antes de actualizarlo",
+    "review": "Revisar…",
+    "working": "Procesando…",
+    "workingOn": "Procesando {name}",
+    "actionAria": "{action} {name}",
+    "disabledAria": "{name}: {action}",
+    "publisher": "Editor",
+    "unknown": "desconocido",
+    "version": "Versión",
+    "youHave": "{version} (tienes la {installed})",
+    "licence": "Licencia",
+    "needsSevak": "Requiere Sevak",
+    "orNewer": "{version} o posterior",
+    "permissions": "Permisos declarados",
+    "none": "ninguno",
+    "authorsStatement": "Es la declaración del autor. Sevak no la hace cumplir.",
+    "builds": "Compilaciones",
+    "thisComputer": "(este equipo: {platform})",
+    "sourceCode": "Código fuente",
+    "more": "Más",
+    "downloadedFrom": "Se descarga de",
+    "ownRepo": "(el propio repositorio de Sevak, en esta versión)",
+    "installNative": "Instalar extensión nativa",
+    "updateNative": "Actualizar extensión nativa",
+    "installName": "Instalar {name}",
+    "updateName": "Actualizar {name}",
+    "notLoadedYet": "La lista aún no se ha cargado en este equipo. Pulsa <strong>Cargar la lista</strong> para ver lo que hay disponible.",
+    "alreadyInstalled": "Lo que ya instalaste está en {link}.",
+    "checkAdvisories": "Comprobar avisos de extensiones",
+    "openPlugins": "Abrir la carpeta de complementos",
+    "installedNote": "Estos son los elementos instalados desde aquí. Los complementos y flujos de trabajo que añadiste a mano están en Complementos y Flujos de trabajo.",
+    "refreshFailed": "No se pudo actualizar la galería: {error}. La lista de instalados y los avisos autenticados anteriormente siguen disponibles.",
+    "unrecordedLabel": "Copias revocadas sin registro de instalación",
+    "unrecordedRevoked": "Revocado en todas sus versiones: {reason}. Sevak no tiene registro de haber instalado este elemento ({kind}), así que no puede quitarlo desde aquí. Quítalo tú mismo:",
+    "advisory": "Aviso: {url}",
+    "nothingInstalled": "Aún no hay nada instalado desde la galería. Abre {link} para explorar.",
+    "installedLabel": "Extensiones instaladas",
+    "updateTo": "Actualizar a v{version}",
+    "keyword": "palabra clave: {keyword}",
+    "revokedInstalled": "Versión revocada: {reason}. Desinstala esta extensión con el botón de al lado. No se quita ni se desactiva automáticamente.",
+    "programSha": "SHA-256 del programa",
+    "update": "Actualizar",
+    "updateAria": "Actualizar {name} a {version}",
+    "reviewAria": "Revisar {name}",
+    "enable": "Activar {name}",
+    "uninstall": "Desinstalar",
+    "uninstallAria": "Desinstalar {name}",
+    "kind": {
+      "workflow": "Flujo de trabajo",
+      "plugin": "Plugin de script",
+      "native": "Extensión nativa",
+      "theme": "Tema"
+    },
+    "kindPlural": {
+      "workflow": "Flujos de trabajo",
+      "plugin": "Complementos de script",
+      "native": "Extensiones nativas",
+      "theme": "Temas"
+    },
+    "kindNoun": {
+      "workflow": "flujo de trabajo",
+      "plugin": "plugin de script",
+      "native": "extensión nativa",
+      "theme": "tema"
+    },
+    "permission": {
+      "network": "se conecta a internet o a tu red",
+      "filesystem": "lee o escribe archivos fuera de sus propias carpetas",
+      "processes": "inicia otros programas",
+      "clipboard": "lee o cambia el portapapeles por sí mismo",
+      "system": "cambia ajustes del sistema",
+      "own": "(etiqueta propia del autor)"
+    },
+    "status": {
+      "ready": "Listo",
+      "waiting": "Esperando tu permiso",
+      "disabled": "Desactivado",
+      "broken": "No cargado",
+      "theme": "Instalado"
+    },
+    "action": {
+      "available": "Instalar",
+      "update_available": "Actualizar",
+      "installed": "Instalado",
+      "unavailable": "No disponible"
+    },
+    "justNow": "justo ahora",
+    "warning": {
+      "native": "Una extensión nativa es un programa compilado, no un script que puedas leer. Sevak no la aísla: cuando la permites, se ejecuta con los permisos de tu cuenta. Nunca se ejecuta antes de que la permitas en el diálogo siguiente, que muestra su editor, los permisos que declara y su suma de verificación.",
+      "theme": "Un tema solo cambia colores y tamaños. Se comprueba y se reescribe antes de guardarlo.",
+      "plugin": "Un plugin de script ejecuta código. No se ejecuta hasta que lo permitas en el diálogo siguiente.",
+      "workflow": "Un flujo de trabajo que ejecuta un programa o pega en otra aplicación espera tu permiso; uno que solo abre enlaces no ejecuta código."
+    }
+  },
+  "appearance": {
+    "units": {
+      "px": "{value} px"
+    },
+    "extras": {
+      "accent": "Color de acento",
+      "accentHint": "Resaltados y la fila seleccionada. Vacío mantiene el del tema.",
+      "pickAccent": "Elegir el color de acento",
+      "reset": "Restablecer",
+      "fontSize": "Tamaño de letra",
+      "fontSizeHint": "Tamaño de los títulos de los resultados; la barra de búsqueda se ajusta a él.",
+      "font": "Fuente",
+      "fontHint": "Una lista separada por comas, como Fira Sans, sans-serif. Vacío usa la fuente del sistema.",
+      "opacity": "Opacidad del fondo",
+      "opacityHint": "Los valores bajos dejan ver el escritorio a través de la barra de búsqueda.",
+      "blur": "Desenfoque de vidrio esmerilado",
+      "blurHint": "Desenfoca el escritorio detrás de la barra de búsqueda. Baja la opacidad de arriba para verlo.",
+      "radius": "Radio de las esquinas",
+      "radiusHint": "Redondez de la barra de búsqueda.",
+      "customCss": "Hoja de estilos personalizada",
+      "customCssHint": "Un archivo CSS dentro de la carpeta de configuración que sustituye las variables del tema, como <code>theme.css</code>. Consulta docs/themes.md."
+    },
+    "gallery": {
+      "title": "Temas en línea",
+      "hint": "Temas de la comunidad listados en el repositorio de Sevak. Al pulsar <strong>{button}</strong> se hace una sola petición a <code>{url}</code> (sin cuenta, cookies ni datos que te identifiquen). Al instalar se descarga un archivo de tema y se comprueba su SHA-256 con la lista antes de guardarlo en tu carpeta de temas. No se pide nada hasta que pulses.",
+      "browse": "Explorar temas en línea",
+      "refresh": "Actualizar la lista",
+      "empty": "La galería aún no tiene temas.",
+      "by": "de {author}",
+      "unknownAuthor": "autor desconocido",
+      "theme": "tema",
+      "install": "Instalar",
+      "reinstall": "Reinstalar",
+      "installing": "Instalando…",
+      "installNamed": "Instalar {name}",
+      "reinstallNamed": "Reinstalar {name}",
+      "installingNamed": "Instalando {name}",
+      "installed": "{name} instalado. Ya está en tus temas."
+    },
+    "colorRow": {
+      "pick": "Elegir: {name}",
+      "followsText": "sigue a Texto",
+      "opacityOf": "Opacidad de {name}",
+      "opacityTitle": "Opacidad {value}",
+      "clear": "Borrar",
+      "shadowError": "Usa none o, por ejemplo, 0 8px 28px rgba(0, 0, 0, 0.5)",
+      "colorError": "Usa #rrggbb, #rrggbbaa, rgb() o rgba()"
+    },
+    "preview": {
+      "application": "Aplicación",
+      "calculator": "Calculadora",
+      "searchGoogle": "Buscar “chrome themes” en Google",
+      "webSearch": "Búsqueda web",
+      "launch": "Abrir",
+      "open": "Abrir",
+      "search": "Buscar",
+      "placeholder": "Escribe para buscar…",
+      "showInFolder": "Mostrar en la carpeta",
+      "actions": "Acciones"
+    },
+    "colors": {
+      "background": {
+        "label": "Fondo",
+        "hint": "La barra de búsqueda"
+      },
+      "text": {
+        "label": "Texto",
+        "hint": "Títulos de los resultados y lo que escribes"
+      },
+      "subtext": {
+        "label": "Texto secundario",
+        "hint": "Subtítulos, pistas, texto de ejemplo"
+      },
+      "selection": {
+        "label": "Selección",
+        "hint": "Fondo de la fila seleccionada"
+      },
+      "selection_text": {
+        "label": "Texto seleccionado",
+        "hint": "Título de la fila seleccionada; vacío sigue a Texto"
+      },
+      "accent": {
+        "label": "Acento",
+        "hint": "Cursor, botones, interruptores"
+      },
+      "border": {
+        "label": "Borde",
+        "hint": "Líneas finas y el contorno de la barra"
+      },
+      "shadow": {
+        "label": "Sombra",
+        "hint": "Un box-shadow, por ejemplo 0 8px 28px rgba(0, 0, 0, 0.5), o none"
+      },
+      "accent_strong": {
+        "label": "Acento (al pasar)",
+        "hint": "Acento al pasar el ratón y con el foco"
+      },
+      "on_accent": {
+        "label": "Texto sobre acento",
+        "hint": "Texto sobre un fondo de acento"
+      },
+      "tile": {
+        "label": "Mosaico de icono",
+        "hint": "Detrás de los iconos de los resultados"
+      },
+      "kbd_background": {
+        "label": "Tecla",
+        "hint": "Indicaciones de teclas como Ctrl+1"
+      },
+      "kbd_border": {
+        "label": "Borde de tecla",
+        "hint": ""
+      },
+      "surface": {
+        "label": "Panel",
+        "hint": "Paneles de Ajustes"
+      },
+      "input_background": {
+        "label": "Campo",
+        "hint": "Controles de formulario de Ajustes"
+      },
+      "input_border": {
+        "label": "Borde de campo",
+        "hint": ""
+      },
+      "switch_off": {
+        "label": "Interruptor (apagado)",
+        "hint": "Pistas de interruptores y controles deslizantes"
+      },
+      "warn": {
+        "label": "Advertencia",
+        "hint": "Avisos"
+      },
+      "error": {
+        "label": "Error",
+        "hint": "Mensajes de error"
+      },
+      "ok": {
+        "label": "Éxito",
+        "hint": "Marcas de éxito"
+      }
+    },
+    "contrast": {
+      "label": "Contraste",
+      "text": "Texto sobre el fondo",
+      "selection": "Texto de la fila seleccionada sobre la selección",
+      "subtext": "Texto secundario sobre el fondo",
+      "onAccent": "Texto sobre botones de acento",
+      "belowAa": "Por debajo de AA",
+      "failing": "El contraste es inferior a 4,5:1 (WCAG AA) en {pairs}, así que a algunas personas les costará leerlo."
+    },
+    "fontErrors": {
+      "tooLong": "Como máximo {max} caracteres",
+      "characters": "Solo se permiten letras, dígitos, espacios y , . _ -"
+    },
+    "mode": {
+      "light": "Claro",
+      "dark": "Oscuro",
+      "lightNone": "Claro (ninguno)",
+      "darkNone": "Oscuro (ninguno)"
+    },
+    "variant": {
+      "missing": {
+        "light": "Este tema no tiene variante clara, así que sus colores oscuros también se usan en el modo claro.",
+        "dark": "Este tema no tiene variante oscura, así que sus colores claros también se usan en el modo oscuro."
+      },
+      "noColors": "Aún no hay colores.",
+      "add": {
+        "light": "Añadir variante clara",
+        "dark": "Añadir variante oscura"
+      },
+      "remove": {
+        "light": "Quitar la variante clara",
+        "dark": "Quitar la variante oscura"
+      },
+      "onePalette": "Se usa una sola paleta en los modos claro y oscuro."
+    },
+    "sizes": {
+      "fontSize": "Tamaño de letra",
+      "fontSizeHint": "Títulos de los resultados; la barra se ajusta a él",
+      "radius": "Radio de las esquinas",
+      "radiusHint": "Redondez de la barra de búsqueda",
+      "opacity": "Opacidad del fondo",
+      "opacityHint": "Más baja deja ver el escritorio",
+      "rowHeight": "Altura de fila",
+      "rowHeightHint": "Altura de una fila de resultados",
+      "searchSize": "Tamaño del campo de búsqueda",
+      "searchSizeHint": "Tamaño del texto que escribes",
+      "iconSize": "Tamaño de los iconos",
+      "iconSizeHint": "Tamaño de los iconos de los resultados",
+      "windowWidth": "Ancho de la ventana",
+      "windowWidthHint": "Se usa mientras Ajustes mantenga el ancho predeterminado; la vista previa se limita al espacio disponible aquí"
+    },
+    "editor": {
+      "title": "Editor de temas",
+      "intro": "Elige un tema para previsualizarlo, cambia lo que quieras y luego aplícalo. Los temas son archivos pequeños en tu carpeta de temas.",
+      "inUseFile": "En uso: <strong>{file}</strong>",
+      "useNone": "No usar ninguno",
+      "noFileInUse": "Ningún archivo de tema en uso",
+      "listFailed": "No se pudieron listar los temas.",
+      "loadingThemes": "Cargando temas…",
+      "builtin": "Temas integrados",
+      "yours": "Tus temas",
+      "inUse": "En uso",
+      "preview": "Vista previa",
+      "variantToPreview": "Variante que previsualizar",
+      "noColorsAddVariant": "Este tema aún no tiene colores. Añade una variante para empezar a editarlo.",
+      "name": "Nombre",
+      "namePlaceholder": "Mi tema",
+      "author": "Autor",
+      "undo": "Deshacer",
+      "redo": "Rehacer",
+      "reset": "Restablecer",
+      "replace": "Sustituir",
+      "saveAs": "Guardar como…",
+      "replaceApply": "Sustituir y aplicar",
+      "apply": "Aplicar",
+      "import": "Importar…",
+      "export": "Exportar…",
+      "openFolder": "Abrir la carpeta de temas",
+      "colors": {
+        "light": "Colores (claro)",
+        "dark": "Colores (oscuro)"
+      },
+      "moreColors": "Más colores",
+      "fewerColors": "Menos colores",
+      "derive": "Derivar del texto, el fondo y el acento",
+      "deriveHint": "Recalcula bordes, mosaicos, teclas, paneles, campos, el tono del acento al pasar el ratón y la selección.",
+      "sizesFont": "Tamaños y fuente",
+      "useDefault": "Usar el valor predeterminado",
+      "useDefaultFor": "Usar el valor predeterminado: {name}",
+      "default": "Predeterminado",
+      "installedFonts": "Fuentes instaladas",
+      "builtinName": "Ese es el nombre de un tema integrado; elige otro.",
+      "ignoredValues": "Se ignoraron algunos valores de este tema: {warnings}",
+      "fileNotFound": "No se encontró el archivo de tema \"{file}\" en la carpeta de temas, así que no se aplica ningún tema.",
+      "copyName": "{name} (copia)",
+      "fontsUnavailable": "La lista de fuentes del sistema no está disponible aquí; escribe el nombre de una fuente.",
+      "fontsSuggested": {
+        "one": "Se sugiere {count} fuente instalada.",
+        "many": "Se sugieren {count} fuentes instaladas.",
+        "other": "Se sugieren {count} fuentes instaladas."
+      },
+      "fontsDeclined": "Se denegó el acceso a la lista de fuentes; escribe el nombre de una fuente.",
+      "nameFirst": "Primero ponle un nombre al tema.",
+      "exists": "Ya existe un tema llamado \"{name}\". Pulsa de nuevo para sustituirlo.",
+      "savedFile": "Se guardó {file}.",
+      "savedIgnored": "Se guardó {file}, pero se ignoraron algunos valores: {warnings}",
+      "willBeUsed": "Se usará {name}. Pulsa Guardar abajo para conservarlo.",
+      "noneWillBeUsed": "No se usará ningún archivo de tema. Pulsa Guardar abajo para conservar el cambio.",
+      "imported": "Se importó {name}.",
+      "saveBeforeExport": "Primero guarda el tema (Guardar como…) y luego expórtalo.",
+      "exported": "Se exportó el tema."
+    }
+  }
+}

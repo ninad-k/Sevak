@@ -23,6 +23,7 @@
   import Toggle from "../Toggle.svelte";
   import KeywordRow from "./KeywordRow.svelte";
   import Row from "./Row.svelte";
+  import { t, tHtml } from "../i18n.svelte";
   import "./pages.css";
 
   let {
@@ -69,7 +70,7 @@
 
   async function saveKey() {
     if (!isPlausibleKey(keyText)) {
-      keyError = "That does not look like an API key (no spaces or line breaks).";
+      keyError = t("pages.ai.notAKey");
       return;
     }
     keyBusy = true;
@@ -104,32 +105,26 @@
 </script>
 
 <div class="sp-page ai-page">
-  <h1>AI assistant</h1>
-  <p class="sp-lead">
-    Type <code>{config.ai.keyword.trim() || "ai"}</code> and a question in the launcher, press Enter
-    and read (or copy, or paste) the answer. Off until you turn it on. Sevak never runs anything an
-    answer says: it only shows it as text.
-  </p>
+  <h1>{t("pages.ai.title")}</h1>
+  <p class="sp-lead">{@html tHtml("pages.ai.lead", { keyword: config.ai.keyword.trim() || "ai" })}</p>
 
   <p class="sp-note privacy" data-testid="ai-disclosure">
-    <strong>What is sent:</strong>
+    {@html tHtml("pages.ai.whatIsSent")}
     {disclosure(config.ai)}
-    Nothing is sent while you type, when Sevak starts, or in the background, and there is no telemetry.
-    Questions and answers are kept in memory only: not logged, not written to disk, not in your search
-    history.
+    {t("pages.ai.notSent")}
   </p>
 
   <div class="sp-group">
-    <Row label="Use the AI assistant" hint="Off until you turn it on.">
-      <Toggle bind:checked={config.ai.enabled} label="Use the AI assistant" />
+    <Row label={t("pages.ai.use")} hint={t("pages.common.offUntilOn")}>
+      <Toggle bind:checked={config.ai.enabled} label={t("pages.ai.use")} />
     </Row>
     <KeywordRow
       id="ai-keyword"
       bind:value={config.ai.keyword}
       error={problems.keywords["ai.keyword"]}
-      hint="Type the keyword, a space, then your question."
+      hint={t("pages.ai.keywordHint")}
     />
-    <Row label="Provider" hint={provider.blurb} forId="ai-provider">
+    <Row label={t("pages.ai.provider")} hint={provider.blurb} forId="ai-provider">
       <select
         id="ai-provider"
         class="sp-input provider"
@@ -142,8 +137,8 @@
       </select>
     </Row>
     <Row
-      label="Model"
-      hint="Empty uses the default shown. Providers retire models, so type the name you want."
+      label={t("pages.ai.model")}
+      hint={t("pages.ai.modelHint")}
       forId="ai-model"
       error={fieldProblems.model ?? ""}
     >
@@ -160,8 +155,8 @@
       />
     </Row>
     <Row
-      label="Base URL"
-      hint="Empty uses the default shown. Point the OpenAI-compatible provider at another server, such as http://localhost:1234/v1 for LM Studio."
+      label={t("pages.ai.baseUrl")}
+      hint={t("pages.ai.baseUrlHint")}
       forId="ai-base-url"
       error={fieldProblems.baseUrl ?? ""}
     >
@@ -180,10 +175,8 @@
 
     {#if keyed}
       <Row
-        label="API key"
-        hint={needsKey(config.ai)
-          ? "Write-only: paste it and press Save key. It is never shown again."
-          : "Optional for a server on this computer. Write-only: paste it and press Save key."}
+        label={t("pages.ai.apiKey")}
+        hint={needsKey(config.ai) ? t("pages.ai.apiKeyHintRequired") : t("pages.ai.apiKeyHintOptional")}
         forId="ai-key"
         error={keyError}
       >
@@ -195,33 +188,30 @@
           class="sp-input wide mono"
           type="password"
           bind:value={keyText}
-          placeholder={keyState === "stored" ? "••••••••••••" : "Paste an API key"}
+          placeholder={keyState === "stored" ? "••••••••••••" : t("pages.ai.pasteKey")}
           spellcheck="false"
           autocomplete="off"
-          aria-label="API key (write-only)"
+          aria-label={t("pages.ai.apiKeyAria")}
           aria-invalid={!!keyError}
         />
         <button
           type="button"
           class="sp-btn"
           disabled={keyBusy || keyText.trim() === ""}
-          onclick={saveKey}>Save key</button
+          onclick={saveKey}>{t("pages.ai.saveKey")}</button
         >
         <button
           type="button"
           class="sp-btn danger"
           disabled={keyBusy || keyState !== "stored"}
-          onclick={removeKey}>Remove</button
+          onclick={removeKey}>{t("common.remove")}</button
         >
       </Row>
     {/if}
 
     <div class="sp-field">
-      <label class="sp-name" for="ai-system">System prompt</label>
-      <span class="sp-hint">
-        Sent with every question to set the tone. Keep secrets out of it: it goes to the provider
-        too.
-      </span>
+      <label class="sp-name" for="ai-system">{t("pages.ai.systemPrompt")}</label>
+      <span class="sp-hint">{t("pages.ai.systemPromptHint")}</span>
       <textarea
         id="ai-system"
         class="sp-input area"
@@ -239,8 +229,8 @@
     </div>
 
     <Row
-      label="Longest answer"
-      hint={`Asked of the model, in tokens (${MIN_MAX_TOKENS} to ${MAX_MAX_TOKENS}). Roughly 0.75 words each. Longer answers cost more with paid services.`}
+      label={t("pages.ai.longest")}
+      hint={t("pages.ai.longestHint", { min: MIN_MAX_TOKENS, max: MAX_MAX_TOKENS })}
       forId="ai-max-tokens"
       error={fieldProblems.maxTokens ?? ""}
     >
@@ -255,11 +245,11 @@
         bind:value={config.ai.max_tokens}
         aria-invalid={!!fieldProblems.maxTokens}
       />
-      <span class="sp-unit">tokens</span>
+      <span class="sp-unit">{t("pages.common.units.tokens")}</span>
     </Row>
     <Row
-      label="Timeout"
-      hint={`How long to wait for the whole answer (${MIN_TIMEOUT_SECS} to ${MAX_TIMEOUT_SECS} seconds). A local model may need time to load.`}
+      label={t("pages.ai.timeout")}
+      hint={t("pages.ai.timeoutHint", { min: MIN_TIMEOUT_SECS, max: MAX_TIMEOUT_SECS })}
       forId="ai-timeout"
       error={fieldProblems.timeout ?? ""}
     >
@@ -274,18 +264,15 @@
         bind:value={config.ai.timeout_secs}
         aria-invalid={!!fieldProblems.timeout}
       />
-      <span class="sp-unit">seconds</span>
+      <span class="sp-unit">{t("pages.common.units.seconds")}</span>
     </Row>
 
     <div class="sp-field">
       <div class="test-row">
         <button type="button" class="sp-btn" disabled={testing || hasProblems} onclick={test}>
-          {testing ? "Testing…" : "Test connection"}
+          {testing ? t("pages.ai.testing") : t("pages.ai.test")}
         </button>
-        <span class="sp-hint">
-          Checks the address, the key and the model with the values above (saved or not). It lists
-          the provider's models and sends no question.
-        </span>
+        <span class="sp-hint">{t("pages.ai.testHint")}</span>
       </div>
       {#if testResult}
         <p
@@ -302,16 +289,13 @@
   </div>
 
   <p class="sp-note">
-    <strong>Where the key is kept:</strong>
-    never in <code>config.toml</code>, never in a settings export or the diagnostics report, never in
-    the log.
-    {keyStatus ? `A saved key is ${keyStatus.protection}.` : ""}
-    The <code>OPENAI_API_KEY</code> and <code>ANTHROPIC_API_KEY</code> environment variables are used
-    when no key is saved here. Press Save (below) to apply the other settings.
+    {@html tHtml("pages.ai.keyKept")}
+    {keyStatus ? t("pages.ai.savedKeyIs", { protection: keyStatus.protection }) : ""}
+    {@html tHtml("pages.ai.envVars")}
   </p>
   {#if pluginOff("ai")}
     <p class="sp-note warn" role="status">
-      “AI assistant” is switched off under <strong>Plugins</strong>. Switch it on there as well.
+      {@html tHtml("pages.common.pluginOff", { name: t("pages.ai.plugin") })}
     </p>
   {/if}
 </div>

@@ -61,6 +61,12 @@ check_for_updates = true
 # version that is newer than the one you have.
 update_channel = "stable"
 
+# Language of Sevak's windows and tray menu: "auto" (follow the operating
+# system), "en" (English), "es" (Español), "de" (Deutsch), "fr" (Français) or
+# "hi" (हिन्दी). Languages other than English are machine-drafted and await
+# review by native speakers; plugin results stay in English for now.
+language = "auto"
+
 [window]
 # Width of the search window in logical pixels (400-1600).
 width = 720
@@ -575,6 +581,9 @@ pub struct GeneralConfig {
     pub check_for_updates: bool,
     /// Which releases the update check follows. See [`UpdateChannel`].
     pub update_channel: UpdateChannel,
+    /// Interface language: a code from [`crate::language::LANGUAGES`] or
+    /// `auto` (the OS language). Normalized by [`Config::normalized`].
+    pub language: String,
 }
 
 /// The release channel the update check follows.
@@ -619,6 +628,7 @@ impl Default for GeneralConfig {
             launch_at_login: false,
             check_for_updates: true,
             update_channel: UpdateChannel::default(),
+            language: crate::language::AUTO.to_owned(),
         }
     }
 }
@@ -1718,6 +1728,7 @@ impl Config {
             hotkey.to_owned()
         };
         self.general.actions_hotkey = self.general.actions_hotkey.trim().to_owned();
+        self.general.language = crate::language::normalize(&self.general.language);
         // An entry without a key cannot be reported against anything.
         for binding in &mut self.hotkeys {
             binding.key = binding.key.trim().to_owned();
@@ -2489,6 +2500,29 @@ expand_in_terminals = true
             Config::from_toml_str(&text).unwrap().general.update_channel,
             UpdateChannel::Beta
         );
+    }
+
+    #[test]
+    fn language_defaults_to_auto_normalizes_and_is_saved_in_place() {
+        assert_eq!(Config::default().general.language, "auto");
+        let parsed = Config::from_toml_str(DEFAULT_CONFIG_TOML).unwrap();
+        assert_eq!(parsed.general.language, "auto");
+        assert!(DEFAULT_CONFIG_TOML.contains("language = \"auto\""));
+        let german = Config::from_toml_str("[general]\nlanguage = \" DE \"\n").unwrap();
+        assert_eq!(german.normalized().general.language, "de");
+        let unknown =
+            Config::from_toml_str("[general]\nhotkey = \"Alt+Space\"\nlanguage = \"tlh\"\n")
+                .unwrap();
+        let unknown = unknown.normalized();
+        assert_eq!(unknown.general.language, "auto");
+        assert_eq!(unknown.general.hotkey, "Alt+Space");
+
+        let mut config = Config::default();
+        config.general.language = "hi".to_owned();
+        let text = saved(Some(DEFAULT_CONFIG_TOML), &config);
+        assert!(text.contains("language = \"hi\""));
+        assert!(text.contains("machine-drafted"));
+        assert_eq!(Config::from_toml_str(&text).unwrap().general.language, "hi");
     }
 
     #[test]

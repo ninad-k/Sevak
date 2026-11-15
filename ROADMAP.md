@@ -39,6 +39,11 @@ does not mean a release containing it is published yet.
   messages, focus is managed and visible, built-in themes meet AA contrast,
   and axe-core checks run in CI ([Accessibility](docs/accessibility.md)). Manual testing
   with NVDA, VoiceOver and Orca is still recommended
+- Localisation: the launcher, Settings, tray menu and Windows setup in English,
+  Spanish, German and French, and the app (not the setup) in Hindi, with a
+  language setting that follows the OS by default
+  ([Localisation](docs/localisation.md)). The non-English text is machine-drafted
+  and awaits review by native speakers; plugin results stay in English
 
 ## Next (planned, awaiting resources)
 
@@ -55,7 +60,6 @@ does not mean a release containing it is published yet.
 - Alfred Remote-style phone companion app (not actively planned)
 - Music library browsing and filtering
 - Richer file search filters
-- Localisation for other languages
 - More community gallery themes, workflows, plugins and extensions (the initial
   marketplace, gallery packages, submission and review process exist; see
   [Publishing to the gallery](docs/marketplace/publishing.md))

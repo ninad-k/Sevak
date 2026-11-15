@@ -10,6 +10,7 @@
   import ListEditor from "./ListEditor.svelte";
   import Row from "./Row.svelte";
   import SizeInput from "./SizeInput.svelte";
+  import { t, tHtml } from "../i18n.svelte";
   import "./pages.css";
 
   let {
@@ -52,48 +53,34 @@
 </script>
 
 <div class="sp-page">
-  <h1>Clipboard &amp; paste</h1>
-  <p class="sp-lead">
-    Clipboard history lets you type <code>cb</code> to paste something you copied earlier: text,
-    images and files. Pasting options below also apply to snippets.
-  </p>
+  <h1>{t("pages.clipboard.title")}</h1>
+  <p class="sp-lead">{@html tHtml("pages.clipboard.lead")}</p>
 
-  <h2 class="sp-h2">Clipboard history</h2>
+  <h2 class="sp-h2">{t("pages.clipboard.historyTitle")}</h2>
   <div class="sp-group">
-    <Row
-      label="Keep a clipboard history"
-      hint="Off until you turn it on. Only what you copy after that is remembered."
-    >
-      <Toggle bind:checked={config.clipboard.enabled} label="Keep a clipboard history" />
+    <Row label={t("pages.clipboard.keep")} hint={t("pages.clipboard.keepHint")}>
+      <Toggle bind:checked={config.clipboard.enabled} label={t("pages.clipboard.keep")} />
     </Row>
   </div>
   <p class="sp-note privacy">
-    <strong>Privacy:</strong> while this is on, Sevak watches the clipboard and keeps what you copy
-    on this computer, in its local data folder: text and the paths of copied files in
-    <code>clipboard-history.json</code>, images as PNG files.
+    {@html tHtml("pages.clipboard.privacy")}
     {#if platform === "windows"}
-      {#if config.clipboard.encrypt}The files are encrypted for your Windows account.{:else}The
-        files are <strong>not encrypted</strong>.{/if}
+      {#if config.clipboard.encrypt}{t("pages.clipboard.encrypted")}{:else}{@html tHtml("pages.clipboard.notEncrypted")}{/if}
     {:else}
-      The files are <strong>not encrypted</strong>; they are readable only by your user.
+      {@html tHtml("pages.clipboard.notEncryptedUnix")}
     {/if}
-    Nothing is sent anywhere. Password managers and credential prompts are never recorded (see
-    below){#if platform === "linux"}; on Linux a copy is skipped only when the app marks it as
-      secret, so add other apps to Ignore apps{/if}.
+    {platform === "linux" ? t("pages.clipboard.neverRecordedLinux") : t("pages.clipboard.neverRecorded")}
   </p>
   {#if pluginOff}
-    <p class="sp-note warn" role="status">
-      “Clipboard history” is switched off under <strong>Plugins</strong>, so <code>cb</code> shows
-      nothing. Switch it on there as well.
-    </p>
+    <p class="sp-note warn" role="status">{@html tHtml("pages.clipboard.pluginOff")}</p>
   {/if}
 
-  <h2 class="sp-h2">What to keep</h2>
-  <p class="sp-sub">These apply while the history is on.</p>
+  <h2 class="sp-h2">{t("pages.clipboard.keepTitle")}</h2>
+  <p class="sp-sub">{t("pages.clipboard.keepSub")}</p>
   <div class="sp-group">
     <Row
-      label="Number of items"
-      hint="Older entries are dropped, together with their image files."
+      label={t("pages.clipboard.items")}
+      hint={t("pages.clipboard.itemsHint")}
       forId="cb-items"
       error={problems.clipboard.maxItems}
     >
@@ -111,8 +98,8 @@
     </Row>
 
     <Row
-      label="Longest text"
-      hint="Longer text is not recorded. 1 to {MAX_CLIPBOARD_ITEM_BYTES / 1024} KB."
+      label={t("pages.clipboard.longestText")}
+      hint={t("pages.clipboard.longestTextHint", { max: MAX_CLIPBOARD_ITEM_BYTES / 1024 })}
       forId="cb-text-size"
       error={problems.clipboard.maxItemBytes}
     >
@@ -120,30 +107,24 @@
         id="cb-text-size"
         bind:bytes={config.clipboard.max_item_bytes}
         unit={1024}
-        unitLabel="KB"
+        unitLabel={t("pages.common.units.kb")}
         invalid={!!problems.clipboard.maxItemBytes}
       />
     </Row>
 
     {#if platform === "windows"}
-      <Row
-        label="Encrypt the history"
-        hint="Encrypts the history file and the images for your Windows account. Another user, another computer or a backup cannot read them."
-      >
-        <Toggle bind:checked={config.clipboard.encrypt} label="Encrypt the clipboard history" />
+      <Row label={t("pages.clipboard.encrypt")} hint={t("pages.clipboard.encryptHint")}>
+        <Toggle bind:checked={config.clipboard.encrypt} label={t("pages.clipboard.encryptToggle")} />
       </Row>
     {/if}
 
-    <Row
-      label="Record images"
-      hint="Copied pictures, saved as PNG files next to the history."
-    >
-      <Toggle bind:checked={config.clipboard.images} label="Record images" />
+    <Row label={t("pages.clipboard.images")} hint={t("pages.clipboard.imagesHint")}>
+      <Toggle bind:checked={config.clipboard.images} label={t("pages.clipboard.images")} />
     </Row>
 
     <Row
-      label="Largest image"
-      hint="A picture whose PNG is bigger is not recorded. Up to {MAX_CLIPBOARD_IMAGE_BYTES / 1048576} MB."
+      label={t("pages.clipboard.largestImage")}
+      hint={t("pages.clipboard.largestImageHint", { max: MAX_CLIPBOARD_IMAGE_BYTES / 1048576 })}
       forId="cb-image-size"
       error={problems.clipboard.maxImageBytes}
     >
@@ -151,54 +132,45 @@
         id="cb-image-size"
         bind:bytes={config.clipboard.max_image_bytes}
         unit={1048576}
-        unitLabel="MB"
+        unitLabel={t("pages.common.units.mb")}
         invalid={!!problems.clipboard.maxImageBytes}
       />
     </Row>
 
-    <Row
-      label="Record files"
-      hint="Copied files and folders: only their paths are kept; the files stay where they are."
-    >
-      <Toggle bind:checked={config.clipboard.files} label="Record files" />
+    <Row label={t("pages.clipboard.files")} hint={t("pages.clipboard.filesHint")}>
+      <Toggle bind:checked={config.clipboard.files} label={t("pages.clipboard.files")} />
     </Row>
 
-    <Row
-      label="Skip password managers"
-      hint="Never record copies made in KeePass, 1Password, Bitwarden and similar apps, or in system credential and passphrase prompts. Add other apps below."
-    >
+    <Row label={t("pages.clipboard.skipManagers")} hint={t("pages.clipboard.skipManagersHint")}>
       <Toggle
         bind:checked={config.clipboard.default_ignore_apps}
-        label="Skip password managers and credential prompts"
+        label={t("pages.clipboard.skipManagersToggle")}
       />
     </Row>
 
     <ListEditor
       id="cb-ignore"
       bind:items={config.clipboard.ignore_apps}
-      label="Ignore apps"
-      hint="Copies made in these apps are never recorded, such as KeePassXC or 1Password. Program or app names, any case."
-      placeholder="App name"
-      emptyText="No apps ignored."
+      label={t("pages.clipboard.ignore")}
+      hint={t("pages.clipboard.ignoreHint")}
+      placeholder={t("pages.common.appName")}
+      emptyText={t("pages.common.noAppsIgnored")}
     />
   </div>
 
-  <h2 class="sp-h2">Delete what is stored</h2>
+  <h2 class="sp-h2">{t("pages.clipboard.deleteTitle")}</h2>
   <div class="sp-group">
-    <Row
-      label="Clear clipboard history"
-      hint="Deletes every saved entry and the image files. This cannot be undone."
-    >
+    <Row label={t("pages.clipboard.clear")} hint={t("pages.clipboard.clearHint")}>
       {#if phase === "confirm"}
         <!-- svelte-ignore a11y_autofocus -->
-        <button type="button" class="sp-btn danger" onclick={clear} autofocus>Delete everything</button>
+        <button type="button" class="sp-btn danger" onclick={clear} autofocus>{t("pages.clipboard.deleteEverything")}</button>
         <button
           type="button"
           class="sp-btn"
           onclick={() => {
             returnFocus = true;
             phase = "idle";
-          }}>Cancel</button
+          }}>{t("common.cancel")}</button
         >
       {:else}
         <button
@@ -208,42 +180,29 @@
           disabled={phase === "busy"}
           onclick={() => (phase = "confirm")}
         >
-          {phase === "busy" ? "Clearing…" : "Clear history…"}
+          {phase === "busy" ? t("pages.clipboard.clearing") : t("pages.clipboard.clearButton")}
         </button>
       {/if}
     </Row>
   </div>
   {#if phase === "done"}
-    <p class="sp-msg ok" role="status">The clipboard history was deleted.</p>
+    <p class="sp-msg ok" role="status">{t("pages.clipboard.cleared")}</p>
   {:else if phase === "failed"}
     <p class="sp-msg error" role="alert">{failure}</p>
   {/if}
-  <p class="sp-sub">
-    This takes effect right away; it is not part of Save. You can also type <code>cb clear</code>
-    in Sevak.
-  </p>
+  <p class="sp-sub">{@html tHtml("pages.clipboard.clearNote")}</p>
 
-  <h2 class="sp-h2">Pasting</h2>
+  <h2 class="sp-h2">{t("pages.clipboard.pastingTitle")}</h2>
   <div class="sp-group">
-    <Row
-      label="Put the clipboard back after pasting"
-      hint="After pasting a clipboard entry or snippet, restore what was on the clipboard before. Off leaves the pasted text on it."
-    >
-      <Toggle bind:checked={config.paste.restore_clipboard} label="Restore the clipboard after pasting" />
+    <Row label={t("pages.clipboard.restore")} hint={t("pages.clipboard.restoreHint")}>
+      <Toggle bind:checked={config.paste.restore_clipboard} label={t("pages.clipboard.restoreToggle")} />
     </Row>
   </div>
   {#if platform === "macos"}
-    <p class="sp-note">
-      macOS pastes only with <strong>Accessibility</strong> permission for Sevak (System Settings,
-      Privacy &amp; Security). Without it, Sevak copies the entry instead.
-    </p>
+    <p class="sp-note">{@html tHtml("pages.clipboard.pasteNoteMac")}</p>
   {:else if platform === "linux"}
-    <p class="sp-note">
-      On Wayland, apps cannot be sent a paste, so Sevak copies the entry instead.
-    </p>
+    <p class="sp-note">{t("pages.clipboard.pasteNoteLinux")}</p>
   {:else}
-    <p class="sp-note">
-      Apps running as administrator cannot receive a paste; Sevak copies the entry instead.
-    </p>
+    <p class="sp-note">{t("pages.clipboard.pasteNoteWindows")}</p>
   {/if}
 </div>

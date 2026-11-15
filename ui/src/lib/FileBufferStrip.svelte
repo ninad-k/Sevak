@@ -5,6 +5,7 @@
   // last one ended). All state lives in App.svelte and the shell; this only draws.
   import { tick } from "svelte";
   import Glyph from "./Glyph.svelte";
+  import { t } from "./i18n.svelte";
   import type { BufferItemDto, BufferNote, BufferProgress } from "./ipc";
 
   interface Props {
@@ -43,10 +44,10 @@
 </script>
 
 {#if items.length > 0 || progress || note || destination}
-  <section class="buffer" aria-label="File buffer">
+  <section class="buffer" aria-label={t("launcher.buffer.label")}>
     {#if items.length > 0}
       <div class="strip">
-        <span class="label">Buffer</span>
+        <span class="label">{t("launcher.buffer.strip")}</span>
         <ul class="chips" bind:this={list}>
           {#each items as item, i (item.path)}
             <li class="chip" title={item.path}>
@@ -70,7 +71,7 @@
                 class="remove"
                 type="button"
                 tabindex="-1"
-                aria-label="Remove {item.name} from the buffer"
+                aria-label={t("launcher.buffer.remove", { name: item.name })}
                 onmousedown={(e) => e.preventDefault()}
                 onclick={() => onremove(i)}>×</button
               >
@@ -78,8 +79,8 @@
           {/each}
         </ul>
         <span class="keys" aria-hidden="true">
-          <span class="key"><kbd>{alt}→</kbd>Actions</span>
-          <span class="key"><kbd>{alt}⌫</kbd>Clear</span>
+          <span class="key"><kbd>{alt}→</kbd>{t("launcher.buffer.actions")}</span>
+          <span class="key"><kbd>{alt}⌫</kbd>{t("launcher.buffer.clear")}</span>
         </span>
       </div>
     {/if}
@@ -88,14 +89,13 @@
       <div class="line" role="status">
         <strong>{destination.label}</strong>
         <span class="muted">
-          {destination.count === 1 ? "1 item" : `${destination.count} items`}: type or browse to a
-          folder.
+          {t("launcher.buffer.destination", { count: destination.count })}
         </span>
         <span class="keys" aria-hidden="true">
-          <span class="key"><kbd>↵</kbd>Use folder</span>
-          <span class="key"><kbd>{ctrl}↵</kbd>Use typed path</span>
-          <span class="key"><kbd>Tab</kbd>Open</span>
-          <span class="key"><kbd>Esc</kbd>Cancel</span>
+          <span class="key"><kbd>↵</kbd>{t("launcher.buffer.useFolder")}</span>
+          <span class="key"><kbd>{ctrl}↵</kbd>{t("launcher.buffer.useTypedPath")}</span>
+          <span class="key"><kbd>Tab</kbd>{t("launcher.buffer.open")}</span>
+          <span class="key"><kbd>Esc</kbd>{t("launcher.buffer.cancel")}</span>
         </span>
       </div>
     {/if}
@@ -104,13 +104,13 @@
       <div class="line" role="status">
         <span class="progress-text">
           {progress.label}{progress.total > 0
-            ? ` · ${Math.min(progress.done + 1, progress.total)} of ${progress.total}`
+            ? ` · ${t("launcher.buffer.step", { done: Math.min(progress.done + 1, progress.total), total: progress.total })}`
             : ""}{progress.name ? ` · ${progress.name}` : "…"}
         </span>
         <span
           class="bar"
           role="progressbar"
-          aria-label="{progress.label} progress"
+          aria-label={t("launcher.buffer.progress", { label: progress.label })}
           aria-valuemin="0"
           aria-valuemax="100"
           aria-valuenow={percent}

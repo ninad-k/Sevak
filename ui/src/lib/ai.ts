@@ -1,6 +1,9 @@
 // The pure logic of Settings > AI assistant: providers and their defaults, what
 // is sent where, and the checks Rust repeats on save (`sevak_core::ai`). Nothing
-// here touches the network or the IPC layer; see ai-ipc.ts for that.
+// here touches the network or the IPC layer; see ai-ipc.ts for that. The words
+// are the `launcher.ai` messages of the current language.
+
+import { t } from "./i18n.svelte";
 
 export type AiProviderId = "openai" | "anthropic" | "ollama";
 
@@ -31,27 +34,39 @@ export interface ProviderInfo {
 export const AI_PROVIDERS: ProviderInfo[] = [
   {
     id: "ollama",
-    label: "Ollama (on this computer)",
+    get label() {
+      return t("launcher.ai.providers.ollama.label");
+    },
     defaultModel: "llama3.2",
     defaultBaseUrl: "http://localhost:11434",
     envVar: null,
-    blurb: "A model that runs on this computer. Nothing leaves it unless the base URL points elsewhere.",
+    get blurb() {
+      return t("launcher.ai.providers.ollama.blurb");
+    },
   },
   {
     id: "openai",
-    label: "OpenAI-compatible (ChatGPT, OpenRouter, LM Studio…)",
+    get label() {
+      return t("launcher.ai.providers.openai.label");
+    },
     defaultModel: "gpt-4o-mini",
     defaultBaseUrl: "https://api.openai.com/v1",
     envVar: "OPENAI_API_KEY",
-    blurb: "OpenAI, or any server that speaks the same API: change the base URL.",
+    get blurb() {
+      return t("launcher.ai.providers.openai.blurb");
+    },
   },
   {
     id: "anthropic",
-    label: "Anthropic (Claude)",
+    get label() {
+      return t("launcher.ai.providers.anthropic.label");
+    },
     defaultModel: "claude-haiku-4-5",
     defaultBaseUrl: "https://api.anthropic.com",
     envVar: "ANTHROPIC_API_KEY",
-    blurb: "Anthropic's Messages API.",
+    get blurb() {
+      return t("launcher.ai.providers.anthropic.blurb");
+    },
   },
 ];
 
@@ -83,7 +98,7 @@ export function isLoopbackHost(host: string): boolean {
 /**
  * The same rules as `parse_base_url` in Rust: `http://` or `https://`, a host, an
  * optional port and path; no user name, password, query or fragment. Returns
- * the parts, or the text that completes "the base URL …".
+ * the parts, or a sentence saying what is wrong with the base URL.
  */
 export function parseBaseUrl(url: string): ParsedBase | string {
   const text = url.trim();
@@ -97,31 +112,31 @@ export function parseBaseUrl(url: string): ParsedBase | string {
     scheme = "http";
     rest = lower.slice(7);
   } else {
-    return "must start with http:// or https://";
+    return t("launcher.ai.baseUrl.scheme");
   }
-  if (/[\s\u0000-\u001f]/.test(text)) return "cannot contain spaces";
-  if (/[?#]/.test(rest)) return "cannot contain a query or fragment";
+  if (/[\s\u0000-\u001f]/.test(text)) return t("launcher.ai.baseUrl.spaces");
+  if (/[?#]/.test(rest)) return t("launcher.ai.baseUrl.query");
   const authority = rest.split("/")[0];
-  if (authority.includes("@")) return "cannot contain a user name or password";
+  if (authority.includes("@")) return t("launcher.ai.baseUrl.userInfo");
   let host: string;
   let port: string | null = null;
   if (authority.startsWith("[")) {
     const close = authority.indexOf("]");
-    if (close < 0) return "has an invalid address";
+    if (close < 0) return t("launcher.ai.baseUrl.address");
     host = authority.slice(1, close);
     const after = authority.slice(close + 1);
     if (after.startsWith(":")) port = after.slice(1);
-    else if (after !== "") return "has an invalid address";
+    else if (after !== "") return t("launcher.ai.baseUrl.address");
   } else {
     const colon = authority.lastIndexOf(":");
     host = colon < 0 ? authority : authority.slice(0, colon);
     port = colon < 0 ? null : authority.slice(colon + 1);
   }
-  if (host === "") return "needs a host name";
-  if (!/^[a-z0-9._:-]+$/.test(host)) return "has an invalid host name";
+  if (host === "") return t("launcher.ai.baseUrl.noHost");
+  if (!/^[a-z0-9._:-]+$/.test(host)) return t("launcher.ai.baseUrl.host");
   let portNumber: number | null = null;
   if (port !== null) {
-    if (!/^\d{1,5}$/.test(port) || Number(port) > 65535) return "has an invalid port";
+    if (!/^\d{1,5}$/.test(port) || Number(port) > 65535) return t("launcher.ai.baseUrl.port");
     portNumber = Number(port);
   }
   return { scheme, host, port: portNumber };
@@ -157,13 +172,12 @@ export function staysOnThisComputer(ai: AiConfig): boolean {
  */
 export function disclosure(ai: AiConfig): string {
   const host = destinationHost(ai);
-  const where = host === "" ? "the address in Base URL" : host;
+  const where = host === "" ? t("launcher.ai.disclosure.addressFallback") : host;
   const keyword = ai.keyword.trim() || DEFAULT_KEYWORD;
-  const sent = `the question you typed after “${keyword} ” (or the text you chose with “Ask AI about selection”), the system prompt below and the model name`;
-  if (staysOnThisComputer(ai)) {
-    return `When you press Enter on a question, Sevak sends ${sent} to ${where}, which is this computer. Nothing leaves it.`;
-  }
-  return `When you press Enter on a question, Sevak sends ${sent} to ${where}, over the internet. Nothing else is sent: not your clipboard, files or search history.`;
+  return t(staysOnThisComputer(ai) ? "launcher.ai.disclosure.local" : "launcher.ai.disclosure.remote", {
+    keyword,
+    where,
+  });
 }
 
 /** The keyword is checked with the other keywords (see validate.ts). */
@@ -173,19 +187,19 @@ export type AiProblems = Partial<Record<AiField, string>>;
 /** The checks `AiConfig::problem` makes in Rust, per field. */
 export function aiProblems(ai: AiConfig): AiProblems {
   const problems: AiProblems = {};
-  if ([...ai.model].length > MAX_MODEL_CHARS) problems.model = "Too long";
+  if ([...ai.model].length > MAX_MODEL_CHARS) problems.model = t("launcher.ai.problems.tooLong");
   if ([...ai.system_prompt].length > MAX_SYSTEM_PROMPT_CHARS) {
-    problems.systemPrompt = `At most ${MAX_SYSTEM_PROMPT_CHARS} characters`;
+    problems.systemPrompt = t("launcher.ai.problems.atMostChars", { max: MAX_SYSTEM_PROMPT_CHARS });
   }
   if (ai.base_url.trim() !== "") {
     const parsed = parseBaseUrl(ai.base_url);
-    if (typeof parsed === "string") problems.baseUrl = `The base URL ${parsed}`;
+    if (typeof parsed === "string") problems.baseUrl = parsed;
   }
   if (!Number.isInteger(ai.max_tokens) || ai.max_tokens < MIN_MAX_TOKENS || ai.max_tokens > MAX_MAX_TOKENS) {
-    problems.maxTokens = `Enter a whole number from ${MIN_MAX_TOKENS} to ${MAX_MAX_TOKENS}`;
+    problems.maxTokens = t("launcher.ai.problems.wholeNumber", { min: MIN_MAX_TOKENS, max: MAX_MAX_TOKENS });
   }
   if (!Number.isInteger(ai.timeout_secs) || ai.timeout_secs < MIN_TIMEOUT_SECS || ai.timeout_secs > MAX_TIMEOUT_SECS) {
-    problems.timeout = `Enter a whole number from ${MIN_TIMEOUT_SECS} to ${MAX_TIMEOUT_SECS}`;
+    problems.timeout = t("launcher.ai.problems.wholeNumber", { min: MIN_TIMEOUT_SECS, max: MAX_TIMEOUT_SECS });
   }
   return problems;
 }
@@ -226,15 +240,17 @@ export function keyStatusText(provider: AiProviderId, status: KeyStatus | null):
   const info = status[provider];
   switch (info.state) {
     case "stored":
-      return `A key is saved, ${status.protection}.`;
+      return t("launcher.ai.key.stored", { protection: status.protection });
     case "env":
-      return `Using the ${info.env_var ?? "environment"} environment variable. A key saved here would take its place.`;
+      return info.env_var
+        ? t("launcher.ai.key.env", { variable: info.env_var })
+        : t("launcher.ai.key.envUnnamed");
     case "unreadable":
-      return "A saved key cannot be read (it was saved by another user or computer). Enter it again.";
+      return t("launcher.ai.key.unreadable");
     default:
       return info.env_var
-        ? `No key yet. Paste one here, or set the ${info.env_var} environment variable.`
-        : "No key yet.";
+        ? t("launcher.ai.key.noneWithEnv", { variable: info.env_var })
+        : t("launcher.ai.key.none");
   }
 }
 

@@ -6,6 +6,7 @@
   import ListEditor from "./ListEditor.svelte";
   import Row from "./Row.svelte";
   import { MAX_PASSWORD_LENGTH, MAX_PASSPHRASE_WORDS, MIN_PASSWORD_LENGTH, MIN_PASSPHRASE_WORDS } from "./tidy";
+  import { t, tHtml } from "../i18n.svelte";
   import "./pages.css";
 
   /** The world clock (`[clock]`) and password generator (`[passwords]`) settings. */
@@ -24,12 +25,8 @@
   const passKeyword = $derived(config.passwords.keyword.trim() || "pass");
 </script>
 
-<h2 class="sp-h2">World clock</h2>
-<p class="sp-sub">
-  The time anywhere, offline: <code>{timeKeyword}</code> lists your cities, <code>{timeKeyword} tokyo</code>
-  shows one place and <code>{timeKeyword} 3pm pst in ist</code> converts a time, daylight saving time included.
-  Enter copies the answer.
-</p>
+<h2 class="sp-h2">{t("pages.clock.title")}</h2>
+<p class="sp-sub">{@html tHtml("pages.clock.sub", { keyword: timeKeyword })}</p>
 <div class="sp-group">
   <KeywordRow
     id="clock-keyword"
@@ -39,32 +36,32 @@
   <ListEditor
     id="clock-cities"
     bind:items={config.clock.cities}
-    label="Cities"
-    hint="What a bare keyword lists, after the time here: a city (San Francisco), an abbreviation (IST) or a time-zone name (Europe/Berlin)."
-    placeholder="Tokyo"
-    emptyText="None added: only the time here is listed."
+    label={t("pages.clock.cities")}
+    hint={t("pages.clock.citiesHint")}
+    placeholder={t("pages.clock.citiesPlaceholder")}
+    emptyText={t("pages.clock.citiesEmpty")}
     divider
   />
 </div>
 {#if pluginOff("clock")}
   <p class="sp-note warn" role="status">
-    “World clock” is switched off under <strong>Plugins</strong>. Switch it on there as well.
+    {@html tHtml("pages.common.pluginOff", { name: t("pages.clock.plugin") })}
   </p>
 {/if}
 
-<h2 class="sp-h2">Password generator</h2>
-<p class="sp-sub">
-  Random passwords made on this computer: <code>{passKeyword}</code>, <code>{passKeyword} 24</code>,
-  <code>{passKeyword} 6 words</code> or <code>{passKeyword} pin</code>. Enter copies one, marked so that
-  clipboard histories leave it out. Nothing generated is saved or logged.
-</p>
+<h2 class="sp-h2">{t("pages.passwords.title")}</h2>
+<p class="sp-sub">{@html tHtml("pages.passwords.sub", { keyword: passKeyword })}</p>
 <div class="sp-group">
   <KeywordRow
     id="passwords-keyword"
     bind:value={config.passwords.keyword}
     error={problems.keywords["passwords.keyword"]}
   />
-  <Row label="Password length" hint="Characters in a password ({MIN_PASSWORD_LENGTH}-{MAX_PASSWORD_LENGTH})." forId="passwords-length">
+  <Row
+    label={t("pages.passwords.length")}
+    hint={t("pages.passwords.lengthHint", { min: MIN_PASSWORD_LENGTH, max: MAX_PASSWORD_LENGTH })}
+    forId="passwords-length"
+  >
     <input
       id="passwords-length"
       class="sp-input number"
@@ -74,9 +71,13 @@
       step="1"
       bind:value={config.passwords.length}
     />
-    <span class="sp-unit">characters</span>
+    <span class="sp-unit">{t("pages.common.units.characters")}</span>
   </Row>
-  <Row label="Passphrase words" hint="Words in a passphrase ({MIN_PASSPHRASE_WORDS}-{MAX_PASSPHRASE_WORDS})." forId="passwords-words">
+  <Row
+    label={t("pages.passwords.words")}
+    hint={t("pages.passwords.wordsHint", { min: MIN_PASSPHRASE_WORDS, max: MAX_PASSPHRASE_WORDS })}
+    forId="passwords-words"
+  >
     <input
       id="passwords-words"
       class="sp-input number"
@@ -86,14 +87,14 @@
       step="1"
       bind:value={config.passwords.words}
     />
-    <span class="sp-unit">words</span>
+    <span class="sp-unit">{t("pages.common.units.words")}</span>
   </Row>
-  <Row label="Include symbols" hint="Add symbols such as !#%+ to passwords (letters and digits are always used).">
-    <Toggle bind:checked={config.passwords.symbols} label="Include symbols" />
+  <Row label={t("pages.passwords.symbols")} hint={t("pages.passwords.symbolsHint")}>
+    <Toggle bind:checked={config.passwords.symbols} label={t("pages.passwords.symbols")} />
   </Row>
 </div>
 {#if pluginOff("pwgen")}
   <p class="sp-note warn" role="status">
-    “Password generator” is switched off under <strong>Plugins</strong>. Switch it on there as well.
+    {@html tHtml("pages.common.pluginOff", { name: t("pages.passwords.plugin") })}
   </p>
 {/if}

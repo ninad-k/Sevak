@@ -44,6 +44,7 @@
   import { displayAccelerator } from "./lib/accelerator";
   import { applyAppearance } from "./lib/appearance";
   import { applyTheme } from "./lib/theme";
+  import { LANGUAGES, currentLanguage, formatList, formatNumber, resolveLanguage, setLanguage, t, tHtml } from "./lib/i18n.svelte";
   import {
     MAX_DEPTH,
     MAX_WIDTH,
@@ -62,6 +63,7 @@
       launch_at_login: false,
       check_for_updates: true,
       update_channel: "stable",
+      language: "auto",
     },
     window: { width: 720 },
     linux: { wayland_use_xwayland: true },
@@ -189,38 +191,40 @@
   const startupDraftChanged = $derived(loaded !== null && draft.general.launch_at_login !== loaded.config.general.launch_at_login);
   const otherCopyStartup = $derived(!!loaded && !loaded.startup.error && loaded.startup.registered && !!loaded.startup.other_copy);
   const needsStartupRepair = $derived(!!loaded?.config.general.launch_at_login && (!!loaded.startup.error || !loaded.startup.enabled || otherCopyStartup));
-  const startupRepairLabel = $derived(loaded?.startup.registered && !loaded.startup.error && !otherCopyStartup ? "Enable again" : "Repair startup");
+  /** Startup is registered for this copy but switched off: "Enable again" rather than "Repair startup". */
+  const startupEnableAgain = $derived(!!loaded?.startup.registered && !loaded.startup.error && !otherCopyStartup);
+  const startupRepairLabel = $derived(startupEnableAgain ? t("settings.startup.enableAgain") : t("settings.startup.repair"));
   const startupStatusLabel = $derived.by(() => {
     const startup = loaded?.startup;
-    if (!startup || startup.error) return "Unavailable";
-    if (otherCopyStartup) return "Registered for another copy of Sevak";
-    if (startup.enabled) return loaded?.config.general.launch_at_login ? "Enabled for your account" : "Enabled outside Sevak's saved setting";
-    if (startup.registered) return "Disabled outside Sevak";
-    return loaded?.config.general.launch_at_login ? "Entry missing" : "Off";
+    if (!startup || startup.error) return t("settings.startup.state.unavailable");
+    if (otherCopyStartup) return t("settings.startup.state.otherCopy");
+    if (startup.enabled) return loaded?.config.general.launch_at_login ? t("settings.startup.state.enabled") : t("settings.startup.state.enabledOutside");
+    if (startup.registered) return t("settings.startup.state.disabledOutside");
+    return loaded?.config.general.launch_at_login ? t("settings.startup.state.missing") : t("settings.startup.state.off");
   });
 
   const sections = $derived(
     (
       [
-        { id: "general", label: "General" },
-        { id: "hotkeys", label: "Hotkeys" },
-        { id: "appearance", label: "Appearance" },
-        { id: "search", label: "Search" },
-        { id: "plugins", label: "Plugins" },
-        { id: "workflows", label: "Workflows" },
-        { id: "gallery", label: "Gallery" },
-        { id: "extensions", label: "Extensions" },
-        { id: "web", label: "Web search" },
-        { id: "files", label: "Files & bookmarks" },
-        { id: "clipboard", label: "Clipboard & paste" },
-        { id: "tasks", label: "Tasks & media" },
-        { id: "windows", label: "Windows" },
-        { id: "integrations", label: "Integrations" },
-        { id: "ai", label: "AI assistant" },
-        { id: "system", label: "System & terminal" },
-        ...(showLinux ? [{ id: "linux", label: "Linux" }] : []),
-        { id: "backup", label: "Backup & restore" },
-        { id: "help", label: "Help" },
+        { id: "general", label: t("settings.sections.general") },
+        { id: "hotkeys", label: t("settings.sections.hotkeys") },
+        { id: "appearance", label: t("settings.sections.appearance") },
+        { id: "search", label: t("settings.sections.search") },
+        { id: "plugins", label: t("settings.sections.plugins") },
+        { id: "workflows", label: t("settings.sections.workflows") },
+        { id: "gallery", label: t("settings.sections.gallery") },
+        { id: "extensions", label: t("settings.sections.extensions") },
+        { id: "web", label: t("settings.sections.web") },
+        { id: "files", label: t("settings.sections.files") },
+        { id: "clipboard", label: t("settings.sections.clipboard") },
+        { id: "tasks", label: t("settings.sections.tasks") },
+        { id: "windows", label: t("settings.sections.windows") },
+        { id: "integrations", label: t("settings.sections.integrations") },
+        { id: "ai", label: t("settings.sections.ai") },
+        { id: "system", label: t("settings.sections.system") },
+        ...(showLinux ? [{ id: "linux", label: t("settings.sections.linux") }] : []),
+        { id: "backup", label: t("settings.sections.backup") },
+        { id: "help", label: t("settings.sections.help") },
       ] as { id: PageId; label: string }[]
     ).map((section) => ({
       ...section,
@@ -232,11 +236,11 @@
     })),
   );
 
-  const themes = [
-    { value: "system", label: "System" },
-    { value: "light", label: "Light" },
-    { value: "dark", label: "Dark" },
-  ] as const;
+  const themes = $derived([
+    { value: "system", label: t("settings.appearance.system") },
+    { value: "light", label: t("settings.appearance.light") },
+    { value: "dark", label: t("settings.appearance.dark") },
+  ] as const);
 
   const engineKeywords = $derived(
     [...new Set(draft.web_search.map((e) => e.keyword.trim()).filter((k) => k !== ""))].map(
@@ -280,7 +284,10 @@
         return {
           id: `web:${keyword}`,
           name,
-          description: `Search ${name} by typing \`${keyword} <terms>\`.`,
+          description: t("settings.plugins.webDescription", {
+            name,
+            example: `${keyword} <${t("settings.plugins.terms")}>`,
+          }),
           keyword,
           enabled: true,
         };
@@ -360,6 +367,15 @@
     if (ready) applyTheme(draft.appearance.theme);
   });
 
+  // Switch the language as soon as it is picked, like the theme.
+  $effect(() => {
+    if (ready) setLanguage(draft.general.language);
+  });
+  /** The language `auto` stands for on this computer, named in itself. */
+  const autoLanguageName = $derived(
+    LANGUAGES.find((l) => l.code === resolveLanguage("auto", typeof navigator === "undefined" ? [] : navigator.languages ?? []))?.name ?? "English",
+  );
+
   // The rest of the appearance (accent, fonts, custom stylesheet) follows the saved config.
   $effect(() => applyAppearance(status?.appearance));
 
@@ -383,12 +399,12 @@
   const canRestore = $derived(!!status?.hotkey.can_restore);
   const platform = $derived(loaded?.platform ?? "linux");
   const takeoverLabel = $derived(
-    `Let Sevak use ${displayAccelerator(draft.general.hotkey.trim(), platform)}`,
+    t("settings.general.takeOver", { shortcut: displayAccelerator(draft.general.hotkey.trim(), platform) }),
   );
   const restoreLabel = $derived(
     platform === "macos"
-      ? "Restore Spotlight's shortcut"
-      : "Restore GNOME's input-source shortcut",
+      ? t("settings.general.restoreSpotlight")
+      : t("settings.general.restoreGnome"),
   );
 
   const actionsRegistrationWarning = $derived(
@@ -426,7 +442,7 @@
     loaded.config.general.launch_at_login = saved;
     baseline = JSON.stringify(loaded.config);
     if (untouched) draft.general.launch_at_login = saved;
-    startupMessage = `Your saved startup preference was changed outside Settings and is now ${saved ? "on" : "off"}.`;
+    startupMessage = saved ? t("settings.startup.changedOutsideOn") : t("settings.startup.changedOutsideOff");
   }
 
   function showToast() {
@@ -503,7 +519,7 @@
     if (result.status) {
       // Keep every unsaved field and the baseline. Repair never saves config.
       loaded.startup = result.status;
-      startupMessage = "Startup enabled. Sevak will start in the background after sign-in.";
+      startupMessage = t("settings.startup.enabledMessage");
     } else {
       // A failed repair (or its rollback) may have changed the OS entry, and
       // the saved preference may have changed outside Settings: show both.
@@ -623,19 +639,19 @@
 
 <svelte:window onkeydown={onKeydown} oncontextmenu={onContextMenu} />
 <svelte:head>
-  <title>Sevak Settings</title>
+  <title>{t("settings.title")}</title>
 </svelte:head>
 
 <div class="app">
   {#if loadFailed}
     <div class="state" role="alert">
-      Could not load the settings. Close this window and try again from the tray menu.
+      {t("settings.loadFailed")}
     </div>
   {:else if !ready}
-    <div class="state" role="status">Loading…</div>
+    <div class="state" role="status">{t("common.loading")}</div>
   {:else}
     <main class="body">
-      <div class="sidebar" role="tablist" aria-orientation="vertical" aria-label="Settings sections">
+      <div class="sidebar" role="tablist" aria-orientation="vertical" aria-label={t("settings.sectionsLabel")}>
         {#each sections as section, i (section.id)}
           <button
             id="tab-{section.id}"
@@ -651,8 +667,8 @@
           >
             <span>{section.label}</span>
             {#if section.problems > 0}
-              <span class="dot" title="{section.problems} problem(s)" aria-hidden="true"></span>
-              <span class="sr-only">, {section.problems} problem{section.problems === 1 ? "" : "s"}</span>
+              <span class="dot" title={t("settings.problems", { count: section.problems })} aria-hidden="true"></span>
+              <span class="sr-only">, {t("settings.problems", { count: section.problems })}</span>
             {/if}
           </button>
         {/each}
@@ -662,18 +678,33 @@
         <!-- Saving reloads the form from disk; edits made meanwhile would be lost. -->
         <fieldset class="panel-form" disabled={saving}>
         {#if active === "general"}
-          <h1>General</h1>
+          <h1>{t("settings.sections.general")}</h1>
+
+          <section class="group">
+            <div class="row">
+              <div class="label">
+                <label class="name" for="language">{t("language.label")}</label>
+                <span class="hint">{t("language.hint")}</span>
+                {#if currentLanguage() !== "en"}
+                  <span class="hint">{t("language.reviewNote")}</span>
+                {/if}
+              </div>
+              <select id="language" class="input select" bind:value={draft.general.language}>
+                <option value="auto">{t("language.auto", { language: autoLanguageName })}</option>
+                {#each LANGUAGES as language (language.code)}
+                  <option value={language.code} lang={language.code}>{language.name}</option>
+                {/each}
+              </select>
+            </div>
+          </section>
 
           <section class="group">
             <div class="field">
-              <label class="name" for="hotkey">Shortcut</label>
+              <label class="name" for="hotkey">{t("settings.general.shortcut")}</label>
               {#if isWayland}
-                <p class="hint">
-                  Wayland: the desktop owns global shortcuts. Bind this key to
-                  <code>sevak --toggle</code> in your desktop settings, or let Sevak do it on GNOME.
-                </p>
+                <p class="hint">{@html tHtml("settings.general.shortcutWayland")}</p>
               {:else}
-                <p class="hint">Shows and hides Sevak from anywhere.</p>
+                <p class="hint">{t("settings.general.shortcutHint")}</p>
               {/if}
               <HotkeyField
                 id="hotkey"
@@ -684,7 +715,7 @@
               />
               {#if registrationWarning}
                 <p class="msg warn" role="status">
-                  This shortcut could not be registered: {registrationWarning}
+                  {t("settings.general.notRegistered", { error: registrationWarning })}
                 </p>
               {/if}
               {#if hotkeyNote}
@@ -699,7 +730,7 @@
                       disabled={takeoverBusy}
                       onclick={() => runTakeover(takeOverHotkey)}
                     >
-                      {takeoverBusy ? "Working…" : takeoverLabel}
+                      {takeoverBusy ? t("settings.working") : takeoverLabel}
                     </button>
                   {/if}
                   {#if canRestore}
@@ -709,7 +740,7 @@
                       disabled={takeoverBusy}
                       onclick={() => runTakeover(restoreTakeover)}
                     >
-                      {takeoverBusy ? "Working…" : restoreLabel}
+                      {takeoverBusy ? t("settings.working") : restoreLabel}
                     </button>
                   {/if}
                 </div>
@@ -725,7 +756,7 @@
                     disabled={waylandBusy || !!hotkeyError}
                     onclick={setUpWayland}
                   >
-                    {waylandBusy ? "Setting up…" : "Set up GNOME shortcut"}
+                    {waylandBusy ? t("settings.general.settingUp") : t("settings.general.setUpGnome")}
                   </button>
                 </div>
                 {#if waylandResult}
@@ -735,14 +766,11 @@
             </div>
 
             <div class="field">
-              <label class="name" for="actions-hotkey">Universal Actions shortcut</label>
+              <label class="name" for="actions-hotkey">{t("settings.general.actionsShortcut")}</label>
               <p class="hint">
-                Acts on what you have selected in the app you are using: text, a link or files.
-                Sevak copies the selection, shows what you can do with it and puts your clipboard
-                back. Leave empty to turn it off.
+                {t("settings.general.actionsHint")}
                 {#if isWayland}
-                  On Wayland, set it up with the button above (it binds
-                  <code>sevak --actions</code>).
+                  {@html tHtml("settings.general.actionsWayland")}
                 {/if}
               </p>
               <HotkeyField
@@ -753,7 +781,7 @@
               />
               {#if actionsRegistrationWarning}
                 <p class="msg warn" role="status">
-                  This shortcut could not be registered: {actionsRegistrationWarning}
+                  {t("settings.general.notRegistered", { error: actionsRegistrationWarning })}
                 </p>
               {/if}
             </div>
@@ -761,100 +789,90 @@
             {#if platform === "windows"}
               <div class="row">
                 <div class="label">
-                  <span class="name">Accept shortcuts sent by other programs</span>
-                  <span class="hint">
-                    Off: only keys you press count, so no other program can open Sevak by sending
-                    its shortcut. Turn on if AutoHotkey, PowerToys or another remapper types the
-                    shortcut for you.
-                  </span>
+                  <span class="name">{t("settings.general.acceptInjected")}</span>
+                  <span class="hint">{t("settings.general.acceptInjectedHint")}</span>
                 </div>
                 <Toggle
                   bind:checked={draft.general.accept_injected_hotkeys}
-                  label="Accept shortcuts sent by other programs"
+                  label={t("settings.general.acceptInjected")}
                 />
               </div>
             {/if}
 
             <div class="row">
               <div class="label">
-                <span class="name">Use the clipboard if the selection can't be read</span>
-                <span class="hint">
-                  Wayland, terminal windows and apps Sevak may not control: act on what is on the
-                  clipboard instead.
-                </span>
+                <span class="name">{t("settings.general.clipboardFallback")}</span>
+                <span class="hint">{t("settings.general.clipboardFallbackHint")}</span>
               </div>
               <Toggle
                 bind:checked={draft.actions.use_clipboard_fallback}
-                label="Use the clipboard if the selection can't be read"
+                label={t("settings.general.clipboardFallback")}
               />
             </div>
 
             {#if display === "x11"}
               <div class="row">
                 <div class="label">
-                  <span class="name">Read highlighted text first (X11)</span>
-                  <span class="hint">
-                    Universal Actions reads the PRIMARY selection, the text you have highlighted,
-                    before it presses Ctrl+C.
-                  </span>
+                  <span class="name">{t("settings.general.primarySelection")}</span>
+                  <span class="hint">{t("settings.general.primarySelectionHint")}</span>
                 </div>
                 <Toggle
                   bind:checked={draft.actions.use_primary_selection}
-                  label="Read highlighted text first"
+                  label={t("settings.general.primarySelectionToggle")}
                 />
               </div>
             {/if}
 
             <div class="row">
               <div class="label">
-                <span class="name">Hide when focus is lost</span>
-                <span class="hint">Closes the search bar when you click elsewhere.</span>
+                <span class="name">{t("settings.general.hideOnBlur")}</span>
+                <span class="hint">{t("settings.general.hideOnBlurHint")}</span>
               </div>
-              <Toggle bind:checked={draft.general.hide_on_blur} label="Hide when focus is lost" />
+              <Toggle bind:checked={draft.general.hide_on_blur} label={t("settings.general.hideOnBlur")} />
             </div>
 
             <div class="row">
               <div class="label">
-                <span class="name">Start Sevak when I sign in</span>
-                <span class="hint">Start in the background for this account after sign-in. Your shortcut opens the launcher. Click Save to apply.</span>
+                <span class="name">{t("settings.startup.name")}</span>
+                <span class="hint">{t("settings.startup.hint")}</span>
                 {#if platform === "windows"}
-                  <span class="hint">Also managed in Windows Settings → Apps → Startup.</span>
+                  <span class="hint">{t("settings.startup.windowsHint")}</span>
                 {:else if platform === "macos"}
-                  <span class="hint">macOS can also restrict startup in System Settings → General → Login Items.</span>
+                  <span class="hint">{t("settings.startup.macosHint")}</span>
                 {:else}
-                  <span class="hint">Uses your desktop's autostart settings. Keep an AppImage in a permanent location.</span>
+                  <span class="hint">{t("settings.startup.linuxHint")}</span>
                 {/if}
                 <div class="startup-state">
                   <span class="startup-status" role="status" aria-live="polite">
-                    Startup status: {startupStatusLabel}
+                    {t("settings.startup.status", { status: startupStatusLabel })}
                   </span>
                   {#if startupError}
-                    <span class="hint error" role="alert">Could not enable startup: {startupError}</span>
+                    <span class="hint error" role="alert">{t("settings.startup.couldNotEnable", { error: startupError })}</span>
                   {:else if loaded?.startup.error}
-                    <span class="hint error" role="alert">Could not check startup: {loaded.startup.error}</span>
+                    <span class="hint error" role="alert">{t("settings.startup.couldNotCheck", { error: loaded.startup.error })}</span>
                   {/if}
                   {#if needsStartupRepair}
-                    <span class="hint">Your saved preference is on. {startupRepairLabel === "Enable again" ? "Enable again restores startup for this account." : "Repair startup registers this installed copy again."} This applies immediately and leaves other settings unchanged.</span>
+                    <span class="hint">{startupEnableAgain ? t("settings.startup.needsEnableAgain") : t("settings.startup.needsRepair")}</span>
                   {/if}
                   {#if needsStartupRepair && startupDraftChanged}
-                    <span class="hint">Save or undo your startup preference change before repairing.</span>
+                    <span class="hint">{t("settings.startup.saveFirst")}</span>
                   {/if}
                   {#if startupMessage}<span class="hint" role="status">{startupMessage}</span>{/if}
                   <div class="startup-actions">
                     {#if needsStartupRepair}
                       <button type="button" class="btn" disabled={saving || startupBusy !== null || startupDraftChanged} onclick={enableStartupAgain}>
-                        {startupBusy === "repair" ? "Enabling…" : startupRepairLabel}
+                        {startupBusy === "repair" ? t("settings.startup.enabling") : startupRepairLabel}
                       </button>
                     {/if}
                     <button type="button" class="btn" disabled={saving || startupBusy !== null} onclick={checkStartup}>
-                      {startupBusy === "check" ? "Checking…" : "Check status"}
+                      {startupBusy === "check" ? t("settings.startup.checking") : t("settings.startup.check")}
                     </button>
                   </div>
                 </div>
               </div>
               <Toggle
                 bind:checked={draft.general.launch_at_login}
-                label="Start Sevak when I sign in"
+                label={t("settings.startup.name")}
                 disabled={saving || startupBusy !== null}
                 onchange={() => { startupError = null; startupMessage = null; }}
               />
@@ -862,32 +880,29 @@
 
             <div class="row">
               <div class="label">
-                <span class="name">Check for updates</span>
-                <span class="hint">Checks at startup, every six hours, and when opened if over an hour has passed. Asks before installing.</span>
+                <span class="name">{t("settings.general.updates")}</span>
+                <span class="hint">{t("settings.general.updatesHint")}</span>
               </div>
-              <Toggle bind:checked={draft.general.check_for_updates} label="Check for updates" />
+              <Toggle bind:checked={draft.general.check_for_updates} label={t("settings.general.updates")} />
             </div>
 
             <div class="row">
               <div class="label">
-                <label class="name" for="update-channel">Update channel</label>
-                <span class="hint">
-                  Beta builds arrive earlier and may be less tested. Going back to Stable never
-                  downgrades: you get the next stable version.
-                </span>
+                <label class="name" for="update-channel">{t("settings.general.channel")}</label>
+                <span class="hint">{t("settings.general.channelHint")}</span>
               </div>
               <select
                 id="update-channel"
                 class="input select"
                 bind:value={draft.general.update_channel}
               >
-                <option value="stable">Stable</option>
-                <option value="beta">Beta</option>
+                <option value="stable">{t("settings.general.stable")}</option>
+                <option value="beta">{t("settings.general.beta")}</option>
               </select>
             </div>
           </section>
         {:else if active === "hotkeys"}
-          <h1>Hotkeys</h1>
+          <h1>{t("settings.sections.hotkeys")}</h1>
           <HotkeyList
             bind:bindings={draft.hotkey}
             bind:parseProblems={hotkeyParseProblems}
@@ -897,13 +912,13 @@
             wayland={isWayland}
           />
         {:else if active === "appearance"}
-          <h1>Appearance</h1>
+          <h1>{t("settings.sections.appearance")}</h1>
 
           <section class="group">
             <div class="row">
               <div class="label">
-                <span class="name" id="theme-label">Theme</span>
-                <span class="hint">System follows your operating system.</span>
+                <span class="name" id="theme-label">{t("settings.appearance.theme")}</span>
+                <span class="hint">{t("settings.appearance.themeHint")}</span>
               </div>
               <div class="segmented" role="radiogroup" aria-labelledby="theme-label">
                 {#each themes as theme (theme.value)}
@@ -922,8 +937,8 @@
 
             <div class="row">
               <div class="label">
-                <label class="name" for="width">Window width</label>
-                <span class="hint">Width of the search bar.</span>
+                <label class="name" for="width">{t("settings.appearance.width")}</label>
+                <span class="hint">{t("settings.appearance.widthHint")}</span>
               </div>
               <div class="slider">
                 <input
@@ -934,7 +949,7 @@
                   step="10"
                   bind:value={draft.window.width}
                 />
-                <output for="width">{draft.window.width} px</output>
+                <output for="width">{t("settings.appearance.pixels", { value: draft.window.width })}</output>
               </div>
             </div>
           </section>
@@ -948,13 +963,13 @@
 
           <ThemeEditor bind:appearance={draft.appearance} />
         {:else if active === "search"}
-          <h1>Search</h1>
+          <h1>{t("settings.sections.search")}</h1>
 
           <section class="group">
             <div class="row">
               <div class="label">
-                <label class="name" for="max-results">Maximum results</label>
-                <span class="hint">How many rows the list shows.</span>
+                <label class="name" for="max-results">{t("settings.search.maxResults")}</label>
+                <span class="hint">{t("settings.search.maxResultsHint")}</span>
               </div>
               <div class="slider">
                 <input
@@ -965,16 +980,14 @@
                   step="1"
                   bind:value={draft.search.max_results}
                 />
-                <output for="max-results">{draft.search.max_results}</output>
+                <output for="max-results">{formatNumber(draft.search.max_results)}</output>
               </div>
             </div>
 
             <div class="row">
               <div class="label">
-                <label class="name" for="fallback">Fallback web search</label>
-                <span class="hint">
-                  Offered when nothing else matches your query. config.toml can list several.
-                </span>
+                <label class="name" for="fallback">{t("settings.search.fallback")}</label>
+                <span class="hint">{t("settings.search.fallbackHint")}</span>
                 {#if problems.fallback}
                   <span class="msg error" id="fallback-error" role="alert">{problems.fallback}</span>
                 {/if}
@@ -987,9 +1000,9 @@
                 aria-describedby={problems.fallback ? "fallback-error" : undefined}
                 bind:value={getFallback, setFallback}
               >
-                <option value="">None</option>
+                <option value="">{t("settings.search.none")}</option>
                 {#if fallbackMany}
-                  <option value={MANY_FALLBACKS}>{fallbackKeywords.join(", ")}</option>
+                  <option value={MANY_FALLBACKS}>{formatList(fallbackKeywords)}</option>
                 {/if}
                 {#each engineKeywords as engine (engine.keyword)}
                   <option value={engine.keyword}>
@@ -997,24 +1010,21 @@
                   </option>
                 {/each}
                 {#if fallbackMissing}
-                  <option value={fallbackKeywords[0]}>{fallbackKeywords[0]} (missing)</option>
+                  <option value={fallbackKeywords[0]}>{t("settings.search.missing", { keyword: fallbackKeywords[0] })}</option>
                 {/if}
               </select>
             </div>
 
             <div class="row">
               <div class="label">
-                <span class="name">Remember searches</span>
-                <span class="hint">
-                  Up and Down on an empty search bar recall what you last ran. Kept on this
-                  computer only.
-                </span>
+                <span class="name">{t("settings.search.remember")}</span>
+                <span class="hint">{t("settings.search.rememberHint")}</span>
               </div>
-              <Toggle bind:checked={draft.search.query_history} label="Remember searches" />
+              <Toggle bind:checked={draft.search.query_history} label={t("settings.search.remember")} />
             </div>
           </section>
         {:else if active === "plugins"}
-          <h1>Plugins</h1>
+          <h1>{t("settings.sections.plugins")}</h1>
 
           <section class="group">
             {#each pluginRows as plugin (plugin.id)}
@@ -1028,7 +1038,7 @@
                 </div>
                 <Toggle
                   checked={pluginEnabled(plugin.id)}
-                  label="Enable {plugin.name}"
+                  label={t("settings.plugins.enable", { name: plugin.name })}
                   onchange={(on) => setPlugin(plugin.id, on)}
                 />
               </div>
@@ -1036,45 +1046,31 @@
 
             <div class="row">
               <div class="label">
-                <span class="name">Currency conversion</span>
-                <span class="hint">
-                  Calculator: “100 usd in eur”. Downloads the European Central Bank’s daily
-                  rates in the background, at most once a day. Off keeps Sevak offline.
-                </span>
+                <span class="name">{t("settings.plugins.currency")}</span>
+                <span class="hint">{t("settings.plugins.currencyHint")}</span>
               </div>
-              <Toggle bind:checked={draft.calculator.currency} label="Convert currencies" />
+              <Toggle bind:checked={draft.calculator.currency} label={t("settings.plugins.currencyToggle")} />
             </div>
 
             <div class="row">
               <div class="label">
-                <span class="name">Expand snippets as you type</span>
-                <span class="hint">
-                  Typing a snippet’s keyword in any app replaces it with the snippet’s text.
-                  While this is on, Sevak watches your keystrokes for the keyword: the last few
-                  characters are kept in memory only, never saved, logged or sent anywhere, and
-                  ignored in Sevak’s own windows, terminals and password boxes it can detect.
-                  Needs a keyword on at least one <code>[[snippet]]</code>; not available on
-                  Wayland.
-                </span>
+                <span class="name">{t("settings.plugins.expand")}</span>
+                <span class="hint">{@html tHtml("settings.plugins.expandHint")}</span>
                 {#if status?.snippet_expansion.problem}
                   <span class="msg warn" role="status">{status.snippet_expansion.problem}</span>
                 {/if}
               </div>
               <Toggle
                 bind:checked={draft.snippets.auto_expand}
-                label="Expand snippets as you type"
+                label={t("settings.plugins.expand")}
               />
             </div>
 
             {#if draft.snippets.auto_expand}
               <div class="row">
                 <div class="label">
-                  <label class="name" for="snippets-prefix">Keyword prefix</label>
-                  <span class="hint">
-                    Typed before every keyword, such as <code>;</code> so that
-                    <code>;sig</code> expands and a plain <code>sig</code> does not. Empty
-                    expands bare keywords at the start of a word.
-                  </span>
+                  <label class="name" for="snippets-prefix">{t("settings.plugins.prefix")}</label>
+                  <span class="hint">{@html tHtml("settings.plugins.prefixHint")}</span>
                 </div>
                 <input
                   id="snippets-prefix"
@@ -1088,69 +1084,61 @@
 
               <div class="row">
                 <div class="label">
-                  <label class="name" for="snippets-expand-on">Expand</label>
-                  <span class="hint">
-                    Right away, or once a space or punctuation mark follows the keyword (which is
-                    kept).
-                  </span>
+                  <label class="name" for="snippets-expand-on">{t("settings.plugins.expandOn")}</label>
+                  <span class="hint">{t("settings.plugins.expandOnHint")}</span>
                 </div>
                 <select
                   id="snippets-expand-on"
                   class="input select"
                   bind:value={draft.snippets.expand_on}
                 >
-                  <option value="immediate">As soon as it is typed</option>
-                  <option value="delimiter">After a space or punctuation</option>
+                  <option value="immediate">{t("settings.plugins.immediate")}</option>
+                  <option value="delimiter">{t("settings.plugins.delimiter")}</option>
                 </select>
               </div>
 
               <div class="row">
                 <div class="label">
-                  <span class="name">Match case</span>
-                  <span class="hint">Off: <code>SIG</code> and <code>sig</code> both expand.</span>
+                  <span class="name">{t("settings.plugins.matchCase")}</span>
+                  <span class="hint">{@html tHtml("settings.plugins.matchCaseHint")}</span>
                 </div>
-                <Toggle bind:checked={draft.snippets.case_sensitive} label="Match case" />
+                <Toggle bind:checked={draft.snippets.case_sensitive} label={t("settings.plugins.matchCase")} />
               </div>
 
               <div class="row">
                 <div class="label">
-                  <span class="name">Expand in terminals</span>
-                  <span class="hint">Terminal windows are skipped unless this is on.</span>
+                  <span class="name">{t("settings.plugins.terminals")}</span>
+                  <span class="hint">{t("settings.plugins.terminalsHint")}</span>
                 </div>
                 <Toggle
                   bind:checked={draft.snippets.expand_in_terminals}
-                  label="Expand in terminals"
+                  label={t("settings.plugins.terminals")}
                 />
               </div>
 
               <div class="row">
                 <div class="label">
-                  <span class="name">Expand in web browsers</span>
-                  <span class="hint">
-                    Off by default: a password field in a web page cannot be told from other text
-                    boxes, so a keyword typed inside a password would expand there.
-                  </span>
+                  <span class="name">{t("settings.plugins.browsers")}</span>
+                  <span class="hint">{t("settings.plugins.browsersHint")}</span>
                 </div>
                 <Toggle
                   bind:checked={draft.snippets.expand_in_browsers}
-                  label="Expand snippets in web browsers"
+                  label={t("settings.plugins.browsersToggle")}
                 />
               </div>
 
               <ListEditor
                 id="snippets-ignore-apps"
                 bind:items={draft.snippets.ignore_apps}
-                label="Never expand in these apps"
-                hint="Nothing is watched or expanded while one of these has focus, such as KeePassXC. Program or app names, any case."
-                placeholder="App name"
-                emptyText="No apps ignored."
+                label={t("settings.plugins.ignoreApps")}
+                hint={t("settings.plugins.ignoreAppsHint")}
+                placeholder={t("settings.plugins.appName")}
+                emptyText={t("settings.plugins.noIgnoredApps")}
                 divider
               />
             {/if}
           </section>
-          <p class="note">
-            Web search engines are edited under “Web search”. Changes apply when you save.
-          </p>
+          <p class="note">{t("settings.plugins.note")}</p>
         {:else if active === "workflows"}
           <WorkflowsPage />
         {:else if active === "gallery"}
@@ -1162,18 +1150,15 @@
         {:else if active === "help"}
           <HelpPage />
         {:else if active === "web"}
-          <h1>Web search</h1>
-          <p class="note">
-            Type a keyword and your terms, such as <code>g rust traits</code>. <code>{"{query}"}</code>
-            in the URL is replaced by what you type.
-          </p>
+          <h1>{t("settings.sections.web")}</h1>
+          <p class="note">{@html tHtml("settings.web.note")}</p>
 
           {#each draft.web_search as engine, i (i)}
             {@const errors = problems.engines[i] ?? {}}
             <section class="group engine" data-engine>
               <div class="engine-top">
                 <div class="cell keyword">
-                  <label class="mini" for="kw-{i}">Keyword</label>
+                  <label class="mini" for="kw-{i}">{t("settings.web.keyword")}</label>
                   <input
                     id="kw-{i}"
                     data-field="keyword"
@@ -1190,7 +1175,7 @@
                   {#if errors.keyword}<span class="msg error" id="kw-{i}-error" role="alert">{errors.keyword}</span>{/if}
                 </div>
                 <div class="cell name-cell">
-                  <label class="mini" for="nm-{i}">Name</label>
+                  <label class="mini" for="nm-{i}">{t("settings.web.name")}</label>
                   <input
                     id="nm-{i}"
                     class="input"
@@ -1207,13 +1192,13 @@
                 <button
                   type="button"
                   class="btn icon"
-                  aria-label="Remove {engine.name || engine.keyword || 'engine'}"
-                  title="Remove"
+                  aria-label={t("settings.web.remove", { name: engine.name || engine.keyword || t("settings.web.engine") })}
+                  title={t("common.remove")}
                   onclick={() => removeEngine(i)}>✕</button
                 >
               </div>
               <div class="cell">
-                <label class="mini" for="url-{i}">URL</label>
+                <label class="mini" for="url-{i}">{t("settings.web.url")}</label>
                 <input
                   id="url-{i}"
                   class="input mono"
@@ -1232,20 +1217,20 @@
           {/each}
 
           {#if draft.web_search.length === 0}
-            <p class="empty">No engines. Web search is off until you add one.</p>
+            <p class="empty">{t("settings.web.empty")}</p>
           {/if}
           <div class="inline">
-            <button type="button" class="btn" onclick={addEngine}>Add engine</button>
+            <button type="button" class="btn" onclick={addEngine}>{t("settings.web.add")}</button>
           </div>
         {:else if active === "files"}
-          <h1>Files &amp; bookmarks</h1>
+          <h1>{t("settings.sections.files")}</h1>
 
           <section class="group">
             <div class="field">
-              <span class="name" id="dirs-label">Folders to search</span>
-              <p class="hint">Files and folders below these are searchable.</p>
+              <span class="name" id="dirs-label">{t("settings.files.folders")}</span>
+              <p class="hint">{t("settings.files.foldersHint")}</p>
               {#if draft.files.directories.length === 0}
-                <p class="empty">No folders yet.</p>
+                <p class="empty">{t("settings.files.noFolders")}</p>
               {:else}
                 <ul class="dirs" aria-labelledby="dirs-label">
                   {#each draft.files.directories as dir, i (dir)}
@@ -1254,8 +1239,8 @@
                       <button
                         type="button"
                         class="btn icon"
-                        aria-label="Remove {dir}"
-                        title="Remove"
+                        aria-label={t("settings.files.removeFolder", { path: dir })}
+                        title={t("common.remove")}
                         onclick={() => removeDirectory(i)}>✕</button
                       >
                     </li>
@@ -1263,14 +1248,14 @@
                 </ul>
               {/if}
               <div class="inline">
-                <button type="button" class="btn" onclick={addDirectory}>Add folder…</button>
+                <button type="button" class="btn" onclick={addDirectory}>{t("settings.files.addFolder")}</button>
               </div>
             </div>
 
             <div class="row">
               <div class="label">
-                <label class="name" for="depth">Folder depth</label>
-                <span class="hint">How many levels below each folder are indexed.</span>
+                <label class="name" for="depth">{t("settings.files.depth")}</label>
+                <span class="hint">{t("settings.files.depthHint")}</span>
                 {#if problems.filesDepth}
                   <span class="msg error" id="depth-error" role="alert">{problems.filesDepth}</span>
                 {/if}
@@ -1291,30 +1276,24 @@
 
             <div class="row">
               <div class="label">
-                <span class="name">Include hidden files</span>
-                <span class="hint">Dot-files and dot-folders.</span>
+                <span class="name">{t("settings.files.hidden")}</span>
+                <span class="hint">{t("settings.files.hiddenHint")}</span>
               </div>
-              <Toggle bind:checked={draft.files.include_hidden} label="Include hidden files" />
+              <Toggle bind:checked={draft.files.include_hidden} label={t("settings.files.hidden")} />
             </div>
 
             <div class="row">
               <div class="label">
-                <span class="name">Allow network paths</span>
-                <span class="hint">
-                  Windows: use <code>\\server\share</code> paths and mapped network drives. Off, Sevak never
-                  contacts them, because Windows signs in to a computer just from looking at its path.
-                </span>
+                <span class="name">{t("settings.files.network")}</span>
+                <span class="hint">{@html tHtml("settings.files.networkHint")}</span>
               </div>
-              <Toggle bind:checked={draft.files.allow_network_paths} label="Allow network paths" />
+              <Toggle bind:checked={draft.files.allow_network_paths} label={t("settings.files.network")} />
             </div>
 
             <div class="row">
               <div class="label">
-                <label class="name" for="files-keyword">Keyword</label>
-                <span class="hint">
-                  Type “keyword name” to search only files. Add filters such as <code>ext:pdf</code>,
-                  <code>size:&gt;10mb</code> or <code>modified:7d</code> (see Help).
-                </span>
+                <label class="name" for="files-keyword">{t("settings.files.keyword")}</label>
+                <span class="hint">{@html tHtml("settings.files.keywordHint")}</span>
                 {#if problems.keywords["files.keyword"]}
                   <span class="msg error" id="files-keyword-error" role="alert">{problems.keywords["files.keyword"]}</span>
                 {/if}
@@ -1334,30 +1313,30 @@
 
             <div class="row">
               <div class="label">
-                <span class="name">Show in global results</span>
-                <span class="hint">Also list matching files for plain searches, ranked lower.</span>
+                <span class="name">{t("settings.files.global")}</span>
+                <span class="hint">{t("settings.files.globalHint")}</span>
               </div>
-              <Toggle bind:checked={draft.files.global} label="Show files in global results" />
+              <Toggle bind:checked={draft.files.global} label={t("settings.files.globalToggle")} />
             </div>
 
             <div class="row">
               <div class="label">
-                <span class="name">Search the whole disk</span>
+                <span class="name">{t("settings.files.wholeDisk")}</span>
                 <span class="hint">
-                  Type “{draft.files.index_keyword.trim() || "keyword"} name” to find files anywhere,
-                  or “{draft.files.content_keyword.trim() || "keyword"} words” to search inside them,
-                  through your computer’s own file index (Windows Search, Spotlight, locate or
-                  Tracker). Nothing leaves your computer.
+                  {t("settings.files.wholeDiskHint", {
+                    indexKeyword: draft.files.index_keyword.trim() || t("settings.files.keywordPlaceholder"),
+                    contentKeyword: draft.files.content_keyword.trim() || t("settings.files.keywordPlaceholder"),
+                  })}
                 </span>
               </div>
-              <Toggle bind:checked={draft.files.use_os_index} label="Search the whole disk" />
+              <Toggle bind:checked={draft.files.use_os_index} label={t("settings.files.wholeDisk")} />
             </div>
 
             {#if draft.files.use_os_index}
               <div class="row">
                 <div class="label">
-                  <label class="name" for="files-index-keyword">Whole-disk keyword</label>
-                  <span class="hint">Empty turns off name search.</span>
+                  <label class="name" for="files-index-keyword">{t("settings.files.indexKeyword")}</label>
+                  <span class="hint">{t("settings.files.indexKeywordHint")}</span>
                   {#if problems.keywords["files.index_keyword"]}
                     <span class="msg error" id="files-index-keyword-error" role="alert">{problems.keywords["files.index_keyword"]}</span>
                   {/if}
@@ -1377,8 +1356,8 @@
 
               <div class="row">
                 <div class="label">
-                  <label class="name" for="files-content-keyword">Contents keyword</label>
-                  <span class="hint">Empty turns off content search.</span>
+                  <label class="name" for="files-content-keyword">{t("settings.files.contentKeyword")}</label>
+                  <span class="hint">{t("settings.files.contentKeywordHint")}</span>
                   {#if problems.keywords["files.content_keyword"]}
                     <span class="msg error" id="files-content-keyword-error" role="alert">{problems.keywords["files.content_keyword"]}</span>
                   {/if}
@@ -1417,27 +1396,24 @@
         {:else if active === "system"}
           <SystemPage bind:config={draft} {platform} {pluginOff} />
         {:else if active === "linux"}
-          <h1>Linux</h1>
+          <h1>{t("settings.sections.linux")}</h1>
 
           <section class="group">
             <div class="row">
               <div class="label">
-                <span class="name">Use XWayland on Wayland</span>
-                <span class="hint">
-                  Native Wayland windows cannot position themselves, so Sevak draws through XWayland
-                  to stay centered and typeable.
-                </span>
+                <span class="name">{t("settings.linux.xwayland")}</span>
+                <span class="hint">{t("settings.linux.xwaylandHint")}</span>
                 <span
                   class="msg"
                   class:warn={draft.linux.wayland_use_xwayland !== xwaylandAtOpen}
                   role="status"
                 >
-                  Restart Sevak to apply.
+                  {t("settings.linux.restart")}
                 </span>
               </div>
               <Toggle
                 bind:checked={draft.linux.wayland_use_xwayland}
-                label="Use XWayland on Wayland"
+                label={t("settings.linux.xwayland")}
               />
             </div>
           </section>
@@ -1449,10 +1425,10 @@
     <footer class="footer">
       <div class="links">
         <button type="button" class="link" onclick={() => runFooter(openConfigFile)}>
-          Open config file
+          {t("settings.footer.openConfig")}
         </button>
         <button type="button" class="link" onclick={() => runFooter(openLogDir)}>
-          Reveal logs folder
+          {t("settings.footer.revealLogs")}
         </button>
       </div>
       <div class="spacer"></div>
@@ -1462,18 +1438,18 @@
         <span class="foot-msg error" role="alert" title={saveError}>{saveError}</span>
       {:else if problemCount > 0}
         <span class="foot-msg error" role="status">
-          Fix {problemCount} problem{problemCount === 1 ? "" : "s"} to save
+          {t("settings.footer.fixProblems", { count: problemCount })}
         </span>
       {/if}
-      <button type="button" class="btn" disabled={saving || startupBusy !== null} onclick={cancel}>{dirty ? "Cancel" : "Close"}</button>
+      <button type="button" class="btn" disabled={saving || startupBusy !== null} onclick={cancel}>{dirty ? t("common.cancel") : t("common.close")}</button>
       <button type="button" class="btn primary" disabled={!canSave} onclick={save}>
-        {saving ? "Saving…" : "Save"}
+        {saving ? t("common.saving") : t("common.save")}
       </button>
     </footer>
   {/if}
 
   <div class="toast" class:show={toastVisible} role="status" aria-live="polite">
-    {#if toastVisible}Saved{/if}
+    {#if toastVisible}{t("common.saved")}{/if}
   </div>
 </div>
 
@@ -1649,7 +1625,8 @@
     font-size: 12.5px;
   }
 
-  code {
+  .hint :global(code),
+  .note :global(code) {
     padding: 0 4px;
     border-radius: 4px;
     background: var(--kbd-bg);

@@ -1,5 +1,6 @@
 <script lang="ts">
   import Toggle from "./Toggle.svelte";
+  import { formatNumber, t, tHtml } from "./i18n.svelte";
   import type { Appearance } from "./settings-ipc";
   import {
     MAX_FONT_SIZE,
@@ -42,15 +43,15 @@
 <section class="group">
   <div class="row">
     <div class="label">
-      <label class="name" for="accent">Accent color</label>
-      <span class="hint">Highlights and the selected row. Empty keeps the theme's own.</span>
+      <label class="name" for="accent">{t("appearance.extras.accent")}</label>
+      <span class="hint">{t("appearance.extras.accentHint")}</span>
       {#if errors.accent}<span class="msg error" id="accent-error" role="alert">{errors.accent}</span>{/if}
     </div>
     <div class="control">
       <input
         type="color"
         class="swatch"
-        aria-label="Pick the accent color"
+        aria-label={t("appearance.extras.pickAccent")}
         value={toHex(appearance.accent)}
         oninput={(e) => (appearance.accent = e.currentTarget.value)}
       />
@@ -70,15 +71,15 @@
         type="button"
         class="btn"
         disabled={appearance.accent === ""}
-        onclick={() => (appearance.accent = "")}>Reset</button
+        onclick={() => (appearance.accent = "")}>{t("appearance.extras.reset")}</button
       >
     </div>
   </div>
 
   <div class="row">
     <div class="label">
-      <label class="name" for="font-size">Font size</label>
-      <span class="hint">Size of the result titles; the search bar scales with it.</span>
+      <label class="name" for="font-size">{t("appearance.extras.fontSize")}</label>
+      <span class="hint">{t("appearance.extras.fontSizeHint")}</span>
     </div>
     <div class="slider">
       <input
@@ -89,14 +90,14 @@
         step="1"
         bind:value={appearance.font_size}
       />
-      <output for="font-size">{appearance.font_size} px</output>
+      <output for="font-size">{t("appearance.units.px", { value: appearance.font_size })}</output>
     </div>
   </div>
 
   <div class="row">
     <div class="label">
-      <label class="name" for="font-family">Font</label>
-      <span class="hint">A comma-separated list, such as Fira Sans, sans-serif. Empty uses the system font.</span>
+      <label class="name" for="font-family">{t("appearance.extras.font")}</label>
+      <span class="hint">{t("appearance.extras.fontHint")}</span>
       {#if errors.fontFamily}<span class="msg error" id="font-family-error" role="alert">{errors.fontFamily}</span>{/if}
     </div>
     <input
@@ -114,8 +115,8 @@
 
   <div class="row">
     <div class="label">
-      <label class="name" for="opacity">Background opacity</label>
-      <span class="hint">Lower values let the desktop show through the search bar.</span>
+      <label class="name" for="opacity">{t("appearance.extras.opacity")}</label>
+      <span class="hint">{t("appearance.extras.opacityHint")}</span>
     </div>
     <div class="slider">
       <input
@@ -126,26 +127,24 @@
         step="1"
         bind:value={appearance.opacity}
       />
-      <output for="opacity">{appearance.opacity}%</output>
+      <output for="opacity">{formatNumber(appearance.opacity / 100, { style: "percent" })}</output>
     </div>
   </div>
 
   {#if blurSupported}
     <div class="row">
       <div class="label">
-        <span class="name">Frosted-glass blur</span>
-        <span class="hint">
-          Blurs the desktop behind the search bar. Lower the opacity above to see it.
-        </span>
+        <span class="name">{t("appearance.extras.blur")}</span>
+        <span class="hint">{t("appearance.extras.blurHint")}</span>
       </div>
-      <Toggle bind:checked={appearance.blur} label="Frosted-glass blur" />
+      <Toggle bind:checked={appearance.blur} label={t("appearance.extras.blur")} />
     </div>
   {/if}
 
   <div class="row">
     <div class="label">
-      <label class="name" for="radius">Corner radius</label>
-      <span class="hint">Roundness of the search bar.</span>
+      <label class="name" for="radius">{t("appearance.extras.radius")}</label>
+      <span class="hint">{t("appearance.extras.radiusHint")}</span>
     </div>
     <div class="slider">
       <input
@@ -156,17 +155,14 @@
         step="1"
         bind:value={appearance.radius}
       />
-      <output for="radius">{appearance.radius} px</output>
+      <output for="radius">{t("appearance.units.px", { value: appearance.radius })}</output>
     </div>
   </div>
 
   <div class="row">
     <div class="label">
-      <label class="name" for="custom-css">Custom stylesheet</label>
-      <span class="hint">
-        A CSS file inside the config folder that overrides the theme variables, such as
-        <code>theme.css</code>. See docs/themes.md.
-      </span>
+      <label class="name" for="custom-css">{t("appearance.extras.customCss")}</label>
+      <span class="hint">{@html tHtml("appearance.extras.customCssHint")}</span>
       {#if errors.customCss}<span class="msg error" id="custom-css-error" role="alert">{errors.customCss}</span>{/if}
     </div>
     <input
@@ -224,7 +220,7 @@
     color: var(--muted);
   }
 
-  code {
+  .hint :global(code) {
     padding: 0 4px;
     border-radius: 4px;
     background: var(--kbd-bg);

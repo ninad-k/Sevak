@@ -3,6 +3,7 @@
 // parsed by Rust only (see `validateHotkey`).
 
 import { acceleratorId } from "./accelerator";
+import { formatNumber, t, type MessageKey } from "./i18n.svelte";
 import { aiProblems, type AiProblems } from "./ai";
 import {
   fallbackList,
@@ -109,20 +110,23 @@ export const MAX_WINDOW_GAP = 200;
 /** Largest `[calendar] days` (as in Rust's `config::MAX_CALENDAR_DAYS`). */
 export const MAX_CALENDAR_DAYS = 60;
 
+/** What answers a keyword, as the message key of its name ("the emoji picker"). */
+type Owner = MessageKey & `validate.owner.${string}`;
+
 /** Keywords of built-in searches that cannot be changed, and what they open (as in Rust). */
-const FIXED_KEYWORDS: [string, string][] = [
-  [">", "terminal commands"],
-  ["cb", "clipboard history"],
-  ["s", "snippets"],
-  ["emoji", "the emoji picker"],
-  [":", "the emoji picker"],
-  ["@", "contacts"],
-  ["uuid", "the UUID generator"],
+const FIXED_KEYWORDS: [string, Owner][] = [
+  [">", "validate.owner.terminal"],
+  ["cb", "validate.owner.clipboard"],
+  ["s", "validate.owner.snippets"],
+  ["emoji", "validate.owner.emoji"],
+  [":", "validate.owner.emoji"],
+  ["@", "validate.owner.contacts"],
+  ["uuid", "validate.owner.uuid"],
 ];
 
 interface KeywordSpec {
   field: KeywordField;
-  owner: string;
+  owner: Owner;
   /** An empty keyword means the default (never "off"). */
   required: boolean;
   section: SectionId;
@@ -131,32 +135,32 @@ interface KeywordSpec {
 
 /** In Rust's order (`sevak_plugins::keywords::configurable_keywords`). */
 const KEYWORDS: KeywordSpec[] = [
-  { field: "files.keyword", owner: "the files search", required: false, section: "files", read: (c) => c.files.keyword },
-  { field: "files.index_keyword", owner: "the whole-disk file search", required: false, section: "files", read: (c) => c.files.index_keyword },
-  { field: "files.content_keyword", owner: "the file contents search", required: false, section: "files", read: (c) => c.files.content_keyword },
-  { field: "bookmarks.keyword", owner: "bookmarks", required: false, section: "files", read: (c) => c.bookmarks.keyword },
-  { field: "tasks.keyword", owner: "automation tasks", required: false, section: "tasks", read: (c) => c.tasks.keyword },
-  { field: "media.keyword", owner: "media controls", required: false, section: "tasks", read: (c) => c.media.keyword },
-  { field: "window_management.keyword", owner: "window layouts", required: false, section: "windows", read: (c) => c.window_management.keyword },
-  { field: "window_management.switcher_keyword", owner: "the window switcher", required: false, section: "windows", read: (c) => c.window_management.switcher_keyword },
-  { field: "contacts.keyword", owner: "contacts", required: true, section: "integrations", read: (c) => c.contacts.keyword },
-  { field: "onepassword.keyword", owner: "1Password", required: true, section: "integrations", read: (c) => c.onepassword.keyword },
-  { field: "dictionary.define_keyword", owner: "the dictionary", required: true, section: "integrations", read: (c) => c.dictionary.define_keyword },
-  { field: "dictionary.spell_keyword", owner: "the spelling checker", required: true, section: "integrations", read: (c) => c.dictionary.spell_keyword },
-  { field: "ai.keyword", owner: "the AI assistant", required: true, section: "ai", read: (c) => c.ai.keyword },
-  { field: "ssh.keyword", owner: "SSH hosts", required: true, section: "integrations", read: (c) => c.ssh.keyword },
-  { field: "projects.keyword", owner: "recent projects", required: true, section: "integrations", read: (c) => c.projects.keyword },
-  { field: "calendar.keyword", owner: "the calendar", required: true, section: "integrations", read: (c) => c.calendar.keyword },
-  { field: "clock.keyword", owner: "the world clock", required: true, section: "integrations", read: (c) => c.clock.keyword },
-  { field: "passwords.keyword", owner: "the password generator", required: true, section: "integrations", read: (c) => c.passwords.keyword },
+  { field: "files.keyword", owner: "validate.owner.files", required: false, section: "files", read: (c) => c.files.keyword },
+  { field: "files.index_keyword", owner: "validate.owner.indexFiles", required: false, section: "files", read: (c) => c.files.index_keyword },
+  { field: "files.content_keyword", owner: "validate.owner.contentFiles", required: false, section: "files", read: (c) => c.files.content_keyword },
+  { field: "bookmarks.keyword", owner: "validate.owner.bookmarks", required: false, section: "files", read: (c) => c.bookmarks.keyword },
+  { field: "tasks.keyword", owner: "validate.owner.tasks", required: false, section: "tasks", read: (c) => c.tasks.keyword },
+  { field: "media.keyword", owner: "validate.owner.media", required: false, section: "tasks", read: (c) => c.media.keyword },
+  { field: "window_management.keyword", owner: "validate.owner.windowLayouts", required: false, section: "windows", read: (c) => c.window_management.keyword },
+  { field: "window_management.switcher_keyword", owner: "validate.owner.windowSwitcher", required: false, section: "windows", read: (c) => c.window_management.switcher_keyword },
+  { field: "contacts.keyword", owner: "validate.owner.contacts", required: true, section: "integrations", read: (c) => c.contacts.keyword },
+  { field: "onepassword.keyword", owner: "validate.owner.onepassword", required: true, section: "integrations", read: (c) => c.onepassword.keyword },
+  { field: "dictionary.define_keyword", owner: "validate.owner.dictionary", required: true, section: "integrations", read: (c) => c.dictionary.define_keyword },
+  { field: "dictionary.spell_keyword", owner: "validate.owner.spelling", required: true, section: "integrations", read: (c) => c.dictionary.spell_keyword },
+  { field: "ai.keyword", owner: "validate.owner.ai", required: true, section: "ai", read: (c) => c.ai.keyword },
+  { field: "ssh.keyword", owner: "validate.owner.ssh", required: true, section: "integrations", read: (c) => c.ssh.keyword },
+  { field: "projects.keyword", owner: "validate.owner.projects", required: true, section: "integrations", read: (c) => c.projects.keyword },
+  { field: "calendar.keyword", owner: "validate.owner.calendar", required: true, section: "integrations", read: (c) => c.calendar.keyword },
+  { field: "clock.keyword", owner: "validate.owner.clock", required: true, section: "integrations", read: (c) => c.clock.keyword },
+  { field: "passwords.keyword", owner: "validate.owner.passwords", required: true, section: "integrations", read: (c) => c.passwords.keyword },
 ];
 
-/** Every keyword of a built-in search (lowercased) and what answers it. */
+/** Every keyword of a built-in search (lowercased) and what answers it, named in the UI language. */
 function reservedKeywords(config: Config): Map<string, string> {
-  const reserved = new Map(FIXED_KEYWORDS);
+  const reserved = new Map(FIXED_KEYWORDS.map(([keyword, owner]) => [keyword, t(owner)]));
   for (const spec of KEYWORDS) {
     const keyword = spec.read(config).trim().toLowerCase();
-    if (keyword !== "" && !reserved.has(keyword)) reserved.set(keyword, spec.owner);
+    if (keyword !== "" && !reserved.has(keyword)) reserved.set(keyword, t(spec.owner));
   }
   return reserved;
 }
@@ -174,7 +178,7 @@ export function keywordProblems(config: Config): Partial<Record<KeywordField, st
   for (const spec of KEYWORDS) {
     const keyword = spec.read(config).trim();
     if (keyword === "") {
-      if (spec.required) problems[spec.field] = "Required";
+      if (spec.required) problems[spec.field] = t("validate.required");
       continue;
     }
     const lower = keyword.toLowerCase();
@@ -182,10 +186,10 @@ export function keywordProblems(config: Config): Partial<Record<KeywordField, st
     const other = KEYWORDS.find(
       (candidate) => candidate !== spec && candidate.read(config).trim().toLowerCase() === lower,
     );
-    if (/\s/.test(keyword)) problems[spec.field] = "No spaces";
-    else if (web.has(lower)) problems[spec.field] = "Already a web search keyword";
-    else if (fixed) problems[spec.field] = `Already used by ${fixed[1]}`;
-    else if (other) problems[spec.field] = `Already used by ${other.owner}`;
+    if (/\s/.test(keyword)) problems[spec.field] = t("validate.noSpaces");
+    else if (web.has(lower)) problems[spec.field] = t("validate.webKeyword");
+    else if (fixed) problems[spec.field] = t("validate.usedBy", { owner: t(fixed[1]) });
+    else if (other) problems[spec.field] = t("validate.usedBy", { owner: t(other.owner) });
   }
   return problems;
 }
@@ -209,29 +213,29 @@ export function hotkeyErrors(
 ): HotkeyErrors {
   const errors: HotkeyErrors = {};
   const key = keyId(binding.key);
-  if (key === "") errors.key = "Required";
-  else if (key === keyId(mainKey)) errors.key = "Same as the main shortcut";
-  else if (key === keyId(actionsKey)) errors.key = "Same as the Universal Actions shortcut";
-  else if (all.filter((other) => keyId(other.key) === key).length > 1) errors.key = "Already used";
-  if (binding.run != null && binding.run.trim() === "") errors.value = "Enter a result id";
+  if (key === "") errors.key = t("validate.required");
+  else if (key === keyId(mainKey)) errors.key = t("validate.sameAsMain");
+  else if (key === keyId(actionsKey)) errors.key = t("validate.sameAsActions");
+  else if (all.filter((other) => keyId(other.key) === key).length > 1) errors.key = t("validate.alreadyUsed");
+  if (binding.run != null && binding.run.trim() === "") errors.value = t("validate.resultId");
   return errors;
 }
 
 export function appearanceErrors(appearance: Appearance): AppearanceErrors {
   const errors: AppearanceErrors = {};
   const accent = appearance.accent.trim();
-  if (accent !== "" && !isColor(accent)) errors.accent = "Use #rrggbb, #rgb or rgb(r, g, b)";
+  if (accent !== "" && !isColor(accent)) errors.accent = t("validate.color");
   const family = appearance.font_family.trim();
   if (family !== "" && !/^[\p{L}\p{N} ,._'"-]+$/u.test(family)) {
-    errors.fontFamily = "Only letters, digits, spaces and , . _ - are allowed";
+    errors.fontFamily = t("validate.fontFamily");
   }
   const css = appearance.custom_css.trim();
   if (css !== "" && (/^[\\/]|^[A-Za-z]:|(^|[\\/])\.\.([\\/]|$)/.test(css))) {
-    errors.customCss = "Must be a path inside the config folder";
+    errors.customCss = t("validate.insideConfig");
   }
   const themeFile = appearance.theme_file.trim();
   if (themeFile !== "" && (/^[\\/]|^[A-Za-z]:|(^|[\\/])\.\.([\\/]|$)/.test(themeFile))) {
-    errors.themeFile = "Must be a path inside the config folder";
+    errors.themeFile = t("validate.insideConfig");
   }
   return errors;
 }
@@ -244,25 +248,27 @@ export function engineErrors(
 ): EngineErrors {
   const errors: EngineErrors = {};
   const keyword = engine.keyword.trim();
-  if (keyword === "") errors.keyword = "Required";
-  else if (/\s/.test(keyword)) errors.keyword = "No spaces";
+  if (keyword === "") errors.keyword = t("validate.required");
+  else if (/\s/.test(keyword)) errors.keyword = t("validate.noSpaces");
   else if (reserved.has(keyword.toLowerCase())) {
-    errors.keyword = `Used by ${reserved.get(keyword.toLowerCase())}`;
+    errors.keyword = t("validate.engineUsedBy", { owner: reserved.get(keyword.toLowerCase())! });
   }
   else if (all.filter((other) => other.keyword.trim().toLowerCase() === keyword.toLowerCase()).length > 1) {
-    errors.keyword = "Already used";
+    errors.keyword = t("validate.alreadyUsed");
   }
-  if (engine.name.trim() === "") errors.name = "Required";
+  if (engine.name.trim() === "") errors.name = t("validate.required");
   const url = engine.url.trim();
-  if (!/^https?:\/\//i.test(url)) errors.url = "Must start with http:// or https://";
-  else if (!engine.url.includes("{query}")) errors.url = "Must contain {query}";
+  if (!/^https?:\/\//i.test(url)) errors.url = t("validate.urlScheme");
+  else if (!engine.url.includes("{query}")) errors.url = t("validate.urlQuery");
   return errors;
 }
+
+const wholeNumber = (min: number, max: number) => t("validate.wholeNumber", { min, max });
 
 /** Sizes are edited in KB and MB but kept in bytes, as in the file. */
 function sizeError(bytes: number, max: number, unit: string): string | undefined {
   if (!Number.isFinite(bytes) || bytes < 1 || bytes > max) {
-    return `Enter a size above 0, up to ${unit}`;
+    return t("validate.size", { max: unit });
   }
   return undefined;
 }
@@ -271,11 +277,11 @@ export function clipboardErrors(config: Config): ClipboardErrors {
   const errors: ClipboardErrors = {};
   const { max_items, max_item_bytes, max_image_bytes } = config.clipboard;
   if (!Number.isInteger(max_items) || max_items < 1 || max_items > MAX_CLIPBOARD_ITEMS) {
-    errors.maxItems = `Enter a whole number from 1 to ${MAX_CLIPBOARD_ITEMS}`;
+    errors.maxItems = wholeNumber(1, MAX_CLIPBOARD_ITEMS);
   }
-  const text = sizeError(max_item_bytes, MAX_CLIPBOARD_ITEM_BYTES, "4096 KB");
+  const text = sizeError(max_item_bytes, MAX_CLIPBOARD_ITEM_BYTES, `${formatNumber(4096)} KB`);
   if (text) errors.maxItemBytes = text;
-  const image = sizeError(max_image_bytes, MAX_CLIPBOARD_IMAGE_BYTES, "64 MB");
+  const image = sizeError(max_image_bytes, MAX_CLIPBOARD_IMAGE_BYTES, `${formatNumber(64)} MB`);
   if (image) errors.maxImageBytes = image;
   return errors;
 }
@@ -333,19 +339,19 @@ export function validate(config: Config): Problems {
 
   const minutes = config.onepassword.cache_minutes;
   if (!Number.isInteger(minutes) || minutes < 1 || minutes > MAX_CACHE_MINUTES) {
-    problems.cacheMinutes = `Enter a whole number from 1 to ${MAX_CACHE_MINUTES}`;
+    problems.cacheMinutes = wholeNumber(1, MAX_CACHE_MINUTES);
     count.integrations++;
   }
 
   const gap = config.window_management.gap;
   if (!Number.isInteger(gap) || gap < 0 || gap > MAX_WINDOW_GAP) {
-    problems.windowGap = `Enter a whole number from 0 to ${MAX_WINDOW_GAP}`;
+    problems.windowGap = wholeNumber(0, MAX_WINDOW_GAP);
     count.windows++;
   }
 
   const days = config.calendar.days;
   if (!Number.isInteger(days) || days < 1 || days > MAX_CALENDAR_DAYS) {
-    problems.calendarDays = `Enter a whole number from 1 to ${MAX_CALENDAR_DAYS}`;
+    problems.calendarDays = wholeNumber(1, MAX_CALENDAR_DAYS);
     count.integrations++;
   }
 
@@ -353,13 +359,13 @@ export function validate(config: Config): Problems {
     (keyword) => !keywords.has(keyword.toLowerCase()),
   );
   if (missing !== undefined) {
-    problems.fallback = `The engine "${missing}" no longer exists.`;
+    problems.fallback = t("validate.fallbackGone", { keyword: missing });
     count.search++;
   }
 
   const depth = config.files.max_depth;
   if (!Number.isInteger(depth) || depth < 0 || depth > MAX_DEPTH) {
-    problems.filesDepth = `Enter a whole number from 0 to ${MAX_DEPTH}`;
+    problems.filesDepth = wholeNumber(0, MAX_DEPTH);
     count.files++;
   }
   return problems;

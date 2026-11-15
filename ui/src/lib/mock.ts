@@ -363,6 +363,7 @@ export function mockSettings(): SettingsDto {
         launch_at_login: false,
         check_for_updates: true,
         update_channel: "stable",
+        language: "auto",
       },
       window: { width: 720 },
       linux: { wayland_use_xwayland: true },
