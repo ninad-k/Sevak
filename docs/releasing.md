@@ -156,6 +156,46 @@ application updates. To keep that key contained:
   `file:extension-revocations.json`, so the two uses of the key stay
   distinguishable.
 
+### Gallery index signatures
+
+Every Release run also signs the two gallery lists that builds read at the new
+tag, `gallery/index.json` and `gallery/themes.json`, and attaches
+`index.json.sig` and `themes.json.sig` to the release. Sevak verifies a list
+against the embedded updater key before reading it
+([Gallery trust](security/gallery-trust.md#7-signed-indexes)). No setup is
+needed beyond the `TAURI_SIGNING_PRIVATE_KEY` secret Release already requires.
+
+- `sign-gallery` (read-only token, no caches, `npm ci --ignore-scripts`) copies
+  each list to `target/gallery-signatures/<tag>-<file>`, signs it with
+  `npx tauri signer sign`, and requires the trusted comment to name
+  `<tag>-<file>`. That name binds the signature to the release and the list.
+- `attach-gallery-signatures` (write token, never the key) runs
+  `cargo run --locked -p sevak-plugins --example verify_gallery_index -- <tag> gallery/<file> <sig>`
+  (the app's key, policy and parsers, against the files committed at the release
+  commit) and uploads the two `.sig` files to the draft. **Publish** waits for
+  it, so a release cannot go out with unsigned or unverifiable lists, and
+  `SHA256SUMS.txt` covers the `.sig` files.
+- To check a published release by hand: download `index.json.sig` from the
+  release and run the same example with
+  `gallery/index.json` from a checkout of the tag.
+
+**Rollout.** `SIGNED_SINCE` in `crates/sevak-plugins/src/index_signature.rs`
+(`v0.14.1`, the version after the newest release when signing was added) is the
+first tag whose lists must be signed. Builds accept a list without a signature
+only from older tags, and refuse an invalid signature from any tag.
+
+- **Before merging the change that introduces signing**, make sure no release
+  has been published at or after `SIGNED_SINCE` without signatures. If one has
+  (another pull request merged first), raise `SIGNED_SINCE` to the version this
+  merge will be released as. Otherwise builds that fall back to that unsigned
+  release (development builds and betas, which read the latest stable release)
+  show "publishes no signature" instead of the gallery. That fails closed; it
+  is not a security hole, but it is an outage for those builds.
+- Never lower `SIGNED_SINCE` after a release, and never delete a `.sig` from a
+  release: builds of that release would then refuse their own gallery.
+- Re-running only the signing jobs on an existing draft fails, because the
+  assets already exist; re-run **Release**, which replaces the stale draft.
+
 ## Before promoting a beta
 
 Tick these before you run **Promote** (or, in the auto flow, before merging
@@ -167,7 +207,8 @@ choose the checks that apply to the release.
 
 - [ ] CI is green on `main` on Windows, macOS and Linux (lint, tests, bundle build).
 - [ ] The release run finished: all three build jobs succeeded and the release
-      has installers, `.sig` files, `latest-beta.json` and `SHA256SUMS.txt`.
+      has installers, `.sig` files (including `index.json.sig` and
+      `themes.json.sig`), `latest-beta.json` and `SHA256SUMS.txt`.
 - [ ] Beta notes read well; fill in **Known issues and upgrade notes**.
 
 **By risk area** (do the ones your changes touch)
@@ -285,6 +326,7 @@ Sevak keeps that guard, and there is no downgrade flag in `latest.json`. So:
 | `.github/workflows/pr-labels.yml`, `.github/release.yml` | Group the generated release notes by commit type |
 | `.github/workflows/release-checks.yml` | Tests the scripts below and parses the workflows on pull requests |
 | `.github/workflows/extension-advisories.yml` | Signs and publishes the extension advisory feed; see [Extension advisories](#extension-advisories) |
+| `crates/sevak-plugins/examples/verify_gallery_index.rs` | Verifies a gallery list's signature with the app's verifier before Release attaches it; see [Gallery index signatures](#gallery-index-signatures) |
 | `scripts/release-signing.mjs` | Publisher-signing configuration (`prepare`) and verification (`verify`) |
 | `scripts/release-version.mjs` | `next`, `next-beta`, `previous-tag`, `compare`, `set` |
 | `scripts/updater-manifest.mjs` | Writes `latest.json` / `latest-beta.json` |

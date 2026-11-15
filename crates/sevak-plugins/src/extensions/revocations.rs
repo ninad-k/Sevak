@@ -147,23 +147,54 @@ fn validate(feed: &Feed) -> Result<(), String> {
     Ok(())
 }
 
+/// Why [`authenticate`] refused a signature.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AuthError {
+    /// The key or signature is not base64.
+    Encoding,
+    /// The decoded key or signature is not UTF-8 text.
+    NotText,
+    /// The key does not decode as a minisign public key.
+    Key,
+    /// The signature does not decode as a minisign signature.
+    Signature,
+    /// The signature is well formed but does not authenticate these bytes
+    /// with this key (wrong key, altered bytes or altered trusted comment).
+    NotAuthenticated,
+}
+
+/// The one minisign check shared by every signed download (the advisory feed
+/// here, the gallery indexes in `crate::index_signature`): `signature` is a
+/// Tauri-signer `.sig` (base64 of a minisign signature box) and `key` the
+/// base64 public key. Verifies the exact `body` bytes (prehashed signatures
+/// only) and returns the signed trusted comment, which callers use to bind a
+/// signature to the file it was made for.
+pub(crate) fn authenticate(body: &[u8], signature: &[u8], key: &str) -> Result<String, AuthError> {
+    let decode = |bytes: &[u8]| -> Result<String, AuthError> {
+        let bytes = STANDARD
+            .decode(bytes.trim_ascii())
+            .map_err(|_| AuthError::Encoding)?;
+        String::from_utf8(bytes).map_err(|_| AuthError::NotText)
+    };
+    let key = PublicKey::decode(&decode(key.as_bytes())?).map_err(|_| AuthError::Key)?;
+    let signature = Signature::decode(&decode(signature)?).map_err(|_| AuthError::Signature)?;
+    key.verify(body, &signature, false)
+        .map_err(|_| AuthError::NotAuthenticated)?;
+    Ok(signature.trusted_comment().to_owned())
+}
+
 /// Verify the exact bounded bytes before parsing any actionable metadata.
 pub fn verify(body: &[u8], signature: &[u8], key: &str) -> Result<Feed, String> {
     if body.len() > MAX_BYTES || signature.len() > MAX_SIGNATURE_BYTES {
         return Err("advisory download exceeds its size limit".into());
     }
-    let decode = |bytes: &[u8]| -> Result<String, String> {
-        let bytes = STANDARD
-            .decode(bytes.trim_ascii())
-            .map_err(|_| "invalid advisory signing encoding")?;
-        String::from_utf8(bytes).map_err(|_| "advisory signing data is not text".into())
-    };
-    let key =
-        PublicKey::decode(&decode(key.as_bytes())?).map_err(|_| "invalid trusted advisory key")?;
-    let signature =
-        Signature::decode(&decode(signature)?).map_err(|_| "invalid advisory signature")?;
-    key.verify(body, &signature, false)
-        .map_err(|_| "advisory signature was not authenticated")?;
+    authenticate(body, signature, key).map_err(|error| match error {
+        AuthError::Encoding => "invalid advisory signing encoding",
+        AuthError::NotText => "advisory signing data is not text",
+        AuthError::Key => "invalid trusted advisory key",
+        AuthError::Signature => "invalid advisory signature",
+        AuthError::NotAuthenticated => "advisory signature was not authenticated",
+    })?;
     let feed: Feed =
         serde_json::from_slice(body).map_err(|_| "invalid signed advisory document")?;
     validate(&feed)?;
@@ -175,7 +206,7 @@ pub fn verify(body: &[u8], signature: &[u8], key: &str) -> Result<Feed, String> 
 /// depend on the app's layout. A test fails if the two ever differ.
 const TRUSTED_KEY: &str = include_str!("revocations/trusted-key.txt");
 
-fn trusted_key() -> String {
+pub(crate) fn trusted_key() -> String {
     // Compile-time source only; local cache/network never supplies it.
     TRUSTED_KEY.trim().to_owned()
 }

@@ -88,6 +88,7 @@ When an update is available and you agree to install it, its package is download
 Only when you click **Browse online themes** (**Settings → Appearance → Theme editor**):
 
 - One request for `https://raw.githubusercontent.com/ninad-k/Sevak/v<your version>/gallery/themes.json`, the list of community themes, read from the release of your Sevak version (a build without a published release uses the latest release and says so)
+- With the list, its release signature `themes.json.sig` from `https://github.com/ninad-k/Sevak/releases/download/<the same tag>/`, checked against the key built into Sevak before the list is read ([Gallery trust](security/gallery-trust.md#7-signed-indexes))
 - **Install** on a theme downloads that one theme file, saved only if its SHA-256 matches the one in the list; a theme of the same name is never replaced silently
 - Files are requested only from Sevak's own repository on GitHub, also when a request is redirected
 - Nothing is requested in the background or on startup
@@ -99,6 +100,7 @@ See [Theme gallery](themes.md#theme-gallery).
 Only when you press **Load gallery** (**Settings → Gallery**):
 
 - One request for `gallery/index.json` from `raw.githubusercontent.com/ninad-k/Sevak`, at the tag of your Sevak version, the list of ready-made workflows and script plugins (a build without a published release uses the latest release and says so)
+- With the list, its release signature `index.json.sig` from `https://github.com/ninad-k/Sevak/releases/download/<the same tag>/`, checked against the key built into Sevak before the list is read ([Gallery trust](security/gallery-trust.md#7-signed-indexes))
 - **Install** on an entry downloads that one package, checked against the checksum in the index before anything is written; the installed folder still has to be allowed before it runs
 - Nothing is requested in the background or on startup
 
@@ -109,6 +111,7 @@ See [The gallery](workflows.md#the-gallery).
 Only when you press **Load the list** on **Settings → Extensions**, or press Enter on **Load the extension list** after typing `ext` or `store`:
 
 - Two requests from `raw.githubusercontent.com/ninad-k/Sevak`, at the tag of your Sevak version: `gallery/index.json` (workflows, script plugins, native extensions) and `gallery/themes.json`. The lists are saved in the data folder (`extensions-catalog.json`) so the page works offline; opening the page reads that file and requests nothing
+- With the lists, their release signatures `index.json.sig` and `themes.json.sig` from `https://github.com/ninad-k/Sevak/releases/download/<the same tag>/`, checked against the key built into Sevak before the lists are read ([Gallery trust](security/gallery-trust.md#7-signed-indexes))
 - **Install** and **Update** download that one package (for a native extension, the one build for your computer), checked against its checksum before anything is written; nothing runs until you allow it
 - Nothing is requested in the background or on startup
 

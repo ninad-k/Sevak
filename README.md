@@ -338,6 +338,9 @@ Every network request Sevak itself makes is in this list:
   that one package, checked against its checksum, and anything that can run
   code still has to be allowed first. The list is saved locally so the page
   works offline. Loading or refreshing also checks the signed advisories below.
+  Each gallery list above comes with one more request, its signature
+  (`index.json.sig`, `themes.json.sig`) from the same release's downloads,
+  checked against the key built into Sevak before the list is read.
 
 - **Extension advisories.** Explicit gallery/list loads, refreshes, and
   **Check extension advisories** request `extension-revocations.json` and its

@@ -345,7 +345,7 @@ fully mitigated is repeated under [Residual risks](#residual-risks).
 | | Threat | Mitigation / status |
 |---|---|---|
 | S | A man-in-the-middle serves a fake gallery | HTTPS with the platform trust store; redirects to HTTPS and to Sevak's repository only. |
-| T | A tampered package passes | SHA-256 from the index must match; the index itself comes from the same repository at the build's release tag, so this protects the transfer, not the source (see [Gallery trust](#gallery-trust)). |
+| T | A tampered package passes | SHA-256 from the index must match; the index itself is signed with the release key and verified before parsing (releases before `v0.14.1` are unsigned; see [Gallery trust](#gallery-trust)). |
 | T | Zip-slip, symlink, zip bomb | Checks listed above. |
 | E | An installed package runs by itself | It is installed unapproved and nothing runs until the dialog. A native extension's package must also agree with its index entry (version, publisher, licence, permissions) and carries per-file checksums. |
 | E | A native extension does more than it declared | **Residual.** It is not sandboxed; the declared permissions are shown to the user, not enforced. Gallery review, public source and the Allow dialog are the controls. |
@@ -393,9 +393,10 @@ vulnerability report: they are design properties or documented limits.
    script asks again, but an approved one has your account's permissions.
 4. **The gallery has a single trust root**: the repository, at the release tag of
    the running build (not `main`). The checksum protects the download; the
-   approval dialog protects the machine. There is no signature yet, so a
-   compromised maintainer account or a moved tag compromises both the index and
-   the packages.
+   approval dialog protects the machine. Since `v0.14.1` the indexes are signed
+   with the updater key and checked before parsing, so a moved tag alone no
+   longer changes what a build lists; the release key and pipeline (item 5)
+   remain the root, and releases before signing keep the old exposure.
 5. **The release pipeline is a single point of trust**: one signing key held as a
    repository secret, and a workflow that releases on every merge. First-time
    installers are not code-signed or notarized.
@@ -431,8 +432,10 @@ release tag of the running build. The SHA-256 in the index detects accidental or
 network corruption and refuses a package that differs from the index; it cannot
 detect a malicious change made to both. A tag that cannot be moved or rewritten
 narrows this, and the installed folder is **not** allowed to run until the user
-reads the approval dialog. A signed index (using the updater key) would remove
-the single trust root; it is in the backlog.
+reads the approval dialog. Since `v0.14.1` both indexes are signed with the
+updater key, bound to their release and list, and verified before parsing; a
+release from that tag on without a signature is refused, older releases are
+read unsigned. See [Gallery trust](gallery-trust.md#7-signed-indexes).
 
 ## Hardening backlog
 
@@ -443,7 +446,7 @@ vulnerabilities; the review's individual findings are handled separately
 | Priority | Item | Why | Status |
 |---|---|---|---|
 | 1 | Bind script-plugin approval to the script file contents, as workflows already do | Closes the gap between "approved command" and "approved code"; also protects gallery updates | Done |
-| 2 | Sign the gallery and theme indexes with the updater key and fetch packages from a fixed repository prefix or tag | Removes the single trust root from [Gallery trust](#gallery-trust) | Prefix and tag done; signing open |
+| 2 | Sign the gallery and theme indexes with the updater key and fetch packages from a fixed repository prefix or tag | Removes the single trust root from [Gallery trust](#gallery-trust) | Done (index signatures since `v0.14.1`) |
 | 3 | Pin GitHub Actions to commit SHAs, publish a signed checksum file, add Windows code signing and macOS notarization | Release integrity and OS trust prompts | Open |
 | 4 | Add `base-uri 'none'; form-action 'none'; object-src 'none'` to the CSP | Defence in depth; needs a run of the app to confirm nothing depends on them | Open |
 | 5 | Restrict app commands per window with a Tauri app manifest and per-window capabilities | A launcher window should not be able to call settings and workflow commands | Open |
@@ -528,7 +531,7 @@ defends against software running as the user.
 
 Backlog items 2 (prefix and tag), 6 and 9, and several smaller findings.
 
-- **Gallery sources.** Files are requested only from `raw.githubusercontent.com/ninad-k/Sevak/` and the repository's release downloads, at the first request and at every redirect, and an index can only name files inside the release it was read from. A build reads the lists at the tag of its own version, not `main`; a build without a tag uses the latest stable release and says so. There is still no signature (backlog item 2). Details and limits: [Gallery trust](gallery-trust.md).
+- **Gallery sources.** Files are requested only from `raw.githubusercontent.com/ninad-k/Sevak/` and the repository's release downloads, at the first request and at every redirect, and an index can only name files inside the release it was read from. A build reads the lists at the tag of its own version, not `main`; a build without a tag uses the latest stable release and says so. Both lists are signed by the release workflow and verified before parsing (backlog item 2). Details and limits: [Gallery trust](gallery-trust.md).
 - **Gallery content.** Windows device names are refused as package entry names, gallery ids and folder names. A gallery theme never replaces a theme of the same name.
 - **Network paths (Windows).** `[files] allow_network_paths` is off by default. A UNC path (`\\server\share`, `//server/share`, `\\?\UNC\...`) or a mapped network drive is refused before any file system call by path browsing, path resolution, the configured folders, the file-buffer destination, workflow open-file and launch nodes and everything opened through the platform provider. Device paths (`\\.\pipe\...`) are refused whatever the setting is. Text selected in other apps is never checked as a network path. This is backlog item 9.
 - **Addresses.** `open_url` parses the address and refuses control characters, quotes, angle brackets, backslashes, addresses with credentials or without a host, addresses over 8192 bytes and `mailto:` options other than recipients, subject and body.

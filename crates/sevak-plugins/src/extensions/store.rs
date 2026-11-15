@@ -40,6 +40,7 @@ use sevak_core::theme_store::{self, Existing, GalleryEntry as ThemeEntry};
 
 use super::package::{self, ExtensionPackage};
 use super::revocations::{self, Advisories, Notice, Subject};
+use crate::index_signature::{self, IndexSignature};
 use crate::net::{fetch_pinned, sha256_hex, verify_sha256, Https, Transport};
 use crate::script::{current_platform, ApprovalStore};
 use crate::workflow::gallery::{
@@ -167,10 +168,12 @@ pub struct Catalog {
     pub fetched_at: u64,
     /// Read from the local cache, not just now from the network.
     pub from_cache: bool,
+    /// What the package list's release signature check found.
+    pub index_signature: IndexSignature,
 }
 
-/// The cache file: the raw lists as fetched, parsed again on load so the same
-/// rules apply.
+/// The cache file: the raw lists as fetched, with their release signatures,
+/// checked and parsed again on load so the same rules apply.
 #[derive(Debug, Serialize, Deserialize)]
 struct CacheFile {
     version: u32,
@@ -180,6 +183,12 @@ struct CacheFile {
     packages: String,
     themes: Option<String>,
     themes_error: Option<String>,
+    /// The `.sig` text of `packages` (absent in caches of older builds, and
+    /// for releases published before lists were signed).
+    #[serde(default)]
+    packages_signature: Option<String>,
+    #[serde(default)]
+    themes_signature: Option<String>,
 }
 
 /// Whether an item can be installed, is installed, or has a newer version.
@@ -239,6 +248,8 @@ pub struct CatalogView {
     pub skipped: usize,
     pub fetched_at: u64,
     pub from_cache: bool,
+    /// `verified`, or `legacy_unsigned` for a release from before lists were signed.
+    pub index_signature: IndexSignature,
     pub items: Vec<CatalogItem>,
 }
 
@@ -304,6 +315,13 @@ pub struct ExtensionStore {
     /// Held while an install, update or removal runs.
     busy: Mutex<()>,
     quiesce: Mutex<Option<Quiesce>>,
+}
+
+/// A downloaded `.sig` as the text saved in the cache.
+fn signature_text(
+    signature: Option<Vec<u8>>,
+) -> Result<Option<String>, std::string::FromUtf8Error> {
+    signature.map(String::from_utf8).transpose()
 }
 
 fn now() -> u64 {
@@ -444,17 +462,24 @@ impl ExtensionStore {
         )?;
         let packages = String::from_utf8(pinned.body)
             .map_err(|_| "Could not load the gallery: the list is not text.".to_owned())?;
-        // The theme list is read from the same release; failing to read it does
-        // not take the packages away.
-        let (themes, themes_error) = match self.transport.get(
-            &pinned.pin.index_url(theme_store::GALLERY_INDEX_FILE),
+        let packages_signature = signature_text(pinned.signature)
+            .map_err(|_| "Could not load the gallery: its signature is not text.".to_owned())?;
+        // The theme list is read from the same release and checked against its
+        // own signature; failing either does not take the packages away.
+        let (themes, themes_signature, themes_error) = match index_signature::fetch_checked(
+            &*self.transport,
+            &pinned.pin,
+            theme_store::GALLERY_INDEX_FILE,
             theme_store::MAX_INDEX_BYTES as usize,
         ) {
-            Ok(body) => match String::from_utf8(body) {
-                Ok(text) => (Some(text), None),
-                Err(_) => (None, Some("the theme list is not text".to_owned())),
+            Ok(checked) => match (
+                String::from_utf8(checked.body),
+                signature_text(checked.signature),
+            ) {
+                (Ok(text), Ok(signature)) => (Some(text), signature, None),
+                _ => (None, None, Some("the theme list is not text".to_owned())),
             },
-            Err(err) => (None, Some(err.to_string())),
+            Err(err) => (None, None, Some(err)),
         };
         let cache = CacheFile {
             version: 1,
@@ -464,6 +489,8 @@ impl ExtensionStore {
             packages,
             themes,
             themes_error,
+            packages_signature,
+            themes_signature,
         };
         let catalog = Self::parse_cache(&cache, false)?;
         // A cache that cannot be written only means the next start begins empty.
@@ -507,9 +534,25 @@ impl ExtensionStore {
     fn parse_cache(cache: &CacheFile, from_cache: bool) -> Result<Catalog, String> {
         let pin = Pin::new(&cache.tag)
             .ok_or_else(|| "the saved gallery list names no valid release".to_owned())?;
+        // The same signature check as a download, before parsing: a saved list
+        // is only as trusted as the release signature saved with it.
+        let index_signature = index_signature::verify(
+            pin.tag(),
+            gallery::INDEX_FILE,
+            cache.packages.as_bytes(),
+            cache.packages_signature.as_deref().map(str::as_bytes),
+        )
+        .map_err(|err| format!("Could not load the gallery: {err}."))?;
         let index = gallery::parse_index(&cache.packages, &pin)?;
         let (themes, themes_error) = match &cache.themes {
-            Some(text) => match theme_store::parse_index(text, &pin) {
+            Some(text) => match index_signature::verify(
+                pin.tag(),
+                theme_store::GALLERY_INDEX_FILE,
+                text.as_bytes(),
+                cache.themes_signature.as_deref().map(str::as_bytes),
+            )
+            .and_then(|_| theme_store::parse_index(text, &pin))
+            {
                 Ok(themes) => (themes, None),
                 Err(err) => (Vec::new(), Some(err)),
             },
@@ -528,6 +571,7 @@ impl ExtensionStore {
             themes_error,
             fetched_at: cache.fetched_at,
             from_cache,
+            index_signature,
         })
     }
 
@@ -754,6 +798,7 @@ impl ExtensionStore {
             skipped: catalog.skipped,
             fetched_at: catalog.fetched_at,
             from_cache: catalog.from_cache,
+            index_signature: catalog.index_signature,
             items,
         }
     }

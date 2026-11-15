@@ -6,6 +6,10 @@ name: Release
 #               (scripts/release-version.mjs) and open a draft GitHub release
 #   2. build    build the installers on Windows, macOS and Linux, signed for the
 #               updater, and attach them
+#      sign-gallery, attach-gallery-signatures  in parallel with build: sign
+#               gallery/index.json and gallery/themes.json, verify the
+#               signatures with the app's verifier and attach them as
+#               index.json.sig and themes.json.sig
 #   3. publish  add latest.json (the update manifest installed copies poll) and
 #               SHA256SUMS.txt, then publish the release, which creates the tag
 #   4. distribute  update winget, Scoop, Homebrew and the AUR (each only when
@@ -331,9 +335,110 @@ jobs:
           retention-days: 30
           path: target/installer-validation/
 
+  # The gallery lists a build of this release reads at its tag
+  # (gallery/index.json and gallery/themes.json on raw.githubusercontent.com)
+  # are signed with the updater key, the same signer flow as the extension
+  # advisory feed, and the signatures are attached to the release as
+  # index.json.sig and themes.json.sig. Sevak checks them before it parses a
+  # list (docs/security/gallery-trust.md, "Signed indexes"). As in
+  # extension-advisories.yml, only `sign-gallery` sees the key (read-only
+  # token, no caches, no install scripts); `attach-gallery-signatures` holds
+  # the write token but never the key, and verifies with the app's own
+  # verifier before uploading. Publish waits for both.
+  sign-gallery:
+    name: Sign the gallery lists
+    needs: plan
+    if: needs.plan.outputs.version != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      TAG: v${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # No dependency cache here: a poisoned cache must not run next to the key.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts
+      - name: Sign the exact committed bytes
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          test -n "$TAURI_SIGNING_PRIVATE_KEY" || { echo "::error::Missing updater signing key"; exit 1; }
+          out=target/gallery-signatures
+          mkdir -p "$out"
+          for file in index.json themes.json; do
+            # Staged as <tag>-<file>: the signer writes that name into the signed
+            # trusted comment, which binds the signature to this release and list.
+            cp "gallery/$file" "$out/$TAG-$file"
+            npx tauri signer sign "$out/$TAG-$file"
+            mv "$out/$TAG-$file.sig" "$out/$file.sig"
+            rm "$out/$TAG-$file"
+          done
+      - name: Check each signature names its release and list
+        run: |
+          for file in index.json themes.json; do
+            trusted=$(base64 -d "target/gallery-signatures/$file.sig" | grep '^trusted comment: ' || true)
+            case "$trusted" in
+              *"file:$TAG-$file"*) echo "$file: ${trusted#trusted comment: }" ;;
+              *)
+                echo "::error::The $file signature's trusted comment does not name $TAG-$file: '$trusted'"
+                exit 1
+                ;;
+            esac
+          done
+      - uses: actions/upload-artifact@v7
+        with:
+          name: gallery-signatures
+          if-no-files-found: error
+          retention-days: 1
+          path: |
+            target/gallery-signatures/index.json.sig
+            target/gallery-signatures/themes.json.sig
+
+  attach-gallery-signatures:
+    name: Verify and attach the gallery signatures
+    needs: [plan, sign-gallery]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # upload release assets
+    env:
+      TAG: v${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-rust
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: gallery-signatures
+          path: target/gallery-signatures
+      - name: Verify with the app's trusted key, policy and parsers
+        run: |
+          # The committed files at this commit are the bytes the tag will serve.
+          for file in index.json themes.json; do
+            cargo run --locked -p sevak-plugins --example verify_gallery_index -- "$TAG" "gallery/$file" "target/gallery-signatures/$file.sig"
+          done
+      - name: Attach the signatures to the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.plan.outputs.release_id }}
+        run: |
+          for file in index.json themes.json; do
+            gh api -X POST -H "Content-Type: application/octet-stream" \
+              --input "target/gallery-signatures/$file.sig" \
+              "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=$file.sig" \
+              --jq .name
+          done
+
   publish:
     name: Publish release
-    needs: [plan, build]
+    needs: [plan, build, attach-gallery-signatures]
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "themes": [
+    {
+      "id": "fixture-dark",
+      "name": "Fixture Dark",
+      "author": "Sevak",
+      "description": "A TEST entry of a signed theme index.",
+      "mode": "dark",
+      "url": "gallery/themes/Fixture-Dark.toml",
+      "sha256": "43c6ac42334ad4774fc8a5c67a4cfee3886410bba30ceb9d22d763aec0f1718f"
+    }
+  ]
+}
