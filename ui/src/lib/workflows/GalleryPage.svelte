@@ -33,8 +33,14 @@
     error = null;
     const result = await loadGallery();
     loading = false;
-    if (result.ok) gallery = result.value;
-    else error = result.error;
+    if (result.ok) {
+      gallery = result.value;
+      error = result.value.load_error ?? null;
+    }
+    else {
+      error = result.error;
+      if (gallery) gallery.advisories = { state: "unavailable", message: "The refresh failed; current revocation status is unknown. Previously displayed notices still apply.", issued_at: gallery.advisories?.issued_at ?? null, expires_at: gallery.advisories?.expires_at ?? null };
+    }
   }
 
   async function install(entry: GalleryEntry) {
@@ -55,6 +61,14 @@
     if (found) found.installed = true;
   }
 
+  /** The replacement's name when it is listed, otherwise its id. */
+  const replacementName = (id: string) => gallery?.entries.find((e) => e.id === id)?.name ?? id;
+  /** On disk, but Sevak has no record of which version it installed. */
+  const unrecorded = (entry: GalleryEntry) => entry.installed && !entry.installed_version;
+  const where = (entry: GalleryEntry) => (entry.installed_path ? ` at ${entry.installed_path}` : "");
+  const revokedVersions = (versions: string[]) =>
+    versions.includes("*") ? "every version" : `version${versions.length === 1 ? "" : "s"} ${versions.join(", ")}`;
+
   const host = (url: string) => {
     try {
       return new URL(url).host;
@@ -68,7 +82,7 @@
   <h1>Gallery</h1>
   <p class="wf-lead">
     Add tools to your launcher with ready-made extensions and workflows.
-    Choose <strong>Load gallery</strong> to browse packages from GitHub, then install what you need.
+    Choose <strong>Load gallery</strong> to browse packages from GitHub and check signed revocation notices, then install what you need.
     Script plugins ask for your permission before running. Themes are in Appearance → Theme editor.
   </p>
   <MarketplaceLinks />
@@ -78,7 +92,7 @@
       <button type="button" class="wf-btn primary" disabled={loading} onclick={load}>
         {loading ? "Loading…" : "Load gallery"}
       </button>
-      <span class="wf-sub">Fetches the list from GitHub (raw.githubusercontent.com).</span>
+      <span class="wf-sub">Fetches the list and signed notices from GitHub.</span>
     </div>
   {:else}
     <div class="wf-toolbar">
@@ -101,6 +115,9 @@
   {/if}
 
   {#if gallery}
+    <p class="wf-msg" class:warn={gallery.advisories?.state !== "verified"} role="status">
+      {gallery.advisories?.message ?? "Current revocation status is unknown. Reload to check signed extension advisories."}
+    </p>
     <div class="filters">
       <div class="field search">
         <label for="gallery-query">Search extensions</label>
@@ -135,6 +152,15 @@
             </div>
           </div>
           <p class="wf-sub description">{entry.description}</p>
+          {#if entry.deprecated}<p class="wf-msg warn">Deprecated: {entry.deprecated}{entry.replaced_by ? ` Replacement: ${replacementName(entry.replaced_by)}.` : ""}</p>{/if}
+          {#if entry.revocation}<p class="wf-msg error" role="alert">Listed version revoked: {entry.revocation.reason}. This version cannot be installed. {unrecorded(entry) && !entry.installed_revocation ? `Your installed version is unknown; check its files${where(entry)} and remove its folder if affected.` : ""}</p>{/if}
+          {#if entry.installed_revocation}
+            {#if unrecorded(entry)}
+              <p class="wf-msg error" role="alert">Your installed version is unknown (it was installed without a record{where(entry)}). A signed notice revokes {revokedVersions(entry.installed_revocation.versions)}: {entry.installed_revocation.reason}. Check its files and remove its folder if affected.</p>
+            {:else}
+              <p class="wf-msg error" role="alert">Installed version revoked: {entry.installed_revocation.reason}. Remove this copy from Extensions → Installed.</p>
+            {/if}
+          {/if}
           <div class="meta wf-sub">
             {#if entry.author}by {entry.author}{/if}
             {#if entry.version}· version {entry.version}{/if}
@@ -153,7 +179,7 @@
               type="button"
               class="wf-btn small"
               class:primary={!entry.installed}
-              disabled={entry.installed || installing !== null}
+              disabled={entry.installed || installing !== null || !!entry.deprecated || !!entry.revocation}
               aria-label={entry.installed ? `${entry.name} is installed` : `Install ${entry.name}`}
               onclick={() => install(entry)}
             >

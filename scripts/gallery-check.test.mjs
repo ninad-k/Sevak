@@ -233,9 +233,13 @@ test("deprecated and replaced_by are optional and checked when present", () => {
   assert.equal(check([entry({ deprecated: "Superseded by a better tool." })]).status, 0);
   assert.match(check([entry({ deprecated: "" })]).stderr, /deprecated must be a short reason/);
   assert.match(check([entry({ deprecated: true })]).stderr, /deprecated must be a short reason/);
+  assert.match(check([entry({ deprecated: " not trimmed" })]).stderr, /deprecated must be a short reason/);
+  assert.match(check([entry({ deprecated: "line\nbreak" })]).stderr, /deprecated must be a short reason/);
   assert.match(check([entry({ replaced_by: "other" })]).stderr, /replaced_by needs deprecated/);
   assert.match(check([entry({ deprecated: "old", replaced_by: "tool" })]).stderr, /points at the entry itself/);
   assert.match(check([entry({ deprecated: "old", replaced_by: "ghost" })]).stderr, /ghost, which is not in the index/);
+  const { entry: oldFlow, files: flowFiles } = workflow("old-flow", "oldflow", { deprecated: "old", replaced_by: "tool" }, true);
+  assert.match(check([oldFlow, entry()], { extra: flowFiles }).stderr, /native extension tool/);
 
   const { entry: newer, files } = workflow("newer", "newer", {}, true);
   const ok = check([entry({ deprecated: "old", replaced_by: "newer" }), newer], { extra: files });

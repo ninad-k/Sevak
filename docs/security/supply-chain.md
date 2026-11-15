@@ -83,12 +83,29 @@ held by the maintainer as a repository secret and never leaves it. You do not
 need to do anything for this check; an update with a missing or wrong signature
 is rejected. It protects automatic updates, not manual downloads.
 
-### Installers are not code-signed yet
+### Publisher signatures
 
-The Windows and macOS installers are not yet signed with a Windows or Apple
-developer certificate, which is why your operating system warns you about them;
-see [Installing Sevak](../install.md). The checks above are how you establish
-trust in the meantime.
+The release pipeline supports Windows Authenticode and Apple Developer ID with
+notarization, but real publisher credentials still need provisioning. Until
+then, Windows installers remain unsigned and macOS builds use ad-hoc signing;
+see [Installing Sevak](../install.md). The checks above remain useful for
+verifying downloaded files.
+
+Configured publisher signatures are verified before publication. The release
+job reports missing configuration explicitly, and required or partial signing
+configuration fails instead of silently producing an unsigned release. See
+[Publisher signing](../publisher-signing.md) for setup and checks. Updater `.sig`
+files are a separate mechanism and do not establish OS publisher identity.
+Unsigned Windows and macOS builds are flagged with a warning annotation in the
+release run. Verification happens after the build uploads to the draft
+release; a failed check deletes the draft, and drafts are never published by
+hand ([Releasing](../releasing.md#failed-builds-and-unverified-draft-assets)).
+
+The updater private key also signs the extension advisory feed. That signing
+runs only in a job gated by the protected `extension-advisories` environment
+(required reviewers), with a read-only token, and the signature's trusted
+comment must name `extension-revocations.json`
+([Releasing](../releasing.md#extension-advisories)).
 
 ## Software bill of materials (SBOM)
 

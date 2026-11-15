@@ -1,0 +1,30 @@
+{
+  "format": 1,
+  "issued_at": 1699999990,
+  "expires_at": 1700086400,
+  "revocations": [
+    {
+      "id": "docs",
+      "versions": [
+        "1.0"
+      ],
+      "reason": "Test advisory: remove this version.",
+      "advisory_url": "https://github.com/ninad-k/Sevak/security/advisories/GHSA-test-only"
+    },
+    {
+      "id": "tool",
+      "versions": [
+        "0.2.0"
+      ],
+      "reason": "Test revoked native version."
+    },
+    {
+      "kind": "theme",
+      "id": "nord",
+      "versions": [
+        "*"
+      ],
+      "reason": "Test revoked theme."
+    }
+  ]
+}

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --config ui/vite.config.ts",
     "build": "vite build --config ui/vite.config.ts",
+    "build:test:windows": "node scripts/build-test-windows.mjs",
     "check": "svelte-check --tsconfig ui/tsconfig.json",
     "test:extensions": "node --test scripts/tests/extensions.test.mjs",
     "icons": "node scripts/generate-icons.mjs",
@@ -18,7 +19,9 @@
     "test": "vitest run --config ui/vitest.config.ts",
     "test:watch": "vitest --config ui/vitest.config.ts",
     "test:coverage": "vitest run --coverage --config ui/vitest.config.ts",
-    "test:scripts": "node --test \"scripts/*.test.mjs\""
+    "test:scripts": "node --test \"scripts/*.test.mjs\"",
+    "test:e2e": "npm --prefix e2e test",
+    "test:startup-cli": "node scripts/test-startup-cli.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.1"

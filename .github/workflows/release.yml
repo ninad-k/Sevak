@@ -6,6 +6,10 @@ name: Release
 #               (scripts/release-version.mjs) and open a draft GitHub release
 #   2. build    build the installers on Windows, macOS and Linux, signed for the
 #               updater, and attach them
+#      sign-gallery, attach-gallery-signatures  in parallel with build: sign
+#               gallery/index.json and gallery/themes.json, verify the
+#               signatures with the app's verifier and attach them as
+#               index.json.sig and themes.json.sig
 #   3. publish  add latest.json (the update manifest installed copies poll) and
 #               SHA256SUMS.txt, then publish the release, which creates the tag
 #   4. distribute  update winget, Scoop, Homebrew and the AUR (each only when
@@ -216,28 +220,225 @@ jobs:
       - name: Stamp the version
         run: node scripts/release-version.mjs set ${{ needs.plan.outputs.version }}
 
-      - uses: tauri-apps/tauri-action@v1
+      # These are publisher signatures, separate from Tauri updater signatures.
+      # Partial configuration fails; a missing configuration is reported honestly.
+      - name: Configure publisher signing
+        id: signing
+        shell: bash
+        env:
+          REQUIRE_WINDOWS_SIGNING: ${{ vars.REQUIRE_WINDOWS_SIGNING }}
+          REQUIRE_MACOS_SIGNING: ${{ vars.REQUIRE_MACOS_SIGNING }}
+          WINDOWS_SIGN_COMMAND: ${{ runner.os == 'Windows' && secrets.WINDOWS_SIGN_COMMAND || '' }}
+          WINDOWS_SIGNER_THUMBPRINT: ${{ vars.WINDOWS_SIGNER_THUMBPRINT }}
+          APPLE_CERTIFICATE: ${{ runner.os == 'macOS' && secrets.APPLE_CERTIFICATE || '' }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+          APPLE_SIGNING_IDENTITY: ${{ vars.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ runner.os == 'macOS' && secrets.APPLE_ID || '' }}
+          APPLE_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+        run: node scripts/release-signing.mjs prepare
+
+      - name: Build installers (Windows, Linux, or ad-hoc macOS)
+        if: runner.os != 'macOS' || steps.signing.outputs.enabled != 'true'
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
         env:
           GITHUB_TOKEN: ${{ github.token }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          WINDOWS_SIGNING_TOKEN: ${{ runner.os == 'Windows' && secrets.WINDOWS_SIGNING_TOKEN || '' }}
         with:
           releaseId: ${{ needs.plan.outputs.release_id }}
-          args: ${{ matrix.args }}
+          args: ${{ matrix.args }} --config "${{ steps.signing.outputs.config_path }}"
           # The publish job writes latest.json once, from every platform's
           # signatures; parallel jobs updating it here could overwrite each other.
           uploadUpdaterJson: false
 
+      # Empty APPLE_* values still trigger Tauri's import/notarization path.
+      # Keep them absent from unconfigured builds, not merely empty strings.
+      - name: Build signed and notarized macOS installers
+        if: runner.os == 'macOS' && steps.signing.outputs.enabled == 'true'
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ vars.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+        with:
+          releaseId: ${{ needs.plan.outputs.release_id }}
+          args: ${{ matrix.args }} --config "${{ steps.signing.outputs.config_path }}"
+          uploadUpdaterJson: false
+
+      - name: Verify publisher signatures before publication
+        id: verify_signing
+        shell: bash
+        env:
+          REQUIRE_WINDOWS_SIGNING: ${{ vars.REQUIRE_WINDOWS_SIGNING }}
+          REQUIRE_MACOS_SIGNING: ${{ vars.REQUIRE_MACOS_SIGNING }}
+          WINDOWS_SIGN_COMMAND: ${{ runner.os == 'Windows' && secrets.WINDOWS_SIGN_COMMAND || '' }}
+          WINDOWS_SIGNER_THUMBPRINT: ${{ vars.WINDOWS_SIGNER_THUMBPRINT }}
+          APPLE_CERTIFICATE: ${{ runner.os == 'macOS' && secrets.APPLE_CERTIFICATE || '' }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+          APPLE_SIGNING_IDENTITY: ${{ vars.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ runner.os == 'macOS' && secrets.APPLE_ID || '' }}
+          APPLE_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+        run: node scripts/release-signing.mjs verify
+
       - name: Verify Windows installer startup integration
+        id: inspect_installers
         if: runner.os == 'Windows'
         shell: bash
+        # The versions the build stamped: a stale or unstamped binary must fail.
         run: |
           node --test scripts/installer.test.mjs scripts/installer-startup.test.mjs
-          pwsh -NoProfile -File scripts/test-windows-installer.ps1
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          msi_version=$(node -p "const c = require('./src-tauri/tauri.conf.json'); c.bundle?.windows?.wix?.version ?? c.version")
+          pwsh -NoProfile -File scripts/test-windows-installer.ps1 -NsisPath 'target/release/bundle/nsis/*.exe' -BinaryPath target/release/sevak.exe -ExpectedVersion "$version" -ExpectedMsiVersion "$msi_version" -ReportPath target/installer-validation/artifacts.json
+
+      - name: Install, repair and uninstall MSI on disposable Windows VM
+        # Also after an artifact-inspection failure, so both reports exist;
+        # not when the build itself failed (inspection then never ran).
+        if: ${{ !cancelled() && runner.os == 'Windows' && (success() || steps.inspect_installers.outcome == 'failure') }}
+        shell: bash
+        env:
+          SEVAK_DISPOSABLE_VM: "1"
+        run: |
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          pwsh -NoProfile -File scripts/test-windows-installer-vm.ps1 -Format Msi -InstallerPath 'target/release/bundle/msi/*.msi' -ExpectedVersion "$version" -DisposableVm -Confirmation I_ACKNOWLEDGE_THIS_IS_A_DISPOSABLE_VM -ReportPath target/installer-validation/msi-vm.json
+
+      # tauri-action has already uploaded this platform's files to the draft.
+      # A draft whose publisher signatures failed must not survive to be
+      # published by hand: delete it (the next run creates a fresh one; plan
+      # also deletes stale drafts). Other platforms' uploads go with it.
+      - name: Delete the draft after a publisher-signature failure
+        if: ${{ failure() && steps.verify_signing.outcome == 'failure' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.plan.outputs.release_id }}
+        run: |
+          echo "::error::Publisher-signature verification failed; deleting draft release $RELEASE_ID so its unverified assets cannot be published."
+          gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" ||
+            echo "::warning::Could not delete draft $RELEASE_ID (another job may have). Do not publish it by hand."
+
+      - name: Save Windows installer validation reports
+        if: ${{ !cancelled() && runner.os == 'Windows' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-windows-installer-validation
+          if-no-files-found: warn
+          retention-days: 30
+          path: target/installer-validation/
+
+  # The gallery lists a build of this release reads at its tag
+  # (gallery/index.json and gallery/themes.json on raw.githubusercontent.com)
+  # are signed with the updater key, the same signer flow as the extension
+  # advisory feed, and the signatures are attached to the release as
+  # index.json.sig and themes.json.sig. Sevak checks them before it parses a
+  # list (docs/security/gallery-trust.md, "Signed indexes"). As in
+  # extension-advisories.yml, only `sign-gallery` sees the key (read-only
+  # token, no caches, no install scripts); `attach-gallery-signatures` holds
+  # the write token but never the key, and verifies with the app's own
+  # verifier before uploading. Publish waits for both.
+  sign-gallery:
+    name: Sign the gallery lists
+    needs: plan
+    if: needs.plan.outputs.version != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      TAG: v${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # No dependency cache here: a poisoned cache must not run next to the key.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts
+      - name: Sign the exact committed bytes
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          test -n "$TAURI_SIGNING_PRIVATE_KEY" || { echo "::error::Missing updater signing key"; exit 1; }
+          out=target/gallery-signatures
+          mkdir -p "$out"
+          for file in index.json themes.json; do
+            # Staged as <tag>-<file>: the signer writes that name into the signed
+            # trusted comment, which binds the signature to this release and list.
+            cp "gallery/$file" "$out/$TAG-$file"
+            npx tauri signer sign "$out/$TAG-$file"
+            mv "$out/$TAG-$file.sig" "$out/$file.sig"
+            rm "$out/$TAG-$file"
+          done
+      - name: Check each signature names its release and list
+        run: |
+          for file in index.json themes.json; do
+            trusted=$(base64 -d "target/gallery-signatures/$file.sig" | grep '^trusted comment: ' || true)
+            case "$trusted" in
+              *"file:$TAG-$file"*) echo "$file: ${trusted#trusted comment: }" ;;
+              *)
+                echo "::error::The $file signature's trusted comment does not name $TAG-$file: '$trusted'"
+                exit 1
+                ;;
+            esac
+          done
+      - uses: actions/upload-artifact@v7
+        with:
+          name: gallery-signatures
+          if-no-files-found: error
+          retention-days: 1
+          path: |
+            target/gallery-signatures/index.json.sig
+            target/gallery-signatures/themes.json.sig
+
+  attach-gallery-signatures:
+    name: Verify and attach the gallery signatures
+    needs: [plan, sign-gallery]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # upload release assets
+    env:
+      TAG: v${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-rust
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: gallery-signatures
+          path: target/gallery-signatures
+      - name: Verify with the app's trusted key, policy and parsers
+        run: |
+          # The committed files at this commit are the bytes the tag will serve.
+          for file in index.json themes.json; do
+            cargo run --locked -p sevak-plugins --example verify_gallery_index -- "$TAG" "gallery/$file" "target/gallery-signatures/$file.sig"
+          done
+      - name: Attach the signatures to the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.plan.outputs.release_id }}
+        run: |
+          for file in index.json themes.json; do
+            gh api -X POST -H "Content-Type: application/octet-stream" \
+              --input "target/gallery-signatures/$file.sig" \
+              "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=$file.sig" \
+              --jq .name
+          done
 
   publish:
     name: Publish release
-    needs: [plan, build]
+    needs: [plan, build, attach-gallery-signatures]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -390,7 +591,7 @@ jobs:
 
       - name: AUR (sevak-bin)
         if: env.AUR_SSH_PRIVATE_KEY != ''
-        uses: KSXGitHub/github-actions-deploy-aur@v4.2.0
+        uses: KSXGitHub/github-actions-deploy-aur@084b0d9b15415bf9cdb65d44dad1efe37a354050 # v4.2.0
         with:
           pkgname: sevak-bin
           pkgbuild: dist/aur/PKGBUILD
@@ -401,7 +602,8 @@ jobs:
 
       - name: winget (NinadKulkarni.Sevak)
         if: env.WINGET_TOKEN != ''
-        uses: vedantmgoyal9/winget-releaser@v2
+        # The project publishes only a v2 tag (no vX.Y.Z); this is its commit.
+        uses: vedantmgoyal9/winget-releaser@b7370d4d152efdce803a26cc6ca9eee58cb2ad54 # v2
         with:
           identifier: NinadKulkarni.Sevak
           version: ${{ needs.plan.outputs.version }}

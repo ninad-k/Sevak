@@ -9,6 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use serde::Serialize;
+use sevak_plugins::extensions::revocations::Subject;
 use sevak_plugins::keywords::{workflow_key, KeywordOwners};
 use sevak_plugins::workflow::gallery::{self, Dirs, Entry, Kind};
 use sevak_plugins::workflow::templates;
@@ -500,6 +501,8 @@ static INDEX: Mutex<Option<gallery::Index>> = Mutex::new(None);
 
 #[derive(Serialize)]
 pub struct GalleryDto {
+    pub advisories: sevak_plugins::extensions::revocations::Status,
+    pub load_error: Option<String>,
     /// Where the index was fetched from (shown so the request is no secret).
     pub source: String,
     /// Set when the index is not from this build's own release, and why.
@@ -513,6 +516,15 @@ pub struct GalleryDto {
 
 #[derive(Serialize)]
 pub struct GalleryEntry {
+    pub revocation: Option<sevak_plugins::extensions::revocations::Notice>,
+    /// The version Sevak recorded installing; `None` for a copy without a
+    /// receipt (installed before receipts existed, or by hand).
+    pub installed_version: Option<String>,
+    /// For a recorded copy, a notice for its version. For a copy without a
+    /// receipt, whose version is unknown, a notice for any version of it.
+    pub installed_revocation: Option<sevak_plugins::extensions::revocations::Notice>,
+    /// Where the copy on disk is, when there is one.
+    pub installed_path: Option<String>,
     #[serde(flatten)]
     pub entry: Entry,
     pub installed: bool,
@@ -524,7 +536,11 @@ fn gallery_dto(app: &AppHandle, index: &gallery::Index) -> GalleryDto {
         workflows: state.search.workflows.workflows_dir(),
         plugins: state.search.scripts.plugins_dir(),
     };
+    let store = state.search.extensions.store();
+    let installed = store.installed();
     GalleryDto {
+        advisories: store.advisory_status(),
+        load_error: None,
         source: index.source.clone(),
         note: index.note.clone(),
         name: index.name.clone(),
@@ -533,9 +549,27 @@ fn gallery_dto(app: &AppHandle, index: &gallery::Index) -> GalleryDto {
             .entries
             .iter()
             .filter(|entry| entry.kind != Kind::Native)
-            .map(|entry| GalleryEntry {
-                installed: dirs.is_installed(entry),
-                entry: entry.clone(),
+            .map(|entry| {
+                let recorded = installed.iter().find(|item| item.id == entry.id);
+                let on_disk = dirs.is_installed(entry);
+                let root = match entry.kind {
+                    Kind::Workflow => dirs.workflows,
+                    _ => dirs.plugins,
+                };
+                GalleryEntry {
+                    installed_version: recorded.map(|item| item.version.clone()),
+                    installed_revocation: match recorded {
+                        Some(item) => item.revocation.clone(),
+                        // Unknown version: any notice for this id may apply.
+                        None if on_disk => store.any_revocation(Subject::Package, &entry.id),
+                        None => None,
+                    },
+                    installed_path: on_disk
+                        .then(|| root.join(entry.folder_name()).display().to_string()),
+                    revocation: store.revocation(Subject::Package, &entry.id, &entry.version),
+                    installed: on_disk,
+                    entry: entry.clone(),
+                }
             })
             .collect(),
         skipped: index.skipped.len(),
@@ -547,7 +581,26 @@ fn gallery_dto(app: &AppHandle, index: &gallery::Index) -> GalleryDto {
 pub async fn gallery_load(app: AppHandle) -> Result<GalleryDto, String> {
     blocking(move || {
         tracing::info!("gallery: fetching the index (the user asked)");
-        let index = gallery::fetch_index()?;
+        app.state::<AppState>()
+            .search
+            .extensions
+            .store()
+            .refresh_advisories();
+        let index = match gallery::fetch_index() {
+            Ok(index) => index,
+            Err(error) => {
+                // Keep the previous pinned list visible, but always recompute
+                // notices after the explicit advisory check. A failed catalog
+                // download must not hide a newly authenticated revocation.
+                let saved = INDEX.lock().unwrap_or_else(|p| p.into_inner());
+                if let Some(index) = saved.as_ref() {
+                    let mut dto = gallery_dto(&app, index);
+                    dto.load_error = Some(format!("{error}. Showing the previously loaded list."));
+                    return Ok(dto);
+                }
+                return Err(error);
+            }
+        };
         for skipped in &index.skipped {
             tracing::warn!("gallery: skipped an entry: {skipped}");
         }
@@ -578,25 +631,29 @@ pub async fn gallery_install(app: AppHandle, id: String) -> Result<Installed, St
             .and_then(|index| index.entries.iter().find(|entry| entry.id == id).cloned())
             .ok_or_else(|| "Load the gallery first.".to_owned())?;
         tracing::info!(entry = entry.id, "gallery: installing (the user asked)");
+        app.state::<AppState>()
+            .search
+            .extensions
+            .store()
+            .check_revocation(Subject::Package, &entry.id, &entry.version)?;
         let installed = {
             let state = app.state::<AppState>();
-            let dirs = Dirs {
-                workflows: state.search.workflows.workflows_dir(),
-                plugins: state.search.scripts.plugins_dir(),
-            };
-            gallery::install(&entry, &dirs)?
+            state
+                .search
+                .extensions
+                .store()
+                .install_gallery_entry(&entry)?
         };
         tracing::info!(
             entry = entry.id,
             folder = installed.folder,
-            files = installed.files,
             "gallery: installed"
         );
         // Reload: the new folder is scanned, and its Allow dialog follows.
         app::reload(&app);
         Ok(Installed {
             id: entry.id,
-            kind: installed.kind,
+            kind: entry.kind,
             folder: installed.folder,
         })
     })

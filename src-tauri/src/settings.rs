@@ -86,6 +86,8 @@ pub struct SettingsDto {
 
 #[tauri::command]
 pub async fn get_settings(app: AppHandle) -> SettingsDto {
+    let startup =
+        autostart::status_off_thread(app.state::<AppState>().paths.config_file.clone()).await;
     let state = app.state::<AppState>();
     let config = state.config();
     let mut catalog = PluginRegistry::builtin().catalog(&config, state.search.platform.clone());
@@ -99,7 +101,7 @@ pub async fn get_settings(app: AppHandle) -> SettingsDto {
         is_gnome: session::is_gnome(),
         config_path: state.paths.config_file.display().to_string(),
         log_dir: state.paths.log_dir.display().to_string(),
-        startup: autostart::status(&state.paths.config_file),
+        startup,
         platform: if cfg!(windows) {
             "windows"
         } else if cfg!(target_os = "macos") {
@@ -419,10 +421,16 @@ fn save(app: &AppHandle, mut config: Config) -> Result<(), String> {
     let state = app.state::<AppState>();
     normalize_hotkeys(&mut config);
     validate(&config, state.display.hotkey_strategy())?;
-    let config = config.normalized();
-    sevak_platform::startup::save_settings(
+    let mut config = config.normalized();
+    let (previous, wanted) = sevak_platform::startup::settings_preference(
         state.config().general.launch_at_login,
         config.general.launch_at_login,
+        sevak_platform::startup::saved_preference(&state.paths.config_file).ok(),
+    );
+    config.general.launch_at_login = wanted;
+    sevak_platform::startup::save_settings(
+        previous,
+        wanted,
         || autostart::backend(&state.paths.config_file),
         || {
             config
@@ -433,7 +441,7 @@ fn save(app: &AppHandle, mut config: Config) -> Result<(), String> {
     .map_err(|error| format!("Settings were not saved: {error}"))?;
     tracing::info!(path = %state.paths.config_file.display(), "settings saved");
     // Re-reads the file just written, so what runs is exactly what is on disk.
-    app::reload(app);
+    app::reload_after_settings(app);
     Ok(())
 }
 
