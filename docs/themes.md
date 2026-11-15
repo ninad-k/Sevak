@@ -108,7 +108,7 @@ input_background = "rgba(236, 239, 244, 0.06)"
 input_border = "rgba(236, 239, 244, 0.24)"
 switch_off = "rgba(236, 239, 244, 0.28)"
 warn = "#ebcb8b"
-error = "#e5848d"
+error = "#ea8e96"
 ok = "#a3be8c"
 ```
 
@@ -222,8 +222,9 @@ Set by the light and dark themes (`ui/src/app.css`):
 | `--fg` | Main text color |
 | `--muted` | Secondary text: subtitles, hints, placeholder |
 | `--border` | Hairlines between sections and form fields |
-| `--accent` | Caret, buttons, switches, slider thumbs, focus rings |
+| `--accent` | Caret, buttons, switches, slider thumbs |
 | `--accent-strong` | Hover and focus states of accented elements |
+| `--focus-ring` | Keyboard focus outline; follows `--accent-strong` (keep it at 3:1 or more against `--bg`) |
 | `--on-accent` | Text and icons on an accent background |
 | `--selected` | Background of the selected result row |
 | `--tile` | Background behind result icons |
