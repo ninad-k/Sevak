@@ -109,6 +109,7 @@ nav:
   - User guide:
       - Searching and launching: usage.md
       - Keyboard shortcuts: keyboard.md
+      - Accessibility: accessibility.md
       - Settings window: settings.md
       - Themes: themes.md
       - Backup and restore: backup-and-restore.md
