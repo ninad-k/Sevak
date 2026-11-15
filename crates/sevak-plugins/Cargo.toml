@@ -55,9 +55,6 @@ getrandom = "0.4"
 rusqlite = { version = "0.41", features = ["bundled"] }
 # Local date and time for snippet placeholders (no timezone database needed).
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
-# IANA time zones for the calendar plugin's TZID times (MIT or Apache-2.0; the
-# zone data is compiled in, so nothing is read from the system or the network).
-chrono-tz = { version = "0.10", default-features = false, features = ["std"] }
 # Safari's `Bookmarks.plist` for the bookmarks plugin (a binary property list;
 # parsed on every OS so the reader is tested everywhere, used on macOS). Already
 # in the build through the platform crate and the Tauri stack.
@@ -82,6 +79,11 @@ regex = "1"
 sha2.workspace = true
 # The gallery downloads are held to an allow-list of parsed addresses.
 url.workspace = true
+# The world clock (`time`) and the calendar's TZID times: the IANA time-zone
+# database compiled into the binary (no data files at run time), and the name of
+# this computer's own zone (already in the tree through chrono's `clock` feature).
+chrono-tz = { version = "0.10", default-features = false, features = ["std"] }
+iana-time-zone = "0.1"
 # Authenticated extension advisories use the updater's existing minisign format.
 minisign-verify = "0.2.5"
 base64 = "0.22"

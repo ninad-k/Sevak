@@ -63,7 +63,9 @@ export type KeywordField =
   | "ai.keyword"
   | "ssh.keyword"
   | "projects.keyword"
-  | "calendar.keyword";
+  | "calendar.keyword"
+  | "clock.keyword"
+  | "passwords.keyword";
 
 export interface ClipboardErrors {
   maxItems?: string;
@@ -145,6 +147,8 @@ const KEYWORDS: KeywordSpec[] = [
   { field: "ssh.keyword", owner: "SSH hosts", required: true, section: "integrations", read: (c) => c.ssh.keyword },
   { field: "projects.keyword", owner: "recent projects", required: true, section: "integrations", read: (c) => c.projects.keyword },
   { field: "calendar.keyword", owner: "the calendar", required: true, section: "integrations", read: (c) => c.calendar.keyword },
+  { field: "clock.keyword", owner: "the world clock", required: true, section: "integrations", read: (c) => c.clock.keyword },
+  { field: "passwords.keyword", owner: "the password generator", required: true, section: "integrations", read: (c) => c.passwords.keyword },
 ];
 
 /** Every keyword of a built-in search (lowercased) and what answers it. */

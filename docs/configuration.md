@@ -33,7 +33,7 @@ A minimal config works: missing fields use their defaults, so a nearly empty fil
 
 ### Keywords
 
-Every keyword is one word, and no two searches may share one: the configurable keywords (`[files]` `keyword` / `index_keyword` / `content_keyword`, `[bookmarks]`, `[tasks]`, `[media]`, `[window_management]` `keyword` / `switcher_keyword`, `[contacts]`, `[onepassword]`, `[dictionary]` `define_keyword` / `spell_keyword`, `[ai]`, `[ssh]`, `[projects]`, `[calendar]`), the fixed ones (`>`, `cb`, `s`, `emoji`, `:`, `@`, `uuid`) and your web search keywords. Settings refuses to save a clash; in a hand-edited file a clashing keyword is ignored and logged. An empty keyword turns that keyword off.
+Every keyword is one word, and no two searches may share one: the configurable keywords (`[files]` `keyword` / `index_keyword` / `content_keyword`, `[bookmarks]`, `[tasks]`, `[media]`, `[window_management]` `keyword` / `switcher_keyword`, `[contacts]`, `[onepassword]`, `[dictionary]` `define_keyword` / `spell_keyword`, `[ai]`, `[ssh]`, `[projects]`, `[calendar]`, `[clock]`, `[passwords]`), the fixed ones (`>`, `cb`, `s`, `emoji`, `:`, `@`, `uuid`) and your web search keywords. Settings refuses to save a clash; in a hand-edited file a clashing keyword is ignored and logged. An empty keyword turns that keyword off.
 
 Keywords of [workflows](workflows.md) and [script plugins](features/script-plugins.md) are checked the same way but only produce a warning (in Settings and in the log), because both plugins then answer the keyword and show their results.
 
@@ -171,7 +171,7 @@ Which plugins are active. Each built-in plugin can be disabled.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `disabled` | array of strings | `[]` | Plugin ids to turn off. Available ids: `"apps"`, `"calculator"`, `"web"` (all engines) or `"web:<keyword>"` (one engine), `"files"` (its instances `"files:names"` and `"files:content"` are the `ff` and `in` searches), `"bookmarks"`, `"system"`, `"tasks"` (automation tasks), `"media"` (media controls), `"windows"` (window layouts; `"windows:switch"` is the window switcher), `"shell"`, `"clipboard"`, `"snippets"`, `"emoji"` (the emoji picker; `"emoji:word"` and `"emoji:colon"` are its two keywords), `"selection"` (Universal Actions), `"contacts"`, `"1password"`, `"dict"` (`define` and `spell`), `"uuid"`, `"backup"` (the `backup settings` and `restore settings` [launcher commands](backup-and-restore.md#from-the-command-line-and-the-launcher)), `"script"` or `"script:<name>"` (script plugins) and `"workflow"` or `"workflow:<folder>"` ([workflows](workflows.md); each also has its own switch in **Settings → Workflows**). Example: `disabled = ["files", "web:yt"]` turns off file search and YouTube search. Unknown ids are ignored. |
+| `disabled` | array of strings | `[]` | Plugin ids to turn off. Available ids: `"apps"`, `"calculator"`, `"web"` (all engines) or `"web:<keyword>"` (one engine), `"files"` (its instances `"files:names"` and `"files:content"` are the `ff` and `in` searches), `"bookmarks"`, `"system"`, `"tasks"` (automation tasks), `"media"` (media controls), `"windows"` (window layouts; `"windows:switch"` is the window switcher), `"shell"`, `"clipboard"`, `"snippets"`, `"emoji"` (the emoji picker; `"emoji:word"` and `"emoji:colon"` are its two keywords), `"selection"` (Universal Actions), `"contacts"`, `"1password"`, `"dict"` (`define` and `spell`), `"uuid"`, `"clock"` (the world clock), `"pwgen"` (the password generator), `"backup"` (the `backup settings` and `restore settings` [launcher commands](backup-and-restore.md#from-the-command-line-and-the-launcher)), `"script"` or `"script:<name>"` (script plugins) and `"workflow"` or `"workflow:<folder>"` ([workflows](workflows.md); each also has its own switch in **Settings → Workflows**). Example: `disabled = ["files", "web:yt"]` turns off file search and YouTube search. Unknown ids are ignored. |
 
 ```toml
 [plugins]
@@ -557,6 +557,40 @@ editors = []
 keyword = "cal"
 files = []
 days = 7
+```
+
+### [clock]
+
+The [world clock and time-zone converter](features/clock.md) (`time`), offline. On by default; turn it off with `"clock"` in `[plugins] disabled`. Set it in **Settings → Integrations**.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `keyword` | string | `"time"` | Keyword for the clock. Cannot be empty (an empty value means the default). |
+| `cities` | array of strings | `["London", "New York", "Tokyo"]` | What a bare `time` lists after the time here: city names (`"San Francisco"`), abbreviations (`"IST"`) or IANA zone names (`"Europe/Berlin"`). An entry that names no known place is shown as a warning row. |
+
+```toml
+[clock]
+keyword = "time"
+cities = ["London", "New York", "Tokyo"]
+```
+
+### [passwords]
+
+The [password generator](features/passwords.md) (`pass`), offline. On by default; turn it off with `"pwgen"` in `[plugins] disabled`. Set it in **Settings → Integrations**. Generated passwords are never stored or logged.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `keyword` | string | `"pass"` | Keyword for the generator. Cannot be empty. |
+| `length` | integer | `20` | Characters in a password made by a bare `pass` (4-128). `pass 24` asks for another length once. |
+| `words` | integer | `6` | Words in a passphrase made by `pass words` (2-20). |
+| `symbols` | boolean | `true` | Include symbols (`!#$%&*+-.:=?@^_~`) in passwords. `pass nosymbols` and `pass symbols` override it once. |
+
+```toml
+[passwords]
+keyword = "pass"
+length = 20
+words = 6
+symbols = true
 ```
 
 ## [[snippet]]
@@ -1046,6 +1080,30 @@ expand_in_terminals = false
 # password would expand there. Chrome, Edge, Firefox, Brave, Vivaldi, Opera,
 # Safari, Arc, Zen, LibreWolf and Chromium count as browsers.
 expand_in_browsers = false
+
+[clock]
+# World clock and time zones, offline (the time-zone rules are built in):
+# "time" lists the cities below, "time tokyo" shows one city, and
+# "time 3pm pst in ist" or "time 14:30 berlin to new york" converts a time.
+# Enter copies the answer. Turn it off with "clock" in [plugins] disabled.
+keyword = "time"
+# Cities a bare "time" lists: city names ("Tokyo", "San Francisco"), time-zone
+# abbreviations ("IST") or IANA zone names ("Europe/Berlin").
+cities = ["London", "New York", "Tokyo"]
+
+[passwords]
+# Password generator, offline: "pass" makes a random password, "pass 24" one of
+# 24 characters, "pass 6 words" a passphrase and "pass pin" a number. Enter
+# copies it, marked so that clipboard histories (Sevak's, Windows Win+V and
+# others that honour the marker) leave it out. Generated passwords are never
+# stored or logged. Turn it off with "pwgen" in [plugins] disabled.
+keyword = "pass"
+# Characters in a password (4-128) and words in a passphrase (2-20).
+length = 20
+words = 6
+# Include symbols such as !#%+ in passwords ("pass nosymbols" leaves them out
+# once, "pass symbols" adds them once).
+symbols = true
 
 # Web search engines: type "<keyword> <terms>". "{query}" is replaced by the
 # URL-encoded terms. Defining any [[web_search]] entry replaces this list.

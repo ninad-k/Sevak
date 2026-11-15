@@ -112,6 +112,20 @@ dealings in these Data Files or Software without prior written
 authorization of the copyright holder.
 ```
 
+### IANA time zone database (the world clock)
+
+The world clock (`time`) uses the IANA Time Zone Database (tzdata 2025b), compiled
+into the program by the `chrono-tz` crate (MIT or Apache-2.0, listed above). The
+database itself is in the public domain: "This database is in the public domain."
+(the tzdata `LICENSE` file). The few extra city and abbreviation names in
+`crates/sevak-plugins/src/clock.rs` were written for Sevak.
+
+### Passphrase word list (the password generator)
+
+`crates/sevak-plugins/data/passphrase-words.txt`, the words of `pass 6 words`, was
+written for Sevak and is covered by Sevak's own licence (Apache-2.0). No outside
+word list is used.
+
 ### Colour palettes (the built-in themes)
 
 Sevak's own themes (Sevak Light, Sevak Dark, High Contrast) are original. The

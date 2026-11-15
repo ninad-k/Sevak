@@ -2,6 +2,19 @@ import type { Config } from "../settings-ipc";
 
 const trimmed = (list: string[]) => list.map((entry) => entry.trim()).filter((entry) => entry !== "");
 
+/** Ranges of `[passwords]` (as Rust's `sevak_core::config` has them). */
+export const MIN_PASSWORD_LENGTH = 4;
+export const MAX_PASSWORD_LENGTH = 128;
+export const MIN_PASSPHRASE_WORDS = 2;
+export const MAX_PASSPHRASE_WORDS = 20;
+
+/** A whole number in `min..=max`; `fallback` when the field was left empty or is not a number. */
+export function clampWhole(value: unknown, min: number, max: number, fallback: number): number {
+  const number = typeof value === "number" ? value : Number.NaN;
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(number)));
+}
+
 /**
  * Trims the text fields of the plugin pages before a save, the way Rust's
  * `Config::normalized` would on the next load (so the form shows what is written).
@@ -37,4 +50,9 @@ export function tidyPluginSettings(config: Config): void {
   config.projects.editors = trimmed(config.projects.editors);
   config.calendar.keyword = config.calendar.keyword.trim();
   config.calendar.files = trimmed(config.calendar.files);
+  config.clock.keyword = config.clock.keyword.trim();
+  config.clock.cities = trimmed(config.clock.cities);
+  config.passwords.keyword = config.passwords.keyword.trim();
+  config.passwords.length = clampWhole(config.passwords.length, MIN_PASSWORD_LENGTH, MAX_PASSWORD_LENGTH, 20);
+  config.passwords.words = clampWhole(config.passwords.words, MIN_PASSPHRASE_WORDS, MAX_PASSPHRASE_WORDS, 6);
 }

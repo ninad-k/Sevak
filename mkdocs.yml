@@ -140,6 +140,8 @@ nav:
       - SSH hosts: features/ssh.md
       - Recent projects: features/projects.md
       - Calendar: features/calendar.md
+      - World clock and time zones: features/clock.md
+      - Password generator: features/passwords.md
   - Reference:
       - Configuration file: configuration.md
       - Command line: cli.md

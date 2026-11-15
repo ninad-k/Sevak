@@ -4038,6 +4038,7 @@ dependencies = [
  "criterion",
  "flate2",
  "getrandom 0.4.3",
+ "iana-time-zone",
  "minisign-verify 0.2.5",
  "miniz_oxide 0.9.1",
  "plist",

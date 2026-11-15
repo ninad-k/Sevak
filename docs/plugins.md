@@ -225,6 +225,8 @@ process, so plugins must never panic.
 | `dict` | `dict`, `dict:spell` | `define` and `spell`, offline |
 | `ai` | `ai` | `ai <question>`, the opt-in AI assistant ([below](#the-ai-assistant)) |
 | `uuid` | `uuid` | example plugin, keyword-only |
+| `clock` | `clock` | `time`, world clock and time-zone converter (`chrono-tz`), offline |
+| `pwgen` | `pwgen` | `pass`, password generator; copies through `set_clipboard_text_private`, `tracks_usage` false |
 
 - `PluginRegistry::builtin()` is the stock set; `register(descriptor)` adds (or
   replaces, by id) a family. This is how a compiled-in third-party plugin joins.

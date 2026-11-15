@@ -108,6 +108,9 @@
   {:else if name === "calendar"}
     <rect x="3.5" y="5" width="17" height="15.5" rx="2.4" />
     <path d="M3.5 10h17M8 3v4M16 3v4" />
+  {:else if name === "clock"}
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3.5 2" />
   {:else}
     <path d="M9 3v4M15 3v4" />
     <path d="M6 7h12v4.5a6 6 0 0 1-12 0Z" />

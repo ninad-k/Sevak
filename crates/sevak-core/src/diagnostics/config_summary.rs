@@ -158,6 +158,16 @@ const GROUPS: &[(&str, &[Field])] = &[
             ("calendar.days", Show::Value),
         ],
     ),
+    // How many cities, not which (they can say where the user's people are).
+    (
+        "World clock and password generator",
+        &[
+            ("clock.cities", Show::Count),
+            ("passwords.length", Show::Value),
+            ("passwords.words", Show::Value),
+            ("passwords.symbols", Show::Value),
+        ],
+    ),
 ];
 
 /// Top-level sections reported by custom code or deliberately left out; every
@@ -246,6 +256,8 @@ const KEYWORD_PATHS: &[&str] = &[
     "ssh.keyword",
     "projects.keyword",
     "calendar.keyword",
+    "clock.keyword",
+    "passwords.keyword",
 ];
 
 /// The configurable keywords of `config`, as `(setting, keyword)`; a search

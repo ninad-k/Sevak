@@ -28,6 +28,8 @@
 //! | `ssh`            | [`SshPlugin`] (hosts in ~/.ssh/config)  | `ssh`   | no     |
 //! | `projects`       | [`ProjectsPlugin`] (recent editor projects) | `code` | no  |
 //! | `calendar`       | [`CalendarPlugin`] (local .ics files)   | `cal`   | no     |
+//! | `clock`          | [`ClockPlugin`] (world clock)           | `time`  | no     |
+//! | `pwgen`          | [`PasswordPlugin`] (password generator) | `pass`  | no     |
 //!
 //! Script plugins (`script:<name>`, from `<config dir>/plugins/`) are loaded by
 //! [`ScriptPluginHost`]; see [`script`].
@@ -48,6 +50,7 @@ pub mod bookmarks;
 pub mod calculator;
 pub mod clipboard_history;
 mod clipboard_store;
+pub mod clock;
 pub mod contacts;
 pub mod currency;
 pub mod dictionary;
@@ -64,6 +67,7 @@ pub mod net;
 pub mod onepassword;
 pub mod os_files;
 pub mod path_browse;
+pub mod pwgen;
 pub mod registry;
 pub mod script;
 pub mod selection;
@@ -92,6 +96,7 @@ pub use bookmarks::BookmarksPlugin;
 pub use calculator::CalculatorPlugin;
 pub use calendar::CalendarPlugin;
 pub use clipboard_history::ClipboardPlugin;
+pub use clock::ClockPlugin;
 pub use contacts::ContactsPlugin;
 pub use dictionary::DictionaryPlugin;
 pub use emoji::EmojiPlugin;
@@ -102,6 +107,7 @@ pub use media::MediaPlugin;
 pub use onepassword::OnePasswordPlugin;
 pub use os_files::{files_family, OsFilesPlugin};
 pub use projects::ProjectsPlugin;
+pub use pwgen::PasswordPlugin;
 pub use registry::{PluginDescriptor, PluginFactory, PluginInfo, PluginRegistry};
 pub use script::{ScriptPlugin, ScriptPluginHost};
 pub use selection::SelectionPlugin;
@@ -118,7 +124,7 @@ pub use workflow::WorkflowHost;
 /// `web:<keyword>` per `[[web_search]]` engine, `files`, `bookmarks`, `system`,
 /// `tasks`, `media`, `shell`, `clipboard`, `snippets`, `emoji`, `selection`,
 /// `contacts`, `1password`, `dict`, `uuid`, `ai`, `ssh`, `projects`,
-/// `calendar`).
+/// `calendar`, `clock`, `pwgen`).
 ///
 /// Shorthand for `PluginRegistry::builtin().instantiate(config, platform)`.
 ///
@@ -177,7 +183,9 @@ mod tests {
                 "ai",
                 "ssh",
                 "projects",
-                "calendar"
+                "calendar",
+                "clock",
+                "pwgen"
             ]
         );
     }
@@ -213,7 +221,9 @@ mod tests {
                 "ai",
                 "ssh",
                 "projects",
-                "calendar"
+                "calendar",
+                "clock",
+                "pwgen"
             ]
         );
     }

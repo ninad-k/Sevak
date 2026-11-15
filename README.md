@@ -107,6 +107,8 @@ And more once you know the keys: preview a result, pick emoji from a grid, open 
 | Connect to an SSH host | `ssh web` | Opens a terminal running `ssh web`, from the hosts in `~/.ssh/config` ([SSH hosts](docs/features/ssh.md)) |
 | Reopen a recent project | `code sevak` | Opens it in VS Code, Cursor, VSCodium or the JetBrains IDE you used ([recent projects](docs/features/projects.md)) |
 | See your agenda | `cal`, `cal tomorrow`, `cal fri` | Lists events from local `.ics` files, offline; Enter copies the details ([calendar](docs/features/calendar.md)) |
+| See the time anywhere, convert time zones | `time`, `time tokyo`, `time 3pm pst in ist` | Copies the [time or conversion](docs/features/clock.md), offline, daylight saving time included |
+| Generate a password or passphrase | `pass`, `pass 24`, `pass 6 words` | Copies it, kept out of clipboard history; shows its strength in bits ([details](docs/features/passwords.md)) |
 
 App results depend on what is installed. `f` covers the folders you choose and
 matches **names**; `ff` and `in` ask your OS file index for the whole disk and
@@ -296,6 +298,9 @@ These features stay on your computer and make no network request:
   `~/.ssh/config` (never a private key), the editors' own recent lists, and
   the `.ics` files you list. They stay in memory, nothing is sent anywhere,
   and a symbolic link out of the expected folder is not followed.
+- The world clock (`time`) and the password generator (`pass`) are offline.
+  Generated passwords are never stored, logged or kept in the search history,
+  and are copied marked as secret so clipboard histories leave them out.
 - The optional AI assistant (off by default, `[ai] enabled`) sends a question
   only when you press Enter on it; see the list below. Its questions and answers
   stay in memory and out of the logs, history and diagnostics, and API keys are
