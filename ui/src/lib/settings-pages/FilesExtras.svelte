@@ -6,6 +6,7 @@
   import KeywordRow from "./KeywordRow.svelte";
   import Row from "./Row.svelte";
   import { BROWSER_KEYS } from "./keys";
+  import { t, tHtml } from "../i18n.svelte";
   import "./pages.css";
 
   /** The sections of the Files page that are not about the file index: the file buffer and bookmarks. */
@@ -21,50 +22,35 @@
 </script>
 
 <div class="sp-extras">
-  <h2 class="sp-h2">File buffer</h2>
-  <p class="sp-sub">
-    Collect several files from the results with Alt+Down, then move, copy, zip or trash them
-    together.
-  </p>
+  <h2 class="sp-h2">{t("pages.files.bufferTitle")}</h2>
+  <p class="sp-sub">{t("pages.files.bufferSub")}</p>
   <div class="sp-group">
-    <Row
-      label="Keep the buffer when Sevak hides"
-      hint="Off empties the buffer every time the search bar closes."
-    >
+    <Row label={t("pages.files.keepBuffer")} hint={t("pages.files.keepBufferHint")}>
       <Toggle
         bind:checked={config.file_buffer.keep_between_shows}
-        label="Keep the file buffer when Sevak hides"
+        label={t("pages.files.keepBufferToggle")}
       />
     </Row>
   </div>
 
-  <h2 class="sp-h2">Bookmarks</h2>
-  <p class="sp-sub">
-    Search your browsers’ bookmarks. They are read from disk when you search; nothing is sent
-    anywhere.
-  </p>
+  <h2 class="sp-h2">{t("pages.files.bookmarksTitle")}</h2>
+  <p class="sp-sub">{t("pages.files.bookmarksSub")}</p>
   <div class="sp-group">
     <KeywordRow
       id="bookmarks-keyword"
       bind:value={config.bookmarks.keyword}
       error={problems.keywords["bookmarks.keyword"]}
-      hint="Type “keyword term” to search only bookmarks. Empty removes the keyword."
+      hint={t("pages.files.bookmarksKeywordHint")}
     />
-    <Row
-      label="Show in ordinary searches"
-      hint="Also list matching bookmarks for plain searches."
-    >
-      <Toggle bind:checked={config.bookmarks.global} label="Show bookmarks in ordinary searches" />
+    <Row label={t("pages.common.showInOrdinary")} hint={t("pages.files.bookmarksGlobalHint")}>
+      <Toggle bind:checked={config.bookmarks.global} label={t("pages.files.bookmarksGlobalToggle")} />
     </Row>
     <div class="sp-field">
-      <span class="sp-name">Browsers</span>
-      <span class="sp-hint">
-        Tick the browsers to read, with all their profiles. None ticked reads every browser Sevak
-        finds. Safari exists on macOS only, and Sevak needs Full Disk Access there to read it.
-      </span>
+      <span class="sp-name">{t("pages.files.browsers")}</span>
+      <span class="sp-hint">{t("pages.files.browsersHint")}</span>
       <KeySet
         id="bookmark-browsers"
-        label="Browsers"
+        label={t("pages.files.browsers")}
         mode="only"
         options={BROWSER_KEYS}
         bind:list={config.bookmarks.browsers}
@@ -73,7 +59,7 @@
   </div>
   {#if pluginOff("bookmarks")}
     <p class="sp-note warn" role="status">
-      “Bookmarks” is switched off under <strong>Plugins</strong>. Switch it on there as well.
+      {@html tHtml("pages.common.pluginOff", { name: t("pages.files.bookmarksPlugin") })}
     </p>
   {/if}
 </div>

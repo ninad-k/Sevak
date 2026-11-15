@@ -7,6 +7,7 @@
   import ListEditor from "./ListEditor.svelte";
   import Row from "./Row.svelte";
   import type { KeyOption, Picker } from "./types";
+  import { t, tHtml } from "../i18n.svelte";
   import "./pages.css";
 
   /** The Integrations page's SSH hosts, recent projects and calendar sections. */
@@ -22,74 +23,62 @@
   } = $props();
 
   /** As in Rust's `projects::editors` (`[projects] editors`). */
-  const EDITORS: KeyOption[] = [
+  const EDITORS: KeyOption[] = $derived([
     { key: "vscode", label: "VS Code" },
     { key: "vscode-insiders", label: "VS Code Insiders" },
     { key: "vscodium", label: "VSCodium" },
     { key: "cursor", label: "Cursor" },
-    { key: "jetbrains", label: "JetBrains IDEs and Android Studio" },
-  ];
+    { key: "jetbrains", label: t("pages.projects.jetbrains") },
+  ]);
 
-  const calendarPickers: Picker[] = [
-    { label: "Add file…", run: () => pickFile("Choose a calendar file", ["ics"]) },
-    { label: "Add folder…", run: () => pickDirectory("Choose a folder of calendar files") },
-  ];
+  const calendarPickers: Picker[] = $derived([
+    { label: t("pages.common.addFile"), run: () => pickFile(t("pages.calendar.pickFile"), ["ics"]) },
+    { label: t("pages.common.addFolder"), run: () => pickDirectory(t("pages.calendar.pickFolder")) },
+  ]);
 </script>
 
-<h2 class="sp-h2">SSH hosts</h2>
-<p class="sp-sub">
-  Type <code>{config.ssh.keyword.trim() || "ssh"} web</code> to connect to a host from
-  <code>~/.ssh/config</code> in a terminal (the one chosen under Terminal commands).
-</p>
+<h2 class="sp-h2">{t("pages.ssh.title")}</h2>
+<p class="sp-sub">{@html tHtml("pages.ssh.sub", { keyword: config.ssh.keyword.trim() || "ssh" })}</p>
 <div class="sp-group">
   <KeywordRow id="ssh-keyword" bind:value={config.ssh.keyword} error={problems.keywords["ssh.keyword"]} />
-  <Row label="Also list known hosts" hint="Hosts you connected to before (from ~/.ssh/known_hosts). Hashed entries cannot be read and are skipped.">
-    <Toggle bind:checked={config.ssh.known_hosts} label="Also list known hosts" />
+  <Row label={t("pages.ssh.knownHosts")} hint={t("pages.ssh.knownHostsHint")}>
+    <Toggle bind:checked={config.ssh.known_hosts} label={t("pages.ssh.knownHosts")} />
   </Row>
 </div>
-<p class="sp-note privacy">
-  <strong>Privacy:</strong> only <code>~/.ssh/config</code>, the files it includes inside
-  <code>~/.ssh</code> and (if on) <code>known_hosts</code> are read, never a private key. Nothing is
-  sent anywhere; <code>ssh</code> runs only when you press Enter.
-</p>
+<p class="sp-note privacy">{@html tHtml("pages.ssh.privacy")}</p>
 {#if pluginOff("ssh")}
   <p class="sp-note warn" role="status">
-    “SSH hosts” is switched off under <strong>Plugins</strong>. Switch it on there as well.
+    {@html tHtml("pages.common.pluginOff", { name: t("pages.ssh.plugin") })}
   </p>
 {/if}
 
-<h2 class="sp-h2">Recent projects</h2>
-<p class="sp-sub">
-  Type <code>{config.projects.keyword.trim() || "code"} sevak</code> to reopen a folder or workspace in
-  the editor you last used it in.
-</p>
+<h2 class="sp-h2">{t("pages.projects.title")}</h2>
+<p class="sp-sub">{@html tHtml("pages.projects.sub", { keyword: config.projects.keyword.trim() || "code" })}</p>
 <div class="sp-group">
   <KeywordRow
     id="projects-keyword"
     bind:value={config.projects.keyword}
     error={problems.keywords["projects.keyword"]}
   />
-  <Row label="Editors" hint="None ticked reads every editor that is installed.">
-    <KeySet id="projects-editors" label="Editors" mode="only" options={EDITORS} bind:list={config.projects.editors} />
+  <Row label={t("pages.projects.editors")} hint={t("pages.projects.editorsHint")}>
+    <KeySet
+      id="projects-editors"
+      label={t("pages.projects.editors")}
+      mode="only"
+      options={EDITORS}
+      bind:list={config.projects.editors}
+    />
   </Row>
 </div>
-<p class="sp-note privacy">
-  <strong>Privacy:</strong> the editors’ own recent lists are read from their settings folders and kept
-  in memory only. Remote (SSH, WSL, container) and network-share projects are skipped.
-</p>
+<p class="sp-note privacy">{@html tHtml("pages.projects.privacy")}</p>
 {#if pluginOff("projects")}
   <p class="sp-note warn" role="status">
-    “Recent projects” is switched off under <strong>Plugins</strong>. Switch it on there as well.
+    {@html tHtml("pages.common.pluginOff", { name: t("pages.projects.plugin") })}
   </p>
 {/if}
 
-<h2 class="sp-h2">Calendar</h2>
-<p class="sp-sub">
-  Type <code>{config.calendar.keyword.trim() || "cal"}</code> for today and the next days,
-  <code>{config.calendar.keyword.trim() || "cal"} tomorrow</code> or
-  <code>{config.calendar.keyword.trim() || "cal"} fri</code>. Events come from .ics files on this computer
-  only: no accounts, no network.
-</p>
+<h2 class="sp-h2">{t("pages.calendar.title")}</h2>
+<p class="sp-sub">{@html tHtml("pages.calendar.sub", { keyword: config.calendar.keyword.trim() || "cal" })}</p>
 <div class="sp-group">
   <KeywordRow
     id="calendar-keyword"
@@ -99,14 +88,19 @@
   <ListEditor
     id="calendar-files"
     bind:items={config.calendar.files}
-    label="Calendar files and folders"
-    hint="Export an .ics file from your calendar app, or point at a folder a sync tool fills (searched three levels deep)."
+    label={t("pages.calendar.files")}
+    hint={t("pages.calendar.filesHint")}
     placeholder="~/calendar.ics"
-    emptyText="None added."
+    emptyText={t("pages.common.noneAdded")}
     pickers={calendarPickers}
     mono
   />
-  <Row label="Days ahead" hint="How far ahead the agenda looks." forId="calendar-days" error={problems.calendarDays}>
+  <Row
+    label={t("pages.calendar.days")}
+    hint={t("pages.calendar.daysHint")}
+    forId="calendar-days"
+    error={problems.calendarDays}
+  >
     <input
       id="calendar-days"
       class="sp-input number"
@@ -118,15 +112,12 @@
       bind:value={config.calendar.days}
       aria-invalid={!!problems.calendarDays}
     />
-    <span class="sp-unit">days</span>
+    <span class="sp-unit">{t("pages.common.units.days")}</span>
   </Row>
 </div>
-<p class="sp-note privacy">
-  <strong>Privacy:</strong> the files are read into memory when Sevak starts and on each refresh. Events
-  are never written anywhere else, logged or sent, and are kept out of the search history.
-</p>
+<p class="sp-note privacy">{@html tHtml("pages.calendar.privacy")}</p>
 {#if pluginOff("calendar")}
   <p class="sp-note warn" role="status">
-    “Calendar” is switched off under <strong>Plugins</strong>. Switch it on there as well.
+    {@html tHtml("pages.common.pluginOff", { name: t("pages.calendar.plugin") })}
   </p>
 {/if}
