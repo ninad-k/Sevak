@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatNumber, t } from "./i18n.svelte";
   import { formatColor, isColor, isShadow, parseColor, toHex6, withAlpha, withRgb, type ColorField } from "./themes";
 
   // One palette entry: a color picker, a text field that takes any spelling
@@ -76,7 +77,7 @@
       <input
         type="color"
         class="swatch"
-        aria-label="Pick: {field.label}"
+        aria-label={t("appearance.colorRow.pick", { name: field.label })}
         value={toHex6(shown)}
         oninput={(e) => onchange(withRgb(shown, e.currentTarget.value), field.key)}
       />
@@ -87,7 +88,7 @@
       class:wide={field.kind === "shadow"}
       type="text"
       value={text}
-      placeholder={value === undefined ? (field.optional ? "follows Text" : fallback) : ""}
+      placeholder={value === undefined ? (field.optional ? t("appearance.colorRow.followsText") : fallback) : ""}
       spellcheck="false"
       autocomplete="off"
       aria-invalid={invalid}
@@ -104,20 +105,20 @@
         max="100"
         step="1"
         value={alpha}
-        aria-label="Opacity of {field.label}"
-        title="Opacity {alpha}%"
+        aria-label={t("appearance.colorRow.opacityOf", { name: field.label })}
+        title={t("appearance.colorRow.opacityTitle", { value: formatNumber(alpha / 100, { style: "percent" }) })}
         oninput={(e) => onchange(withAlpha(shown, Number(e.currentTarget.value) / 100), field.key)}
       />
     {/if}
     {#if field.optional && value !== undefined}
-      <button type="button" class="btn small" onclick={() => onchange(undefined, field.key)}>Clear</button>
+      <button type="button" class="btn small" onclick={() => onchange(undefined, field.key)}>{t("appearance.colorRow.clear")}</button>
     {/if}
   </div>
   {#if invalid}
     <span class="msg error" id="{id}-error" role="alert"
       >{field.kind === "shadow"
-        ? "Use none, or e.g. 0 8px 28px rgba(0, 0, 0, 0.5)"
-        : "Use #rrggbb, #rrggbbaa, rgb() or rgba()"}</span
+        ? t("appearance.colorRow.shadowError")
+        : t("appearance.colorRow.colorError")}</span
     >
   {/if}
 </div>
