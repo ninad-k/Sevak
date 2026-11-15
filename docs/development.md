@@ -534,7 +534,7 @@ only `v2`) is pinned to that tag's commit with `# v2`.
 
 ### The pinned toolchain
 
-`rust-toolchain.toml` pins an exact Rust version (currently 1.99.0) with the
+`rust-toolchain.toml` pins an exact Rust version (currently 1.99.1) with the
 `clippy` and `rustfmt` components. It is the single source of truth: rustup
 picks it up in any checkout, and CI installs it through the
 `.github/actions/setup-rust` composite action (which runs `rustup toolchain

@@ -48,7 +48,7 @@ runner, whatever the coverage number says.
 
 ## Running the automated tests
 
-Run from the repository root. CI pins Rust 1.99.0 for clippy; `cargo +1.99.0 ...`
+Run from the repository root. CI pins Rust 1.99.1 for clippy; `cargo +1.99.1 ...`
 reproduces it.
 
 | Command | What it does |
