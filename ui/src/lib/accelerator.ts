@@ -6,6 +6,8 @@
 // Rust parses the result again on save, so this only has to be close. (Rust
 // also reads Win, Windows and Meta as Super, so typed text may use them.)
 
+import { t } from "./i18n.svelte";
+
 const NAMED_KEYS: Record<string, string> = {
   Space: "Space",
   Enter: "Enter",
@@ -141,14 +143,14 @@ export function capture(e: KeyboardEvent): Captured {
   }
   const key = keyName(e.code);
   if (key === null) {
-    return { kind: "rejected", text: mods.join("+"), reason: "That key cannot be used." };
+    return { kind: "rejected", text: mods.join("+"), reason: t("hotkeys.field.keyUnusable") };
   }
   const isFunctionKey = /^F\d+$/.test(key);
   if (mods.length === 0 && !isFunctionKey) {
     return {
       kind: "rejected",
       text: "",
-      reason: "Hold Ctrl, Alt, Shift or Super together with the key.",
+      reason: t("hotkeys.field.needsModifier"),
     };
   }
   return { kind: "complete", text: [...mods, key].join("+") };
