@@ -135,6 +135,9 @@ nav:
       - Script plugins: features/script-plugins.md
       - Workflows: workflows.md
       - "Extensions: browse and install": features/extensions.md
+      - SSH hosts: features/ssh.md
+      - Recent projects: features/projects.md
+      - Calendar: features/calendar.md
   - Reference:
       - Configuration file: configuration.md
       - Command line: cli.md

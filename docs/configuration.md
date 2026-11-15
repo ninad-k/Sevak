@@ -33,7 +33,7 @@ A minimal config works: missing fields use their defaults, so a nearly empty fil
 
 ### Keywords
 
-Every keyword is one word, and no two searches may share one: the configurable keywords (`[files]` `keyword` / `index_keyword` / `content_keyword`, `[bookmarks]`, `[tasks]`, `[media]`, `[window_management]` `keyword` / `switcher_keyword`, `[contacts]`, `[onepassword]`, `[dictionary]` `define_keyword` / `spell_keyword`, `[ai]`), the fixed ones (`>`, `cb`, `s`, `emoji`, `:`, `@`, `uuid`) and your web search keywords. Settings refuses to save a clash; in a hand-edited file a clashing keyword is ignored and logged. An empty keyword turns that keyword off.
+Every keyword is one word, and no two searches may share one: the configurable keywords (`[files]` `keyword` / `index_keyword` / `content_keyword`, `[bookmarks]`, `[tasks]`, `[media]`, `[window_management]` `keyword` / `switcher_keyword`, `[contacts]`, `[onepassword]`, `[dictionary]` `define_keyword` / `spell_keyword`, `[ai]`, `[ssh]`, `[projects]`, `[calendar]`), the fixed ones (`>`, `cb`, `s`, `emoji`, `:`, `@`, `uuid`) and your web search keywords. Settings refuses to save a clash; in a hand-edited file a clashing keyword is ignored and logged. An empty keyword turns that keyword off.
 
 Keywords of [workflows](workflows.md) and [script plugins](features/script-plugins.md) are checked the same way but only produce a warning (in Settings and in the log), because both plugins then answer the keyword and show their results.
 
@@ -509,6 +509,53 @@ expand_in_terminals = false
 expand_in_browsers = false
 ```
 
+### [ssh]
+
+[SSH hosts](features/ssh.md) (`ssh <host>`): the hosts in `~/.ssh/config` and the files it includes. Enter opens a terminal running `ssh <host>` (the `[shell]` terminal). Private keys are never read. Set it in **Settings → Integrations**.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `keyword` | string | `"ssh"` | Keyword to list the hosts. `""` keeps the default. |
+| `known_hosts` | boolean | `false` | Also list the hosts in `~/.ssh/known_hosts` (hashed entries are skipped). |
+
+```toml
+[ssh]
+keyword = "ssh"
+known_hosts = false
+```
+
+### [projects]
+
+[Recent projects](features/projects.md) (`code <name>`): folders and workspaces you opened recently in VS Code, VS Code Insiders, VSCodium, Cursor and JetBrains IDEs. Enter opens one in its editor. Set it in **Settings → Integrations**.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `keyword` | string | `"code"` | Keyword to list the projects. `""` keeps the default. |
+| `editors` | array of strings | `[]` | Editors to read: `"vscode"`, `"vscode-insiders"`, `"vscodium"`, `"cursor"`, `"jetbrains"`. `[]` reads every one found. |
+
+```toml
+[projects]
+keyword = "code"
+editors = []
+```
+
+### [calendar]
+
+[Calendar](features/calendar.md) (`cal`, `cal tomorrow`, `cal fri`): events from local `.ics` files. No accounts and no network. Set it in **Settings → Integrations**.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `keyword` | string | `"cal"` | Keyword for the agenda. `""` keeps the default. |
+| `files` | array of strings | `[]` | `.ics` files, or folders of them (searched three levels deep), e.g. `["~/calendar.ics", "~/.calendars"]`. |
+| `days` | integer | `7` | How many days ahead `cal` shows (1-60). |
+
+```toml
+[calendar]
+keyword = "cal"
+files = []
+days = 7
+```
+
 ## [[snippet]]
 
 Snippets: text you paste often, with placeholders that expand.
@@ -591,6 +638,8 @@ Result ids:
 - System commands: `system:lock`, `system:sleep`, `system:restart`, `system:shutdown`, `system:logout`, `system:settings`, `system:settings:bluetooth`, `system:settings:wifi`, etc.
 - Snippets: `snippets:<name>`
 - Shell commands: `shell:<command>`
+- SSH hosts: `ssh:<alias>` (see [SSH hosts](features/ssh.md))
+- Recent projects: `projects:<editor>:<path>`, for a project that is in the editor's recent list
 - Automation tasks: `tasks:dark_mode`, `tasks:volume:30`, `tasks:keep_awake:45`, `tasks:kill:chrome.exe` (see [Automation tasks](features/tasks.md#bind-a-task-to-a-hotkey))
 - Window layouts: `windows:left`, `windows:maximize`, `windows:next_display` and so on (see [Window management](window-management.md#global-shortcuts-for-layouts)); they act on the window that has focus when the key is pressed
 - Workflows: `workflow:<folder>:run:<node id>`, the result a workflow's hotkey trigger runs; usually it is simpler to give the workflow its own hotkey trigger in the builder (see [Triggers](workflows.md#triggers))
@@ -1025,4 +1074,34 @@ url = "https://github.com/search?q={query}"
 # [[hotkey]]
 # key = "Ctrl+Alt+F"
 # run = "apps:firefox.desktop"
+
+[ssh]
+# "ssh <name>" lists the hosts in ~/.ssh/config (and the files it includes);
+# Enter opens a terminal running "ssh <host>" (see [shell]), Alt+Enter copies the
+# command. Only the config file is read, never a private key. To turn it off,
+# add "ssh" to [plugins] disabled.
+keyword = "ssh"
+# Also list hosts from ~/.ssh/known_hosts (hashed entries cannot be read and are
+# skipped).
+known_hosts = false
+
+[projects]
+# "code <name>" lists the folders and workspaces you opened recently in VS Code,
+# VS Code Insiders, VSCodium, Cursor and JetBrains IDEs; Enter opens one in the
+# editor it came from. Read from the editors' own files; nothing is sent anywhere.
+keyword = "code"
+# Editors to read: "vscode", "vscode-insiders", "vscodium", "cursor",
+# "jetbrains". [] reads every one that is installed.
+editors = []
+
+[calendar]
+# "cal" shows today's and upcoming events from local .ics files: "cal tomorrow",
+# "cal fri", "cal 2026-12-24", or "cal <text>" to find an event. No accounts and
+# no network: only the files and folders listed here are read.
+keyword = "cal"
+# .ics files, or folders of them (searched three levels deep), e.g.
+# ["~/calendar.ics", "~/.calendars"].
+files = []
+# How many days ahead "cal" shows (1-60).
+days = 7
 ```
