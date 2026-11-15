@@ -400,33 +400,6 @@ fn listed_as_disabled(output: &str, label: &str) -> bool {
 mod tests {
     use super::*;
 
-    #[test]
-    fn launchctl_disabled_output_is_read_in_old_and_new_formats() {
-        let modern = "disabled services = {
-	\"com.apple.x\" => enabled
-	\"Sevak\" => disabled
-}
-";
-        let legacy = "disabled services = {
-	\"Sevak\" => true
-}
-";
-        assert!(listed_as_disabled(modern, "Sevak"));
-        assert!(listed_as_disabled(legacy, "Sevak"));
-        for enabled in [
-            "	\"Sevak\" => enabled
-",
-            "	\"Sevak\" => false
-",
-            "	\"SevakHelper\" => disabled
-",
-            "	\"com.example.Sevak\" => disabled
-",
-        ] {
-            assert!(!listed_as_disabled(enabled, "Sevak"), "{enabled:?}");
-        }
-    }
-
     fn backend(temp: &tempfile::TempDir, kind: Kind) -> Native {
         Native {
             file: temp.path().join("startup-entry"),
@@ -454,6 +427,24 @@ mod tests {
             assert!(super::super::status(&backend).unwrap().enabled);
             backend.remove_owned().unwrap();
             assert!(!backend.file.exists());
+        }
+    }
+
+    #[test]
+    fn launchctl_disabled_list_is_read_in_old_and_new_formats() {
+        let new =
+            "disabled services = {\n\t\"com.apple.x\" => enabled\n\t\"Sevak\" => disabled\n}\n";
+        let old = "disabled services = {\n\t\"Sevak\" => true\n}\n";
+        assert!(listed_as_disabled(new, "Sevak"));
+        assert!(listed_as_disabled(old, "Sevak"));
+        for enabled in [
+            "\t\"Sevak\" => enabled\n",
+            "\t\"Sevak\" => false\n",
+            "\t\"Sevak.helper\" => disabled\n",
+            "\t\"com.example.Sevak\" => disabled\n",
+            "",
+        ] {
+            assert!(!listed_as_disabled(enabled, "Sevak"), "{enabled:?}");
         }
     }
 
