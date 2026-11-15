@@ -557,16 +557,25 @@ impl Package {
             let mut entry = archive
                 .by_index(index)
                 .map_err(|err| format!("the package is damaged: {err}"))?;
-            let name = clean_path(entry.name())?;
+            let name = clean_path(
+                &entry
+                    .name()
+                    .map_err(|err| format!("the package is damaged: {err}"))?,
+            )?;
             if entry.is_dir() {
                 continue;
             }
-            if let Some(mode) = entry.unix_mode() {
-                // 0o120000: a symbolic link, which could point anywhere.
-                if mode & 0o170000 == 0o120000 {
-                    return Err("the package contains a link, which is not allowed".to_owned());
-                }
+            // A symbolic link could point anywhere. zip marks one by the Unix
+            // file type 0o120000; check that directly too, so a change in how
+            // zip reports links cannot let one through.
+            let link = entry
+                .unix_mode()
+                .is_some_and(|mode| mode & 0o170000 == 0o120000);
+            if link || entry.is_symlink() {
+                return Err("the package contains a link, which is not allowed".to_owned());
             }
+            // Only "is it executable" is kept: setuid, setgid and sticky bits,
+            // and every other permission in the archive, are dropped here.
             let executable = entry.unix_mode().is_some_and(|mode| mode & 0o111 != 0);
             if files.len() >= MAX_FILES {
                 return Err("the package has too many files".to_owned());
@@ -1431,6 +1440,58 @@ mod tests {
         assert!(err.contains("too large when unpacked"), "{err}");
     }
 
+    /// Options for an entry made on Unix with the full `mode` (setuid and
+    /// setgid included) in its external attributes, as a hostile archive would
+    /// carry it. `unix_permissions` cannot: zip keeps only `mode & 0o777`.
+    fn unix_mode_options(mode: u32) -> SimpleFileOptions {
+        SimpleFileOptions::default()
+            .system(zip::System::Unix)
+            .external_attributes((0o100_000 | mode) << 16)
+    }
+
+    /// A zip with each `(name, data, unix mode)` entry, modes stored as given.
+    fn zip_with_modes(files: &[(&str, &[u8], u32)]) -> Vec<u8> {
+        let mut out = Cursor::new(Vec::new());
+        let mut writer = zip::ZipWriter::new(&mut out);
+        for (name, data, mode) in files {
+            writer.start_file(*name, unix_mode_options(*mode)).unwrap();
+            writer.write_all(data).unwrap();
+        }
+        writer.finish().unwrap();
+        out.into_inner()
+    }
+
+    #[test]
+    fn setuid_and_setgid_bits_are_dropped_when_a_package_is_read() {
+        let bytes = zip_with_modes(&[
+            ("docs/workflow.toml", WORKFLOW.as_bytes(), 0o644),
+            ("docs/run.sh", b"#!/bin/sh\n", 0o6755),
+            ("docs/data.txt", b"x", 0o2644),
+        ]);
+        // The archive really carries the bits, so the test is not vacuous.
+        let mut archive = zip::ZipArchive::new(Cursor::new(bytes.as_slice())).unwrap();
+        let stored = archive
+            .by_name("docs/run.sh")
+            .unwrap()
+            .external_attributes()
+            >> 16;
+        assert_eq!(stored & 0o7000, 0o6000, "{stored:o}");
+
+        let package = Package::read(&bytes, "docs", Kind::Workflow).unwrap();
+        let executable = |name: &str| {
+            package
+                .files
+                .iter()
+                .find(|(path, _, _)| path == name)
+                .map(|(_, _, executable)| *executable)
+                .unwrap()
+        };
+        // Only "executable or not" survives; nothing else of the mode does.
+        assert!(executable("run.sh"));
+        assert!(!executable("data.txt"));
+        assert!(!executable("workflow.toml"));
+    }
+
     #[cfg(unix)]
     #[test]
     fn only_the_owners_execute_bit_is_restored() {
@@ -1444,21 +1505,24 @@ mod tests {
             .unwrap();
         writer.write_all(WORKFLOW.as_bytes()).unwrap();
         writer
-            .start_file(
-                "docs/run.sh",
-                SimpleFileOptions::default().unix_permissions(0o4777),
-            )
+            .start_file("docs/run.sh", unix_mode_options(0o4777))
+            .unwrap();
+        writer.write_all(b"#!/bin/sh\n").unwrap();
+        writer
+            .start_file("docs/tool.sh", unix_mode_options(0o2755))
             .unwrap();
         writer.write_all(b"#!/bin/sh\n").unwrap();
         writer.finish().unwrap();
         let bytes = out.into_inner();
         let entry = entry_for(&bytes, Kind::Workflow, "docs");
         install_bytes(&entry, &bytes, &r.dirs()).unwrap();
-        let mode = fs::metadata(r.workflows.join("docs/run.sh"))
-            .unwrap()
-            .permissions()
-            .mode();
-        assert_eq!(mode & 0o7777, 0o755);
+        for name in ["docs/run.sh", "docs/tool.sh"] {
+            let mode = fs::metadata(r.workflows.join(name))
+                .unwrap()
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o7777, 0o755, "{name}");
+        }
         let plain = fs::metadata(r.workflows.join("docs/workflow.toml"))
             .unwrap()
             .permissions()
