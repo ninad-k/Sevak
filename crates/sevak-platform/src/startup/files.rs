@@ -156,11 +156,10 @@ impl Native {
             if !output.status.success() {
                 return Err("macOS could not report the login item's status".to_owned());
             }
-            let text = String::from_utf8_lossy(&output.stdout);
-            return Ok(text.lines().any(|line| {
-                line.trim()
-                    .starts_with(&format!("\"{ENTRY_NAME}\" => true"))
-            }));
+            return Ok(listed_as_disabled(
+                &String::from_utf8_lossy(&output.stdout),
+                ENTRY_NAME,
+            ));
         }
         Ok(false)
     }
@@ -180,6 +179,19 @@ impl Native {
         let _ = disabled;
         Ok(())
     }
+}
+
+/// Reads `launchctl print-disabled` output. Older macOS prints
+/// `"label" => true`; current releases print `"label" => disabled`.
+#[cfg(any(target_os = "macos", test))]
+fn listed_as_disabled(output: &str, label: &str) -> bool {
+    let key = format!("\"{label}\"");
+    output.lines().any(|line| {
+        line.trim()
+            .strip_prefix(&key)
+            .and_then(|rest| rest.trim_start().strip_prefix("=>"))
+            .is_some_and(|value| matches!(value.trim(), "true" | "disabled"))
+    })
 }
 
 #[cfg(target_os = "macos")]
@@ -407,6 +419,24 @@ mod tests {
             assert!(super::super::status(&backend).unwrap().enabled);
             backend.remove_owned().unwrap();
             assert!(!backend.file.exists());
+        }
+    }
+
+    #[test]
+    fn launchctl_disabled_list_is_read_in_old_and_new_formats() {
+        let new =
+            "disabled services = {\n\t\"com.apple.x\" => enabled\n\t\"Sevak\" => disabled\n}\n";
+        let old = "disabled services = {\n\t\"Sevak\" => true\n}\n";
+        assert!(listed_as_disabled(new, "Sevak"));
+        assert!(listed_as_disabled(old, "Sevak"));
+        for enabled in [
+            "\t\"Sevak\" => enabled\n",
+            "\t\"Sevak\" => false\n",
+            "\t\"Sevak.helper\" => disabled\n",
+            "\t\"com.example.Sevak\" => disabled\n",
+            "",
+        ] {
+            assert!(!listed_as_disabled(enabled, "Sevak"), "{enabled:?}");
         }
     }
 
