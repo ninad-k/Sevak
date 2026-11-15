@@ -16,7 +16,10 @@
     setAuto,
     undoRestore,
   } from "./backup-ipc";
+  import { formatList, t, tHtml } from "../i18n.svelte";
   import {
+    categoryDescription,
+    categoryLabel,
     changeLabel,
     changesSomething,
     chosen,
@@ -41,6 +44,8 @@
   let { onrestored }: { onrestored?: () => void | Promise<void> } = $props();
 
   type Msg = { kind: "ok" | "error"; text: string };
+  /** The backend's default folder, a real path: not translated. */
+  const DEFAULT_FOLDER = "Documents/Sevak backups";
 
   let overview = $state<Overview | null>(null);
   let loadError = $state<string | null>(null);
@@ -167,7 +172,7 @@
     busy = null;
     if (!done.ok) backupMsg = { kind: "error", text: done.error };
     else if (done.value) {
-      backupMsg = { kind: "ok", text: `Saved to ${done.value.display} (${formatBytes(done.value.bytes)}).` };
+      backupMsg = { kind: "ok", text: t("backup.backUp.savedTo", { path: done.value.display, size: formatBytes(done.value.bytes) }) };
       await refresh();
     }
   }
@@ -179,7 +184,7 @@
     busy = null;
     if (!done.ok) backupMsg = { kind: "error", text: done.error };
     else {
-      backupMsg = { kind: "ok", text: `Saved to ${done.value.display} (${formatBytes(done.value.bytes)}).` };
+      backupMsg = { kind: "ok", text: t("backup.backUp.savedTo", { path: done.value.display, size: formatBytes(done.value.bytes) }) };
       await refresh();
     }
   }
@@ -240,9 +245,7 @@
     shown = null;
     restoreMsg = {
       kind: "ok",
-      text: done.value.changed
-        ? "Restored. The new settings are already in use."
-        : "Nothing needed to change.",
+      text: done.value.changed ? t("backup.restore.restored") : t("backup.restore.nothingChanged"),
     };
     await refresh();
     if (done.value.changed) await onrestored?.();
@@ -258,7 +261,7 @@
       return;
     }
     result = null;
-    restoreMsg = { kind: "ok", text: "Undone. What the restore replaced is back." };
+    restoreMsg = { kind: "ok", text: t("backup.restore.undone") };
     await refresh();
     await onrestored?.();
   }
@@ -275,31 +278,27 @@
     }
     auto = { ...done.value };
     autoSaved = JSON.stringify(auto);
-    autoMsg = { kind: "ok", text: "Saved." };
+    autoMsg = { kind: "ok", text: t("backup.auto.saved") };
     await refresh();
   }
 
-  const kindWord = (kind: string) => (kind === "auto" ? "automatic backup" : "backup");
 </script>
 
 <div class="bk-page">
-  <h1>Backup &amp; restore</h1>
-  <p class="bk-lead">
-    Save your settings, snippets, web searches, themes, script plugins and workflows to one file,
-    and put them back on this or another computer. Nothing is sent anywhere.
-  </p>
+  <h1>{t("backup.title")}</h1>
+  <p class="bk-lead">{t("backup.lead")}</p>
 
   {#if loadError}
-    <p class="bk-msg error" role="alert">Could not load this page: {loadError}</p>
+    <p class="bk-msg error" role="alert">{t("backup.loadFailed", { error: loadError })}</p>
   {:else if !overview}
-    <p class="bk-muted">Loading…</p>
+    <p class="bk-muted">{t("common.loading")}</p>
   {:else}
     <!-- Back up ------------------------------------------------------------>
     <section class="bk-card" aria-labelledby="bk-backup-h">
-      <h2 id="bk-backup-h">Back up</h2>
+      <h2 id="bk-backup-h">{t("backup.backUp.heading")}</h2>
 
       <fieldset class="bk-fieldset">
-        <legend>What to include</legend>
+        <legend>{t("backup.backUp.include")}</legend>
         {#each overview.categories as category (category.id)}
           {@const listed = contents?.categories.find((c) => c.category === category.id)}
           <div class="bk-choice">
@@ -310,11 +309,11 @@
               disabled={busy !== null}
             />
             <label for="bk-cat-{category.id}">
-              <span class="bk-name">{category.label}</span>
-              <span class="bk-hint">{category.description}</span>
+              <span class="bk-name">{categoryLabel(category.id, category.label)}</span>
+              <span class="bk-hint">{categoryDescription(category.id, category.description)}</span>
             </label>
             {#if listed && ticks[category.id]}
-              <span class="bk-count">{listed.files} file{listed.files === 1 ? "" : "s"}</span>
+              <span class="bk-count">{t("backup.backUp.fileCount", { count: listed.files })}</span>
             {/if}
           </div>
         {/each}
@@ -326,11 +325,11 @@
 
       {#if contents}
         <details class="bk-details">
-          <summary>Show exactly what is included ({formatBytes(contents.bytes)})</summary>
+          <summary>{t("backup.backUp.showContents", { size: formatBytes(contents.bytes) })}</summary>
           {#each contents.categories as listed (listed.category)}
-            <p class="bk-sub"><strong>{listed.label}</strong></p>
+            <p class="bk-sub"><strong>{categoryLabel(listed.category, listed.label)}</strong></p>
             {#if listed.entries.length === 0}
-              <p class="bk-muted">Nothing yet.</p>
+              <p class="bk-muted">{t("backup.backUp.nothingYet")}</p>
             {:else}
               <ul class="bk-list">
                 {#each listed.entries as entry (entry)}
@@ -344,24 +343,20 @@
           {/each}
           {#if contents.left_out.length > 0}
             <p class="bk-muted">
-              Left out of config.toml on purpose: {contents.left_out.join(", ")}.
+              {t("backup.backUp.leftOut", { sections: formatList(contents.left_out) })}
             </p>
           {/if}
         </details>
       {/if}
 
       <div class="bk-note privacy">
-        <strong>Never included:</strong>
+        <strong>{t("backup.backUp.neverIncluded")}</strong>
         <ul class="bk-list">
           {#each overview.never_included as line (line)}
             <li>{line}</li>
           {/each}
         </ul>
-        <p>
-          The backup is a plain file, <strong>not encrypted</strong>: anyone who can open it can
-          read your snippets and scripts. Sevak makes it readable by you only; keep it somewhere
-          you trust.
-        </p>
+        <p>{@html tHtml("backup.backUp.plainFile")}</p>
       </div>
 
       <div class="bk-actions">
@@ -371,7 +366,7 @@
           disabled={busy !== null || backupIds.length === 0}
           onclick={save}
         >
-          {busy === "save" ? "Saving…" : "Save backup as…"}
+          {busy === "save" ? t("common.saving") : t("backup.backUp.saveAs")}
         </button>
         <button
           type="button"
@@ -379,11 +374,11 @@
           disabled={busy !== null || backupIds.length === 0}
           onclick={now}
         >
-          {busy === "now" ? "Backing up…" : "Back up now"}
+          {busy === "now" ? t("backup.backUp.backingUp") : t("backup.backUp.now")}
         </button>
-        <button type="button" class="bk-btn" onclick={openFolder}>Open backup folder</button>
+        <button type="button" class="bk-btn" onclick={openFolder}>{t("backup.backUp.openFolder")}</button>
       </div>
-      <p class="bk-hint">“Back up now” saves to <code>{overview.folder}</code> without asking.</p>
+      <p class="bk-hint">{@html tHtml("backup.backUp.nowHint", { folder: overview.folder })}</p>
 
       {#if backupMsg}
         <p class="bk-msg {backupMsg.kind}" role={backupMsg.kind === "error" ? "alert" : "status"}>
@@ -392,29 +387,29 @@
       {/if}
       {#if overview.last_backup}
         <p class="bk-muted">
-          Last {kindWord(overview.last_backup.kind)}: {formatWhen(overview.last_backup.created)},
-          <code>{overview.last_backup.path}</code>{overview.last_backup.exists ? "" : " (the file is no longer there)"}
+          {@html tHtml(overview.last_backup.kind === "auto" ? "backup.backUp.lastAuto" : "backup.backUp.lastManual", {
+            when: formatWhen(overview.last_backup.created),
+            path: overview.last_backup.path,
+          })}
+          {#if !overview.last_backup.exists}{t("backup.backUp.fileGone")}{/if}
         </p>
       {:else}
-        <p class="bk-muted">No backup made yet.</p>
+        <p class="bk-muted">{t("backup.backUp.none")}</p>
       {/if}
     </section>
 
     <!-- Restore ------------------------------------------------------------>
     <section class="bk-card" aria-labelledby="bk-restore-h">
-      <h2 id="bk-restore-h">Restore</h2>
-      <p class="bk-sub">
-        Choose a backup file. Sevak checks it and shows what would change before it changes
-        anything. A safety copy of what is replaced is saved first, so you can undo.
-      </p>
+      <h2 id="bk-restore-h">{t("backup.restore.heading")}</h2>
+      <p class="bk-sub">{t("backup.restore.lead")}</p>
 
       <div class="bk-actions">
         <button type="button" class="bk-btn primary" disabled={busy !== null} onclick={choose}>
-          {busy === "pick" ? "Checking…" : inspected ? "Choose another backup…" : "Choose a backup…"}
+          {busy === "pick" ? t("backup.restore.checking") : inspected ? t("backup.restore.chooseAnother") : t("backup.restore.choose")}
         </button>
         {#if inspected}
           <button type="button" class="bk-btn" disabled={busy !== null} onclick={cancelRestore}>
-            Cancel
+            {t("common.cancel")}
           </button>
         {/if}
       </div>
@@ -429,9 +424,11 @@
         <div class="bk-file">
           <p class="bk-name"><code>{inspected.display}</code></p>
           <p class="bk-muted">
-            Made {formatWhen(inspected.archive.created)} by Sevak {inspected.archive.app_version} on
-            {platformName(inspected.archive.platform)} · {inspected.archive.files}
-            file{inspected.archive.files === 1 ? "" : "s"} · {formatBytes(inspected.archive.size)}
+            {t("backup.restore.made", {
+              when: formatWhen(inspected.archive.created),
+              version: inspected.archive.app_version,
+              platform: platformName(inspected.archive.platform),
+            })} · {t("backup.backUp.fileCount", { count: inspected.archive.files })} · {formatBytes(inspected.archive.size)}
           </p>
           {#each inspected.warnings as warning (warning)}
             <p class="bk-msg warn">{warning}</p>
@@ -439,7 +436,7 @@
         </div>
 
         <fieldset class="bk-fieldset">
-          <legend>What to restore</legend>
+          <legend>{t("backup.restore.what")}</legend>
           {#each inspected.categories as category (category.id)}
             {@const line = shown?.categories.find((c) => c.category === category.id)}
             <div class="bk-choice">
@@ -450,7 +447,7 @@
                 disabled={busy !== null}
               />
               <label for="bk-rcat-{category.id}">
-                <span class="bk-name">{category.label}</span>
+                <span class="bk-name">{categoryLabel(category.id, category.label)}</span>
                 {#if line && rticks[category.id]}
                   <span class="bk-hint">{summarize(line)}</span>
                 {/if}
@@ -460,31 +457,25 @@
         </fieldset>
 
         <fieldset class="bk-fieldset">
-          <legend>How</legend>
+          <legend>{t("backup.restore.how")}</legend>
           <div class="bk-choice">
             <input id="bk-mode-merge" type="radio" name="bk-mode" value="merge" bind:group={mode} disabled={busy !== null} />
             <label for="bk-mode-merge">
-              <span class="bk-name">Merge</span>
-              <span class="bk-hint">
-                Adds what the backup has and overwrites what has the same name or setting. Keeps
-                everything else you have.
-              </span>
+              <span class="bk-name">{t("backup.restore.merge")}</span>
+              <span class="bk-hint">{t("backup.restore.mergeHint")}</span>
             </label>
           </div>
           <div class="bk-choice">
             <input id="bk-mode-replace" type="radio" name="bk-mode" value="replace" bind:group={mode} disabled={busy !== null} />
             <label for="bk-mode-replace">
-              <span class="bk-name">Replace</span>
-              <span class="bk-hint">
-                Makes the chosen categories exactly like the backup: what the backup does not have
-                is removed, or goes back to its default.
-              </span>
+              <span class="bk-name">{t("backup.restore.replace")}</span>
+              <span class="bk-hint">{t("backup.restore.replaceHint")}</span>
             </label>
           </div>
         </fieldset>
 
         {#if previewing}
-          <p class="bk-muted" role="status">Checking what would change…</p>
+          <p class="bk-muted" role="status">{t("backup.restore.previewing")}</p>
         {/if}
         {#if previewError}
           <p class="bk-msg error" role="alert">{previewError}</p>
@@ -499,16 +490,16 @@
 
           <!-- Not a live region: it would read the whole list again on every change. -->
           <div class="bk-preview">
-            <h3>What would change</h3>
+            <h3>{t("backup.restore.wouldChange")}</h3>
             {#each shown.categories.filter((c) => c.selected) as category (category.category)}
               <details class="bk-details" open={category.added + category.changed + category.removed > 0 && category.items.length <= 12}>
                 <summary>
-                  <span class="bk-name">{category.label}</span>: {summarize(category)}
+                  <span class="bk-name">{categoryLabel(category.category, category.label)}</span>: {summarize(category)}
                 </summary>
                 {#if category.problem}
                   <p class="bk-msg error">{category.problem}</p>
                 {:else if category.items.length === 0}
-                  <p class="bk-muted">Nothing in the backup for this.</p>
+                  <p class="bk-muted">{t("backup.restore.nothingInBackup")}</p>
                 {:else}
                   <ul class="bk-items">
                     {#each category.items as item, i (i)}
@@ -516,7 +507,7 @@
                         <span class="bk-badge {item.change}">{changeLabel(item.change, shown.mode)}</span>
                         <span class="bk-item-name">{item.name}</span>
                         {#if item.needs_approval}
-                          <span class="bk-flag">asks for approval</span>
+                          <span class="bk-flag">{t("backup.restore.asksApproval")}</span>
                         {/if}
                         {#if item.files.length > 0 && item.change !== "unchanged"}
                           <span class="bk-files">{item.files.join(", ")}</span>
@@ -530,26 +521,21 @@
 
             {#if shown.needs_approval.length > 0}
               <p class="bk-note">
-                <strong>Scripts are never trusted automatically.</strong> After the restore Sevak
-                asks before it runs {shown.needs_approval.join(", ")}. Which scripts you allowed is
-                not part of a backup.
+                {@html tHtml("backup.restore.scriptsNeverTrusted", { names: formatList(shown.needs_approval) })}
               </p>
             {/if}
             {#if !willChange && !shown.problem}
-              <p class="bk-muted">Everything chosen is already the same: there is nothing to restore.</p>
+              <p class="bk-muted">{t("backup.restore.allSame")}</p>
             {/if}
           </div>
 
           {#if confirming}
             <div class="bk-note warn" role="alert">
-              <strong>Replace will remove {willRemove} thing{willRemove === 1 ? "" : "s"}</strong>
-              that {willRemove === 1 ? "is" : "are"} not in the backup (or reset
-              {willRemove === 1 ? "it" : "them"} to the default). A safety copy is saved first, and
-              “Undo restore” puts it back.
+              {@html tHtml("backup.restore.confirmReplace", { count: willRemove })}
               <div class="bk-actions">
                 <!-- svelte-ignore a11y_autofocus -->
                 <button type="button" class="bk-btn primary" disabled={busy !== null} onclick={restoreNow} autofocus>
-                  Replace now
+                  {t("backup.restore.replaceNow")}
                 </button>
                 <button
                   type="button"
@@ -559,14 +545,14 @@
                     // The confirm block took the focus with it: back to the button that opened it.
                     await tick();
                     restoreButton?.focus();
-                  }}>Cancel</button
+                  }}>{t("common.cancel")}</button
                 >
               </div>
             </div>
           {:else}
             <div class="bk-actions">
               <button bind:this={restoreButton} type="button" class="bk-btn primary" disabled={!canRestore} onclick={askOrRestore}>
-                {busy === "restore" ? "Restoring…" : mode === "replace" ? "Replace…" : "Restore"}
+                {busy === "restore" ? t("backup.restore.restoring") : mode === "replace" ? t("backup.restore.replaceEllipsis") : t("backup.restore.restoreButton")}
               </button>
             </div>
           {/if}
@@ -575,12 +561,12 @@
 
       {#if result && result.changed}
         <div class="bk-note" role="status">
-          <strong>Restored.</strong>
+          <strong>{t("backup.restore.restoredHeading")}</strong>
           {#each result.categories as category (category.category)}
-            <span class="bk-chip">{category.label}: {summarize(category)}</span>
+            <span class="bk-chip">{categoryLabel(category.category, category.label)}: {summarize(category)}</span>
           {/each}
           {#if result.needs_approval.length > 0}
-            <p>Sevak will ask before it runs {result.needs_approval.join(", ")}.</p>
+            <p>{t("backup.restore.willAsk", { names: formatList(result.needs_approval) })}</p>
           {/if}
           {#each result.warnings as warning (warning)}
             <p class="bk-msg warn">{warning}</p>
@@ -591,11 +577,13 @@
       {#if overview.undo}
         <div class="bk-undo">
           <p class="bk-sub">
-            The last restore ({formatWhen(overview.undo.created)}) can be undone. It puts back
-            what was replaced: {overview.undo.categories.join(", ").replace(/_/g, " ")}.
+            {t("backup.restore.undoable", {
+              when: formatWhen(overview.undo.created),
+              categories: formatList(overview.undo.categories.map((id) => categoryLabel(id, id.replace(/_/g, " ")))),
+            })}
           </p>
           <button type="button" class="bk-btn" disabled={busy !== null} onclick={undo}>
-            {busy === "undo" ? "Undoing…" : "Undo restore"}
+            {busy === "undo" ? t("backup.restore.undoing") : t("backup.restore.undo")}
           </button>
         </div>
       {/if}
@@ -603,31 +591,28 @@
 
     <!-- Automatic backups -------------------------------------------------->
     <section class="bk-card" aria-labelledby="bk-auto-h">
-      <h2 id="bk-auto-h">Automatic backups</h2>
-      <p class="bk-sub">
-        Off unless you turn it on. Sevak keeps the newest few and deletes older automatic backups
-        only; it never touches files you saved yourself.
-      </p>
+      <h2 id="bk-auto-h">{t("backup.auto.heading")}</h2>
+      <p class="bk-sub">{t("backup.auto.lead")}</p>
       {#if overview.auto_problem}
         <p class="bk-msg error" role="alert">{overview.auto_problem}</p>
       {/if}
 
       <div class="bk-row">
-        <label for="bk-schedule" class="bk-name">Back up</label>
+        <label for="bk-schedule" class="bk-name">{t("backup.auto.schedule")}</label>
         <select id="bk-schedule" class="bk-input" bind:value={auto.schedule} disabled={busy !== null}>
           {#each SCHEDULES as option (option.value)}
-            <option value={option.value}>{option.label}</option>
+            <option value={option.value}>{option.label()}</option>
           {/each}
         </select>
       </div>
 
       <div class="bk-row">
-        <span class="bk-name" id="bk-update-label">Also when Sevak is updated</span>
-        <Toggle bind:checked={auto.on_update} label="Also back up when Sevak is updated" disabled={busy !== null} />
+        <span class="bk-name" id="bk-update-label">{t("backup.auto.onUpdate")}</span>
+        <Toggle bind:checked={auto.on_update} label={t("backup.auto.onUpdateToggle")} disabled={busy !== null} />
       </div>
 
       <div class="bk-row">
-        <label for="bk-keep" class="bk-name">Keep the newest</label>
+        <label for="bk-keep" class="bk-name">{t("backup.auto.keep")}</label>
         <input
           id="bk-keep"
           class="bk-input number"
@@ -641,27 +626,25 @@
       </div>
 
       <div class="bk-field">
-        <label for="bk-folder" class="bk-name">Folder</label>
+        <label for="bk-folder" class="bk-name">{t("backup.auto.folder")}</label>
         <input
           id="bk-folder"
           class="bk-input wide"
           type="text"
           spellcheck="false"
           autocomplete="off"
-          placeholder={auto.resolved_folder || "Documents/Sevak backups"}
+          placeholder={auto.resolved_folder || DEFAULT_FOLDER}
           bind:value={auto.folder}
           disabled={busy !== null}
         />
         <p class="bk-hint">
-          Used by automatic backups and “Back up now”. Leave empty for
-          <code>{overview.auto.resolved_folder || "Documents/Sevak backups"}</code>. A full path, or
-          one starting with <code>~</code>.
+          {@html tHtml("backup.auto.folderHint", { folder: overview.auto.resolved_folder || DEFAULT_FOLDER })}
         </p>
       </div>
 
       <div class="bk-actions">
         <button type="button" class="bk-btn primary" disabled={!autoDirty || busy !== null} onclick={saveAuto}>
-          {busy === "auto" ? "Saving…" : "Save"}
+          {busy === "auto" ? t("common.saving") : t("common.save")}
         </button>
         {#if autoMsg}
           <span class="bk-msg {autoMsg.kind}" role={autoMsg.kind === "error" ? "alert" : "status"}>
@@ -669,12 +652,7 @@
           </span>
         {/if}
       </div>
-      <p class="bk-hint">
-        The same options are in <code>backup.toml</code> next to <code>config.toml</code>. From a
-        terminal: <code>sevak --backup &lt;file&gt;</code>, <code>sevak --restore &lt;file&gt;</code>,
-        <code>sevak --undo-restore</code>. In the launcher: <code>backup settings</code>,
-        <code>restore settings</code>.
-      </p>
+      <p class="bk-hint">{@html tHtml("backup.auto.cli")}</p>
     </section>
   {/if}
 </div>
@@ -731,7 +709,7 @@
     color: var(--fg);
   }
 
-  code {
+  .bk-page :global(code) {
     padding: 0 4px;
     border-radius: 4px;
     background: var(--kbd-bg);
@@ -832,7 +810,7 @@
     line-height: 1.5;
   }
 
-  .bk-note strong {
+  .bk-note :global(strong) {
     color: var(--fg);
   }
 

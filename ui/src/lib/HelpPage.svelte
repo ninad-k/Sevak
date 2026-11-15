@@ -5,6 +5,7 @@
   import { onMount } from "svelte";
   import { copyDiagnostics, getDiagnostics, saveDiagnostics } from "./diagnostics-ipc";
   import { openLogDir } from "./settings-ipc";
+  import { t, tHtml, type MessageKey } from "./i18n.svelte";
 
   let report = $state("");
   let loading = $state(true);
@@ -12,18 +13,19 @@
   let notice = $state<string | null>(null);
   let noticeTimer: ReturnType<typeof setTimeout> | undefined;
 
-  // The file search filters (crates/sevak-plugins/src/files/filters.rs).
-  const FILTERS: [string, string][] = [
-    ["ext:pdf  ext:jpg,png", "Files with these extensions"],
-    ["type:image", "Also video, audio, doc, code, archive"],
-    ["size:>10mb  size:<500kb", "File size (also >=, <=, 1mb..20mb, empty)"],
-    ["modified:today  modified:7d", "Changed today, or in the last 7 days (>7d: longer ago)"],
-    ["modified:>2026-01-01", "Changed after that day (also >=, <, <=, 2026-01, 2026)"],
-    ["created:yesterday", "Created then, where the file system records it"],
-    ["in:~/Projects  in:src", "Inside that folder, or any folder of that name"],
-    ["is:folder  is:file", "Folders or files only"],
-    ['"annual report"', "The name contains the exact phrase"],
-    ["-ext:tmp  -draft", "Leave these out"],
+  // The file search filters (crates/sevak-plugins/src/files/filters.rs). The
+  // examples are query syntax and stay as typed; only their meaning is translated.
+  const FILTERS: [string, MessageKey][] = [
+    ["ext:pdf  ext:jpg,png", "help.filters.ext"],
+    ["type:image", "help.filters.type"],
+    ["size:>10mb  size:<500kb", "help.filters.size"],
+    ["modified:today  modified:7d", "help.filters.modified"],
+    ["modified:>2026-01-01", "help.filters.modifiedAfter"],
+    ["created:yesterday", "help.filters.created"],
+    ["in:~/Projects  in:src", "help.filters.in"],
+    ["is:folder  is:file", "help.filters.is"],
+    ['"annual report"', "help.filters.phrase"],
+    ["-ext:tmp  -draft", "help.filters.exclude"],
   ];
 
   async function make() {
@@ -33,7 +35,7 @@
     const result = await getDiagnostics();
     loading = false;
     if (result.ok) report = result.value;
-    else error = `Could not make the report: ${result.error}`;
+    else error = t("help.makeFailed", { error: result.error });
   }
 
   function say(text: string) {
@@ -44,14 +46,14 @@
 
   async function copy() {
     const result = await copyDiagnostics(report);
-    if (result.ok) say("Copied to the clipboard. Paste it into your bug report.");
-    else error = `Could not copy: ${result.error}`;
+    if (result.ok) say(t("help.copied"));
+    else error = t("help.copyFailed", { error: result.error });
   }
 
   async function save() {
     const result = await saveDiagnostics(report);
     if (!result.ok) error = result.error;
-    else if (result.value) say(`Saved to ${result.value}.`);
+    else if (result.value) say(t("help.savedTo", { path: result.value }));
   }
 
   async function logs() {
@@ -66,27 +68,19 @@
 </script>
 
 <div class="hp-page">
-  <h1>Help</h1>
-  <p class="hp-lead">
-    When something does not work, this report helps to find out why. Sevak has no telemetry, so it
-    only exists here: it is made on this computer, nothing is sent anywhere, and you decide whether
-    to share it. It holds the version, your system, which features are on, which plugins loaded and
-    the last log lines. It does not hold what you searched for, your clipboard or snippets, the
-    contents of scripts or workflows, contacts or passwords. Your user name, computer name and home
-    folder are hidden. Read it before you paste it into a bug report at
-    <code>github.com/ninad-k/Sevak/issues/new/choose</code>.
-  </p>
+  <h1>{t("help.title")}</h1>
+  <p class="hp-lead">{@html tHtml("help.lead")}</p>
 
   <div class="hp-toolbar">
     <button type="button" class="hp-btn primary" disabled={loading || !report} onclick={copy}>
-      Copy diagnostics
+      {t("help.copy")}
     </button>
     <button type="button" class="hp-btn" disabled={loading || !report} onclick={save}>
-      Save as file…
+      {t("help.saveAs")}
     </button>
-    <button type="button" class="hp-btn" onclick={logs}>Open logs folder</button>
+    <button type="button" class="hp-btn" onclick={logs}>{t("help.openLogs")}</button>
     <button type="button" class="hp-btn" disabled={loading} onclick={make}>
-      {loading ? "Making…" : "Refresh"}
+      {loading ? t("help.making") : t("help.refresh")}
     </button>
   </div>
 
@@ -96,36 +90,30 @@
     <p class="hp-msg ok" role="status">{notice}</p>
   {/if}
 
-  <label class="hp-label" for="hp-report">The report (read-only, exactly what is copied or saved)</label>
+  <label class="hp-label" for="hp-report">{t("help.reportLabel")}</label>
   <textarea
     id="hp-report"
     class="hp-report"
     readonly
     spellcheck="false"
     rows="18"
-    value={loading && !report ? "Making the report…" : report}
+    value={loading && !report ? t("help.makingReport") : report}
   ></textarea>
 
-  <p class="hp-hint">
-    Without opening Settings: run <code>sevak --diagnostics</code> in a terminal. That report is made
-    from files only, so it works even when Sevak is not running.
-  </p>
+  <p class="hp-hint">{@html tHtml("help.cliHint")}</p>
 
   <section class="hp-cheats" aria-labelledby="hp-filters">
-    <h2 id="hp-filters">File search filters</h2>
-    <p class="hp-hint">
-      Add these to <code>f</code>, <code>ff</code> or <code>in</code> searches, in any order. Every
-      filter must match; <code>-</code> in front leaves out what follows.
-    </p>
+    <h2 id="hp-filters">{t("help.filters.heading")}</h2>
+    <p class="hp-hint">{@html tHtml("help.filters.hint")}</p>
     <table class="hp-table">
       <thead class="sr-only">
-        <tr><th scope="col">Filter</th><th scope="col">Meaning</th></tr>
+        <tr><th scope="col">{t("help.filters.filter")}</th><th scope="col">{t("help.filters.meaning")}</th></tr>
       </thead>
       <tbody>
         {#each FILTERS as [example, meaning] (example)}
           <tr>
             <td><code>{example}</code></td>
-            <td>{meaning}</td>
+            <td>{t(meaning)}</td>
           </tr>
         {/each}
       </tbody>
@@ -255,8 +243,8 @@
     white-space: pre;
   }
 
-  .hp-lead code,
-  .hp-hint code,
+  .hp-lead :global(code),
+  .hp-hint :global(code),
   .hp-table code {
     padding: 0 4px;
     border-radius: 4px;

@@ -1,6 +1,8 @@
 // Types and small pure helpers for Settings > Backup & restore. The shapes
 // mirror the Rust side (`src-tauri/src/backup.rs` and the `sevak-backup` crate).
 
+import { formatDate, formatNumber, t, type MessageKey } from "../i18n.svelte";
+
 export type CategoryId =
   | "settings"
   | "snippets"
@@ -159,13 +161,15 @@ export function summarize(category: {
   unchanged: number;
 }): string {
   const parts: string[] = [];
-  if (category.added > 0) parts.push(`${category.added} new`);
-  if (category.changed > 0) parts.push(`${category.changed} changed`);
-  if (category.removed > 0) parts.push(`${category.removed} removed`);
+  if (category.added > 0) parts.push(t("backup.summary.added", { count: category.added }));
+  if (category.changed > 0) parts.push(t("backup.summary.changed", { count: category.changed }));
+  if (category.removed > 0) parts.push(t("backup.summary.removed", { count: category.removed }));
   if (parts.length === 0) {
-    return category.unchanged > 0 ? `${category.unchanged} already the same` : "nothing in it";
+    return category.unchanged > 0
+      ? t("backup.summary.allSame", { count: category.unchanged })
+      : t("backup.summary.empty");
   }
-  if (category.unchanged > 0) parts.push(`${category.unchanged} the same`);
+  if (category.unchanged > 0) parts.push(t("backup.summary.same", { count: category.unchanged }));
   return parts.join(", ");
 }
 
@@ -173,13 +177,13 @@ export function summarize(category: {
 export function changeLabel(change: Change, mode: Mode): string {
   switch (change) {
     case "added":
-      return "New";
+      return t("backup.change.added");
     case "changed":
-      return "Changed";
+      return t("backup.change.changed");
     case "unchanged":
-      return "Same";
+      return t("backup.change.unchanged");
     case "removed":
-      return mode === "replace" ? "Removed" : "Kept";
+      return mode === "replace" ? t("backup.change.removed") : t("backup.change.kept");
   }
 }
 
@@ -198,16 +202,43 @@ export function removals(preview: RestorePreview | null): number {
 }
 
 export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  const digits = (n: number) => ({ minimumFractionDigits: n, maximumFractionDigits: n });
+  if (bytes < 1024) return t("backup.size.bytes", { size: formatNumber(bytes) });
+  if (bytes < 1024 * 1024) {
+    return t("backup.size.kilobytes", {
+      size: formatNumber(bytes / 1024, digits(bytes < 10 * 1024 ? 1 : 0)),
+    });
+  }
+  return t("backup.size.megabytes", { size: formatNumber(bytes / (1024 * 1024), digits(1)) });
 }
 
-/** An ISO time as the person's own date and time; the text itself if it does not parse. */
+/** An ISO time in the UI language's date and time format; the text itself if it does not parse. */
 export function formatWhen(iso: string): string {
   const time = Date.parse(iso);
   if (Number.isNaN(time)) return iso;
-  return new Date(time).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  return formatDate(time, { dateStyle: "medium", timeStyle: "short" });
+}
+
+/** The catalogue key of each category (`backup.categories.<key>`). */
+const CATEGORY_KEYS: Record<CategoryId, string> = {
+  settings: "settings",
+  snippets: "snippets",
+  web_search: "webSearch",
+  themes: "themes",
+  plugins: "plugins",
+  workflows: "workflows",
+};
+
+/** A category's name in the UI language; `fallback` (the backend's English) for an unknown id. */
+export function categoryLabel(id: string, fallback: string = id): string {
+  const key = CATEGORY_KEYS[id as CategoryId];
+  return key ? t(`backup.categories.${key}.label` as MessageKey) : fallback;
+}
+
+/** What a category holds, in the UI language; `fallback` for an unknown id. */
+export function categoryDescription(id: string, fallback: string): string {
+  const key = CATEGORY_KEYS[id as CategoryId];
+  return key ? t(`backup.categories.${key}.description` as MessageKey) : fallback;
 }
 
 export function platformName(platform: string): string {
@@ -223,10 +254,11 @@ export function platformName(platform: string): string {
   }
 }
 
-export const SCHEDULES: { value: Schedule; label: string }[] = [
-  { value: "off", label: "Off" },
-  { value: "daily", label: "Every day" },
-  { value: "weekly", label: "Every week" },
+/** The schedules; `label` is a function so it follows the UI language. */
+export const SCHEDULES: { value: Schedule; label: () => string }[] = [
+  { value: "off", label: () => t("backup.auto.off") },
+  { value: "daily", label: () => t("backup.auto.daily") },
+  { value: "weekly", label: () => t("backup.auto.weekly") },
 ];
 
 export const MAX_KEEP = 50;
