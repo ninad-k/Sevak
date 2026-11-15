@@ -1955,3 +1955,365 @@ fn the_slugify_plugin_makes_slugs_and_counts_text() {
         "Text is longer than 5000 characters"
     );
 }
+
+#[test]
+fn the_unit_converter_converts_units() {
+    let Some(py) = require_python() else { return };
+    let ask = |query: &str| ask(&py, "unit-converter", "units.py", query);
+
+    // One unit alone lists the value in every other unit of its kind.
+    let items = ask("5 km");
+    assert_eq!(item(&items, "m"), "5,000 m");
+    assert_eq!(item(&items, "mi"), "3.106855961 mi");
+    assert_eq!(item(&items, "ft"), "16,404.19948 ft");
+    assert!(
+        items.iter().all(|i| i["key"] != "km"),
+        "the source unit is not repeated"
+    );
+    let miles = items.iter().find(|i| i["key"] == "mi").unwrap();
+    assert_eq!(miles["action"]["text"], "3.106855961 mi");
+
+    // The separators all give the target first, then related units.
+    for query in [
+        "5 km mi",
+        "5 km in mi",
+        "5 km to mi",
+        "5 km as mi",
+        "5 km = mi",
+        "5km->mi",
+    ] {
+        let items = ask(query);
+        assert_eq!(item(&items, "result"), "3.106855961 mi", "{query}");
+        assert_eq!(items[0]["key"], "result", "{query}");
+        assert_eq!(item(&items, "m"), "5,000 m", "{query}");
+    }
+    // `in` is also the inch.
+    assert_eq!(item(&ask("5 in cm"), "result"), "12.7 cm");
+    assert_eq!(item(&ask("5 cm in"), "result"), "1.968503937 in");
+
+    // Number formats.
+    for query in ["1,000 m km", "1_000 m km", "1e3 m km", "1000 metres km"] {
+        assert_eq!(item(&ask(query), "result"), "1 km", "{query}");
+    }
+    assert_eq!(item(&ask(".5 km m"), "result"), "500 m");
+    assert_eq!(item(&ask("-40 C F"), "result"), "-40 \u{b0}F");
+    assert_eq!(item(&ask("1/2 cup flour g"), "result"), "62.5 g");
+    assert_eq!(item(&ask("1 1/2 cup flour g"), "result"), "187.5 g");
+
+    // Other kinds: temperature, power, fuel economy, data, speed, area.
+    assert_eq!(item(&ask("72 F C"), "result"), "22.22222222 \u{b0}C");
+    assert_eq!(item(&ask("100 hp kW"), "result"), "74.56998716 kW");
+    assert_eq!(
+        item(&ask("30 mpg L/100km"), "result"),
+        "7.840486111 L/100km"
+    );
+    assert_eq!(item(&ask("8 L/100km km/L"), "result"), "12.5 km/L");
+    assert_eq!(item(&ask("100 Mbps MB/s"), "result"), "12.5 MB/s");
+    assert_eq!(item(&ask("10 MB Mb"), "result"), "80 Mb");
+    assert_eq!(item(&ask("10 Mb MB"), "result"), "1.25 MB");
+    assert_eq!(item(&ask("100 km/h mph"), "result"), "62.13711922 mph");
+    assert_eq!(item(&ask("3 square feet m2"), "result"), "0.27870912 m2");
+
+    // Cooking by ingredient, in both directions, and browsing.
+    assert_eq!(item(&ask("1 cup flour g"), "result"), "125 g");
+    assert_eq!(item(&ask("200 g sugar cups"), "result"), "1 cup");
+    assert_eq!(item(&ask("2 tbsp butter g"), "result"), "28.375 g");
+    assert_eq!(item(&ask("1 cup brown sugar g"), "result"), "220 g");
+    let items = ask("1 cup flour");
+    assert_eq!(item(&items, "g"), "125 g");
+    assert_eq!(item(&items, "oz"), "4.409245244 oz");
+    assert_eq!(item(&items, "tbsp"), "16 tbsp");
+
+    // Typography at 96 dpi; em and rem follow the `@` size.
+    assert_eq!(item(&ask("16px pt"), "result"), "12 pt");
+    assert_eq!(item(&ask("2rem px @ 18px"), "result"), "36 px");
+    assert_eq!(item(&ask("2rem px"), "result"), "32 px");
+    assert_eq!(item(&ask("1 pica pt"), "result"), "12 pt");
+    // `pc` is the parsec next to ordinary lengths, the pica next to px/pt.
+    assert_eq!(item(&ask("12 pc px"), "result"), "192 px");
+    assert!(item(&ask("2 pc m"), "result").ends_with(" m"));
+
+    // Zero fuel economy, bad units and mixed kinds get a single explaining row.
+    for query in ["0 mpg L/100km", "0 L/100km"] {
+        assert_eq!(
+            titles(&ask(query)),
+            ["Zero has no fuel economy equivalent"],
+            "{query}"
+        );
+    }
+    assert_eq!(
+        titles(&ask("5 km kg")),
+        ["Cannot convert km (length) to kg (mass)"]
+    );
+    assert_eq!(titles(&ask("5 kmx")), ["Unknown unit \"kmx\""]);
+    let items = ask("garbage");
+    assert_eq!(titles(&items), ["Unknown unit \"garbage\""]);
+    assert_eq!(items[0]["subtitle"], "Did you mean: gal?");
+    assert_eq!(titles(&ask("1e999 m")), ["That number is too large"]);
+    assert_eq!(titles(&ask("1/0 m")), ["That value cannot be converted"]);
+
+    // No query: a hint and examples that can be copied.
+    let items = ask("");
+    assert_eq!(item(&items, "hint"), "Type a number and a unit");
+    assert_eq!(item(&items, "example-0"), "unit 5 km");
+}
+
+#[test]
+fn the_percentage_calculator_answers_common_questions() {
+    let Some(py) = require_python() else { return };
+    let ask = |query: &str| ask(&py, "percentage", "pct.py", query);
+    for query in ["15% of 200", "15 % of 200", "15 percent of 200"] {
+        assert_eq!(item(&ask(query), "result"), "30", "{query}");
+    }
+    for query in ["30 of 120", "30 is what % of 120"] {
+        assert_eq!(item(&ask(query), "result"), "25%", "{query}");
+    }
+    let items = ask("80 to 100");
+    assert_eq!(item(&items, "change"), "+25%");
+    assert_eq!(item(&items, "diff"), "20");
+    for query in ["200 + 15%", "200 +15%"] {
+        assert_eq!(item(&ask(query), "result"), "230", "{query}");
+    }
+    assert_eq!(item(&ask("200 - 15%"), "result"), "170");
+    let items = ask("15% off 200");
+    assert_eq!(item(&items, "result"), "170");
+    assert_eq!(item(&items, "saved"), "30");
+    for query in ["30 is 15% of what", "30 is 15% of ?"] {
+        assert_eq!(item(&ask(query), "result"), "200", "{query}");
+    }
+    let items = ask("15%");
+    assert_eq!(item(&items, "decimal"), "0.15");
+    assert_eq!(item(&items, "percent"), "15%");
+    assert_eq!(item(&items, "fraction"), "3/20");
+    let items = ask("0.15");
+    assert_eq!(item(&items, "decimal"), "0.15");
+    assert_eq!(item(&items, "percent"), "15%");
+    // Float noise is rounded away and large numbers stay out of exponent form.
+    assert_eq!(item(&ask("7% of 0.3"), "result"), "0.021");
+    assert_eq!(item(&ask("9999999999 + 1%"), "result"), "10099999999");
+    // Division by zero is explained in one row, not a crash.
+    for bad in ["30 of 0", "0 to 100", "30 is 0% of what"] {
+        assert_eq!(titles(&ask(bad)), ["Cannot divide by zero"], "{bad}");
+    }
+    assert_eq!(
+        titles(&ask("hello")),
+        ["That is not a percent question I can answer"]
+    );
+    let examples = ask("");
+    assert_eq!(examples.len(), 7);
+    assert_eq!(item(&examples, "example-1"), "15% of 200");
+}
+
+#[test]
+fn the_number_tools_spell_and_romanise_numbers() {
+    let Some(py) = require_python() else { return };
+    let ask = |query: &str| ask(&py, "number-tools", "num.py", query);
+    let items = ask("1234");
+    assert_eq!(item(&items, "decimal"), "1234");
+    assert_eq!(
+        item(&items, "words"),
+        "one thousand two hundred thirty-four"
+    );
+    assert_eq!(item(&items, "ordinal"), "1234th");
+    assert_eq!(
+        item(&items, "ordinal-words"),
+        "one thousand two hundred thirty-fourth"
+    );
+    assert_eq!(item(&items, "roman"), "MCCXXXIV");
+    assert_eq!(item(&items, "grouped"), "1,234");
+    assert_eq!(item(&items, "scientific"), "1.234e+3");
+    assert_eq!(item(&items, "engineering"), "1.234e+3");
+    assert_eq!(item(&items, "si"), "1.234 k");
+    for query in ["1,234", "1_234"] {
+        let items = ask(query);
+        assert_eq!(item(&items, "decimal"), "1234", "{query}");
+    }
+    // A Roman numeral is read as its value, with the same rows for that number.
+    for query in ["1994", "MCMXCIV", "mcmxciv"] {
+        let items = ask(query);
+        assert_eq!(item(&items, "decimal"), "1994", "{query}");
+        assert_eq!(
+            item(&items, "words"),
+            "one thousand nine hundred ninety-four",
+            "{query}"
+        );
+        assert_eq!(item(&items, "roman"), "MCMXCIV", "{query}");
+        assert_eq!(item(&items, "grouped"), "1,994", "{query}");
+        assert_eq!(item(&items, "si"), "1.994 k", "{query}");
+    }
+    assert_eq!(item(&ask("3999"), "roman"), "MMMCMXCIX");
+    // Ordinals take the right suffix, including the 11th to 13th exceptions.
+    for (number, ordinal) in [
+        ("1", "1st"),
+        ("2", "2nd"),
+        ("3", "3rd"),
+        ("11", "11th"),
+        ("12", "12th"),
+        ("13", "13th"),
+        ("21", "21st"),
+        ("112", "112th"),
+    ] {
+        assert_eq!(item(&ask(number), "ordinal"), ordinal, "{number}");
+    }
+    assert_eq!(item(&ask("21"), "ordinal-words"), "twenty-first");
+    assert_eq!(item(&ask("0"), "words"), "zero");
+    assert_eq!(item(&ask("0"), "ordinal"), "0th");
+    // Negatives, decimals and exponents.
+    let items = ask("-42");
+    assert_eq!(item(&items, "decimal"), "-42");
+    assert_eq!(item(&items, "words"), "minus forty-two");
+    assert_eq!(item(&items, "scientific"), "-4.2e+1");
+    assert_eq!(item(&items, "engineering"), "-42e+0");
+    assert_eq!(item(&items, "si"), "-42");
+    let items = ask("3.14");
+    assert_eq!(item(&items, "words"), "three point one four");
+    assert_eq!(item(&items, "grouped"), "3.14");
+    assert_eq!(item(&items, "scientific"), "3.14e+0");
+    let items = ask("1e6");
+    assert_eq!(item(&items, "decimal"), "1000000");
+    assert_eq!(item(&items, "words"), "one million");
+    assert_eq!(item(&items, "grouped"), "1,000,000");
+    assert_eq!(item(&items, "scientific"), "1e+6");
+    assert_eq!(item(&items, "si"), "1 M");
+    assert_eq!(item(&ask("1234567.89"), "grouped"), "1,234,567.89");
+    assert_eq!(item(&ask("12345"), "engineering"), "12.345e+3");
+    assert_eq!(item(&ask("12345"), "si"), "12.345 k");
+    let items = ask("0.0012");
+    assert_eq!(item(&items, "scientific"), "1.2e-3");
+    assert_eq!(item(&items, "si"), "1.2 m");
+    assert_eq!(
+        item(&ask("999999999999999"), "words"),
+        "nine hundred ninety-nine trillion nine hundred ninety-nine billion nine hundred ninety-nine million nine hundred ninety-nine thousand nine hundred ninety-nine"
+    );
+    // Too many digits before the point is refused with one explaining row.
+    assert_eq!(
+        titles(&ask("1000000000000000")),
+        ["That number is too big to spell out"]
+    );
+    // Not a number, or not a valid Roman numeral: one hint row.
+    for bad in ["abc", "12 99", "1,23", "MMMM", "IIII", "1,234e3"] {
+        assert_eq!(
+            titles(&ask(bad)),
+            ["That is not a number I can convert"],
+            "{bad}"
+        );
+    }
+    assert_eq!(titles(&ask("")), ["Type a number", "Or a Roman numeral"]);
+}
+
+#[test]
+fn the_encode_tools_encode_and_decode_typed_text() {
+    let Some(py) = require_python() else { return };
+    let ask = |query: &str| ask(&py, "encode-tools", "enc.py", query);
+
+    let items = ask("hello world");
+    assert_eq!(items[0]["key"], "b64");
+    assert_eq!(item(&items, "b64"), "aGVsbG8gd29ybGQ=");
+    assert_eq!(item(&items, "b64url"), "aGVsbG8gd29ybGQ");
+    assert_eq!(item(&items, "url"), "hello%20world");
+    assert_eq!(item(&items, "html"), "hello world");
+    assert_eq!(item(&items, "hex"), "68656c6c6f20776f726c64");
+    assert_eq!(item(&items, "rot13"), "uryyb jbeyq");
+    assert_eq!(item(&items, "json"), "\"hello world\"");
+
+    let items = ask("aGVsbG8gd29ybGQ=");
+    assert_eq!(items[0]["key"], "b64-decoded");
+    assert_eq!(item(&items, "b64-decoded"), "hello world");
+    assert_eq!(item(&items, "b64"), "YUdWc2JHOGdkMjl5YkdRPQ==");
+    assert_eq!(item(&items, "url"), "aGVsbG8gd29ybGQ%3D");
+    assert_eq!(item(&items, "hex"), "6147567362473867643239796247513d");
+    assert_eq!(item(&items, "rot13"), "nTIfoT8tq29loTD=");
+
+    let items = ask("hello%20world");
+    assert_eq!(items[0]["key"], "url-decoded");
+    assert_eq!(item(&items, "url-decoded"), "hello world");
+    assert_eq!(item(&items, "url"), "hello%2520world");
+    assert_eq!(item(&items, "html"), "hello%20world");
+
+    let items = ask("&lt;b&gt;");
+    assert_eq!(items[0]["key"], "html-decoded");
+    assert_eq!(item(&items, "html-decoded"), "<b>");
+    assert_eq!(item(&items, "html"), "&amp;lt;b&amp;gt;");
+    assert_eq!(item(&items, "url"), "%26lt%3Bb%26gt%3B");
+
+    let items = ask("68656c6c6f");
+    assert_eq!(items[0]["key"], "hex-decoded");
+    assert_eq!(item(&items, "hex-decoded"), "hello");
+    assert_eq!(item(&items, "hex"), "36383635366336633666");
+
+    let items = ask("");
+    assert!(items
+        .iter()
+        .all(|i| i["key"].as_str().is_some_and(|k| k.starts_with("help"))));
+
+    let items = ask("café ☃");
+    assert_eq!(items[0]["key"], "b64");
+    assert_eq!(item(&items, "b64"), "Y2Fmw6kg4piD");
+    assert_eq!(item(&items, "url"), "caf%C3%A9%20%E2%98%83");
+    assert_eq!(item(&items, "html"), "café ☃");
+    assert_eq!(item(&items, "hex"), "636166c3a920e29883");
+    assert_eq!(item(&items, "rot13"), "pnsé ☃");
+    assert_eq!(item(&items, "json"), "\"café ☃\"");
+
+    let items = ask("\\u00e9t\\u00e9");
+    assert_eq!(items[0]["key"], "unicode");
+    assert_eq!(item(&items, "unicode"), "été");
+}
+
+#[test]
+fn the_random_picker_stays_within_bounds() {
+    let Some(py) = require_python() else { return };
+    let ask = |query: &str| ask(&py, "random-picker", "rand.py", query);
+    for _ in 0..20 {
+        let n: i64 = item(&ask("1-6"), "range").parse().unwrap();
+        assert!((1..=6).contains(&n), "1-6 gave {n}");
+        // Swapped bounds are put in order.
+        let n: i64 = item(&ask("6 to 1"), "range").parse().unwrap();
+        assert!((1..=6).contains(&n), "6 to 1 gave {n}");
+        let n: i64 = item(&ask("-10..10"), "range").parse().unwrap();
+        assert!((-10..=10).contains(&n), "-10..10 gave {n}");
+        let n: i64 = item(&ask("50"), "range").parse().unwrap();
+        assert!((1..=50).contains(&n), "50 gave {n}");
+        let total: i64 = item(&ask("2d6"), "dice").parse().unwrap();
+        assert!((2..=12).contains(&total), "2d6 gave {total}");
+        let total: i64 = item(&ask("3d8+2"), "dice").parse().unwrap();
+        assert!((5..=26).contains(&total), "3d8+2 gave {total}");
+        let total: i64 = item(&ask("4d6-1"), "dice").parse().unwrap();
+        assert!((3..=23).contains(&total), "4d6-1 gave {total}");
+        let total: i64 = item(&ask("d20"), "dice").parse().unwrap();
+        assert!((1..=20).contains(&total), "d20 gave {total}");
+        let coin = item(&ask("coin"), "coin").to_owned();
+        assert!(coin == "Heads" || coin == "Tails", "coin gave {coin}");
+        let pick = item(&ask("pick a, b | c"), "pick").to_owned();
+        assert!(["a", "b", "c"].contains(&pick.as_str()), "pick gave {pick}");
+        let shuffled_text = item(&ask("shuffle a, b, c"), "shuffle").to_owned();
+        let mut shuffled: Vec<&str> = shuffled_text.split(", ").collect();
+        shuffled.sort_unstable();
+        assert_eq!(shuffled, ["a", "b", "c"]);
+    }
+}
+
+#[test]
+fn the_random_picker_shapes_its_rows_and_refuses_nonsense() {
+    let Some(py) = require_python() else { return };
+    let ask = |query: &str| ask(&py, "random-picker", "rand.py", query);
+    let items = ask("");
+    for key in ["coin", "d6", "range"] {
+        assert!(
+            items.iter().any(|i| i["key"] == key),
+            "empty query lacks {key}"
+        );
+    }
+    assert_eq!(titles(&ask("0d6")), ["Roll from 1 to 100 dice"]);
+    assert_eq!(titles(&ask("1d1")), ["Dice need 2 to 1000 sides"]);
+    assert_eq!(titles(&ask("pick")), ["Add the options after pick"]);
+    assert_eq!(titles(&ask("0")), ["Top number must be 1 or more"]);
+    let unknown = ask("xyz");
+    assert!(unknown.iter().any(|i| i["key"] == "hint"));
+    assert!(unknown.iter().any(|i| i["key"] == "help-dice"));
+    assert_eq!(
+        item(&ask("shuffle a, b, c"), "shuffle").split(", ").count(),
+        3
+    );
+    assert_eq!(item(&ask("pick only"), "pick"), "only");
+}

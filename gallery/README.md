@@ -68,6 +68,11 @@ standard-library only, and wait for your permission before anything runs:
 | `chmod-calculator` | `chmod` | octal and symbolic Unix permissions (`chmod 755`) | Python 3 |
 | `date-calculator` | `days` | days until or between dates, date plus N days | Python 3 |
 | `slugify` | `slug` | URL slug, safe file name, word and reading-time counts | Python 3 |
+| `unit-converter` | `unit` | length, mass, temperature, data, cooking and CSS units (`unit 5 km mi`) | Python 3 |
+| `percentage` | `pct` | percent of a number, percent change and discounts (`pct 15% of 200`) | Python 3 |
+| `number-tools` | `num` | number in words, ordinal, Roman, scientific and SI forms (`num 1234`) | Python 3 |
+| `random-picker` | `rand` | coin flip, dice, random numbers and list picks (`rand 2d6`) | Python 3 |
+| `encode-tools` | `enc` | Base64, URL, HTML, hex, JSON and Unicode-escape encoding and decoding (`enc hello`) | Python 3 |
 
 **Native extensions** (source in `examples/native/<id>/`; compiled Rust programs,
 one `.sevakext` package per platform in `extensions/<id>/`). All are offline,

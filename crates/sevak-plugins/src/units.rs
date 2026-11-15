@@ -9,7 +9,8 @@
 //!
 //! Every category has a base unit, and a unit is `base = (value + offset) *
 //! factor`; only temperature has a non-zero offset, which is what makes
-//! `32 F = 0 C` work. Spellings come in two kinds:
+//! `32 F = 0 C` work. `L/100km` is the one reciprocal unit (`base = factor /
+//! value`), so `0 L/100km` has no answer. Spellings come in two kinds:
 //!
 //! - **case-sensitive** (`MB` megabyte, `Mb` megabit, `B` byte, `b` bit,
 //!   `kPa`, `MPa`, `Cal`, `L`), tried first, and
@@ -30,9 +31,18 @@
 //! - `cal` is the small calorie (4.184 J), `Cal` the food Calorie (1 kcal).
 //! - `°`, `deg` and `degrees` alone are angles; with a letter after
 //!   (`°F`, `deg C`, `degrees celsius`) they are temperatures.
+//! - `kN`, `Nm`, `MW` and `mW` are case-sensitive, because `kn` is the knot, `nm`
+//!   the nanometer and `mw` could be either watt; `c` stays Celsius, so there is
+//!   no speed of light, and `kt` stays the knot.
+//! - Pound-foot (`lbf·ft`, `lb-ft`) is torque, foot-pound (`ft·lbf`, `ft-lb`) is
+//!   energy; inch-pounds (`in-lb`) are torque. `bbl` is the 42 gallon oil barrel
+//!   and `Mach` is 340.29 m/s (sea level, 15 °C).
+//! - `Mbps` is megabits per second and `MBps` megabytes, like `Mb` and `MB`.
 //!
 //! `km/h`, `m/s`, `mi/h`, `ft/min`, ... and `miles per hour` are built from any
-//! length unit over any time unit; `mph`, `kph`, `knots` and friends also work.
+//! length unit over any time unit, and `MB/s`, `Mbit/s`, `MiB/s`, ... from any
+//! data unit over any time unit; `mph`, `kph`, `knots` and friends also work.
+//! Fuel economy is `km/L`, `L/100km`, `mpg` (US) and `mpg imp`.
 //! `sq ft`, `square feet`, `ft2`, `ft²`, `cubic cm`, `cm3`, ... are derived from
 //! the common length units.
 
@@ -61,9 +71,16 @@ pub enum Category {
     Pressure,
     Energy,
     Angle,
+    Power,
+    Frequency,
+    Force,
+    Torque,
+    DataRate,
+    FuelEconomy,
 }
 
-/// A unit of measurement: `base = (value + offset) * factor`.
+/// A unit of measurement: `base = (value + offset) * factor`, or
+/// `base = factor / value` for the one reciprocal unit (`L/100km`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Unit {
     pub category: Category,
@@ -71,16 +88,25 @@ pub struct Unit {
     pub symbol: String,
     factor: f64,
     offset: f64,
+    inverse: bool,
 }
 
 impl Unit {
     fn to_base(&self, value: f64) -> f64 {
-        (value + self.offset) * self.factor
+        let value = value + self.offset;
+        if self.inverse {
+            self.factor / value
+        } else {
+            value * self.factor
+        }
     }
 
     /// `base` expressed in this unit, with cancellation noise snapped to zero
     /// (`32 F` in `C` is `5.7e-14` in floating point, not `0`).
     fn in_unit(&self, base: f64) -> f64 {
+        if self.inverse {
+            return self.factor / base;
+        }
         let scaled = base / self.factor;
         let value = scaled - self.offset;
         if value.abs() < NOISE_THRESHOLD * scaled.abs().max(self.offset.abs()) {
@@ -96,8 +122,9 @@ pub fn convert(value: f64, from: &Unit, to: &Unit) -> Option<f64> {
     if from.category != to.category {
         return None;
     }
-    let out = to.in_unit(from.to_base(value));
-    out.is_finite().then_some(out)
+    let base = from.to_base(value);
+    let out = to.in_unit(base);
+    (base.is_finite() && out.is_finite()).then_some(out)
 }
 
 // ---------------------------------------------------------------------------
@@ -130,6 +157,7 @@ impl Table {
             symbol: symbol.to_owned(),
             factor,
             offset,
+            inverse: false,
         });
         for spelling in exact {
             self.claim(true, spelling.to_string(), index);
@@ -137,6 +165,21 @@ impl Table {
         for name in names {
             self.claim(false, name.to_lowercase(), index);
         }
+        index
+    }
+
+    /// Like `add` for a unit that is the reciprocal of its base (`L/100km` over
+    /// `km/L`): zero and infinity then have no counterpart, see `convert`.
+    fn add_inverse(
+        &mut self,
+        category: Category,
+        symbol: &str,
+        factor: f64,
+        exact: &[&str],
+        names: &[&str],
+    ) -> usize {
+        let index = self.add(category, symbol, factor, 0.0, exact, names);
+        self.units[index].inverse = true;
         index
     }
 
@@ -308,6 +351,49 @@ fn build() -> Table {
         &[],
         &["å", "angstrom", "angstroms", "ångström"],
     );
+    t.add(
+        Length,
+        "furlong",
+        201.168,
+        0.0,
+        &[],
+        &["furlong", "furlongs"],
+    );
+    t.add(Length, "chain", 20.1168, 0.0, &[], &["chain", "chains"]);
+    t.add(
+        Length,
+        "rod",
+        5.0292,
+        0.0,
+        &[],
+        &["rod", "rods", "pole", "poles", "perch", "perches"],
+    );
+    t.add(
+        Length,
+        "ftm",
+        1.8288,
+        0.0,
+        &[],
+        &["ftm", "fathom", "fathoms"],
+    );
+    t.add(
+        Length,
+        "league",
+        4_828.032,
+        0.0,
+        &[],
+        &["league", "leagues"],
+    );
+    t.add(
+        Length,
+        "pc",
+        3.085_677_581_491_367e16,
+        0.0,
+        &[],
+        &["pc", "parsec", "parsecs"],
+    );
+    t.add(Length, "mil", 2.54e-5, 0.0, &[], &["mil", "mils", "thou"]);
+    t.add(Length, "hand", 0.1016, 0.0, &[], &["hand", "hands", "hh"]);
 
     // Area (m²) and volume (L) units derived from the common lengths.
     let derivable = [
@@ -528,6 +614,15 @@ fn build() -> Table {
         &["gr", "grain", "grains"],
     );
     t.add(Mass, "ct", 2e-4, 0.0, &[], &["ct", "carat", "carats"]);
+    t.add(
+        Mass,
+        "ozt",
+        0.031_103_476_8,
+        0.0,
+        &[],
+        &["ozt", "troy oz", "troy ounce", "troy ounces"],
+    );
+    t.add(Mass, "slug", 14.593_902_937_2, 0.0, &[], &["slug", "slugs"]);
 
     // Temperature (K): base = (value + offset) * factor.
     t.add(
@@ -738,6 +833,38 @@ fn build() -> Table {
             "imperial gallons",
         ],
     );
+    t.add(
+        Volume,
+        "gill",
+        0.118_294_118_25,
+        0.0,
+        &[],
+        &["gill", "gills"],
+    );
+    // The oil barrel (42 US gallons), not the 31.5 gallon liquid barrel.
+    t.add(
+        Volume,
+        "bbl",
+        158.987_294_928,
+        0.0,
+        &[],
+        &[
+            "bbl",
+            "bbls",
+            "barrel",
+            "barrels",
+            "oil barrel",
+            "oil barrels",
+        ],
+    );
+    t.add(
+        Volume,
+        "ac·ft",
+        1_233_481.837_547_52,
+        0.0,
+        &[],
+        &["ac ft", "acre ft", "acre foot", "acre feet"],
+    );
 
     // Speed (m/s); `X/Y` and `X per Y` are built on the fly in `lookup`.
     t.add(Speed, "mph", 0.447_04, 0.0, &[], &["mph"]);
@@ -752,6 +879,8 @@ fn build() -> Table {
         &[],
         &["kn", "kt", "kts", "knot", "knots"],
     );
+    // Sea level, ISA (15 °C); the speed of sound changes with temperature.
+    t.add(Speed, "Mach", 340.29, 0.0, &[], &["mach"]);
 
     // Data (byte): SI prefixes are powers of 1000, IEC ones powers of 1024.
     t.add(Data, "B", 1.0, 0.0, &["B"], &["byte", "bytes"]);
@@ -762,6 +891,8 @@ fn build() -> Table {
         ("G", "giga", 1e9, &["GB"][..], &["Gb"][..]),
         ("T", "tera", 1e12, &["TB"][..], &["Tb"][..]),
         ("P", "peta", 1e15, &["PB"][..], &["Pb"][..]),
+        ("E", "exa", 1e18, &["EB"][..], &["Eb"][..]),
+        ("Z", "zetta", 1e21, &["ZB"][..], &["Zb"][..]),
     ];
     for (prefix, word, power, byte_exact, bit_exact) in si {
         let lower = prefix.to_lowercase();
@@ -799,6 +930,8 @@ fn build() -> Table {
         ("Gi", "gibi", 1024.0_f64.powi(3)),
         ("Ti", "tebi", 1024.0_f64.powi(4)),
         ("Pi", "pebi", 1024.0_f64.powi(5)),
+        ("Ei", "exbi", 1024.0_f64.powi(6)),
+        ("Zi", "zebi", 1024.0_f64.powi(7)),
     ];
     for (prefix, word, power) in iec {
         let lower = prefix.to_lowercase();
@@ -830,6 +963,15 @@ fn build() -> Table {
             .map(String::as_str),
         );
     }
+
+    t.add(
+        Data,
+        "nibble",
+        0.5,
+        0.0,
+        &[],
+        &["nibble", "nibbles", "nybble", "nybbles"],
+    );
 
     // Time (s).
     t.add(
@@ -921,6 +1063,22 @@ fn build() -> Table {
         &[],
         &["century", "centuries"],
     );
+    t.add(
+        Time,
+        "fortnight",
+        1_209_600.0,
+        0.0,
+        &[],
+        &["fortnight", "fortnights"],
+    );
+    t.add(
+        Time,
+        "millennium",
+        31_557_600_000.0,
+        0.0,
+        &[],
+        &["millennium", "millennia", "millenniums"],
+    );
 
     // Pressure (Pa).
     t.add(Pressure, "Pa", 1.0, 0.0, &[], &["pa", "pascal", "pascals"]);
@@ -978,6 +1136,28 @@ fn build() -> Table {
     t.add(Pressure, "torr", 101_325.0 / 760.0, 0.0, &[], &["torr"]);
     t.add(Pressure, "mmHg", 133.322_387_415, 0.0, &[], &["mmhg"]);
     t.add(Pressure, "inHg", 3_386.388_640_341, 0.0, &[], &["inhg"]);
+    t.add(
+        Pressure,
+        "inH2O",
+        249.088_91,
+        0.0,
+        &[],
+        &[
+            "inh2o",
+            "inh₂o",
+            "in h2o",
+            "inch of water",
+            "inches of water",
+        ],
+    );
+    t.add(
+        Pressure,
+        "cmH2O",
+        98.066_5,
+        0.0,
+        &[],
+        &["cmh2o", "cmh₂o", "cm h2o", "cm of water"],
+    );
 
     // Energy (J).
     t.add(Energy, "J", 1.0, 0.0, &[], &["j", "joule", "joules"]);
@@ -1046,6 +1226,46 @@ fn build() -> Table {
         &[],
         &["ev", "electronvolt", "electronvolts"],
     );
+    t.add(
+        Energy,
+        "GJ",
+        1e9,
+        0.0,
+        &[],
+        &["gj", "gigajoule", "gigajoules"],
+    );
+    t.add(
+        Energy,
+        "thm",
+        105_480_400.0,
+        0.0,
+        &[],
+        &["thm", "therm", "therms"],
+    );
+    // `ft·lbf` and `ft-lb` are energy, `lbf·ft` and `lb-ft` torque.
+    t.add(
+        Energy,
+        "ft·lbf",
+        1.355_817_948_331_400_4,
+        0.0,
+        &[],
+        &[
+            "ft lbf",
+            "ft lb",
+            "foot pound",
+            "foot pounds",
+            "foot pound force",
+        ],
+    );
+    t.add(Energy, "erg", 1e-7, 0.0, &[], &["erg", "ergs"]);
+    t.add(
+        Energy,
+        "tTNT",
+        4.184e9,
+        0.0,
+        &[],
+        &["ttnt", "ton tnt", "tons tnt", "ton of tnt", "tons of tnt"],
+    );
 
     // Angle (rad).
     t.add(Angle, "rad", 1.0, 0.0, &[], &["rad", "radian", "radians"]);
@@ -1090,6 +1310,325 @@ fn build() -> Table {
         &["arcsec", "arcsecs", "arcsecond", "arcseconds"],
     );
 
+    // Power (W). `mw` is left unclaimed: milliwatt or megawatt.
+    t.add(Power, "W", 1.0, 0.0, &[], &["w", "watt", "watts", "j/s"]);
+    t.add(
+        Power,
+        "mW",
+        1e-3,
+        0.0,
+        &["mW"],
+        &["milliwatt", "milliwatts"],
+    );
+    t.add(Power, "kW", 1e3, 0.0, &[], &["kw", "kilowatt", "kilowatts"]);
+    t.add(Power, "MW", 1e6, 0.0, &["MW"], &["megawatt", "megawatts"]);
+    t.add(Power, "GW", 1e9, 0.0, &[], &["gw", "gigawatt", "gigawatts"]);
+    t.add(
+        Power,
+        "hp",
+        745.699_871_582_270_2,
+        0.0,
+        &[],
+        &["hp", "horsepower", "horse power", "mechanical horsepower"],
+    );
+    t.add(
+        Power,
+        "PS",
+        735.498_75,
+        0.0,
+        &[],
+        &[
+            "ps",
+            "cv",
+            "metric hp",
+            "metric horsepower",
+            "pferdestarke",
+            "pferdestärke",
+        ],
+    );
+    t.add(
+        Power,
+        "BTU/h",
+        1_055.055_852_62 / 3600.0,
+        0.0,
+        &[],
+        &["btu/h", "btu/hr", "btu/hour", "btuh"],
+    );
+    t.add(
+        Power,
+        "kcal/h",
+        4184.0 / 3600.0,
+        0.0,
+        &[],
+        &["kcal/h", "kcal/hr", "kcal/hour"],
+    );
+    t.add(
+        Power,
+        "ft·lbf/s",
+        1.355_817_948_331_400_4,
+        0.0,
+        &[],
+        &["ft lbf/s", "ft lb/s", "ft lbf/sec", "ft lb/sec"],
+    );
+
+    // Frequency (Hz).
+    t.add(Frequency, "Hz", 1.0, 0.0, &[], &["hz", "hertz"]);
+    t.add(Frequency, "kHz", 1e3, 0.0, &[], &["khz", "kilohertz"]);
+    t.add(Frequency, "MHz", 1e6, 0.0, &["MHz"], &["mhz", "megahertz"]);
+    t.add(Frequency, "GHz", 1e9, 0.0, &[], &["ghz", "gigahertz"]);
+    t.add(Frequency, "THz", 1e12, 0.0, &[], &["thz", "terahertz"]);
+    t.add(
+        Frequency,
+        "rpm",
+        1.0 / 60.0,
+        0.0,
+        &[],
+        &[
+            "rpm",
+            "r/min",
+            "rev/min",
+            "revs/min",
+            "revolutions/minute",
+            "revolution/minute",
+        ],
+    );
+    t.add(
+        Frequency,
+        "bpm",
+        1.0 / 60.0,
+        0.0,
+        &[],
+        &["bpm", "beats/min", "beat/min", "beats/minute"],
+    );
+
+    // Force (N). `kN` is case-sensitive because `kn` is the knot.
+    t.add(Force, "N", 1.0, 0.0, &["N"], &["newton", "newtons"]);
+    t.add(
+        Force,
+        "kN",
+        1e3,
+        0.0,
+        &["kN"],
+        &["kilonewton", "kilonewtons"],
+    );
+    t.add(
+        Force,
+        "MN",
+        1e6,
+        0.0,
+        &["MN"],
+        &["meganewton", "meganewtons"],
+    );
+    t.add(Force, "dyn", 1e-5, 0.0, &[], &["dyn", "dyne", "dynes"]);
+    t.add(
+        Force,
+        "lbf",
+        4.448_221_615_260_5,
+        0.0,
+        &[],
+        &["lbf", "pound force", "pounds force"],
+    );
+    t.add(
+        Force,
+        "kgf",
+        9.806_65,
+        0.0,
+        &[],
+        &[
+            "kgf",
+            "kp",
+            "kilogram force",
+            "kilograms force",
+            "kilopond",
+            "kiloponds",
+        ],
+    );
+    t.add(
+        Force,
+        "ozf",
+        4.448_221_615_260_5 / 16.0,
+        0.0,
+        &[],
+        &["ozf", "ounce force", "ounces force"],
+    );
+
+    // Torque (N·m). `Nm` is case-sensitive because `nm` is the nanometer.
+    // Pound-foot is torque, foot-pound is energy (see `ft·lbf` above).
+    t.add(
+        Torque,
+        "N·m",
+        1.0,
+        0.0,
+        &["Nm", "N m"],
+        &[
+            "n m",
+            "newton meter",
+            "newton meters",
+            "newton metre",
+            "newton metres",
+        ],
+    );
+    t.add(
+        Torque,
+        "kN·m",
+        1e3,
+        0.0,
+        &["kNm", "kN m"],
+        &[
+            "kn m",
+            "kilonewton meter",
+            "kilonewton meters",
+            "kilonewton metre",
+            "kilonewton metres",
+        ],
+    );
+    t.add(
+        Torque,
+        "lbf·ft",
+        1.355_817_948_331_400_4,
+        0.0,
+        &[],
+        &[
+            "lbf ft",
+            "lb ft",
+            "lbs ft",
+            "pound foot",
+            "pound feet",
+            "pound force foot",
+        ],
+    );
+    t.add(
+        Torque,
+        "lbf·in",
+        1.355_817_948_331_400_4 / 12.0,
+        0.0,
+        &[],
+        &["lbf in", "in lbf", "in lb", "pound inch", "pound inches"],
+    );
+    t.add(
+        Torque,
+        "kgf·m",
+        9.806_65,
+        0.0,
+        &[],
+        &[
+            "kgf m",
+            "kgfm",
+            "kilogram force meter",
+            "kilogram force metre",
+        ],
+    );
+    t.add(
+        Torque,
+        "dyn·cm",
+        1e-7,
+        0.0,
+        &[],
+        &[
+            "dyn cm",
+            "dyncm",
+            "dyne cm",
+            "dyne centimeter",
+            "dyne centimetre",
+        ],
+    );
+
+    // Data rate (bit/s). `X/Y` data-over-time units are built in `lookup`;
+    // these are the `bps` spellings, where `Mbps` is bits and `MBps` bytes.
+    t.add(DataRate, "bps", 1.0, 0.0, &[], &["bps"]);
+    t.add(DataRate, "B/s", 8.0, 0.0, &["Bps"], &[]);
+    for (prefix, power, byte_exact) in [
+        ("k", 1e3, &["kBps", "KBps"][..]),
+        ("M", 1e6, &["MBps"][..]),
+        ("G", 1e9, &["GBps"][..]),
+        ("T", 1e12, &["TBps"][..]),
+    ] {
+        t.add(
+            DataRate,
+            &format!("{prefix}bps"),
+            power,
+            0.0,
+            &[],
+            &[&format!("{prefix}bps")].map(String::as_str),
+        );
+        t.add(
+            DataRate,
+            &format!("{prefix}B/s"),
+            power * 8.0,
+            0.0,
+            byte_exact,
+            &[],
+        );
+    }
+
+    // Fuel economy (km/L); `L/100km` is the reciprocal.
+    t.add(
+        FuelEconomy,
+        "km/L",
+        1.0,
+        0.0,
+        &[],
+        &[
+            "km/l",
+            "kmpl",
+            "kpl",
+            "km/liter",
+            "km/litre",
+            "kilometers/liter",
+            "kilometres/litre",
+        ],
+    );
+    t.add_inverse(
+        FuelEconomy,
+        "L/100km",
+        100.0,
+        &[],
+        &[
+            "l/100km",
+            "l/100 km",
+            "lt/100km",
+            "liter/100km",
+            "liters/100km",
+            "liters/100 km",
+            "litre/100km",
+            "litres/100km",
+            "litres/100 km",
+        ],
+    );
+    t.add(
+        FuelEconomy,
+        "mpg",
+        1.609_344 / 3.785_411_784,
+        0.0,
+        &[],
+        &[
+            "mpg",
+            "mpg us",
+            "us mpg",
+            "mi/gal",
+            "mi/us gal",
+            "miles/gallon",
+            "mile/gallon",
+            "miles/gal",
+        ],
+    );
+    t.add(
+        FuelEconomy,
+        "mpg imp",
+        1.609_344 / 4.546_09,
+        0.0,
+        &[],
+        &[
+            "mpg imp",
+            "mpg uk",
+            "imp mpg",
+            "uk mpg",
+            "mi/imp gal",
+            "miles/imp gallon",
+            "miles/imperial gallon",
+        ],
+    );
+
     t
 }
 
@@ -1103,7 +1642,7 @@ fn table() -> &'static Table {
 // ---------------------------------------------------------------------------
 
 /// Canonical form of a unit spelling: single spaces, no dots or carets,
-/// `²`/`³` as digits, `per` as `/`, hyphens as spaces.
+/// `²`/`³` as digits, `per` as `/`, hyphens and middle dots as spaces.
 fn normalize_unit_text(text: &str) -> String {
     let mut s = String::with_capacity(text.len());
     for c in text.trim().chars() {
@@ -1112,7 +1651,7 @@ fn normalize_unit_text(text: &str) -> String {
             '³' => s.push('3'),
             'º' => s.push('°'),
             '^' | '.' => {}
-            '-' | '_' => s.push(' '),
+            '-' | '_' | '·' | '⋅' => s.push(' '),
             c => s.push(c),
         }
     }
@@ -1170,17 +1709,27 @@ pub fn lookup(text: &str) -> Option<Unit> {
             }
         }
     }
-    // `km/h`, `ft/min`: any length over any time.
-    if let Some((distance, time)) = text.split_once('/') {
-        let (distance, time) = (lookup_plain(distance.trim())?, lookup_plain(time.trim())?);
-        if distance.category == Category::Length && time.category == Category::Time {
-            return Some(Unit {
-                category: Category::Speed,
-                symbol: format!("{}/{}", distance.symbol, time.symbol),
-                factor: distance.factor / time.factor,
-                offset: 0.0,
-            });
+    // `km/h`, `ft/min`: any length over any time; `MB/s`, `Mbit/min`: any
+    // data over any time. Fuel economy (`km/L`, `L/100km`) is in the table,
+    // which is searched first.
+    if let Some((amount, time)) = text.split_once('/') {
+        let (amount, time) = (lookup_plain(amount.trim())?, lookup_plain(time.trim())?);
+        if time.category != Category::Time {
+            return None;
         }
+        let (category, factor) = match amount.category {
+            Category::Length => (Category::Speed, amount.factor / time.factor),
+            // Data is counted in bytes, data rates in bits.
+            Category::Data => (Category::DataRate, amount.factor * 8.0 / time.factor),
+            _ => return None,
+        };
+        return Some(Unit {
+            category,
+            symbol: format!("{}/{}", amount.symbol, time.symbol),
+            factor,
+            offset: 0.0,
+            inverse: false,
+        });
     }
     None
 }
@@ -1262,7 +1811,7 @@ fn parse_quantity(text: &str) -> Option<Quantity> {
 }
 
 /// `2 h 30 min`, `5 ft 11 in`, `5'11"`: two or more `number unit` pairs of one
-/// category (not temperature), summed.
+/// category (not temperature or `L/100km`), summed.
 fn parse_compound(text: &str) -> Option<Quantity> {
     let mut rest = text.trim();
     let negative = rest.starts_with('-');
@@ -1287,7 +1836,10 @@ fn parse_compound(text: &str) -> Option<Quantity> {
             })
             .map_or(after.len(), |(i, _)| i);
         let unit = lookup(after[..unit_end].trim())?;
-        if unit.offset != 0.0 || *category.get_or_insert(unit.category) != unit.category {
+        if unit.offset != 0.0
+            || unit.inverse
+            || *category.get_or_insert(unit.category) != unit.category
+        {
             return None;
         }
         total += number * unit.factor;
@@ -1341,7 +1893,7 @@ pub fn answer(input: &str) -> Option<Conversion> {
             continue;
         }
         let value = to.in_unit(quantity.base);
-        if !value.is_finite() {
+        if !(quantity.base.is_finite() && value.is_finite()) {
             continue;
         }
         return Some(Conversion {
@@ -1467,6 +2019,8 @@ mod tests {
         assert_eq!(conv("20 deg C to F"), "68 °F");
         assert_eq!(conv("20 degC in degF"), "68 °F");
         assert_eq!(conv("20 °C = °F"), "68 °F");
+        assert_eq!(conv("(30 + 2) f to c"), "0 °C");
+        assert_eq!(conv("2 * 10 c to f"), "68 °F");
     }
 
     #[test]
@@ -1505,6 +2059,7 @@ mod tests {
         assert_eq!(conv("1 acre to sqft"), "43560 ft²");
         assert_eq!(conv("1 km2 to ha"), "100 ha");
         assert_eq!(conv("2 square feet in square inches"), "288 in²");
+        assert_eq!(conv("1 acre in m²"), "4046.856422 m²");
     }
 
     #[test]
@@ -1628,6 +2183,210 @@ mod tests {
     }
 
     #[test]
+    fn power() {
+        assert_eq!(conv("1 kW in W"), "1000 W");
+        assert_eq!(conv("1 MW in kW"), "1000 kW");
+        assert_eq!(conv("1 GW in MW"), "1000 MW");
+        assert_eq!(conv("1 W in mW"), "1000 mW");
+        assert_eq!(conv("1 hp in W"), "745.6998716 W");
+        assert_eq!(conv("1 hp in kW"), "0.7456998716 kW");
+        assert_eq!(conv("100 PS in kW"), "73.549875 kW");
+        assert_eq!(conv("1 horsepower to ps"), "1.013869665 PS");
+        assert_eq!(conv("1 kW in BTU/h"), "3412.141633 BTU/h");
+        assert_eq!(conv("1000 kcal/h in W"), "1162.222222 W");
+        assert_eq!(conv("550 ft·lbf/s in hp"), "1 hp");
+        assert_eq!(conv("2 kilowatts to watts"), "2000 W");
+        close("1 kW = hp", 1.34102209);
+    }
+
+    #[test]
+    fn frequency() {
+        assert_eq!(conv("1 kHz in Hz"), "1000 Hz");
+        assert_eq!(conv("2.4 GHz in MHz"), "2400 MHz");
+        assert_eq!(conv("1 THz in GHz"), "1000 GHz");
+        assert_eq!(conv("60 rpm in Hz"), "1 Hz");
+        assert_eq!(conv("1 Hz in rpm"), "60 rpm");
+        assert_eq!(conv("120 bpm in Hz"), "2 Hz");
+        assert_eq!(conv("3000 rev/min to rpm"), "3000 rpm");
+        assert_eq!(conv("1 megahertz to khz"), "1000 kHz");
+    }
+
+    #[test]
+    fn force() {
+        assert_eq!(conv("1 kN in N"), "1000 N");
+        assert_eq!(conv("1 MN in kN"), "1000 kN");
+        assert_eq!(conv("1 N in dyn"), "100000 dyn");
+        assert_eq!(conv("1 lbf in N"), "4.448221615 N");
+        assert_eq!(conv("1 kgf in N"), "9.80665 N");
+        assert_eq!(conv("1 kp in N"), "9.80665 N");
+        assert_eq!(conv("16 ozf in lbf"), "1 lbf");
+        assert_eq!(conv("100 N in kgf"), "10.19716213 kgf");
+        assert_eq!(conv("1 pound-force to newtons"), "4.448221615 N");
+    }
+
+    #[test]
+    fn torque() {
+        assert_eq!(conv("1 N·m in lbf·ft"), "0.7375621493 lbf·ft");
+        assert_eq!(conv("100 Nm in lbf·ft"), "73.75621493 lbf·ft");
+        assert_eq!(conv("100 lb-ft to Nm"), "135.5817948 N·m");
+        assert_eq!(conv("1 lbf·ft in lbf·in"), "12 lbf·in");
+        assert_eq!(conv("12 in-lb to lb-ft"), "1 lbf·ft");
+        assert_eq!(conv("1 kN·m in N m"), "1000 N·m");
+        assert_eq!(conv("1 kgf·m in N·m"), "9.80665 N·m");
+        assert_eq!(conv("1 N·m in dyn·cm"), "10000000 dyn·cm");
+        assert_eq!(conv("1 newton meter to newton metres"), "1 N·m");
+        // `nm` is still nanometers, `Nm` newton meters.
+        assert_eq!(conv("1 nm in m"), "0.000000001 m");
+        assert_eq!(unit("Nm").category, Category::Torque);
+        assert_eq!(unit("nm").category, Category::Length);
+    }
+
+    #[test]
+    fn foot_pounds_are_energy_and_pound_feet_torque() {
+        assert_eq!(unit("ft·lbf").category, Category::Energy);
+        assert_eq!(unit("ft-lb").category, Category::Energy);
+        assert_eq!(unit("lbf·ft").category, Category::Torque);
+        assert_eq!(unit("lb-ft").category, Category::Torque);
+        assert_eq!(conv("1 ft·lbf in J"), "1.355817948 J");
+        assert!(answer("1 ft·lbf in N·m").is_none());
+        assert!(answer("1 lb-ft in J").is_none());
+    }
+
+    #[test]
+    fn data_rate() {
+        assert_eq!(conv("100 Mbps in MB/s"), "12.5 MB/s");
+        assert_eq!(conv("1 GB/s in Gbps"), "8 Gbps");
+        assert_eq!(conv("1 Gbps in Mbps"), "1000 Mbps");
+        assert_eq!(conv("1 Mbit/s in kbps"), "1000 kbps");
+        assert_eq!(conv("1 MiB/s in KiB/s"), "1024 KiB/s");
+        assert_eq!(conv("8 Mb/s in MB/s"), "1 MB/s");
+        assert_eq!(conv("1 MB/s in Mb/s"), "8 Mbit/s");
+        assert_eq!(conv("1 GB/min in MB/s"), "16.66666667 MB/s");
+        assert_eq!(conv("1 MBps in Mbps"), "8 Mbps");
+        assert_eq!(conv("1 Bps in bps"), "8 bps");
+        assert_eq!(conv("1 megabit per second to kbps"), "1000 kbps");
+        assert_eq!(conv("1 byte/s in bit/s"), "8 bit/s");
+        assert_eq!(unit("MB/s").category, Category::DataRate);
+        assert_eq!(unit("Tbps").symbol, "Tbps");
+        assert!(answer("1 Mbps in MB").is_none());
+        assert!(answer("1 MB/s in km/h").is_none());
+        assert!(answer("1 kg/s in MB/s").is_none());
+    }
+
+    #[test]
+    fn fuel_economy() {
+        close("30 mpg in L/100km", 7.840486111);
+        close("7.840486111 L/100km in mpg", 30.0);
+        close("30 mpg in km/L", 12.75431122);
+        close("12.75431122 km/L in mpg", 30.0);
+        close("10 km/L in L/100km", 10.0);
+        close("10 L/100km in km/L", 10.0);
+        close("8 l/100 km to mpg", 29.40182292);
+        close("1 mpg imp in km/L", 0.354006190);
+        close("30 mpg uk in L/100km", 9.416031211);
+        close("30 mpg in mpg imp", 36.02849777);
+        assert_eq!(conv("100 L/100km in km/L"), "1 km/L");
+        assert_eq!(conv("1 km/L in L/100km"), "100 L/100km");
+        assert_eq!(conv("5 L/100km in L/100km"), "5 L/100km");
+        assert_eq!(conv("0 mpg in km/L"), "0 km/L");
+        assert_eq!(unit("km/L").category, Category::FuelEconomy);
+        assert_eq!(unit("L/100 km").symbol, "L/100km");
+        assert_eq!(unit("liters per 100 km").symbol, "L/100km");
+        assert_eq!(unit("miles per gallon").symbol, "mpg");
+    }
+
+    #[test]
+    fn fuel_economy_has_no_answer_at_zero_or_infinity() {
+        assert!(answer("0 L/100km in mpg").is_none());
+        assert!(answer("0 L/100km in km/L").is_none());
+        assert!(answer("0 L/100km in L/100km").is_none());
+        assert!(answer("0 mpg in L/100km").is_none());
+        assert!(answer("0 km/L in L/100km").is_none());
+        assert!(answer("1e-320 L/100km in mpg").is_none());
+        let (lper100, mpg) = (unit("L/100km"), unit("mpg"));
+        assert!(convert(0.0, &lper100, &mpg).is_none());
+        assert!(convert(0.0, &mpg, &lper100).is_none());
+        assert!(convert(f64::INFINITY, &mpg, &mpg).is_none());
+    }
+
+    #[test]
+    fn fuel_economy_is_not_length_over_volume_or_compound() {
+        assert!(answer("10 km/L in km/h").is_none());
+        assert!(answer("10 km/L in m").is_none());
+        assert!(answer("30 mpg in mph").is_none());
+        assert!(answer("5 L/100km 3 L/100km in mpg").is_none());
+        assert_eq!(unit("km/h").category, Category::Speed);
+    }
+
+    #[test]
+    fn longer_lengths() {
+        assert_eq!(conv("1 furlong in m"), "201.168 m");
+        assert_eq!(conv("8 furlongs in mi"), "1 mi");
+        assert_eq!(conv("1 chain in ft"), "66 ft");
+        assert_eq!(conv("1 rod in ft"), "16.5 ft");
+        assert_eq!(conv("1 pole in rod"), "1 rod");
+        assert_eq!(conv("1 perch in m"), "5.0292 m");
+        assert_eq!(conv("1 fathom in ft"), "6 ft");
+        assert_eq!(conv("1 league in mi"), "3 mi");
+        assert_eq!(conv("1 mil in µm"), "25.4 µm");
+        assert_eq!(conv("1000 thou in in"), "1 in");
+        assert_eq!(conv("1 hand in in"), "4 in");
+        close("1 parsec in ly", 3.261563777);
+        close("1 pc in au", 206_264.806_2);
+    }
+
+    #[test]
+    fn more_mass_volume_and_energy() {
+        assert_eq!(conv("1 troy oz in g"), "31.1034768 g");
+        assert_eq!(conv("1 ozt in oz"), "1.097142857 oz");
+        close("1 slug in kg", 14.5939029372);
+        assert_eq!(conv("1 barrel in gal"), "42 gal");
+        assert_eq!(conv("1 bbl in L"), "158.9872949 L");
+        assert_eq!(conv("1 gill in fl oz"), "4 fl oz");
+        assert_eq!(conv("1 acre foot in m3"), "1233.481838 m³");
+        assert_eq!(conv("1 ac·ft in gal"), "325851.4286 gal");
+        assert_eq!(conv("1 GJ in MJ"), "1000 MJ");
+        assert_eq!(conv("1 therm in kWh"), "29.30011111 kWh");
+        assert_eq!(conv("1 erg in J"), "0.0000001 J");
+        assert_eq!(conv("1 ton of TNT in GJ"), "4.184 GJ");
+        assert_eq!(conv("1 tTNT in kcal"), "1000000 kcal");
+    }
+
+    #[test]
+    fn more_time_speed_data_and_pressure() {
+        assert_eq!(conv("1 fortnight in days"), "14 d");
+        assert_eq!(conv("1 millennium in years"), "1000 yr");
+        assert_eq!(conv("1 mach in m/s"), "340.29 m/s");
+        assert_eq!(conv("2 Mach in km/h"), "2450.088 km/h");
+        assert_eq!(conv("1 EB in PB"), "1000 PB");
+        assert_eq!(conv("1 ZB in EB"), "1000 EB");
+        assert_eq!(conv("1 EiB in PiB"), "1024 PiB");
+        assert_eq!(conv("1 ZiB in EiB"), "1024 EiB");
+        assert_eq!(conv("1 byte in nibbles"), "2 nibble");
+        assert_eq!(conv("1 nibble in bits"), "4 bit");
+        close("1 inH2O in Pa", 249.08891);
+        close("1 cmH2O in Pa", 98.0665);
+        assert_eq!(conv("1 cmH₂O in Pa"), "98.0665 Pa");
+    }
+
+    #[test]
+    fn short_spellings_keep_their_old_meaning() {
+        assert_eq!(unit("c").category, Category::Temperature);
+        assert_eq!(unit("t").symbol, "t");
+        assert_eq!(unit("kt").symbol, "kn");
+        assert_eq!(unit("kn").symbol, "kn");
+        assert_eq!(unit("kN").symbol, "kN");
+        assert_eq!(unit("m").symbol, "m");
+        assert_eq!(unit("MW").symbol, "MW");
+        assert_eq!(unit("mW").symbol, "mW");
+        assert!(lookup("mw").is_none());
+        assert_eq!(unit("PS").category, Category::Power);
+        assert_eq!(unit("pc").category, Category::Length);
+        assert_eq!(conv("10 kt in km/h"), "18.52 km/h");
+        assert_eq!(conv("0 c to f"), "32 °F");
+    }
+
+    #[test]
     fn plurals_and_spellings() {
         assert_eq!(unit("miles").symbol, "mi");
         assert_eq!(unit("Miles").symbol, "mi");
@@ -1695,6 +2454,16 @@ mod tests {
             "1 turn in deg",
             "(2+3) km in m",
             "12 in in cm",
+            "100 Mbps in MB/s",
+            "1 GB/s in Gbps",
+            "30 mpg in L/100km",
+            "8 L/100km to mpg",
+            "1 hp in kW",
+            "2.4 GHz in MHz",
+            "1 kgf in N",
+            "100 Nm in lbf·ft",
+            "1 furlong in m",
+            "1 bbl in L",
         ] {
             assert!(answer(input).is_some(), "`{input}` should convert");
         }

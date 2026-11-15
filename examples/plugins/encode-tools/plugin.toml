@@ -1,0 +1,19 @@
+# Type "enc" and text: "enc hello world", "enc aGVsbG8=", "enc hello%20world", "enc &lt;b&gt;".
+#
+# A one-shot Python plugin (Python 3.8 or newer, standard library only) that
+# decodes text which is clearly encoded (Base64, percent-encoding, HTML
+# entities, hex, a JSON string, backslash-u escapes) and encodes typed text as
+# Base64, URL-safe Base64, percent-encoding, HTML entities, hex, ROT13 and a
+# JSON string. Runs offline and writes no files. Enter copies the row you
+# picked. Sevak's built-in Universal Actions do the same on a selection; this
+# works on text you type.
+protocol    = 1
+id          = "script:encode-tools"
+name        = "Encode and decode (Python)"
+description = "enc <text> encodes or decodes Base64, URL, HTML, hex, JSON and Unicode-escaped text. Offline."
+keyword     = "enc"
+mode        = "oneshot"
+script      = "enc.py"
+
+# Python starts a little slower than the default 50 ms wait.
+timeout_ms  = 200

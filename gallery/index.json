@@ -482,6 +482,86 @@
       "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/slugify"
     },
     {
+      "id": "unit-converter",
+      "kind": "plugin",
+      "name": "Unit converter (Python)",
+      "description": "unit 5 km, unit 72 F C, unit 1 cup flour g, unit 16px pt: length, mass, temperature, data, cooking, CSS sizes and more. Offline; needs Python 3.",
+      "author": "Sevak",
+      "version": "1.0",
+      "tags": [
+        "converter",
+        "math",
+        "needs-python"
+      ],
+      "source": "gallery/packages/unit-converter.zip",
+      "sha256": "95b0c1b61424446eb35e273deb879b0eb8fdc5e08fccf6c676abdf6ff83df9b4",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/unit-converter"
+    },
+    {
+      "id": "percentage",
+      "kind": "plugin",
+      "name": "Percentage calculator (Python)",
+      "description": "15% of 200, 30 of 120, 80 to 100, 15% off 200: percents, changes and discounts. Offline; needs Python 3.",
+      "author": "Sevak",
+      "version": "1.0",
+      "tags": [
+        "math",
+        "calculator",
+        "needs-python"
+      ],
+      "source": "gallery/packages/percentage.zip",
+      "sha256": "926f9036441dbfdb3d394a72c04fc7cffdc4f9195877c4c40bcc628ae250f498",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/percentage"
+    },
+    {
+      "id": "number-tools",
+      "kind": "plugin",
+      "name": "Number tools (Python)",
+      "description": "num 1234: the number in words, ordinal, Roman, grouped, scientific and SI forms. Offline; needs Python 3.",
+      "author": "Sevak",
+      "version": "1.0",
+      "tags": [
+        "math",
+        "converter",
+        "needs-python"
+      ],
+      "source": "gallery/packages/number-tools.zip",
+      "sha256": "3f951c4a73261bda97c4c18c51a2245aff1906aad1010bc34d9a6c8b1d4ec712",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/number-tools"
+    },
+    {
+      "id": "random-picker",
+      "kind": "plugin",
+      "name": "Random picker (Python)",
+      "description": "rand flips a coin, rolls dice (rand 2d6), picks a number (rand 1-100) or a list item (rand pick a, b). Offline; needs Python 3.",
+      "author": "Sevak",
+      "version": "1.0",
+      "tags": [
+        "random",
+        "generator",
+        "needs-python"
+      ],
+      "source": "gallery/packages/random-picker.zip",
+      "sha256": "b5486b57f0ca5fd18467d2045a777b35ac951255690db175b21d07fdc460e45c",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/random-picker"
+    },
+    {
+      "id": "encode-tools",
+      "kind": "plugin",
+      "name": "Encode and decode (Python)",
+      "description": "enc hello world or enc aGVsbG8= encodes or decodes Base64, URL, HTML, hex, JSON and Unicode-escaped text. Offline; needs Python 3.",
+      "author": "Sevak",
+      "version": "1.0",
+      "tags": [
+        "developer",
+        "text",
+        "needs-python"
+      ],
+      "source": "gallery/packages/encode-tools.zip",
+      "sha256": "bcf02b539fc9867caa32600ad7ed05f47ca960da35162c7c2512bd53cdd2e13d",
+      "homepage": "https://github.com/ninad-k/Sevak/tree/main/examples/plugins/encode-tools"
+    },
+    {
       "id": "jwt",
       "kind": "native",
       "name": "JWT decoder",

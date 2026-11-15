@@ -1,0 +1,15 @@
+# Type "num" and a number: "num 1234", "num mcmxciv", "num -42" or "num 3.14".
+#
+# A one-shot Python plugin (Python 3.8 or newer, standard library only) that
+# spells a number out in English, gives ordinal, Roman, grouped, scientific,
+# engineering and SI-prefix forms. Runs offline and writes no files. Enter copies the row you picked.
+protocol    = 1
+id          = "script:number-tools"
+name        = "Number tools (Python)"
+description = "num 1234: the number in words, ordinal, Roman, grouped, scientific and SI forms. Offline."
+keyword     = "num"
+mode        = "oneshot"
+script      = "num.py"
+
+# Python starts a little slower than the default 50 ms wait.
+timeout_ms  = 200

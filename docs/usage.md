@@ -203,18 +203,19 @@ Examples:
 
 ### Unit conversion
 
-Type `<amount> <unit> (in|to|as|=) <unit>`. The amount can be any expression: `(2+3) km in m`.
+Type `<amount> <unit> (in|to|as|=|→) <unit>`. The amount can be any expression: `(2+3) km in m`.
 
-Supported: length, mass, temperature, volume, area, speed, data, time, pressure, energy, angle.
+Supported: length, mass, temperature, volume, area, speed, data, data rate, time, pressure, energy, power, frequency, force, torque, fuel economy, angle.
 
 Examples:
 - `10 km in mi`, `5'11" to cm`, `3 ft 4 in to cm`
 - `100°F in C`, `0 c to k`
 - `1 kg in lb`, `8 oz to g`
-- `5 GB in MiB`, `100 Mbit to MB`
+- `5 GB in MiB`, `100 Mbit to MB`, `100 Mbps in MB/s`
+- `30 mpg in L/100km`, `1 hp in kW`, `100 Nm in lbf·ft`
 - `90 min to h`
 
-For data: `MB` is megabytes (1,000,000 bytes); `MiB` is mebibytes (1,048,576 bytes). `KB`/`MB`/`GB` are powers of 1000; `KiB`/`MiB`/`GiB` are powers of 1024.
+For data: `MB` is megabytes (1,000,000 bytes); `MiB` is mebibytes (1,048,576 bytes). `KB`/`MB`/`GB` are powers of 1000; `KiB`/`MiB`/`GiB` are powers of 1024. Likewise, `Mbps` is megabits per second and `MBps` is megabytes per second.
 
 ### Currency conversion
 
