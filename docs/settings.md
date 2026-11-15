@@ -28,6 +28,21 @@ Pages: [General](#general), [Hotkeys](#hotkeys), [Appearance](#appearance), [Sea
 
 ## General
 
+### Language
+
+Choose the language of the launcher, the Settings window and the tray menu:
+**Automatic** (the default) follows your operating system, or pick English,
+Español, Deutsch, Français or हिन्दी. Each language is listed in its own name.
+The change applies at once, before you save; **Cancel** goes back to the saved
+language. If the system language is not one of these, Sevak uses English.
+
+Spanish, German, French and Hindi are machine-drafted translations that still
+need review by native speakers. Search results that plugins produce (app names,
+calculator answers, file results, error messages from Sevak's core) stay in
+English for now. See [Localisation](localisation.md).
+
+Links to: `[general] language` in [Configuration](configuration.md#general).
+
 ### Shortcut
 
 The global hotkey to show and hide Sevak. Tap it to toggle the launcher from anywhere.

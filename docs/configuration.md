@@ -66,6 +66,7 @@ Main hotkeys and startup behaviour.
 | `launch_at_login` | boolean | `false` | Start Sevak in the background after this account signs in to Windows, macOS or Linux. Set in **Settings → General → Start Sevak when I sign in**, then **Save**; the Windows installer uses the same preference. An OS-level startup restriction can still prevent launch; Settings shows registration errors or a disabled/missing entry. |
 | `check_for_updates` | boolean | `true` | Check GitHub for a new version shortly after startup, every six hours, and whenever you open Sevak (if the last check is over an hour old). Updates are only installed after you confirm. Apart from optional currency rates, this is the only automatic network request. |
 | `update_channel` | `"stable"` or `"beta"` | `"stable"` | Which releases the update check follows. `"beta"` also offers pre-release builds (`X.Y.Z-beta.N`), which arrive earlier and may be less tested; Sevak then reads `latest-beta.json` from GitHub Releases as well as `latest.json` and offers the newer of the two. Switching back to `"stable"` never downgrades: Sevak waits for a stable version newer than the one installed. Any other value means `"stable"`. |
+| `language` | `"auto"`, `"en"`, `"es"`, `"de"`, `"fr"` or `"hi"` | `"auto"` | Language of the launcher, Settings and the tray menu. `"auto"` follows the operating system and falls back to English. Any other value means `"auto"`. Languages other than English are machine-drafted and await native review; plugin results stay in English. See [Localisation](localisation.md). |
 
 ```toml
 [general]
@@ -76,6 +77,7 @@ hide_on_blur = true
 launch_at_login = false
 check_for_updates = true
 update_channel = "stable"
+language = "auto"
 ```
 
 Startup is per user, including a Windows installation for all users. It does not
@@ -764,6 +766,12 @@ check_for_updates = true
 # Switching back to "stable" never downgrades: Sevak waits for the next stable
 # version that is newer than the one you have.
 update_channel = "stable"
+
+# Language of Sevak's windows and tray menu: "auto" (follow the operating
+# system), "en" (English), "es" (Español), "de" (Deutsch), "fr" (Français) or
+# "hi" (हिन्दी). Languages other than English are machine-drafted and await
+# review by native speakers; plugin results stay in English for now.
+language = "auto"
 
 [window]
 # Width of the search window in logical pixels (400-1600).
