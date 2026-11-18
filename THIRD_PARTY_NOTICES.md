@@ -401,7 +401,7 @@ full licence text is under "Licence texts" below.
 | fdeflate | 0.3.7 | MIT OR Apache-2.0 | all |
 | field-offset | 0.3.6 | MIT OR Apache-2.0 | Linux |
 | filetime | 0.2.29 | MIT/Apache-2.0 | macOS, Linux |
-| flate2 | 1.1.10 | MIT OR Apache-2.0 | all |
+| flate2 | 1.1.11 | MIT OR Apache-2.0 | all |
 | fnv | 1.0.7 | Apache-2.0 / MIT | all |
 | foldhash | 0.2.0 | Zlib | all |
 | foreign-types | 0.5.0 | MIT/Apache-2.0 | macOS |
@@ -490,7 +490,7 @@ full licence text is under "Licence texts" below.
 | libc | 0.2.191 | MIT OR Apache-2.0 | all |
 | libdbus-sys | 0.2.7 | Apache-2.0/MIT | Linux |
 | libloading | 0.7.4 | ISC | Linux |
-| libsqlite3-sys | 0.39.1 | MIT | all |
+| libsqlite3-sys | 0.40.0 | MIT | all |
 | linux-raw-sys | 0.12.1 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | Linux |
 | litemap | 0.8.3 | Unicode-3.0 | all |
 | lock_api | 0.4.14 | MIT OR Apache-2.0 | all |
@@ -576,7 +576,7 @@ full licence text is under "Licence texts" below.
 | reqwest | 0.13.5 | MIT OR Apache-2.0 | all |
 | rfd | 0.17.2 | MIT | all |
 | ring | 0.17.14 | Apache-2.0 AND ISC | all |
-| rusqlite | 0.41.1 | MIT | all |
+| rusqlite | 0.42.0 | MIT | all |
 | rustc-hash | 2.1.3 | Apache-2.0 OR MIT | all |
 | rustix | 1.1.5 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | macOS, Linux |
 | rustls | 0.23.46 | Apache-2.0 OR ISC OR MIT | all |
@@ -768,7 +768,7 @@ Each distinct licence or notice text appears once, followed by the packages it c
 
 ### 1. Apache License 2.0
 
-Used by: async-channel 2.5.0, async-executor 1.14.0, async-io 2.6.0, async-lock 3.4.2, async-process 2.5.0, async-recursion 1.1.1, async-signal 0.2.14, async-task 4.7.1, atomic-waker 1.1.2, base64 0.21.7, base64 0.22.1, base64 0.23.1, bitflags 1.3.2, bitflags 2.13.2, blocking 1.7.0, bs58 0.5.1, camino 1.2.6, cfg-if 1.0.5, concurrent-queue 2.5.0, core-foundation 0.10.1, core-foundation 0.9.4, core-foundation-sys 0.8.7, core-graphics 0.25.0, core-graphics-types 0.2.0, crossbeam-channel 0.5.17, crossbeam-utils 0.8.23, displaydoc 0.2.7, equivalent 1.0.2, errno 0.3.14, event-listener 5.4.2, event-listener-strategy 0.5.4, fastrand 2.5.0, filetime 0.2.29, flate2 1.1.10, fnv 1.0.7, form_urlencoded 1.2.2, futures-lite 2.6.1, gethostname 1.1.0, glob 0.3.4, global-hotkey 0.8.0, hashbrown 0.12.3, hashbrown 0.17.1, heck 0.4.1, heck 0.5.0, html5ever 0.39.0, httparse 1.10.1, hyper-rustls 0.27.10, idna 1.1.0, idna_adapter 1.2.2, indexmap 1.9.3, indexmap 2.14.2, keyboard-types 0.7.0, keyboard-types 0.8.3, lazy_static 1.5.1, libappindicator 0.9.0, linux-raw-sys 0.12.1, lock_api 0.4.14, log 0.4.34, markup5ever 0.39.0, mime 0.3.17, muda 0.20.0, num-traits 0.2.19, once_cell 1.21.4, openssl-probe 0.2.1, ordered-stream 0.2.0, parking 2.2.1, parking_lot 0.12.5, parking_lot_core 0.9.12, percent-encoding 2.3.2, piper 0.2.5, png 0.17.16, png 0.18.1, polling 3.11.0, regex 1.13.1, regex-automata 0.4.18, regex-syntax 0.8.11, rustix 1.1.5, rustls 0.23.46, rustls-native-certs 0.8.4, scopeguard 1.2.0, security-framework 3.7.0, security-framework-sys 2.17.0, serde_with 3.24.0, serde_with_macros 3.24.0, servo_arc 0.4.3, signal-hook-registry 1.4.8, smallvec 1.16.2, socket2 0.6.5, stable_deref_trait 1.2.1, string_cache 0.9.0, symlink 0.1.0, syn 1.0.109, system-configuration 0.7.0, system-configuration-sys 0.6.0, tar 0.4.46, tempfile 3.27.0, tendril 0.5.1, thread_local 1.1.10, toml_datetime 0.6.3, tray-icon 0.25.1, unicode-segmentation 1.13.3, url 2.5.8, uuid 1.27.0, web_atoms 0.2.6, weezl 0.1.12, window-vibrancy 0.8.1, wry 0.57.0, xattr 1.6.1
+Used by: async-channel 2.5.0, async-executor 1.14.0, async-io 2.6.0, async-lock 3.4.2, async-process 2.5.0, async-recursion 1.1.1, async-signal 0.2.14, async-task 4.7.1, atomic-waker 1.1.2, base64 0.21.7, base64 0.22.1, base64 0.23.1, bitflags 1.3.2, bitflags 2.13.2, blocking 1.7.0, bs58 0.5.1, camino 1.2.6, cfg-if 1.0.5, concurrent-queue 2.5.0, core-foundation 0.10.1, core-foundation 0.9.4, core-foundation-sys 0.8.7, core-graphics 0.25.0, core-graphics-types 0.2.0, crossbeam-channel 0.5.17, crossbeam-utils 0.8.23, displaydoc 0.2.7, equivalent 1.0.2, errno 0.3.14, event-listener 5.4.2, event-listener-strategy 0.5.4, fastrand 2.5.0, filetime 0.2.29, flate2 1.1.11, fnv 1.0.7, form_urlencoded 1.2.2, futures-lite 2.6.1, gethostname 1.1.0, glob 0.3.4, global-hotkey 0.8.0, hashbrown 0.12.3, hashbrown 0.17.1, heck 0.4.1, heck 0.5.0, html5ever 0.39.0, httparse 1.10.1, hyper-rustls 0.27.10, idna 1.1.0, idna_adapter 1.2.2, indexmap 1.9.3, indexmap 2.14.2, keyboard-types 0.7.0, keyboard-types 0.8.3, lazy_static 1.5.1, libappindicator 0.9.0, linux-raw-sys 0.12.1, lock_api 0.4.14, log 0.4.34, markup5ever 0.39.0, mime 0.3.17, muda 0.20.0, num-traits 0.2.19, once_cell 1.21.4, openssl-probe 0.2.1, ordered-stream 0.2.0, parking 2.2.1, parking_lot 0.12.5, parking_lot_core 0.9.12, percent-encoding 2.3.2, piper 0.2.5, png 0.17.16, png 0.18.1, polling 3.11.0, regex 1.13.1, regex-automata 0.4.18, regex-syntax 0.8.11, rustix 1.1.5, rustls 0.23.46, rustls-native-certs 0.8.4, scopeguard 1.2.0, security-framework 3.7.0, security-framework-sys 2.17.0, serde_with 3.24.0, serde_with_macros 3.24.0, servo_arc 0.4.3, signal-hook-registry 1.4.8, smallvec 1.16.2, socket2 0.6.5, stable_deref_trait 1.2.1, string_cache 0.9.0, symlink 0.1.0, syn 1.0.109, system-configuration 0.7.0, system-configuration-sys 0.6.0, tar 0.4.46, tempfile 3.27.0, tendril 0.5.1, thread_local 1.1.10, toml_datetime 0.6.3, tray-icon 0.25.1, unicode-segmentation 1.13.3, url 2.5.8, uuid 1.27.0, web_atoms 0.2.6, weezl 0.1.12, window-vibrancy 0.8.1, wry 0.57.0, xattr 1.6.1
 
 ```text
 Apache License
@@ -5661,7 +5661,7 @@ limitations under the License.
 
 ### 54. MIT-style licence, Copyright (c) 2014 The rusqlite developers
 
-Used by: libsqlite3-sys 0.39.1, rusqlite 0.41.1
+Used by: libsqlite3-sys 0.40.0, rusqlite 0.42.0
 
 ```text
 Copyright (c) 2014 The rusqlite developers
@@ -12324,7 +12324,7 @@ DEALINGS IN THE SOFTWARE.
 
 ### 131. MIT-style licence, Copyright (c) 2014-2026 Alex Crichton
 
-Used by: flate2 1.1.10
+Used by: flate2 1.1.11
 
 ```text
 Copyright (c) 2014-2026 Alex Crichton
