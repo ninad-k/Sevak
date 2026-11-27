@@ -153,6 +153,21 @@ impl Delivery {
         stale.unwrap_or_default()
     }
 
+    /// Starts a new request for the query that is still on screen, without
+    /// the answer cache: a Script Filter's `rerun`. `None` when `input` is no
+    /// longer the newest query, or it is still waiting for its answer. Nobody
+    /// waits for the request, so its answer notifies the shell.
+    pub fn refresh(&self, input: &str) -> Option<u64> {
+        let mut state = lock(&self.state);
+        if state.latest == 0 || state.input != input || state.outstanding {
+            return None;
+        }
+        state.latest += 1;
+        state.outstanding = true;
+        state.waiting = None;
+        Some(state.latest)
+    }
+
     /// Gives up on request `id` without waiting (the script could not be
     /// reached); the same input is sent again next time. An answer that still
     /// arrives is accepted, like any other late one.

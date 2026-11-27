@@ -42,7 +42,7 @@ use super::template::{expand, expand_command, Scope, Target};
 use super::ui::{self, Component, UiDefinition, UiScript, UiTarget};
 use super::validate::{compile_regex, valid_variable_name};
 use crate::files::{expand_home, home_dir};
-use crate::script::{resolve_launch, Launch};
+use crate::script::{resolve_launch, Launch, ALFRED_COMPAT_VERSION};
 use crate::selection::transform::{base64_encode, title_case};
 use crate::web_search::percent_encode;
 
@@ -283,7 +283,15 @@ pub struct Runtime {
     pub dir: PathBuf,
     /// A folder the workflow's scripts may keep files in.
     pub data_dir: PathBuf,
+    /// A folder for what can be thrown away (`alfred_workflow_cache`), apart
+    /// from `data_dir`.
+    pub cache_dir: PathBuf,
     pub workflow: Workflow,
+    /// What the user set in the settings form (see [`super::config`]).
+    user_values: BTreeMap<String, String>,
+    /// The variables every run starts with: the workflow's `[variables]`,
+    /// the settings' defaults and the user's values.
+    base_vars: BTreeMap<String, String>,
     platform: Arc<dyn PlatformProvider>,
     sink: Arc<dyn OutputSink>,
     shell: ShellConfig,
@@ -303,10 +311,46 @@ impl Runtime {
         sink: Arc<dyn OutputSink>,
         config: &Config,
     ) -> Arc<Self> {
+        // Beside the data folders' parent, never inside a workflow's own data.
+        let cache_dir = data_dir
+            .parent()
+            .map(|parent| parent.with_file_name("workflows-cache").join(folder))
+            .unwrap_or_else(|| data_dir.join(".cache"));
+        Self::configured(
+            folder,
+            dir,
+            data_dir,
+            cache_dir,
+            BTreeMap::new(),
+            workflow,
+            platform,
+            sink,
+            config,
+        )
+    }
+
+    /// Like [`Runtime::new`], with the cache folder and the values the user
+    /// saved in the workflow's settings form.
+    #[allow(clippy::too_many_arguments)]
+    pub fn configured(
+        folder: &str,
+        dir: PathBuf,
+        data_dir: PathBuf,
+        cache_dir: PathBuf,
+        user_values: BTreeMap<String, String>,
+        workflow: Workflow,
+        platform: Arc<dyn PlatformProvider>,
+        sink: Arc<dyn OutputSink>,
+        config: &Config,
+    ) -> Arc<Self> {
+        let base_vars = workflow.effective_variables(&user_values);
         Arc::new(Self {
             folder: folder.to_owned(),
             dir,
             data_dir,
+            cache_dir,
+            user_values,
+            base_vars,
             workflow,
             platform,
             sink,
@@ -355,6 +399,23 @@ impl Runtime {
             })
     }
 
+    /// The labels of the required settings that still have no value.
+    pub fn missing_config(&self) -> Vec<String> {
+        self.workflow.missing_config(&self.user_values)
+    }
+
+    /// Why this workflow cannot run yet, when a required setting is empty.
+    pub fn configure_message(&self) -> Option<String> {
+        let missing = self.missing_config();
+        (!missing.is_empty())
+            .then(|| super::config::configure_message(&self.display_name(), &missing))
+    }
+
+    /// The variables a run starts with before the trigger adds its own.
+    pub fn base_variables(&self) -> &BTreeMap<String, String> {
+        &self.base_vars
+    }
+
     /// The plugin and approval id of this workflow.
     pub fn id(&self) -> String {
         format!("{}:{}", super::model::FAMILY, self.folder)
@@ -373,6 +434,10 @@ impl Runtime {
     /// Runs the nodes after `start` on a thread of their own. Fails at once
     /// (nothing runs) when too many runs are already going.
     pub fn start(self: &Arc<Self>, start: &str, ctx: Ctx) -> Result<(), String> {
+        if let Some(message) = self.configure_message() {
+            self.sink.notify(&self.display_name(), &message);
+            return Err(message);
+        }
         let Some(guard) = RunGuard::acquire() else {
             return Err("too many workflows are running; try again in a moment".to_owned());
         };
@@ -449,20 +514,42 @@ impl Runtime {
         depth: usize,
         budget: Arc<Budget>,
     ) -> RunReport {
-        let mut vars = self.workflow.variables.clone();
-        vars.extend(ctx.vars);
-        let ctx = Ctx { arg: ctx.arg, vars };
         let mut run = Run {
             report: RunReport::default(),
             budget,
             stopped: false,
             depth,
         };
+        if let Some(message) = self.configure_message() {
+            run.report.errors.push(NodeFailure {
+                node: start.to_owned(),
+                message,
+            });
+            return run.report;
+        }
+        let mut vars = self.base_vars.clone();
+        vars.extend(ctx.vars);
+        // Alfred workflows read the keyword that started them.
+        if let Some(keyword) = self.start_keyword(start) {
+            vars.entry("alfred_workflow_keyword".to_owned())
+                .or_insert(keyword);
+        }
+        let ctx = Ctx { arg: ctx.arg, vars };
         // A disabled start node (a trigger switched off in the editor) runs nothing.
         if self.workflow.node(start).is_some_and(|node| !node.disabled) {
             self.follow(start, OUT, &ctx, &mut run);
         }
         run.report
+    }
+
+    /// The keyword of the keyword trigger or script filter `node`.
+    fn start_keyword(&self, node: &str) -> Option<String> {
+        match &self.workflow.node(node)?.kind {
+            NodeKind::Keyword { keyword, .. } | NodeKind::ScriptFilter { keyword, .. } => {
+                Some(keyword.trim().to_owned()).filter(|keyword| !keyword.is_empty())
+            }
+            _ => None,
+        }
     }
 
     fn follow(&self, from: &str, port: &str, ctx: &Ctx, run: &mut Run) {
@@ -888,7 +975,7 @@ impl Runtime {
                     vars: if *pass_variables {
                         ctx.vars
                             .iter()
-                            .filter(|(name, _)| !target.workflow.variables.contains_key(*name))
+                            .filter(|(name, _)| !target.base_vars.contains_key(*name))
                             .map(|(name, value)| (name.clone(), value.clone()))
                             .collect()
                     } else {
@@ -1138,9 +1225,18 @@ impl Runtime {
             self.data_dir.display().to_string(),
         );
         env.insert(
-            "alfred_workflow_cache".to_owned(),
-            self.data_dir.display().to_string(),
+            "SEVAK_WORKFLOW_CACHE".to_owned(),
+            self.cache_dir.display().to_string(),
         );
+        env.insert(
+            "alfred_workflow_cache".to_owned(),
+            self.cache_dir.display().to_string(),
+        );
+        env.insert(
+            "alfred_version".to_owned(),
+            ALFRED_COMPAT_VERSION.to_owned(),
+        );
+        env.insert("alfred_debug".to_owned(), "0".to_owned());
         env
     }
 
@@ -1149,7 +1245,7 @@ impl Runtime {
     pub(super) fn script_environment(&self) -> Vec<(String, String)> {
         let ctx = Ctx {
             arg: String::new(),
-            vars: self.workflow.variables.clone(),
+            vars: self.base_vars.clone(),
         };
         let mut env = self.environment(&ctx);
         env.remove("SEVAK_QUERY");
@@ -1169,8 +1265,9 @@ impl Runtime {
         let (program, args) = argv
             .split_first()
             .ok_or_else(|| "no program is set".to_owned())?;
-        // Best effort: a script that needs the folder reports its own error.
+        // Best effort: a script that needs the folders reports its own error.
         let _ = std::fs::create_dir_all(&self.data_dir);
+        let _ = std::fs::create_dir_all(&self.cache_dir);
         let mut command = Command::new(program);
         // Only the base environment; the node's own variables follow below.
         scrub_environment(&mut command, &[]);

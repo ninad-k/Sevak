@@ -1105,7 +1105,10 @@
       "edit": "Modifier",
       "editLabel": "Modifier {name}",
       "delete": "Supprimer",
-      "deleteLabel": "Supprimer {name}"
+      "deleteLabel": "Supprimer {name}",
+      "configure": "Configurer…",
+      "configureLabel": "Configurer {name}",
+      "needsSettings": "Réglages requis : {fields}"
     },
     "editor": {
       "region": "Éditeur de workflow",
@@ -1386,6 +1389,10 @@
           },
           "hard_timeout_ms": {
             "label": "Arrêter le script après (ms)"
+          },
+          "filter_results": {
+            "label": "Sevak filtre les résultats",
+            "hint": "Compare la saisie au texte de correspondance de chaque ligne (ou à son titre) et masque le reste. Laissez désactivé si le script filtre lui-même."
           }
         }
       },
@@ -1845,6 +1852,56 @@
           }
         }
       }
+    },
+    "config": {
+      "title": "Configurer {name}",
+      "lead": "Ces réglages sont à vous. Ils sont conservés en dehors du workflow : le mettre à jour ou le réinstaller ne les modifie pas.",
+      "empty": "Ce workflow n'a aucun réglage.",
+      "required": "Obligatoire",
+      "fillIn": "Renseignez {fields} pour enregistrer.",
+      "choose": "Choisir…",
+      "browse": "Parcourir…",
+      "chooseFile": "Choisir un fichier",
+      "chooseFolder": "Choisir un dossier"
+    },
+    "builder": {
+      "title": "Formulaire de réglages",
+      "hint": "Ce que l'utilisateur renseigne sous « Configurer… ». Chaque réglage devient la variable <code>{var:name}</code> et une variable d'environnement pour les scripts. Un réglage obligatoire empêche le workflow de s'exécuter tant qu'il n'a pas de valeur.",
+      "add": "Ajouter un réglage",
+      "moveUp": "Monter {name}",
+      "moveDown": "Descendre {name}",
+      "remove": "Supprimer le réglage {name}",
+      "label": "Libellé",
+      "variable": "Variable",
+      "kind": "Type",
+      "kinds": {
+        "textfield": "Champ de texte",
+        "textarea": "Zone de texte",
+        "checkbox": "Case à cocher",
+        "popup": "Liste déroulante",
+        "slider": "Curseur",
+        "filepicker": "Fichier ou dossier"
+      },
+      "required": "Obligatoire",
+      "description": "Description",
+      "options": "Choix",
+      "optionLabel": "Libellé du choix {n}",
+      "optionValue": "Valeur du choix {n}",
+      "optionLabelPlaceholder": "libellé",
+      "optionValuePlaceholder": "valeur",
+      "addOption": "Ajouter un choix",
+      "removeOption": "Supprimer le choix {n}",
+      "default": "Valeur par défaut",
+      "noDefault": "(aucune)",
+      "off": "Désactivé",
+      "on": "Activé",
+      "min": "Minimum",
+      "max": "Maximum",
+      "step": "Pas",
+      "mode": "Choisit",
+      "modeFile": "Un fichier",
+      "modeFolder": "Un dossier",
+      "placeholder": "Texte indicatif"
     }
   },
   "gallery": {

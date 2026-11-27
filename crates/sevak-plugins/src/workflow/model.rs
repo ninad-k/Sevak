@@ -76,6 +76,11 @@ pub struct Workflow {
     pub nodes: Vec<Node>,
     #[serde(rename = "connection", skip_serializing_if = "Vec::is_empty")]
     pub connections: Vec<Connection>,
+    /// The settings form the user fills in (`[[config]]`); see
+    /// [`super::config`]. The values are the user's own data: they live
+    /// outside the workflow folder and are not part of what is approved.
+    #[serde(rename = "config", skip_serializing_if = "Vec::is_empty")]
+    pub config: Vec<super::config::ConfigField>,
 }
 
 impl Default for Workflow {
@@ -90,6 +95,7 @@ impl Default for Workflow {
             variables: BTreeMap::new(),
             nodes: Vec::new(),
             connections: Vec::new(),
+            config: Vec::new(),
         }
     }
 }
@@ -373,6 +379,11 @@ pub enum NodeKind {
         /// to 60 000 ms; default 3000).
         #[serde(default, skip_serializing_if = "is_default_timeout")]
         hard_timeout_ms: Option<u64>,
+        /// "Sevak filters results": Sevak matches what is typed against each
+        /// row's `match` (else its title) and drops the rows that do not
+        /// match, instead of trusting the script to filter.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        filter_results: bool,
     },
 
     // ---- actions ----------------------------------------------------------
@@ -1021,6 +1032,7 @@ mod tests {
                 args: vec!["--x".into()],
                 timeout_ms: Some(80),
                 hard_timeout_ms: Some(2000),
+                filter_results: true,
             },
             NodeKind::RunScript {
                 command: Vec::new(),

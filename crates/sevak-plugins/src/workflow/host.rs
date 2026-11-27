@@ -9,7 +9,7 @@
 //! A workflow that only opens links, copies or shows text needs no approval:
 //! it cannot do more than the standard result actions can.
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -20,6 +20,7 @@ use sevak_core::bounded_read::{read_to_string_capped, MAX_WORKFLOW_BYTES};
 use sevak_core::{Config, HotkeyBinding, Plugin};
 use sevak_platform::PlatformProvider;
 
+use super::config::{self, ConfigField};
 use super::exec::{Ctx, OutputSink, Registry, Runtime};
 use super::filters::{FileFilterPlugin, ListFilterPlugin, RunningAppsPlugin};
 use super::model::{
@@ -89,6 +90,22 @@ pub struct Summary {
     pub keyword_warnings: Vec<String>,
     /// Why it cannot load.
     pub error: Option<String>,
+    /// It has a settings form (`[[config]]`).
+    pub configurable: bool,
+    /// The labels of the required settings that still have no value.
+    pub missing_config: Vec<String>,
+}
+
+/// A workflow's settings form with what the user has set so far.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ConfigForm {
+    pub folder: String,
+    pub name: String,
+    pub fields: Vec<ConfigField>,
+    /// The user's saved values (checkbox `true`/`false`, slider a number, all
+    /// as text).
+    pub values: BTreeMap<String, String>,
+    pub missing: Vec<String>,
 }
 
 /// A workflow opened for editing.
@@ -110,6 +127,8 @@ pub struct WorkflowHost {
     dir: PathBuf,
     /// Parent of the per-workflow data folders.
     data_dir: PathBuf,
+    /// Parent of the per-workflow cache folders (`alfred_workflow_cache`).
+    cache_dir: PathBuf,
     approvals: ApprovalStore,
     /// Workflows the user said "not now" to, until Sevak restarts.
     declined: Mutex<HashSet<String>>,
@@ -135,12 +154,26 @@ impl WorkflowHost {
     ) -> Self {
         Self {
             dir,
+            cache_dir: data_dir.with_file_name("workflows-cache"),
             data_dir,
             approvals: ApprovalStore::new(approvals_file),
             declined: Mutex::new(HashSet::new()),
             sink,
             runtimes: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    /// Where the workflows' cache folders live, apart from their data
+    /// folders (which hold what must be kept).
+    #[must_use]
+    pub fn with_cache_dir(mut self, cache_dir: PathBuf) -> Self {
+        self.cache_dir = cache_dir;
+        self
+    }
+
+    /// The data folder of workflow `folder` (the caller checked the name).
+    fn data_dir_of(&self, folder: &str) -> PathBuf {
+        self.data_dir.join(folder)
     }
 
     /// The folder workflows live in.
@@ -252,10 +285,13 @@ impl WorkflowHost {
                 tracing::info!(workflow = id, "workflow skipped (not approved yet)");
                 continue;
             }
-            let runtime = Runtime::new(
+            let data_dir = self.data_dir_of(&candidate.folder);
+            let runtime = Runtime::configured(
                 &candidate.folder,
                 candidate.dir.clone(),
-                self.data_dir.join(&candidate.folder),
+                data_dir.clone(),
+                self.cache_dir.join(&candidate.folder),
+                config::load_user_values(&data_dir),
                 candidate.workflow.clone(),
                 Arc::clone(platform),
                 Arc::clone(&self.sink),
@@ -455,6 +491,10 @@ impl WorkflowHost {
                         author: c.workflow.author.clone(),
                         version: c.workflow.version.clone(),
                         error: None,
+                        configurable: !c.workflow.config.is_empty(),
+                        missing_config: c.workflow.missing_config(&config::load_user_values(
+                            &self.data_dir_of(&c.folder),
+                        )),
                         folder: c.folder,
                     }
                 }
@@ -471,6 +511,8 @@ impl WorkflowHost {
                     warnings: 0,
                     keyword_warnings: Vec::new(),
                     error: Some(error),
+                    configurable: false,
+                    missing_config: Vec::new(),
                     folder,
                 },
             })
@@ -546,12 +588,57 @@ impl WorkflowHost {
     }
 
     /// Deletes a workflow folder (the user confirmed in the settings window).
-    pub fn delete(&self, folder: &str) -> Result<(), String> {
+    /// With `with_data` its data folder (files its scripts kept, the user's
+    /// saved settings) and cache folder go too; otherwise they stay, so
+    /// installing the workflow again finds its settings.
+    pub fn delete(&self, folder: &str, with_data: bool) -> Result<(), String> {
         let dir = self.folder_dir(folder)?;
         if !dir.join(FILE).is_file() {
             return Err("that folder is not a workflow".to_owned());
         }
-        fs::remove_dir_all(&dir).map_err(|err| format!("could not delete the workflow: {err}"))
+        fs::remove_dir_all(&dir).map_err(|err| format!("could not delete the workflow: {err}"))?;
+        if with_data {
+            for extra in [self.data_dir_of(folder), self.cache_dir.join(folder)] {
+                match fs::remove_dir_all(&extra) {
+                    Ok(()) => {}
+                    Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+                    Err(err) => {
+                        return Err(format!(
+                            "the workflow is deleted, but its data could not be: {err}"
+                        ))
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    // ---- the settings form -------------------------------------------------
+
+    /// The settings form of `folder` and the user's values.
+    pub fn config_form(&self, folder: &str) -> Result<ConfigForm, String> {
+        let loaded = self.load(folder)?;
+        let values = config::load_user_values(&self.data_dir_of(folder));
+        Ok(ConfigForm {
+            folder: folder.to_owned(),
+            name: display_name(&loaded.workflow, folder),
+            missing: loaded.workflow.missing_config(&values),
+            fields: loaded.workflow.config.clone(),
+            values,
+        })
+    }
+
+    /// Saves what the user entered in the settings form. Every value is
+    /// checked against its field first; nothing is written when one is wrong.
+    pub fn set_config_values(
+        &self,
+        folder: &str,
+        values: &BTreeMap<String, serde_json::Value>,
+    ) -> Result<(), String> {
+        let loaded = self.load(folder)?;
+        let checked = loaded.workflow.check_user_values(values)?;
+        config::save_user_values(&self.data_dir_of(folder), &checked)
+            .map_err(|err| format!("could not save the settings: {err}"))
     }
 
     /// Switches a workflow on or off by rewriting its `enabled` field.
@@ -1471,7 +1558,7 @@ mod tests {
         for bad in ["../x", "a/b", "..", ""] {
             assert!(f.host.save(Some(bad), &workflow).is_err(), "{bad:?}");
             assert!(f.host.load(bad).is_err(), "{bad:?}");
-            assert!(f.host.delete(bad).is_err(), "{bad:?}");
+            assert!(f.host.delete(bad, true).is_err(), "{bad:?}");
         }
         assert!(f.host.load("missing").is_err());
     }
@@ -1489,12 +1576,155 @@ mod tests {
         assert!(rows[0].needs_approval && !rows[0].approved);
         assert!(f.host.create_from_template("nope").is_err());
 
-        f.host.delete("script-filter").unwrap();
+        f.host.delete("script-filter", false).unwrap();
         assert!(!dir.exists());
-        assert!(f.host.delete("script-filter").is_err());
+        assert!(f.host.delete("script-filter", false).is_err());
         // Only workflow folders can be deleted this way.
         fs::create_dir_all(f.root.path().join("config/workflows/precious")).unwrap();
-        assert!(f.host.delete("precious").is_err());
+        assert!(f.host.delete("precious", false).is_err());
+    }
+
+    const CONFIGURED: &str = r#"
+        name = "Configured"
+        [[node]]
+        id = "k"
+        type = "keyword"
+        keyword = "cfg"
+        [[node]]
+        id = "c"
+        type = "copy"
+        text = "{var:host}"
+        [[connection]]
+        from = "k"
+        to = "c"
+        [[config]]
+        variable = "host"
+        label = "Server"
+        required = true
+        [[config]]
+        variable = "volume"
+        kind = "slider"
+        min = 0
+        max = 10
+        [[config]]
+        variable = "flag"
+        kind = "checkbox"
+    "#;
+
+    fn data_of(f: &Fixture, folder: &str) -> PathBuf {
+        f.root.path().join("data").join("workflows").join(folder)
+    }
+
+    #[test]
+    fn settings_are_saved_outside_the_workflow_folder_and_survive_a_reinstall() {
+        let f = fixture();
+        let dir = write(&f, "configured", CONFIGURED);
+        let form = f.host.config_form("configured").unwrap();
+        assert_eq!(form.fields.len(), 3);
+        assert_eq!(form.missing, ["Server"]);
+        assert!(form.values.is_empty());
+        let summary = &f
+            .host
+            .summaries(&Config::default(), &KeywordOwners::default())[0];
+        assert!(summary.configurable);
+        assert_eq!(summary.missing_config, ["Server"]);
+
+        let values = serde_json::json!({"host": "h.example", "volume": 7, "flag": true});
+        let values = serde_json::from_value(values).unwrap();
+        f.host.set_config_values("configured", &values).unwrap();
+        let form = f.host.config_form("configured").unwrap();
+        assert!(form.missing.is_empty());
+        assert_eq!(form.values["host"], "h.example");
+        assert_eq!(form.values["volume"], "7");
+        assert_eq!(form.values["flag"], "true");
+        assert!(data_of(&f, "configured").join("user-config.json").is_file());
+        assert!(
+            !dir.join("user-config.json").exists(),
+            "never inside the workflow folder"
+        );
+
+        let plugins = f.host.plugins(&Config::default(), &platform());
+        let keyword = plugins
+            .iter()
+            .find(|p| p.id() == "workflow:configured:k")
+            .unwrap();
+        assert_eq!(keyword.query("cfg")[0].subtitle, "");
+
+        // Deleting and installing again finds the settings.
+        f.host.delete("configured", false).unwrap();
+        write(&f, "configured", CONFIGURED);
+        assert_eq!(
+            f.host.config_form("configured").unwrap().values["host"],
+            "h.example"
+        );
+    }
+
+    #[test]
+    fn settings_are_validated_before_anything_is_written() {
+        let f = fixture();
+        write(&f, "configured", CONFIGURED);
+        let set = |value: serde_json::Value| {
+            f.host
+                .set_config_values("configured", &serde_json::from_value(value).unwrap())
+        };
+        assert!(set(serde_json::json!({"volume": 11})).is_err());
+        assert!(set(serde_json::json!({"flag": "maybe"})).is_err());
+        assert!(set(serde_json::json!({"host": 5})).is_err());
+        assert!(set(serde_json::json!({"nope": "x"})).is_err());
+        assert!(
+            !data_of(&f, "configured").join("user-config.json").exists(),
+            "a refused form writes nothing"
+        );
+        assert!(f.host.config_form("missing").is_err());
+    }
+
+    #[test]
+    fn an_unconfigured_workflow_loads_but_says_it_needs_settings() {
+        let f = fixture();
+        write(&f, "configured", CONFIGURED);
+        let plugins = f.host.plugins(&Config::default(), &platform());
+        let keyword = plugins
+            .iter()
+            .find(|p| p.id() == "workflow:configured:k")
+            .unwrap();
+        let rows = keyword.query("cfg");
+        assert_eq!(rows[0].subtitle, "Configure Configured first: Server");
+    }
+
+    #[test]
+    fn deleting_with_data_removes_data_cache_and_settings_and_without_keeps_them() {
+        let f = fixture();
+        let cache = f.root.path().join("data").join("workflows-cache");
+        for folder in ["keep", "wipe"] {
+            write(&f, folder, HARMLESS);
+            fs::create_dir_all(data_of(&f, folder)).unwrap();
+            fs::write(data_of(&f, folder).join("state.txt"), "x").unwrap();
+            fs::write(data_of(&f, folder).join("user-config.json"), "{}").unwrap();
+            fs::create_dir_all(cache.join(folder)).unwrap();
+            fs::write(cache.join(folder).join("c.bin"), "x").unwrap();
+        }
+        // A neighbour's data is never touched.
+        fs::create_dir_all(data_of(&f, "neighbour")).unwrap();
+
+        f.host.delete("keep", false).unwrap();
+        assert!(!f.root.path().join("config/workflows/keep").exists());
+        assert!(data_of(&f, "keep").join("state.txt").is_file());
+        assert!(cache.join("keep").join("c.bin").is_file());
+
+        f.host.delete("wipe", true).unwrap();
+        assert!(!f.root.path().join("config/workflows/wipe").exists());
+        assert!(!data_of(&f, "wipe").exists());
+        assert!(!cache.join("wipe").exists());
+        assert!(data_of(&f, "neighbour").is_dir());
+        assert!(data_of(&f, "keep").is_dir());
+    }
+
+    #[test]
+    fn deleting_with_data_works_when_there_is_no_data_yet() {
+        let f = fixture();
+        write(&f, "plain", HARMLESS);
+        f.host.delete("plain", true).unwrap();
+        assert!(f.host.delete("../x", true).is_err());
     }
 
     #[test]

@@ -13,6 +13,7 @@
 //! | `items.rs` | validating and mapping a script's items to `ResultItem`s |
 //! | `alfred.rs` | Alfred Script Filter compatibility (one-shot mode) |
 //! | `delivery.rs` | query generations, the answer cache, late-answer notification |
+//! | `filter_cache.rs` | Script Filter `cache` and `rerun` bookkeeping |
 //! | `runner.rs`, `oneshot.rs` | process lifecycle: start, restart policy, idle stop |
 //! | `plugin.rs` | [`ScriptPlugin`], the `Plugin` over a runner |
 //! | `host.rs`, `approvals.rs` | discovery, the disabled list, first-run approval |
@@ -21,6 +22,7 @@ mod alfred;
 mod approvals;
 pub(crate) mod delivery;
 pub mod dialog;
+pub(crate) mod filter_cache;
 mod host;
 mod items;
 mod manifest;
@@ -33,6 +35,7 @@ mod stderr;
 
 pub use alfred::RawPick;
 pub use approvals::{script_approval_key, ApprovalStore, Approvals, ContentHasher};
+pub use filter_cache::{Clock, SystemClock};
 pub use host::{Candidate, Scanned, ScriptPluginHost, FAMILY};
 pub use manifest::{
     relative_inside, resolve_launch, Capabilities, Format, Launch, Manifest, Mode, ID_PREFIX,
@@ -40,4 +43,4 @@ pub use manifest::{
 };
 pub use native::{current_platform, Native, PLATFORMS};
 pub use plugin::ScriptPlugin;
-pub use runner::Spec;
+pub use runner::{Spec, ALFRED_COMPAT_VERSION};

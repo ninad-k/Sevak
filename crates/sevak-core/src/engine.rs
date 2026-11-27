@@ -444,7 +444,7 @@ impl SearchEngine {
                 .filter(|&s| s < score::KEYWORD)
                 .fold(0.0_f64, f64::max);
             for item in &mut collected {
-                if item.score < score::KEYWORD {
+                if item.score < score::KEYWORD && !item.keep_order {
                     let quality = if best > 0.0 {
                         (item.score / best).clamp(0.0, 1.0)
                     } else {
@@ -684,6 +684,16 @@ impl SearchEngine {
     pub fn attach_notifier(&self, notifier: &ResultsNotifier) {
         for plugin in &self.plugins {
             plugin.attach_notifier(Arc::clone(notifier));
+        }
+    }
+
+    /// Tells every plugin the launcher is hidden, so it can stop refreshing
+    /// results nobody sees.
+    pub fn launcher_hidden(&self) {
+        for plugin in &self.plugins {
+            let _ = guarded(plugin.as_ref(), "launcher_hidden", || {
+                plugin.launcher_hidden()
+            });
         }
     }
 
@@ -1172,6 +1182,33 @@ mod tests {
         }
         let e = engine_with(vec![app], usage, 8, &[]);
         assert_eq!(ids(&e.query_at("x", T0)), vec!["app:a", "app:b"]);
+    }
+
+    #[test]
+    fn keep_order_rows_ignore_usage_boosts() {
+        let make = |keep: bool| {
+            Mock::new("app", move |_| {
+                let mut rows = vec![
+                    item("app", "a", "Alpha", 60.0),
+                    item("app", "b", "Beta", 62.0),
+                ];
+                if keep {
+                    rows = rows.into_iter().map(ResultItem::keep_order).collect();
+                }
+                rows
+            })
+            .arc()
+        };
+        let mut usage = UsageStore::default();
+        for _ in 0..5 {
+            usage.record("app:a", "", T0);
+        }
+        let boosted = engine_with(vec![make(false)], usage.clone(), 8, &[]);
+        assert_eq!(ids(&boosted.query_at("x", T0)), vec!["app:a", "app:b"]);
+        let kept = engine_with(vec![make(true)], usage, 8, &[]);
+        let results = kept.query_at("x", T0);
+        assert_eq!(ids(&results), vec!["app:b", "app:a"]);
+        assert_eq!(results[1].score, 60.0, "no boost was added");
     }
 
     #[test]

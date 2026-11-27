@@ -1095,7 +1095,10 @@
       "edit": "Editar",
       "editLabel": "Editar {name}",
       "delete": "Eliminar",
-      "deleteLabel": "Eliminar {name}"
+      "deleteLabel": "Eliminar {name}",
+      "configure": "Configurar…",
+      "configureLabel": "Configurar {name}",
+      "needsSettings": "Necesita ajustes: {fields}"
     },
     "editor": {
       "region": "Editor de flujos de trabajo",
@@ -1374,6 +1377,10 @@
           },
           "hard_timeout_ms": {
             "label": "Detener el script tras (ms)"
+          },
+          "filter_results": {
+            "label": "Sevak filtra los resultados",
+            "hint": "Compara lo escrito con el texto de coincidencia de cada fila (o su título) y oculta el resto. Déjalo desactivado si el script filtra por sí mismo."
           }
         }
       },
@@ -1833,6 +1840,56 @@
           }
         }
       }
+    },
+    "config": {
+      "title": "Configurar {name}",
+      "lead": "Estos ajustes son tuyos. Se guardan fuera del flujo de trabajo, así que actualizarlo o reinstalarlo no los cambia.",
+      "empty": "Este flujo de trabajo no tiene ajustes.",
+      "required": "Obligatorio",
+      "fillIn": "Rellena {fields} para guardar.",
+      "choose": "Elegir…",
+      "browse": "Examinar…",
+      "chooseFile": "Elegir un archivo",
+      "chooseFolder": "Elegir una carpeta"
+    },
+    "builder": {
+      "title": "Formulario de ajustes",
+      "hint": "Lo que el usuario rellena en «Configurar…». Cada ajuste se convierte en la variable <code>{var:name}</code> y en una variable de entorno para los scripts. Un ajuste obligatorio impide ejecutar el flujo hasta que tenga valor.",
+      "add": "Añadir un ajuste",
+      "moveUp": "Subir {name}",
+      "moveDown": "Bajar {name}",
+      "remove": "Quitar el ajuste {name}",
+      "label": "Etiqueta",
+      "variable": "Variable",
+      "kind": "Tipo",
+      "kinds": {
+        "textfield": "Campo de texto",
+        "textarea": "Área de texto",
+        "checkbox": "Casilla",
+        "popup": "Lista desplegable",
+        "slider": "Control deslizante",
+        "filepicker": "Archivo o carpeta"
+      },
+      "required": "Obligatorio",
+      "description": "Descripción",
+      "options": "Opciones",
+      "optionLabel": "Etiqueta de la opción {n}",
+      "optionValue": "Valor de la opción {n}",
+      "optionLabelPlaceholder": "etiqueta",
+      "optionValuePlaceholder": "valor",
+      "addOption": "Añadir una opción",
+      "removeOption": "Quitar la opción {n}",
+      "default": "Valor por defecto",
+      "noDefault": "(ninguno)",
+      "off": "Desactivado",
+      "on": "Activado",
+      "min": "Mínimo",
+      "max": "Máximo",
+      "step": "Paso",
+      "mode": "Elige",
+      "modeFile": "Un archivo",
+      "modeFolder": "Una carpeta",
+      "placeholder": "Texto de ejemplo"
     }
   },
   "gallery": {

@@ -21,9 +21,23 @@ objects, arbitrary URL schemes) that would widen what a script result can do.
   existing absolute path (or `~/...`) opens with its default program, and
   anything else is copied. Other schemes are copied, never opened, because the
   platform layer only opens web and mail links ([ADR-0003](0003-closed-action-vocabulary.md)).
-- `icon.path` is resolved inside the plugin folder. `quicklookurl`, `variables`,
-  `text` and `rerun` are ignored. `mods` become secondary actions; Alfred
-  modifier combinations that have no Sevak key are dropped.
+- `icon.path` is resolved inside the plugin folder. `mods` become secondary
+  actions; Alfred modifier combinations (and `ctrl` and `fn`) that have no
+  Sevak key are listed in the action panel only.
+- Supported keys: `title`, `subtitle`, `uid`, `arg`, `autocomplete`, `valid`,
+  `type`, `icon.path`, `mods` (`arg`, `subtitle`, `valid`, `variables`),
+  `variables` (item and top level, in workflows), `quicklookurl` (a file path
+  previews the file, a web address is shown as a link and never fetched),
+  `text.copy`, `text.largetype`, `match` (only when a workflow node lets Sevak
+  filter), top-level `skipknowledge`, `cache` (`seconds` clamped to 5..86 400,
+  `loosereload`; in memory, 64 queries per filter) and `rerun` (0.1..5 s; it
+  stops when the query changes or the launcher hides).
+- Accepted and ignored, never an error: `strictmods`, `icon.resize`,
+  `iconresize`, `icon.type`. Unknown keys are ignored.
+- Everything a script asks for stays inside Sevak's closed action vocabulary:
+  `quicklookurl` only chooses what the local preview pane shows, `cache` and
+  `rerun` only decide when the script runs again (the same approved command),
+  and none of them opens a URL scheme or fetches anything.
 - Compatible scripts are still script plugins: the user approves the command
   before it first runs ([ADR-0005](0005-approval-before-run.md)).
 - Sevak's own JSON protocol stays the primary, documented format; Alfred

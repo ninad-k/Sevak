@@ -151,6 +151,7 @@ pub const SETTINGS_TABLES: &[&str] = &[
     "ssh",
     "projects",
     "calendar",
+    "recent",
 ];
 
 /// The `[[hotkey]]` entries: part of [`Category::Settings`].

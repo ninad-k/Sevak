@@ -49,6 +49,14 @@ pub struct ResultItem {
     /// phone number for a contact, say. `None` shows the title.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub large_text: Option<String>,
+    /// The plugin's own order is final: usage statistics must not lift this
+    /// row above its neighbours (Alfred's `skipknowledge`). False by default.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub keep_order: bool,
+    /// What Ctrl+C copies for this row instead of the text derived from its
+    /// action (Alfred's `text.copy`). `None` copies by the action.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub copy_override: Option<String>,
 }
 
 impl ResultItem {
@@ -72,6 +80,8 @@ impl ResultItem {
             preview: None,
             view: None,
             large_text: None,
+            keep_order: false,
+            copy_override: None,
         }
     }
 
@@ -136,6 +146,20 @@ impl ResultItem {
         self
     }
 
+    /// Keeps the plugin's order against usage boosts (see [`ResultItem::keep_order`]).
+    #[must_use]
+    pub fn keep_order(mut self) -> Self {
+        self.keep_order = true;
+        self
+    }
+
+    /// Sets what Ctrl+C copies (see [`ResultItem::copy_override`]).
+    #[must_use]
+    pub fn with_copy_text(mut self, text: impl Into<String>) -> Self {
+        self.copy_override = Some(text.into());
+        self
+    }
+
     /// Adds a secondary action. `modifier` is the key held with Enter to run it
     /// directly; the action panel lists every secondary action, with or
     /// without one. Give each modifier to at most one action.
@@ -170,6 +194,9 @@ impl ResultItem {
     /// file or application path, a URL. `None` when there is nothing sensible
     /// (a packaged Windows app, a plugin-defined action).
     pub fn copy_text(&self) -> Option<String> {
+        if let Some(text) = &self.copy_override {
+            return Some(text.clone());
+        }
         self.action.copy_text()
     }
 }
@@ -488,6 +515,23 @@ mod tests {
         assert!(derived.secondary.is_empty());
         assert_eq!(derived.id, item.id);
         assert_eq!(item.secondary_as_primary(2), None);
+    }
+
+    #[test]
+    fn a_copy_override_wins_over_the_action_and_survives_a_secondary() {
+        let row = ResultItem::new(
+            "p",
+            "k",
+            "T",
+            Action::OpenUrl {
+                url: "https://example.com".into(),
+            },
+        );
+        assert_eq!(row.copy_text().as_deref(), Some("https://example.com"));
+        let row = row.with_copy_text("override");
+        assert_eq!(row.copy_text().as_deref(), Some("override"));
+        assert!(!row.keep_order);
+        assert!(row.keep_order().keep_order);
     }
 
     #[test]

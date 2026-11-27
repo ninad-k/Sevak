@@ -87,6 +87,77 @@ export interface Workflow {
   variables: Record<string, string>;
   node: WfNode[];
   connection: WfConnection[];
+  /** The settings form the user fills in (`[[config]]`); see `ConfigField`. */
+  config?: ConfigField[];
+}
+
+export type ConfigKind = "textfield" | "textarea" | "checkbox" | "popup" | "slider" | "filepicker";
+
+export const CONFIG_KINDS: readonly ConfigKind[] = [
+  "textfield",
+  "textarea",
+  "checkbox",
+  "popup",
+  "slider",
+  "filepicker",
+];
+
+export interface ConfigOption {
+  label: string;
+  value: string;
+}
+
+/** One setting of a workflow's form (what the author declares). */
+export interface ConfigField {
+  /** The variable, and environment variable, the value becomes. */
+  variable: string;
+  kind: ConfigKind;
+  label?: string;
+  description?: string;
+  /** Text; a checkbox is "true" or "false", a slider a number. */
+  default?: string;
+  required?: boolean;
+  options?: ConfigOption[];
+  min?: number | null;
+  max?: number | null;
+  step?: number | null;
+  mode?: "file" | "folder";
+  placeholder?: string;
+}
+
+/** The slider range when the author gives none (matches Rust). */
+export const DEFAULT_SLIDER_MIN = 0;
+export const DEFAULT_SLIDER_MAX = 100;
+
+/** A new field with a variable name no other field uses. */
+export function newConfigField(existing: readonly ConfigField[]): ConfigField {
+  const taken = new Set(existing.map((field) => field.variable));
+  let variable = "setting";
+  for (let n = 2; taken.has(variable); n++) variable = `setting_${n}`;
+  return { variable, kind: "textfield", label: "", required: false };
+}
+
+/** Whether `name` can be a configuration variable (matches Rust). */
+export const isConfigVariable = (name: string) => /^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(name);
+
+/** A popup's options as the editor's lines: `value` or `label = value`. */
+export function optionsToText(options: readonly ConfigOption[] | undefined): string {
+  return (options ?? [])
+    .map((option) => (option.label && option.label !== option.value ? `${option.label} = ${option.value}` : option.value))
+    .join("\n");
+}
+
+export function optionsFromText(text: string): ConfigOption[] {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "")
+    .map((line) => {
+      const at = line.lastIndexOf("=");
+      if (at < 0) return { label: line, value: line };
+      const value = line.slice(at + 1).trim();
+      return { label: line.slice(0, at).trim() || value, value };
+    });
 }
 
 export type Severity = "error" | "warning";
@@ -334,6 +405,7 @@ export const KINDS: KindDef[] = (
         max: 60000,
         placeholder: "3000",
       },
+      { key: "filter_results", kind: "checkbox", optional: true, hint: true },
     ],
     defaults: () => ({ keyword: "", command: [], script: "script.py" }),
   },
@@ -834,6 +906,7 @@ export function newWorkflow(): Workflow {
     version: "",
     enabled: true,
     variables: {},
+    config: [],
     node: [
       {
         id: "keyword",
@@ -881,6 +954,7 @@ export function normalize(workflow: Workflow): Workflow {
     variables: { ...(workflow.variables ?? {}) },
     node: (workflow.node ?? []).map((node) => ({ ...node, x: node.x ?? 0, y: node.y ?? 0 })),
     connection: (workflow.connection ?? []).map((conn) => ({ ...conn, port: conn.port ?? OUT })),
+    config: (workflow.config ?? []).map((field) => ({ ...field })),
   };
 }
 
@@ -919,7 +993,29 @@ export function toSave(workflow: Workflow): Workflow {
     to: conn.to,
     ...(conn.disabled ? { disabled: true } : {}),
   }));
+  copy.config = (copy.config ?? []).map(toSaveConfigField);
   return copy;
+}
+
+/** A settings field without what its kind does not use or the author left empty. */
+function toSaveConfigField(field: ConfigField): ConfigField {
+  const kept: ConfigField = { variable: field.variable.trim(), kind: field.kind };
+  const label = field.label?.trim();
+  if (label) kept.label = label;
+  if (field.description?.trim()) kept.description = field.description.trim();
+  if (field.default !== undefined && field.default !== "") kept.default = field.default;
+  if (field.required) kept.required = true;
+  if (field.kind === "popup") kept.options = (field.options ?? []).filter((o) => o.value !== "");
+  if (field.kind === "slider") {
+    if (typeof field.min === "number") kept.min = field.min;
+    if (typeof field.max === "number") kept.max = field.max;
+    if (typeof field.step === "number") kept.step = field.step;
+  }
+  if (field.kind === "filepicker" && field.mode === "folder") kept.mode = "folder";
+  if ((field.kind === "textfield" || field.kind === "textarea") && field.placeholder) {
+    kept.placeholder = field.placeholder;
+  }
+  return kept;
 }
 
 // ---- graph logic ------------------------------------------------------------------

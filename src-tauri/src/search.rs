@@ -287,19 +287,25 @@ impl Search {
     pub fn new(paths: &AppPaths, config: &Config) -> Self {
         let platform: Arc<dyn PlatformProvider> = Arc::from(native_provider());
         let usage = load_usage(&paths.usage_file);
-        let scripts = Arc::new(ScriptPluginHost::new(
-            paths.config_dir.join("plugins"),
-            paths.data_dir.join("plugins"),
-            paths.data_dir.join("script-plugin-approvals.json"),
-        ));
+        let scripts = Arc::new(
+            ScriptPluginHost::new(
+                paths.config_dir.join("plugins"),
+                paths.data_dir.join("plugins"),
+                paths.data_dir.join("script-plugin-approvals.json"),
+            )
+            .with_cache_dir(paths.local_data_dir.join("cache").join("plugins")),
+        );
         let sink = Arc::new(TauriSink::default());
-        let workflows = Arc::new(WorkflowHost::new(
-            paths.config_dir.join("workflows"),
-            paths.data_dir.join("workflows"),
-            // The same file as the script plugins': one list of what is allowed.
-            paths.data_dir.join("script-plugin-approvals.json"),
-            sink.clone(),
-        ));
+        let workflows = Arc::new(
+            WorkflowHost::new(
+                paths.config_dir.join("workflows"),
+                paths.data_dir.join("workflows"),
+                // The same file as the script plugins': one list of what is allowed.
+                paths.data_dir.join("script-plugin-approvals.json"),
+                sink.clone(),
+            )
+            .with_cache_dir(paths.local_data_dir.join("cache").join("workflows")),
+        );
         let extensions = extensions::build_host(paths);
         let engine = build_engine(
             config,

@@ -10,6 +10,7 @@
   // (the list is SHORTCUTS below, and docs/keyboard.md).
   import "./workflows.css";
   import { onMount, tick } from "svelte";
+  import ConfigBuilder from "./ConfigBuilder.svelte";
   import NodeFields from "./NodeFields.svelte";
   import Markdown from "../Markdown.svelte";
   import { t, tHtml, type MessageKey } from "../i18n.svelte";
@@ -1118,6 +1119,10 @@
           <button type="button" class="wf-btn small" onclick={addVariable}>{t("workflows.editor.addVariable")}</button>
           <p class="wf-hint">{@html tHtml("workflows.editor.variablesHint")}</p>
         </div>
+        <ConfigBuilder
+          fields={workflow.config ?? []}
+          onchange={(next) => (workflow.config = next)}
+        />
         <p class="wf-hint help">{t("workflows.editor.help")}</p>
       {/if}
 
