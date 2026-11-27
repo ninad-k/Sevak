@@ -21,6 +21,8 @@ fn node(id: &str, title: &str, x: f64, y: f64, kind: NodeKind) -> Node {
         title: title.to_owned(),
         x,
         y,
+        note: String::new(),
+        disabled: false,
         kind,
     }
 }
@@ -30,6 +32,7 @@ fn wire(from: &str, port: &str, to: &str) -> Connection {
         from: from.to_owned(),
         port: port.to_owned(),
         to: to.to_owned(),
+        disabled: false,
     }
 }
 

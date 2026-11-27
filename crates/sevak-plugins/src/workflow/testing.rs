@@ -70,6 +70,8 @@ pub fn node(id: &str, kind: NodeKind) -> Node {
         title: String::new(),
         x: 0.0,
         y: 0.0,
+        note: String::new(),
+        disabled: false,
         kind,
     }
 }
@@ -83,6 +85,7 @@ pub fn wire_port(from: &str, port: &str, to: &str) -> Connection {
         from: from.into(),
         port: port.into(),
         to: to.into(),
+        disabled: false,
     }
 }
 

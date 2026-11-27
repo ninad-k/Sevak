@@ -108,6 +108,14 @@ pub struct Node {
     pub x: f64,
     #[serde(default)]
     pub y: f64,
+    /// A free-text comment shown under the box on the canvas. Documentation
+    /// only: it never affects what runs or what has to be approved.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub note: String,
+    /// A disabled node is skipped: it does not run, its branch stops there,
+    /// and a disabled trigger does not register its keyword or hotkey.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub disabled: bool,
     #[serde(flatten)]
     pub kind: NodeKind,
 }
@@ -119,6 +127,13 @@ pub struct Connection {
     #[serde(default = "out", skip_serializing_if = "is_out")]
     pub port: String,
     pub to: String,
+    /// A disabled connection is not followed when the workflow runs.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub disabled: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 fn out() -> String {
@@ -781,14 +796,17 @@ impl Workflow {
     /// The nodes that answer a typed keyword (keyword triggers and script
     /// filters) with that keyword, trimmed.
     pub fn keyword_nodes(&self) -> impl Iterator<Item = (&Node, &str)> {
-        self.nodes.iter().filter_map(|node| match &node.kind {
-            NodeKind::Keyword { keyword, .. }
-            | NodeKind::ScriptFilter { keyword, .. }
-            | NodeKind::ListFilter { keyword, .. }
-            | NodeKind::FileFilter { keyword, .. }
-            | NodeKind::RunningApps { keyword, .. } => Some((node, keyword.trim())),
-            _ => None,
-        })
+        self.nodes
+            .iter()
+            .filter(|node| !node.disabled)
+            .filter_map(|node| match &node.kind {
+                NodeKind::Keyword { keyword, .. }
+                | NodeKind::ScriptFilter { keyword, .. }
+                | NodeKind::ListFilter { keyword, .. }
+                | NodeKind::FileFilter { keyword, .. }
+                | NodeKind::RunningApps { keyword, .. } => Some((node, keyword.trim())),
+                _ => None,
+            })
     }
 
     /// The keywords of [`Workflow::keyword_nodes`].
@@ -805,7 +823,7 @@ impl Workflow {
     ) -> impl Iterator<Item = &'a Connection> + 'a {
         self.connections
             .iter()
-            .filter(move |conn| conn.from == from && conn.port == port)
+            .filter(move |conn| conn.from == from && conn.port == port && !conn.disabled)
     }
 
     /// Whether any node needs the user's approval before the workflow runs.
@@ -1069,6 +1087,8 @@ mod tests {
                     title: format!("Node {i}"),
                     x: i as f64 * 10.0,
                     y: 5.0,
+                    note: String::new(),
+                    disabled: false,
                     kind,
                 })
                 .collect(),
@@ -1392,6 +1412,35 @@ mod tests {
 
         let again = Workflow::from_toml(&w.to_toml().unwrap()).unwrap();
         assert_eq!(again, w);
+    }
+
+    #[test]
+    fn notes_and_disabled_flags_round_trip_and_are_omitted_when_unused() {
+        let plain = Workflow::from_toml(SAMPLE).unwrap();
+        let text = plain.to_toml().unwrap();
+        assert!(!text.contains("note"), "{text}");
+        assert!(!text.contains("disabled"), "{text}");
+
+        let mut marked = plain.clone();
+        marked.nodes[1].note = "only digits".into();
+        marked.nodes[2].disabled = true;
+        marked.connections[0].disabled = true;
+        let text = marked.to_toml().unwrap();
+        assert_eq!(text.matches("disabled = true").count(), 2, "{text}");
+        let again = Workflow::from_toml(&text).unwrap();
+        assert_eq!(again, marked);
+        assert_eq!(again.nodes[1].note, "only digits");
+        assert!(again.nodes[2].disabled && again.connections[0].disabled);
+    }
+
+    #[test]
+    fn disabled_nodes_have_no_keyword_and_disabled_connections_are_not_outgoing() {
+        let mut w = Workflow::from_toml(SAMPLE).unwrap();
+        assert_eq!(w.keywords().collect::<Vec<_>>(), ["docs"]);
+        w.nodes[0].disabled = true;
+        assert_eq!(w.keywords().count(), 0);
+        w.connections[1].disabled = true;
+        assert_eq!(w.outgoing("c", THEN).count(), 0);
     }
 
     #[test]

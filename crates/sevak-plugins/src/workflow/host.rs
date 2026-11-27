@@ -261,7 +261,7 @@ impl WorkflowHost {
                 Arc::clone(&self.sink),
                 config,
             );
-            for node in &candidate.workflow.nodes {
+            for node in candidate.workflow.nodes.iter().filter(|n| !n.disabled) {
                 let plugin: Option<Arc<dyn Plugin>> = match &node.kind {
                     NodeKind::Keyword { .. } => KeywordPlugin::new(runtime.clone(), node)
                         .map(|plugin| Arc::new(plugin) as Arc<dyn Plugin>),
@@ -338,7 +338,7 @@ impl WorkflowHost {
             if !candidate.approved || !Self::enabled(config, &candidate) {
                 continue;
             }
-            for node in &candidate.workflow.nodes {
+            for node in candidate.workflow.nodes.iter().filter(|n| !n.disabled) {
                 if let NodeKind::Hotkey { key } = &node.kind {
                     bindings.push(HotkeyBinding {
                         key: key.trim().to_owned(),
@@ -366,7 +366,12 @@ impl WorkflowHost {
                      allowed?)."
                 )
             })?;
-        match runtime.workflow.node(node).map(|n| &n.kind) {
+        match runtime
+            .workflow
+            .node(node)
+            .filter(|n| !n.disabled)
+            .map(|n| &n.kind)
+        {
             Some(NodeKind::External {}) => runtime.start(node, Ctx::with_arg(arg)),
             Some(_) => Err(format!(
                 "\"{node}\" in \"{folder}\" is not an external trigger."
@@ -607,6 +612,13 @@ fn write_atomic(path: &Path, text: &str) -> io::Result<()> {
 /// that cannot run code, so moving a box or retitling a node does not ask
 /// again, while editing a script does.
 ///
+/// `note` is documentation and is not hashed. `disabled` flags only remove
+/// behaviour, but they are hashed *when set*: otherwise a workflow approved
+/// with a disabled connection or node could later be hand-edited to switch it
+/// on, running something the user approved only as dormant. Workflows that do
+/// not use the flags hash exactly as before. Disabled nodes outside the code
+/// running ones are not hashed (they cannot run code either way).
+///
 /// `None` for a workflow that runs nothing.
 pub fn approval_key(workflow: &Workflow, dir: &Path) -> Option<String> {
     if !workflow.needs_approval() {
@@ -623,6 +635,9 @@ pub fn approval_key(workflow: &Workflow, dir: &Path) -> Option<String> {
                 .unwrap_or_default()
                 .as_bytes(),
         );
+        if node.disabled {
+            hasher.feed("disabled", b"node");
+        }
         for file in script_files(node) {
             hasher.file(dir, &file);
         }
@@ -631,6 +646,10 @@ pub fn approval_key(workflow: &Workflow, dir: &Path) -> Option<String> {
         hasher.feed("from", conn.from.as_bytes());
         hasher.feed("port", conn.port.as_bytes());
         hasher.feed("to", conn.to.as_bytes());
+        // Fed only when set, so keys of existing workflows stay valid.
+        if conn.disabled {
+            hasher.feed("disabled", b"connection");
+        }
     }
     for (name, value) in &workflow.variables {
         hasher.feed("var", name.as_bytes());
@@ -1085,6 +1104,28 @@ mod tests {
     }
 
     #[test]
+    fn a_disabled_keyword_trigger_is_not_registered_and_notes_do_not_matter() {
+        let f = fixture();
+        let dir = write(&f, "scripted", &scripted(r#"["python3", "main.py"]"#));
+        fs::write(dir.join("main.py"), "print(1)").unwrap();
+        let config = Config::default();
+        f.host.approve(&f.host.pending(&config)[0]).unwrap();
+        assert!(!f.host.keyword_uses(&config).is_empty());
+
+        // A note is documentation: still approved.
+        let noted =
+            scripted(r#"["python3", "main.py"]"#).replace("x = 10", "x = 10\n note = \"hi\"");
+        write(&f, "scripted", &noted);
+        assert!(f.host.pending(&config).is_empty(), "notes are not behavior");
+
+        // Disabling the trigger drops its keyword...
+        let off =
+            scripted(r#"["python3", "main.py"]"#).replace("x = 10", "x = 10\n disabled = true");
+        write(&f, "scripted", &off);
+        assert!(f.host.keyword_uses(&config).is_empty());
+    }
+
+    #[test]
     fn approval_keys_ignore_everything_that_cannot_run_code() {
         let dir = Path::new("wf");
         let a = Workflow::from_toml(&scripted(r#"["tool"]"#)).unwrap();
@@ -1101,6 +1142,8 @@ mod tests {
             title: String::new(),
             x: 0.0,
             y: 0.0,
+            note: String::new(),
+            disabled: false,
             kind: NodeKind::Copy { text: "x".into() },
         });
         assert_eq!(approval_key(&a, dir), approval_key(&c, dir));
@@ -1379,6 +1422,7 @@ mod tests {
             from: "o".into(),
             port: "out".into(),
             to: "k".into(),
+            disabled: false,
         });
         let err = f.host.save(Some("harmless"), &broken).unwrap_err();
         assert!(err.contains("problems"), "{err}");
@@ -1710,6 +1754,8 @@ mod tests {
             title: String::new(),
             x: 0.0,
             y: 0.0,
+            note: String::new(),
+            disabled: false,
             kind: NodeKind::RunScript {
                 command: command.iter().map(|s| (*s).to_owned()).collect(),
                 script: script.map(str::to_owned),

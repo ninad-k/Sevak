@@ -131,7 +131,17 @@ impl Workflow {
             } else if !ids.insert(&node.id) {
                 problems.push(Problem::error(Some(&node.id), "this id is used twice"));
             }
-            check_node(node, &mut problems);
+            if node.disabled {
+                // It never runs, so what is missing in it is only worth a warning.
+                let mut found = Vec::new();
+                check_node(node, &mut found);
+                problems.extend(found.into_iter().map(|mut problem| {
+                    problem.severity = Severity::Warning;
+                    problem
+                }));
+            } else {
+                check_node(node, &mut problems);
+            }
         }
         self.check_graph(&mut problems);
         // Stable and readable: errors before warnings, otherwise in file order.
@@ -727,6 +737,8 @@ mod tests {
             title: String::new(),
             x: 0.0,
             y: 0.0,
+            note: String::new(),
+            disabled: false,
             kind,
         }
     }
@@ -751,6 +763,7 @@ mod tests {
             from: from.into(),
             port: OUT.into(),
             to: to.into(),
+            disabled: false,
         }
     }
 
@@ -913,6 +926,7 @@ mod tests {
                 from: "k".into(),
                 port: "then".into(),
                 to: "c".into(),
+                disabled: false,
             }],
         );
         assert!(has_error(&bad_port, "no output \"then\""));
@@ -950,11 +964,13 @@ mod tests {
                     from: "q".into(),
                     port: "then".into(),
                     to: "yes".into(),
+                    disabled: false,
                 },
                 Connection {
                     from: "q".into(),
                     port: "else".into(),
                     to: "no".into(),
+                    disabled: false,
                 },
             ],
         );
@@ -1050,6 +1066,7 @@ mod tests {
             from: from.into(),
             port: port.into(),
             to: to.into(),
+            disabled: false,
         }
     }
 
@@ -1397,5 +1414,19 @@ mod tests {
         assert!(summary.contains("ghost"), "{summary}");
         assert!(!summary.contains("never runs"), "{summary}");
         assert_eq!(error_summary(&[]), None);
+    }
+
+    #[test]
+    fn a_disabled_node_with_missing_fields_only_warns() {
+        let mut bad = keyword("t", "");
+        let w = workflow(vec![bad.clone()], vec![]);
+        assert!(!errors(&w).is_empty());
+        bad.disabled = true;
+        let w = workflow(vec![bad], vec![]);
+        assert!(errors(&w).is_empty(), "{:?}", errors(&w));
+        assert!(w
+            .validate()
+            .iter()
+            .any(|p| !p.is_error() && p.node.as_deref() == Some("t")));
     }
 }
