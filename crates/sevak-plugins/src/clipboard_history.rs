@@ -1221,6 +1221,14 @@ fn as_openable(text: &str) -> Option<Openable> {
     if text.is_empty() || text.len() > MAX_OPENABLE_CHARS || text.contains(['\n', '\r']) {
         return None;
     }
+    // Copied text can be a `\\server\share` path; probing it would make
+    // Windows authenticate to that server, so honour the network-path setting
+    // before touching the disk.
+    if sevak_platform::netpath::refusal(text, sevak_platform::netpath::allow_network_paths())
+        .is_some()
+    {
+        return None;
+    }
     let path = PathBuf::from(text);
     (path.is_absolute() && path.exists()).then_some(Openable::Path(path))
 }
