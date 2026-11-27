@@ -8,6 +8,8 @@
   import ListEditor from "./lib/settings-pages/ListEditor.svelte";
   import SystemPage from "./lib/settings-pages/SystemPage.svelte";
   import TasksMediaPage from "./lib/settings-pages/TasksMediaPage.svelte";
+  import UsagePage from "./lib/settings-pages/UsagePage.svelte";
+  import { filterSections } from "./lib/settings-search";
   import WindowsPage from "./lib/settings/WindowsPage.svelte";
   import { tidyPluginSettings } from "./lib/settings-pages/tidy";
   import HotkeyField from "./lib/HotkeyField.svelte";
@@ -157,7 +159,7 @@
   let hotkeyParseProblems = $state(0);
 
   /** The workflow pages keep their own files and are not part of the config form. */
-  type PageId = SectionId | "workflows" | "gallery" | "extensions" | "backup" | "help";
+  type PageId = SectionId | "workflows" | "gallery" | "extensions" | "backup" | "help" | "usage";
   let active = $state<PageId>("general");
   let hotkeyError = $state<string | null>(null);
   let actionsHotkeyError = $state<string | null>(null);
@@ -222,6 +224,7 @@
         { id: "integrations", label: t("settings.sections.integrations") },
         { id: "ai", label: t("settings.sections.ai") },
         { id: "system", label: t("settings.sections.system") },
+        { id: "usage", label: t("settings.sections.usage") },
         ...(showLinux ? [{ id: "linux", label: t("settings.sections.linux") }] : []),
         { id: "backup", label: t("settings.sections.backup") },
         { id: "help", label: t("settings.sections.help") },
@@ -235,6 +238,20 @@
         (section.id === "hotkeys" ? hotkeyParseProblems : 0),
     })),
   );
+
+  let sidebarQuery = $state("");
+  const shownSections = $derived(filterSections(sections, sidebarQuery));
+
+  function onSidebarFilterKeydown(e: KeyboardEvent) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (shownSections.length > 0) active = shownSections[0].id;
+    } else if (e.key === "Escape" && sidebarQuery !== "") {
+      e.preventDefault();
+      e.stopPropagation();
+      sidebarQuery = "";
+    }
+  }
 
   const themes = $derived([
     { value: "system", label: t("settings.appearance.system") },
@@ -601,13 +618,13 @@
   function onTabKeydown(e: KeyboardEvent, index: number) {
     const step = e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : 0;
     const target =
-      e.key === "Home" ? 0 : e.key === "End" ? sections.length - 1 : index + step;
-    if (target === index || target < 0 || target >= sections.length) {
+      e.key === "Home" ? 0 : e.key === "End" ? shownSections.length - 1 : index + step;
+    if (target === index || target < 0 || target >= shownSections.length) {
       if (step !== 0 || e.key === "Home" || e.key === "End") e.preventDefault();
       return;
     }
     e.preventDefault();
-    active = sections[target].id;
+    active = shownSections[target].id;
     void tick().then(() => document.getElementById(`tab-${active}`)?.focus());
   }
 
@@ -619,9 +636,11 @@
     void load();
     void getStatus().then((s) => (status = s));
     const unlisten = onStatus((s) => (status = s));
-    // The launcher's `ext` rows open this window on the Extensions page.
+    // The launcher's `ext` rows, `? ` search and `sevak --settings <section>`
+    // open this window on a section.
     const stopPage = onSettingsPage((page) => {
-      if (page === "extensions") active = "extensions";
+      const target = sections.find((section) => section.id === page);
+      if (target) active = target.id;
     });
     return () => {
       stopPage();
@@ -651,8 +670,17 @@
     <div class="state" role="status">{t("common.loading")}</div>
   {:else}
     <main class="body">
-      <div class="sidebar" role="tablist" aria-orientation="vertical" aria-label={t("settings.sectionsLabel")}>
-        {#each sections as section, i (section.id)}
+      <div class="sidebar">
+        <input
+          type="search"
+          class="sidebar-filter"
+          aria-label={t("filters.sections.label")}
+          placeholder={t("filters.sections.placeholder")}
+          bind:value={sidebarQuery}
+          onkeydown={onSidebarFilterKeydown}
+        />
+        <div class="tabs" role="tablist" aria-orientation="vertical" aria-label={t("settings.sectionsLabel")}>
+        {#each shownSections as section, i (section.id)}
           <button
             id="tab-{section.id}"
             type="button"
@@ -672,6 +700,10 @@
             {/if}
           </button>
         {/each}
+        {#if shownSections.length === 0}
+          <p class="sidebar-none" role="status">{t("filters.sections.none")}</p>
+        {/if}
+        </div>
       </div>
 
       <div id="panel" class="content" role="tabpanel" aria-labelledby="tab-{active}" aria-busy={saving} bind:this={content}>
@@ -1395,6 +1427,8 @@
           <AiPage bind:config={draft} {problems} {pluginOff} />
         {:else if active === "system"}
           <SystemPage bind:config={draft} {platform} {pluginOff} />
+        {:else if active === "usage"}
+          <UsagePage />
         {:else if active === "linux"}
           <h1>{t("settings.sections.linux")}</h1>
 
@@ -1481,6 +1515,31 @@
   }
 
   /* Sidebar ---------------------------------------------------------------- */
+
+  .tabs {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .sidebar-filter {
+    box-sizing: border-box;
+    width: 100%;
+    margin-bottom: 8px;
+    padding: 6px 9px;
+    border: 1px solid var(--input-border);
+    border-radius: 8px;
+    background: var(--input-bg);
+    color: inherit;
+    font: inherit;
+    font-size: 12.5px;
+  }
+
+  .sidebar-none {
+    margin: 6px 12px;
+    color: var(--muted);
+    font-size: 12px;
+  }
 
   .sidebar {
     display: flex;

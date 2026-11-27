@@ -50,6 +50,7 @@ pub fn run(
                 Launch::Actions => selection::trigger(app),
                 Launch::Trigger { target, arg } => workflows::run_trigger(app, target, arg),
                 Launch::Settings => settings::open(app),
+                Launch::SettingsAt(section) => settings::open_at(app, &section),
                 Launch::Background => {}
                 Launch::Quit => quit(app),
             }
@@ -114,6 +115,7 @@ pub fn run(
             settings::open_log_dir,
             settings::open_marketplace,
             settings::close_settings,
+            settings::usage_stats,
             themes::list_themes,
             themes::save_theme,
             themes::use_builtin_theme,
@@ -180,6 +182,7 @@ pub fn run(
                 Launch::Actions => selection::trigger(handle),
                 Launch::Trigger { target, arg } => workflows::run_trigger(handle, target, arg),
                 Launch::Settings => settings::open(handle),
+                Launch::SettingsAt(section) => settings::open_at(handle, &section),
                 Launch::Background => {}
                 Launch::Quit => quit(handle),
             }

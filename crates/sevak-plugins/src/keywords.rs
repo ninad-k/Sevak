@@ -21,6 +21,7 @@ pub const FIXED_KEYWORDS: &[(&str, &str)] = &[
     (":", "the emoji picker"),
     ("@", "contacts"),
     ("uuid", "the UUID generator"),
+    ("?", "the Sevak settings search"),
     ("ext", "the extension store"),
     ("store", "the extension store"),
 ];

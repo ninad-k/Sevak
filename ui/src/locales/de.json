@@ -712,6 +712,36 @@
     "submit": "Deine Erweiterung einreichen",
     "opensBrowser": "(öffnet deinen Browser)"
   },
+  "usage": {
+    "title": "Nutzung",
+    "lead": "Was Sevak auf diesem Computer zählt, um Ergebnisse zu ordnen. Nichts verlässt ihn.",
+    "total": "Erfasste Starts",
+    "items": "Erfasste Einträge",
+    "history": "Verlaufseinträge",
+    "top": "Meistgenutzte Einträge",
+    "item": "Eintrag",
+    "plugin": "Plugin",
+    "count": "Starts",
+    "last": "Zuletzt genutzt",
+    "perPlugin": "Starts pro Plugin",
+    "copy": "Statistik kopieren",
+    "copied": "Kopiert.",
+    "empty": "Noch nichts gezählt. Starte etwas, dann erscheint es hier.",
+    "privacy": "Nur Namen von Einträgen: keine eingetippten Suchen, keine Ordnerpfade. Statistik kopieren kopiert denselben Text.",
+    "loadFailed": "Die Nutzungsstatistik konnte nicht gelesen werden."
+  },
+  "filters": {
+    "sections": {
+      "label": "Einstellungen filtern",
+      "placeholder": "Bereiche filtern",
+      "none": "Kein Bereich passt."
+    },
+    "tasks": {
+      "label": "Aufgaben filtern",
+      "placeholder": "Aufgaben nach Namen filtern",
+      "none": "Keine Aufgabe passt."
+    }
+  },
   "settings": {
     "title": "Sevak-Einstellungen",
     "loadFailed": "Die Einstellungen konnten nicht geladen werden. Schließe dieses Fenster und versuche es erneut über das Infobereich-Menü.",
@@ -735,7 +765,8 @@
       "system": "System & Terminal",
       "linux": "Linux",
       "backup": "Sichern & Wiederherstellen",
-      "help": "Hilfe"
+      "help": "Hilfe",
+      "usage": "Nutzung"
     },
     "problems": {
       "one": "{count} Problem",
@@ -952,6 +983,7 @@
       "emoji": "Emoji-Auswahl",
       "contacts": "Kontakte",
       "uuid": "UUID-Generator",
+      "settings": "die Suche in den Sevak-Einstellungen",
       "files": "Dateisuche",
       "indexFiles": "Dateisuche auf der ganzen Festplatte",
       "contentFiles": "Suche in Dateiinhalten",

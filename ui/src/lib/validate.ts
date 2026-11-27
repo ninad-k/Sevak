@@ -122,6 +122,7 @@ const FIXED_KEYWORDS: [string, Owner][] = [
   [":", "validate.owner.emoji"],
   ["@", "validate.owner.contacts"],
   ["uuid", "validate.owner.uuid"],
+  ["?", "validate.owner.settings"],
 ];
 
 interface KeywordSpec {

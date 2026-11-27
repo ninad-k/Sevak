@@ -8,7 +8,14 @@ Configure Sevak through the Settings window.
   select **Settings** (on Linux, click the icon and select **Settings**)
 - Run `sevak --settings` from the command line
 
-The tabs run from General to Files, with Linux where it applies, then **Backup & restore** and **Help** last.
+The tabs run from General to Files, with **Usage** after System & terminal, Linux where it applies, then **Backup & restore** and **Help** last.
+
+`sevak --settings <section>` (for example `sevak --settings clipboard`) opens Settings on one tab; see [the command line](cli.md#-settings).
+
+### Find a setting
+
+- **Filter box (top of the tab list):** type to show only the tabs whose name or related words match (try `dark`, `shortcut` or `snippets`). ++enter++ jumps to the first match; ++esc++ clears the box.
+- **In the launcher:** type `? ` and a word (for example `? theme`) to list matching tabs and well-known options. ++enter++ opens Settings on that tab. The keyword `?` is fixed. Turn the search off with `[plugins] disabled = ["settings"]`.
 
 ## Using Settings
 
@@ -519,6 +526,8 @@ Links to: `[paste] restore_clipboard` in configuration.
 
 ## Tasks & media
 
+The list of automation tasks has a filter box above it: type part of a task's name or group (`wifi`, `quit`) to show only matching tasks. Tasks you hide stay hidden while filtering.
+
 ### Automation tasks
 
 [Automation tasks](features/tasks.md) are ready-made actions: dark mode, volume, screenshots, quit or kill an app, eject a drive and more.
@@ -617,6 +626,16 @@ Links to: `[system]` in [configuration](configuration.md#system).
 - **Keep the terminal open**: leave it at a shell prompt after the command exits; off closes it.
 
 Links to: `[shell]` in [configuration](configuration.md#shell).
+
+## Usage
+
+Shows what Sevak has counted on this computer to rank your results (read from `usage.json`; nothing is sent anywhere):
+
+- launches tracked, items tracked and the number of remembered searches (just the number)
+- the 20 most used items with launches and date last used
+- launches per plugin
+
+**Copy stats** copies the same numbers as plain text, for a bug report or your own notes. The text and the page hold item names only: no typed searches, and a file result shows its file name, never its folder. There is no reset button here; remove `usage.json` (see [files and data](files-and-data.md)) to start again.
 
 ## Linux
 

@@ -42,4 +42,4 @@ pub use model::{
 };
 pub use plugin::{Plugin, PluginError, PluginResult, ResultsNotifier};
 pub use selection::{Selection, SelectionKind};
-pub use usage::{UsageEntry, UsageError, UsageStore};
+pub use usage::{UsageEntry, UsageError, UsageStore, UsageSummary, UsageTopItem, SUMMARY_TOP};

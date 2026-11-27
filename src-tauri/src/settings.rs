@@ -14,7 +14,7 @@ use sevak_plugins::keywords::{
     configurable_keywords, ConfigurableKeyword, KeywordOwners, FIXED_KEYWORDS,
 };
 use sevak_plugins::{clipboard_history, PluginInfo, PluginRegistry};
-use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
@@ -24,6 +24,50 @@ use crate::{app, autostart, hotkey, takeover, window};
 const WINDOW_TITLE: &str = "Sevak Settings";
 /// Same frontend as the launcher; `main.ts` picks the view from the hash.
 const WINDOW_URL: &str = "index.html#settings";
+
+const EVENT_PAGE: &str = "sevak:settings-page";
+
+/// The section a new settings window was asked to open on, once. The window
+/// reads it when it starts, for the case where the event came before it was
+/// listening.
+static PENDING_SECTION: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+static APP: std::sync::OnceLock<AppHandle> = std::sync::OnceLock::new();
+
+/// Gives the module the app handle. Called once, from `search::start`.
+pub fn attach(app: &AppHandle) {
+    let _ = APP.set(app.clone());
+}
+
+/// What the `? ` launcher search calls: opens Settings on `section`.
+pub fn open_from_launcher(section: &str) {
+    if let Some(app) = APP.get() {
+        open_at(app, section);
+    }
+}
+
+/// Takes the section the window was asked to open on.
+pub fn take_pending_section() -> Option<String> {
+    PENDING_SECTION
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .take()
+}
+
+/// Opens the settings window on `section` (a section id such as `clipboard`),
+/// or switches the open one to it.
+pub fn open_at(app: &AppHandle, section: &str) {
+    let already_open = app.get_webview_window(window::SETTINGS_LABEL).is_some();
+    if !already_open {
+        *PENDING_SECTION.lock().unwrap_or_else(|p| p.into_inner()) = Some(section.to_owned());
+    }
+    open(app);
+    if already_open {
+        if let Err(err) = app.emit_to(window::SETTINGS_LABEL, EVENT_PAGE, section) {
+            tracing::warn!("could not emit {EVENT_PAGE}: {err}");
+        }
+    }
+}
 
 /// Opens the settings window, or brings the open one to the front.
 /// The launcher steps aside first so it does not sit on top of it.
@@ -584,6 +628,26 @@ pub async fn open_marketplace(target: String) -> Result<(), String> {
     let url =
         marketplace_url(&target).ok_or_else(|| format!("unknown marketplace page {target:?}"))?;
     open::open_url(url).map_err(|err| err.to_string())
+}
+
+/// What the Usage page shows: the summary and the text "Copy stats" copies.
+#[derive(Serialize)]
+pub struct UsageStats {
+    #[serde(flatten)]
+    pub summary: sevak_core::UsageSummary,
+    pub text: String,
+}
+
+/// Read-only digest of the usage statistics (no queries, no folder paths).
+#[tauri::command]
+pub fn usage_stats(state: State<'_, AppState>) -> UsageStats {
+    let summary = state
+        .search
+        .engine()
+        .usage_snapshot()
+        .summary(sevak_core::SUMMARY_TOP);
+    let text = summary.to_plain_text();
+    UsageStats { summary, text }
 }
 
 #[tauri::command]
