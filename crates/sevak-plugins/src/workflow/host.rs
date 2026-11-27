@@ -626,6 +626,15 @@ pub fn approval_key(workflow: &Workflow, dir: &Path) -> Option<String> {
         for file in script_files(node) {
             hasher.file(dir, &file);
         }
+        // A UI's `{file:...}` includes, however deep, are part of what it is.
+        if let NodeKind::ShowUi {
+            definition, file, ..
+        } = &node.kind
+        {
+            for included in super::ui::include_files(definition.as_deref(), file.as_deref(), dir) {
+                hasher.file(dir, &included);
+            }
+        }
     }
     for conn in &workflow.connections {
         hasher.feed("from", conn.from.as_bytes());

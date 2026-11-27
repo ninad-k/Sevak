@@ -35,6 +35,10 @@ pub const MAX_DEPTH: usize = 32;
 pub const MAX_COMPONENTS: usize = 2000;
 /// Largest image the host loads.
 pub const MAX_IMAGE_BYTES: u64 = 4 * 1024 * 1024;
+/// Most bytes template expansion may copy in all.
+const MAX_EXPANDED_BYTES: usize = MAX_DEFINITION_BYTES * 4;
+/// Most files [`include_files`] follows.
+const MAX_INCLUDE_FILES: usize = 64;
 /// Most `{file:...}` includes nested inside each other.
 const MAX_INCLUDE_DEPTH: usize = 8;
 /// Most images one UI may show.
@@ -381,7 +385,8 @@ pub fn parse_value(value: Value, scripts: &BTreeSet<String>) -> Result<UiDefinit
         .remove("root")
         .ok_or("the UI needs a `root` component")?;
     let mut count = 0;
-    let root = expand_templates(root, &templates, 0, &mut count)?;
+    let mut bytes = 0;
+    let root = expand_templates(root, &templates, 0, &mut count, &mut bytes)?;
     object.insert("root".to_owned(), root);
     object.insert(
         "templates".to_owned(),
@@ -432,6 +437,57 @@ fn read_inside(dir: &Path, relative: &str, budget: &mut usize) -> Result<String,
     Ok(text)
 }
 
+/// Every file the definition pulls in with `{file:...}`, directly or through
+/// other included files, for the approval hash: the top-level `file` first,
+/// then the includes of the inline text and of each file read. Bounded;
+/// anything outside the workflow folder or unreadable is listed by name only
+/// (the hash then records it as missing).
+pub fn include_files(inline: Option<&str>, file: Option<&str>, dir: &Path) -> Vec<String> {
+    fn scan(value: &Value, out: &mut Vec<String>) {
+        match value {
+            Value::String(text) => {
+                if let Some(rel) = text
+                    .trim()
+                    .strip_prefix("{file:")
+                    .and_then(|rest| rest.strip_suffix('}'))
+                {
+                    out.push(rel.trim().to_owned());
+                }
+            }
+            Value::Array(items) => items.iter().for_each(|item| scan(item, out)),
+            Value::Object(map) => map.values().for_each(|item| scan(item, out)),
+            _ => {}
+        }
+    }
+    let mut found: Vec<String> = Vec::new();
+    let mut queue: Vec<String> = Vec::new();
+    if let Some(file) = file.map(str::trim).filter(|f| !f.is_empty()) {
+        queue.push(file.to_owned());
+    }
+    if let Some(text) = inline {
+        if let Ok(value) = serde_json::from_str::<Value>(text) {
+            scan(&value, &mut queue);
+        }
+    }
+    while let Some(next) = queue.pop() {
+        if found.contains(&next) {
+            continue;
+        }
+        if found.len() >= MAX_INCLUDE_FILES {
+            break;
+        }
+        found.push(next.clone());
+        let mut budget = MAX_DEFINITION_BYTES;
+        if let Ok(text) = read_inside(dir, &next, &mut budget) {
+            if let Ok(value) = serde_json::from_str::<Value>(&text) {
+                scan(&value, &mut queue);
+            }
+        }
+    }
+    found.sort();
+    found
+}
+
 /// Replaces every string that is exactly `{file:relative.json}` with the
 /// parsed file.
 fn resolve_includes(
@@ -480,6 +536,7 @@ fn expand_templates(
     templates: &BTreeMap<String, Value>,
     depth: usize,
     count: &mut usize,
+    bytes: &mut usize,
 ) -> Result<Value, String> {
     if depth > MAX_DEPTH {
         return Err(format!(
@@ -505,17 +562,25 @@ fn expand_templates(
                 Some(_) => return Err("`params` must be an object".to_owned()),
             };
             let filled = substitute_params(body.clone(), &params);
-            expand_templates(filled, templates, depth + 1, count)
+            // Every expansion pays for the size of what it copies, so nested
+            // templates with large parameters cannot grow without bound.
+            *bytes = bytes.saturating_add(filled.to_string().len());
+            if *bytes > MAX_EXPANDED_BYTES {
+                return Err("the UI is too large once its templates are expanded".to_owned());
+            }
+            expand_templates(filled, templates, depth + 1, count, bytes)
         }
         Value::Object(map) => Ok(Value::Object(
             map.into_iter()
-                .map(|(key, item)| Ok((key, expand_templates(item, templates, depth, count)?)))
+                .map(|(key, item)| {
+                    Ok((key, expand_templates(item, templates, depth, count, bytes)?))
+                })
                 .collect::<Result<Map<_, _>, String>>()?,
         )),
         Value::Array(items) => Ok(Value::Array(
             items
                 .into_iter()
-                .map(|item| expand_templates(item, templates, depth, count))
+                .map(|item| expand_templates(item, templates, depth, count, bytes))
                 .collect::<Result<_, _>>()?,
         )),
         other => Ok(other),
@@ -1383,6 +1448,44 @@ mod tests {
     }
 
     #[test]
+    fn include_files_lists_every_file_the_definition_pulls_in() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.json"), r#"{"x": "{file:b.json}"}"#).unwrap();
+        std::fs::write(dir.path().join("b.json"), r#"{"x": "{file:a.json}"}"#).unwrap();
+        std::fs::write(dir.path().join("top.json"), r#"{"root": "{file:a.json}"}"#).unwrap();
+        let inline = r#"{"root": {"type": "column", "children": ["{file:c.json}"]}}"#;
+        assert_eq!(
+            include_files(Some(inline), Some("top.json"), dir.path()),
+            ["a.json", "b.json", "c.json", "top.json"]
+        );
+        assert!(include_files(None, None, dir.path()).is_empty());
+    }
+
+    #[test]
+    fn nested_templates_with_large_params_hit_the_byte_budget() {
+        let big = "x".repeat(200_000);
+        let mut templates = Map::new();
+        for level in 0..3 {
+            let uses: Vec<Value> = (0..10)
+                .map(|_| {
+                    json!({"type": "use", "template": format!("t{}", level + 1),
+                           "params": {"p": "{param:p}"}})
+                })
+                .collect();
+            let mut children = uses;
+            children.push(json!({"type": "label", "text": "{param:p}"}));
+            templates.insert(format!("t{level}"), column(Value::Array(children)));
+        }
+        templates.insert("t3".into(), json!({"type": "label", "text": "{param:p}"}));
+        let err = parse(json!({
+            "templates": templates,
+            "root": {"type": "use", "template": "t0", "params": {"p": big}}
+        }))
+        .unwrap_err();
+        assert!(err.contains("too large"), "{err}");
+    }
+
+    #[test]
     fn includes_that_loop_or_grow_too_large_are_refused() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("a.json"), r#""{file:a.json}""#).unwrap();
@@ -1634,6 +1737,41 @@ mod node_tests {
             *definition = None;
         }
         assert!(check(none)[0].contains("write the UI"));
+    }
+
+    #[test]
+    fn changing_an_included_file_changes_the_approval_key() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("top.json"),
+            r#"{"root": "{file:deep.json}"}"#,
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("deep.json"), r#"{"type": "spacer"}"#).unwrap();
+        let mut ui = kind(json!({}), &["go"]);
+        if let NodeKind::ShowUi {
+            definition, file, ..
+        } = &mut ui
+        {
+            *definition = None;
+            *file = Some("top.json".to_owned());
+        }
+        let workflow = Workflow {
+            name: "w".into(),
+            nodes: vec![keyword("k"), node("ui", ui)],
+            connections: vec![wire("k", "ui")],
+            ..Workflow::default()
+        };
+        let key = |dir: &std::path::Path| crate::workflow::approval_key(&workflow, dir);
+        let before = key(dir.path());
+        assert!(before.is_some());
+        assert_eq!(before, key(dir.path()));
+        std::fs::write(
+            dir.path().join("deep.json"),
+            r#"{"type": "label", "text": "x"}"#,
+        )
+        .unwrap();
+        assert_ne!(before, key(dir.path()));
     }
 
     #[test]
