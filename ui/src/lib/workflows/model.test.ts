@@ -99,10 +99,10 @@ describe("the node catalog", () => {
       expect(kindOf(type as NodeType).type, type).toBe(type);
       expect(kindOf(type as NodeType).category, type).toBe(category);
     }
-    // Only writing files asks for the user's Allow.
+    // Writing files and calling another workflow ask for the user's Allow.
     const needing = KINDS.filter((k) => k.needsApproval).map((k) => k.type);
     expect(needing).toContain("write_file");
-    expect(needing).not.toContain("call_external");
+    expect(needing).toContain("call_external");
     expect(kindOf("split_arg").defaults()).toEqual({
       delimiter: "newline",
       custom: "",
