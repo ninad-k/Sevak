@@ -201,6 +201,8 @@ pub enum ViewHint {
     /// the action: for rows that exist only to show text, such as a script's
     /// output.
     Text { text: String, on_enter: bool },
+    /// Like `Text`, drawn as Markdown (headings, lists, tables, links...).
+    Markdown { text: String, on_enter: bool },
     /// A tile in the Grid View, drawn when every result of a search is a tile.
     /// `glyph` is the picture (an emoji); without one the row's icon is drawn.
     Grid { glyph: Option<String> },

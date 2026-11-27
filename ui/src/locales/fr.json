@@ -540,6 +540,10 @@
         "noneWithEnv": "Pas encore de clé. Collez-en une ici, ou définissez la variable d'environnement {variable}.",
         "none": "Pas encore de clé."
       }
+    },
+    "fileView": {
+      "label": "Fichier",
+      "step": "Passer d'un fichier à l'autre"
     }
   },
   "announce": {
@@ -1151,7 +1155,8 @@
       "saved": "Enregistré.",
       "savedNeedsAllow": "Enregistré. Sevak vous demandera de l'autoriser avant d'exécuter quoi que ce soit.",
       "badId": "Un id comporte de 1 à 40 lettres, chiffres, tirets ou traits de soulignement.",
-      "idTaken": "Un autre nœud porte déjà cet id."
+      "idTaken": "Un autre nœud porte déjà cet id.",
+      "descriptionPreview": "Aperçu de la description"
     },
     "fields": {
       "acceptText": "Texte",
@@ -1484,6 +1489,10 @@
           },
           "text": {
             "label": "Texte"
+          },
+          "markdown": {
+            "label": "Markdown",
+            "hint": "Affiche le texte en Markdown : titres, listes, tableaux, liens."
           }
         }
       }
@@ -1982,5 +1991,12 @@
       "saveBeforeExport": "Enregistrez d'abord le thème (Enregistrer sous…), puis exportez-le.",
       "exported": "Le thème a été exporté."
     }
+  },
+  "markdown": {
+    "note": "Note",
+    "tip": "Astuce",
+    "important": "Important",
+    "warning": "Avertissement",
+    "caution": "Attention"
   }
 }

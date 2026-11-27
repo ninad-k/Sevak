@@ -14,6 +14,8 @@ pub struct RecordingSink {
     pub notes: Mutex<Vec<(String, String)>>,
     pub large: Mutex<Vec<String>>,
     pub views: Mutex<Vec<(String, String)>>,
+    /// Whether each text view was flagged as Markdown, in order.
+    pub view_markdown: Mutex<Vec<bool>>,
     /// What `confirm` answers.
     pub answer: bool,
     pub asked: Mutex<Vec<String>>,
@@ -32,10 +34,15 @@ impl OutputSink for RecordingSink {
     }
 
     fn text_view(&self, heading: &str, text: &str) {
+        self.text_view_markdown(heading, text, false);
+    }
+
+    fn text_view_markdown(&self, heading: &str, text: &str, markdown: bool) {
         self.views
             .lock()
             .unwrap()
             .push((heading.to_owned(), text.to_owned()));
+        self.view_markdown.lock().unwrap().push(markdown);
     }
 
     fn confirm(&self, question: &str) -> bool {

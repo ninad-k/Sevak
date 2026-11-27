@@ -180,7 +180,10 @@ time, no look-around, and limited in size, so a pattern cannot hang Sevak.
 |---|---|
 | **Notification** | a system notification (heading defaults to the workflow's name) |
 | **Large Type** | the text huge on screen (dismiss with any key or a click) |
-| **Text view** | the text in the launcher window, below the search bar |
+| **Text view** | the text in the launcher window, below the search bar; tick **Markdown** (`"markdown": true`) to draw it as Markdown with headings, lists, tables, code and links (links open in your browser) |
+
+The workflow's **Description** in the editor is also read as Markdown: a preview
+under the box shows how it will look.
 
 ### Script filter
 
@@ -424,7 +427,7 @@ Node types and their fields: `keyword` (`keyword`, `argument`, `subtitle`),
 `value`), `transform` (`op`, `input`, `find`, `replace`, `index`, `into`),
 `conditional` (`left`, `test`, `right`, `ignore_case`), `delay` (`ms`),
 `notification` (`heading`, `body`), `large_type` (`text`) and `text_view`
-(`heading`, `text`). Every node may also have `title`, `x` and `y`. Unknown
+(`heading`, `text`, `markdown`). Every node may also have `title`, `x` and `y`. Unknown
 `type` values make the whole workflow fail to load ("Not loaded: ..." on its row)
 rather than half-work. The examples in
 [`examples/workflows/`](https://github.com/ninad-k/Sevak/tree/main/examples/workflows) show real files.

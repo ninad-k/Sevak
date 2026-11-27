@@ -42,7 +42,7 @@ impl TauriSink {
         let _ = self.app.set(app.clone());
     }
 
-    fn show(&self, kind: OutputKind, heading: &str, text: &str) {
+    fn show(&self, kind: OutputKind, heading: &str, text: &str, markdown: bool) {
         let Some(app) = self.app.get() else { return };
         window::show_with(
             app,
@@ -51,6 +51,7 @@ impl TauriSink {
                     kind,
                     heading: heading.to_owned(),
                     text: text.to_owned(),
+                    markdown,
                 }),
                 ..ShowPayload::default()
             },
@@ -73,11 +74,15 @@ impl OutputSink for TauriSink {
     }
 
     fn large_type(&self, text: &str) {
-        self.show(OutputKind::LargeType, "", text);
+        self.show(OutputKind::LargeType, "", text, false);
     }
 
     fn text_view(&self, heading: &str, text: &str) {
-        self.show(OutputKind::TextView, heading, text);
+        self.show(OutputKind::TextView, heading, text, false);
+    }
+
+    fn text_view_markdown(&self, heading: &str, text: &str, markdown: bool) {
+        self.show(OutputKind::TextView, heading, text, markdown);
     }
 
     fn confirm(&self, question: &str) -> bool {

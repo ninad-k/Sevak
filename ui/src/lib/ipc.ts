@@ -132,6 +132,7 @@ export interface MetaRow {
 export type PreviewBody =
   | { kind: "none" }
   | { kind: "text"; text: string; truncated: boolean }
+  | { kind: "markdown"; text: string; truncated: boolean }
   | { kind: "image"; src: string }
   | { kind: "folder"; entries: { name: string; dir: boolean }[]; truncated: boolean }
   | { kind: "url"; url: string };
@@ -153,6 +154,8 @@ export interface TextViewContent {
   title: string;
   text: string;
   truncated: boolean;
+  /** The text is Markdown, to be drawn as such. */
+  markdown?: boolean;
 }
 
 export type IndexState = "indexing" | "ready";
@@ -252,6 +255,39 @@ export async function textView(id: string, ticket: number): Promise<TextViewCont
   }
 }
 
+/**
+ * Opens a link of rendered Markdown in the default browser (the webview itself
+ * never navigates). Resolves to an error message, or `null` on success; the
+ * shell only opens http, https and mailto addresses.
+ */
+export async function openLink(url: string): Promise<string | null> {
+  if (import.meta.env.DEV && !hasTauri()) return null;
+  try {
+    await invoke("open_link", { url });
+    return null;
+  } catch (err) {
+    return typeof err === "string" ? err : err instanceof Error ? err.message : String(err);
+  }
+}
+
+/**
+ * File number `index` of the "View in Sevak" action `id` of the selection
+ * `ticket`, as the preview pane would draw it; `null` when it could not be read.
+ */
+export async function viewSelectionFile(
+  id: string,
+  ticket: number,
+  index: number,
+): Promise<PreviewContent | null> {
+  if (import.meta.env.DEV && !hasTauri()) return null;
+  try {
+    return await invoke<PreviewContent>("view_selection_file", { id, ticket, index });
+  } catch (err) {
+    console.warn("[ipc] view_selection_file failed:", err);
+    return null;
+  }
+}
+
 /** Executed queries, most recent first (empty when history is off). */
 export async function queryHistory(): Promise<string[]> {
   if (import.meta.env.DEV && !hasTauri()) {
@@ -332,7 +368,8 @@ async function safeListen<T>(event: string, cb: (payload: T) => void): Promise<U
 /** An action the launcher window carries out itself instead of the shell. */
 export type WindowAction =
   | { kind: "large_type"; text: string }
-  | { kind: "search"; query: string };
+  | { kind: "search"; query: string }
+  | { kind: "view"; count: number };
 
 /** One Universal Actions entry: a result row, and what the window does for it, if anything. */
 export interface SelectionActionDto extends ResultDto {
@@ -355,6 +392,8 @@ export interface OutputPayload {
   kind: "large_type" | "text_view";
   heading: string;
   text: string;
+  /** The text is Markdown (a text view node with its Markdown box ticked). */
+  markdown?: boolean;
 }
 
 /** What the launcher is asked to show with (`sevak --query`, hotkey entries, errors). */

@@ -540,6 +540,10 @@
         "noneWithEnv": "Noch kein Schlüssel. Füge hier einen ein oder setze die Umgebungsvariable {variable}.",
         "none": "Noch kein Schlüssel."
       }
+    },
+    "fileView": {
+      "label": "Datei",
+      "step": "Dateien durchblättern"
     }
   },
   "announce": {
@@ -1124,7 +1128,8 @@
       "saved": "Gespeichert.",
       "savedNeedsAllow": "Gespeichert. Sevak bittet dich um Erlaubnis, bevor etwas ausgeführt wird.",
       "badId": "Eine ID besteht aus 1 bis 40 Buchstaben, Ziffern, Bindestrichen oder Unterstrichen.",
-      "idTaken": "Ein anderer Knoten hat bereits diese ID."
+      "idTaken": "Ein anderer Knoten hat bereits diese ID.",
+      "descriptionPreview": "Vorschau der Beschreibung"
     },
     "fields": {
       "acceptText": "Text",
@@ -1457,6 +1462,10 @@
           },
           "text": {
             "label": "Text"
+          },
+          "markdown": {
+            "label": "Markdown",
+            "hint": "Zeigt den Text als Markdown an: Überschriften, Listen, Tabellen, Links."
           }
         }
       }
@@ -1945,5 +1954,12 @@
       "saveBeforeExport": "Speichere das Theme zuerst (Speichern unter…) und exportiere es dann.",
       "exported": "Das Theme wurde exportiert."
     }
+  },
+  "markdown": {
+    "note": "Hinweis",
+    "tip": "Tipp",
+    "important": "Wichtig",
+    "warning": "Warnung",
+    "caution": "Vorsicht"
   }
 }
