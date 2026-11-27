@@ -134,7 +134,13 @@ pub(crate) fn to_dtos(icons: Vec<Option<IconDto>>, items: &[ResultItem]) -> Vec<
                 _ => None,
             },
             text_view: preview::has_text_view(item),
-            text_on_enter: matches!(item.view, Some(ViewHint::Text { on_enter: true, .. })),
+            text_on_enter: matches!(
+                item.view,
+                Some(
+                    ViewHint::Text { on_enter: true, .. }
+                        | ViewHint::Markdown { on_enter: true, .. }
+                )
+            ),
             large_text: item.large_text.clone(),
         })
         .collect()
@@ -209,6 +215,19 @@ pub async fn text_view(app: AppHandle, id: String, ticket: u64) -> Result<TextVi
     })
     .await
     .map_err(|err| format!("the text did not load: {err}"))?
+}
+
+/// Opens a link of rendered Markdown in the default browser. The page cannot
+/// navigate to it itself (it never leaves the launcher), and the address goes
+/// through the same gate as every `open_url`: only http, https and mailto.
+#[tauri::command]
+pub async fn open_link(url: String) -> Result<(), String> {
+    let url = sevak_core::url_check::check_open_url(&url).map_err(str::to_owned)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        sevak_platform::open::open_url(&url).map_err(|err| err.to_string())
+    })
+    .await
+    .map_err(|err| format!("the link did not open: {err}"))?
 }
 
 /// Executed queries, most recent first, for Up/Down recall on an empty input

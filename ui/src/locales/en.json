@@ -525,6 +525,10 @@
         "noneWithEnv": "No key yet. Paste one here, or set the {variable} environment variable.",
         "none": "No key yet."
       }
+    },
+    "fileView": {
+      "label": "File",
+      "step": "Step through files"
     }
   },
   "announce": {
@@ -1069,7 +1073,8 @@
       "saved": "Saved.",
       "savedNeedsAllow": "Saved. Sevak will ask you to allow it before it runs anything.",
       "badId": "An id uses 1 to 40 letters, digits, dashes or underscores.",
-      "idTaken": "Another node already has that id."
+      "idTaken": "Another node already has that id.",
+      "descriptionPreview": "Description preview"
     },
     "fields": {
       "acceptText": "Text",
@@ -1402,6 +1407,10 @@
           },
           "text": {
             "label": "Text"
+          },
+          "markdown": {
+            "label": "Markdown",
+            "hint": "Draw the text as Markdown: headings, lists, tables, links."
           }
         }
       }
@@ -1876,5 +1885,12 @@
       "saveBeforeExport": "Save the theme first (Save as…), then export it.",
       "exported": "Exported the theme."
     }
+  },
+  "markdown": {
+    "note": "Note",
+    "tip": "Tip",
+    "important": "Important",
+    "warning": "Warning",
+    "caution": "Caution"
   }
 }

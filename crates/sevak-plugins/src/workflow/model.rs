@@ -359,6 +359,9 @@ pub enum NodeKind {
         heading: String,
         #[serde(default = "query_template")]
         text: String,
+        /// Draw the text as Markdown (headings, lists, tables, links...).
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        markdown: bool,
     },
 }
 
@@ -726,6 +729,7 @@ mod tests {
             NodeKind::TextView {
                 heading: "t".into(),
                 text: "words".into(),
+                markdown: false,
             },
         ];
         let names: std::collections::HashSet<_> = kinds.iter().map(|k| k.type_name()).collect();

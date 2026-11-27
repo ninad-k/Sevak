@@ -514,6 +514,7 @@ export const KINDS: KindDef[] = (
     fields: [
       { key: "heading", kind: "text", optional: true },
       { key: "text", kind: "textarea", hint: "placeholders" },
+      { key: "markdown", kind: "checkbox", optional: true, hint: true },
     ],
     defaults: () => ({ text: "{query}" }),
   },

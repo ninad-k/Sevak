@@ -10,6 +10,7 @@
   import "./workflows.css";
   import { onMount } from "svelte";
   import NodeFields from "./NodeFields.svelte";
+  import Markdown from "../Markdown.svelte";
   import { t, tHtml } from "../i18n.svelte";
   import { checkWorkflow, saveWorkflow } from "./ipc";
   import {
@@ -731,6 +732,11 @@
         <div class="wf-field">
           <label for="wf-desc">{t("workflows.editor.description")}</label>
           <textarea id="wf-desc" class="wf-input" rows="2" bind:value={workflow.description}></textarea>
+          {#if workflow.description.trim() !== ""}
+            <div class="wf-desc-preview" role="region" aria-label={t("workflows.editor.descriptionPreview")}>
+              <Markdown source={workflow.description} compact />
+            </div>
+          {/if}
         </div>
         <div class="wf-field">
           <label for="wf-author">{t("workflows.editor.author")}</label>
@@ -798,6 +804,15 @@
 </div>
 
 <style>
+  .wf-desc-preview {
+    margin-top: 6px;
+    padding: 6px 10px;
+    border: 1px dashed var(--border);
+    border-radius: 6px;
+    max-height: 160px;
+    overflow: auto;
+  }
+
   .editor {
     position: fixed;
     inset: 0;

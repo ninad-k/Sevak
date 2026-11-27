@@ -525,6 +525,10 @@
         "noneWithEnv": "Aún no hay clave. Pega una aquí o define la variable de entorno {variable}.",
         "none": "Aún no hay clave."
       }
+    },
+    "fileView": {
+      "label": "Archivo",
+      "step": "Pasar de un archivo a otro"
     }
   },
   "announce": {
@@ -1084,7 +1088,8 @@
       "saved": "Guardado.",
       "savedNeedsAllow": "Guardado. Sevak te pedirá que lo permitas antes de que ejecute nada.",
       "badId": "Un id usa de 1 a 40 letras, dígitos, guiones o guiones bajos.",
-      "idTaken": "Otro nodo ya tiene ese id."
+      "idTaken": "Otro nodo ya tiene ese id.",
+      "descriptionPreview": "Vista previa de la descripción"
     },
     "fields": {
       "acceptText": "Texto",
@@ -1417,6 +1422,10 @@
           },
           "text": {
             "label": "Texto"
+          },
+          "markdown": {
+            "label": "Markdown",
+            "hint": "Muestra el texto como Markdown: títulos, listas, tablas, enlaces."
           }
         }
       }
@@ -1892,5 +1901,12 @@
       "saveBeforeExport": "Primero guarda el tema (Guardar como…) y luego expórtalo.",
       "exported": "Se exportó el tema."
     }
+  },
+  "markdown": {
+    "note": "Nota",
+    "tip": "Consejo",
+    "important": "Importante",
+    "warning": "Advertencia",
+    "caution": "Precaución"
   }
 }

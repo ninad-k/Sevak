@@ -66,6 +66,12 @@ pub trait OutputSink: Send + Sync {
     fn large_type(&self, text: &str);
     /// Shows `text` in the launcher window.
     fn text_view(&self, heading: &str, text: &str);
+    /// Like [`OutputSink::text_view`], told whether `text` is Markdown. Sinks
+    /// that cannot draw Markdown keep the default, which shows it as text.
+    fn text_view_markdown(&self, heading: &str, text: &str, markdown: bool) {
+        let _ = markdown;
+        self.text_view(heading, text);
+    }
     /// Asks the user a yes/no question before something that cannot be undone
     /// (restart, shut down...). Anything but a clear yes is a no, which is what
     /// the default answers.
@@ -492,14 +498,19 @@ impl Runtime {
                 self.sink.notify(&heading, &plain(body));
             }
             NodeKind::LargeType { text } => self.sink.large_type(&plain(text)),
-            NodeKind::TextView { heading, text } => {
+            NodeKind::TextView {
+                heading,
+                text,
+                markdown,
+            } => {
                 let heading = plain(heading);
                 let heading = if heading.trim().is_empty() {
                     self.display_name()
                 } else {
                     heading
                 };
-                self.sink.text_view(&heading, &plain(text));
+                self.sink
+                    .text_view_markdown(&heading, &plain(text), *markdown);
             }
         }
         Ok(Step { ctx: next, port })
@@ -1308,6 +1319,7 @@ mod tests {
                     NodeKind::TextView {
                         heading: "Result".into(),
                         text: "{query}!".into(),
+                        markdown: false,
                     },
                 ),
             ],
@@ -1336,6 +1348,47 @@ mod tests {
             *f.sink.views.lock().unwrap(),
             [("Result".to_owned(), "it's!".to_owned())]
         );
+    }
+
+    #[test]
+    fn a_text_view_node_passes_its_markdown_flag_on() {
+        let view = |id: &str, markdown: bool| {
+            node(
+                id,
+                NodeKind::TextView {
+                    heading: String::new(),
+                    text: "# {query}".into(),
+                    markdown,
+                },
+            )
+        };
+        let f = fixture(
+            vec![keyword("k"), view("plain", false), view("md", true)],
+            vec![wire("k", "plain"), wire("plain", "md")],
+        );
+        let report = f.runtime.run_blocking("k", Ctx::with_arg("x"));
+        assert!(report.errors.is_empty(), "{report:?}");
+        assert_eq!(*f.sink.view_markdown.lock().unwrap(), [false, true]);
+        assert_eq!(f.sink.views.lock().unwrap()[1].1, "# x");
+    }
+
+    #[test]
+    fn a_text_view_node_without_the_flag_loads_as_plain_text() {
+        let kind: NodeKind = serde_json::from_str(r#"{"type":"text_view","text":"hi"}"#).unwrap();
+        assert!(matches!(
+            kind,
+            NodeKind::TextView {
+                markdown: false,
+                ..
+            }
+        ));
+        let json = serde_json::to_string(&kind).unwrap();
+        assert!(!json.contains("markdown"), "{json}");
+        let on: NodeKind =
+            serde_json::from_str(r#"{"type":"text_view","text":"hi","markdown":true}"#).unwrap();
+        assert!(serde_json::to_string(&on)
+            .unwrap()
+            .contains(r#""markdown":true"#));
     }
 
     #[test]

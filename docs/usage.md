@@ -132,6 +132,7 @@ Tap ++shift++ (press and release it alone) or press ++ctrl+y++ (++cmd+y++ on mac
 | Result | The pane shows |
 |---|---|
 | Text and code files | The first 64 KB in a monospace font, with size and modified date |
+| Markdown files (`.md`, `.markdown`) | The first 64 KB drawn as Markdown (headings, lists, tables, code, links), with size and modified date |
 | Images (PNG, JPEG, GIF, WebP, SVG, BMP, ICO; up to 4 MB) | The picture and its pixel size |
 | PDFs (up to 50 MB) | The first page as a picture, with the page count where the system knows it, then kind, size, path and modified date. Linux needs `pdftoppm` (see below) |
 | Word, Excel and PowerPoint files (up to 50 MB) and videos | The system's own thumbnail, when it has one (Windows and macOS), then the details |
@@ -151,6 +152,8 @@ The pane reads only the file or folder the selected result refers to, only when 
 ### Text View
 
 A result that carries a long text (a long or multi-line clipboard entry, a snippet, a script plugin's output) can be opened in a scrollable, taller view with ++ctrl+t++. ++arrow-up++ ++arrow-down++ ++pageup++ ++pagedown++ ++home++ ++end++ scroll; ++ctrl+c++ copies the text, ++enter++ runs the result as usual, and ++escape++ or ++arrow-left++ goes back to the list. Rows that exist only to show text (marked by the script that produced them) open the Text View on ++enter++.
+
+Text that is Markdown is drawn as Markdown: headings (long ones are cut with an ellipsis), emphasis, lists and task lists, quotes, code blocks, tables (columns sized to their content, `:---:` alignment), links, and GitHub alerts (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`) in the theme's colours. The same renderer draws Markdown files in the preview pane, a workflow's [text view node](workflows.md#outputs) when its **Markdown** box is ticked, and a workflow's description in the editor. It is safe by construction: raw HTML is never passed through (tags such as `<kbd>` are dropped and their text kept, `<script>` and `<style>` are dropped with their content), and a link is only drawn for `http`, `https` and `mailto` addresses. Clicking a link opens it in your default browser; Sevak itself never navigates. Images are not fetched: an image shows its alt text (linked when it has an `http(s)` address).
 
 ### Grid View
 

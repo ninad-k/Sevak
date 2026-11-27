@@ -5,6 +5,7 @@
   import Glyph from "./Glyph.svelte";
   import { formatDate, formatNumber, t } from "./i18n.svelte";
   import type { PreviewContent } from "./ipc";
+  import Markdown from "./Markdown.svelte";
 
   let {
     content,
@@ -47,6 +48,11 @@
   {#if content}
     {#if content.body.kind === "text"}
       <pre class="text">{content.body.text}</pre>
+      {#if content.body.truncated}
+        <div class="note">{t("launcher.preview.startOnly")}</div>
+      {/if}
+    {:else if content.body.kind === "markdown"}
+      <div class="rendered"><Markdown source={content.body.text} compact /></div>
       {#if content.body.truncated}
         <div class="note">{t("launcher.preview.startOnly")}</div>
       {/if}
@@ -153,6 +159,17 @@
     white-space: pre;
     user-select: text;
     -webkit-user-select: text;
+  }
+
+  .rendered {
+    flex: 0 1 auto;
+    min-height: 0;
+    max-height: 140px;
+    padding: 8px 12px;
+    overflow: auto;
+    overscroll-behavior: contain;
+    border-radius: 8px;
+    background: var(--surface);
   }
 
   .picture {

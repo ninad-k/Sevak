@@ -79,6 +79,8 @@ pub fn run(
             commands::copy_result,
             commands::preview,
             commands::text_view,
+            commands::open_link,
+            selection::view_selection_file,
             commands::set_large_type,
             commands::query_history,
             file_buffer::file_buffer_get,

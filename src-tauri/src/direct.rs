@@ -54,6 +54,8 @@ pub struct OutputPayload {
     pub kind: OutputKind,
     pub heading: String,
     pub text: String,
+    /// `text` is Markdown (a text view node with its Markdown box ticked).
+    pub markdown: bool,
 }
 
 // By hand: the text may be anything the user selected or typed.
