@@ -733,7 +733,9 @@ impl NodeKind {
     /// inside the workflow's folder. `Paste` counts: it types text into
     /// whatever app was in front (a terminal, a chat, a form), which is the
     /// same as the user typing it. `WriteFile` counts: it changes files on the
-    /// disk and can replace one the user cares about.
+    /// disk and can replace one the user cares about. `CallExternal` counts:
+    /// it runs another workflow, so the target, trigger and argument are part
+    /// of what the user approves.
     pub fn needs_approval(&self) -> bool {
         matches!(
             self,
@@ -745,6 +747,7 @@ impl NodeKind {
                 | Self::OpenFile { .. }
                 | Self::Paste { .. }
                 | Self::WriteFile { .. }
+                | Self::CallExternal { .. }
         )
     }
 }
@@ -1164,6 +1167,13 @@ mod tests {
                 text: "x".into(),
                 restore_clipboard: None,
             },
+            // Calling another workflow runs whatever that one does.
+            NodeKind::CallExternal {
+                workflow: "x".into(),
+                trigger: "go".into(),
+                arg: String::new(),
+                pass_variables: false,
+            },
         ] {
             assert!(kind.needs_approval(), "{}", kind.type_name());
         }
@@ -1259,10 +1269,10 @@ mod tests {
             };
             assert_eq!(kind.category(), expected, "{}", kind.type_name());
             assert_eq!(kind.output_ports(), [OUT]);
-            // Only writing files needs the user's yes.
+            // Only writing files and calling another workflow need the user's yes.
             assert_eq!(
                 kind.needs_approval(),
-                kind.type_name() == "write_file",
+                matches!(kind.type_name(), "write_file" | "call_external"),
                 "{}",
                 kind.type_name()
             );

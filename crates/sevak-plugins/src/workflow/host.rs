@@ -860,6 +860,17 @@ fn node_also_does(node: &Node) -> Option<String> {
                 WriteMode::Prepend => "adding to the start",
             }
         ),
+        NodeKind::CallExternal {
+            workflow,
+            trigger,
+            arg,
+            ..
+        } => format!(
+            "runs workflow {}'s trigger {} with the argument {}",
+            dialog::sanitize(workflow, dialog::MAX_VALUE_CHARS),
+            dialog::sanitize(trigger, dialog::MAX_VALUE_CHARS),
+            dialog::sanitize(arg, dialog::MAX_VALUE_CHARS)
+        ),
         NodeKind::OpenUrl { url } => {
             format!(
                 "opens the link {}",
@@ -1600,6 +1611,38 @@ mod tests {
         let pending = f.host.pending(&config);
         assert_eq!(pending.len(), 1);
         assert!(pending[0].describe().contains("also does: types text"));
+    }
+
+    #[test]
+    fn a_workflow_that_calls_another_needs_approval_and_names_the_target() {
+        let f = fixture();
+        write(
+            &f,
+            "caller",
+            r#"
+            name = "Caller"
+            [[node]]
+            id = "k"
+            type = "keyword"
+            keyword = "cl"
+            [[node]]
+            id = "c"
+            type = "call_external"
+            workflow = "victim"
+            trigger = "wipe"
+            arg = "{query}"
+            [[connection]]
+            from = "k"
+            to = "c"
+            "#,
+        );
+        let config = Config::default();
+        assert!(f.host.plugins(&config, &platform()).is_empty());
+        let pending = f.host.pending(&config);
+        assert_eq!(pending.len(), 1);
+        assert!(pending[0]
+            .describe()
+            .contains("runs workflow victim's trigger wipe"));
     }
 
     #[test]

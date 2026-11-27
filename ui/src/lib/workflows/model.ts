@@ -622,6 +622,7 @@ export const KINDS: KindDef[] = (
   {
     type: "call_external",
     category: "action",
+    needsApproval: true,
     fields: [
       { key: "workflow", kind: "text", mono: true, placeholder: "my-flow", hint: true },
       { key: "trigger", kind: "text", mono: true, placeholder: "go", hint: true },
