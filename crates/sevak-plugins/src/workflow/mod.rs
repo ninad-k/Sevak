@@ -34,8 +34,8 @@ pub(crate) mod testing;
 pub use exec::{Ctx, NoSink, NodeFailure, OutputSink, RunReport, Runtime};
 pub use host::{approval_key, describe, Candidate, Loaded, Saved, Scanned, Summary, WorkflowHost};
 pub use model::{
-    Accepts, Argument, Category, Connection, Node, NodeKind, Test, TransformOp, Workflow, FAMILY,
-    FILE, FORMAT,
+    Accepts, Argument, Category, Connection, Delimiter, Node, NodeKind, RandomMode, Test,
+    TransformOp, Workflow, WriteMode, FAMILY, FILE, FORMAT,
 };
 pub use plugins::{run_id, FilterPlugin, KeywordPlugin, TriggersPlugin};
 pub use validate::{Problem, Severity};

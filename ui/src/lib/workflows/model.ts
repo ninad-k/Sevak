@@ -34,7 +34,15 @@ export type NodeType =
   | "delay"
   | "notification"
   | "large_type"
-  | "text_view";
+  | "text_view"
+  | "split_arg"
+  | "join_arg"
+  | "random"
+  | "expression"
+  | "write_file"
+  | "debug"
+  | "reveal_file"
+  | "call_external";
 
 export type Category = "trigger" | "input" | "action" | "utility" | "output";
 
@@ -185,6 +193,12 @@ const TESTS = [
   "is_empty",
   "not_empty",
 ] as const;
+
+const DELIMITERS = ["newline", "comma", "tab", "space", "custom"] as const;
+
+const RANDOM_MODES = ["number", "line", "uuid"] as const;
+
+const WRITE_MODES = ["overwrite", "append", "prepend"] as const;
 
 const SYSTEM_COMMANDS = [
   "lock",
@@ -517,6 +531,90 @@ export const KINDS: KindDef[] = (
       { key: "markdown", kind: "checkbox", optional: true, hint: true },
     ],
     defaults: () => ({ text: "{query}" }),
+  },
+  {
+    type: "split_arg",
+    category: "utility",
+    fields: [
+      { key: "delimiter", kind: "select", options: { set: "delimiter", values: DELIMITERS } },
+      { key: "custom", kind: "text", mono: true, optional: true, hint: true },
+      { key: "discard_empty", kind: "checkbox", hint: true },
+      { key: "trim", kind: "checkbox" },
+      { key: "prefix", kind: "text", mono: true, placeholder: "split_", hint: true },
+    ],
+    defaults: () => ({
+      delimiter: "newline",
+      custom: "",
+      discard_empty: true,
+      trim: true,
+      prefix: "split_",
+    }),
+  },
+  {
+    type: "join_arg",
+    category: "utility",
+    fields: [
+      { key: "separator", kind: "text", mono: true, hint: true },
+      { key: "discard_empty", kind: "checkbox", optional: true },
+    ],
+    defaults: () => ({ separator: ", ", discard_empty: false }),
+  },
+  {
+    type: "random",
+    category: "utility",
+    fields: [
+      { key: "mode", kind: "select", options: { set: "random", values: RANDOM_MODES } },
+      { key: "min", kind: "number", hint: true },
+      { key: "max", kind: "number", hint: true },
+      { key: "lines", kind: "textarea", optional: true, hint: "placeholders" },
+      { key: "variable", kind: "text", mono: true, optional: true, hint: true },
+    ],
+    defaults: () => ({ mode: "number", min: 1, max: 100, lines: "", variable: "" }),
+  },
+  {
+    type: "expression",
+    category: "utility",
+    fields: [
+      { key: "expression", kind: "text", mono: true, placeholder: "{var:count} + 1", hint: true },
+      { key: "variable", kind: "text", mono: true, hint: true },
+      { key: "set_arg", kind: "checkbox", hint: true },
+    ],
+    defaults: () => ({ expression: "{query}", variable: "result", set_arg: true }),
+  },
+  {
+    type: "write_file",
+    category: "action",
+    needsApproval: true,
+    fields: [
+      { key: "path", kind: "text", mono: true, placeholder: "notes.txt", hint: true },
+      { key: "content", kind: "textarea", hint: "placeholders" },
+      { key: "mode", kind: "select", options: { set: "write", values: WRITE_MODES } },
+      { key: "create_dirs", kind: "checkbox", optional: true },
+    ],
+    defaults: () => ({ path: "", content: "{query}", mode: "overwrite", create_dirs: false }),
+  },
+  {
+    type: "debug",
+    category: "utility",
+    fields: [{ key: "passthrough", kind: "checkbox", hint: true }],
+    defaults: () => ({ passthrough: true }),
+  },
+  {
+    type: "reveal_file",
+    category: "action",
+    fields: [{ key: "path", kind: "textarea", mono: true, hint: true }],
+    defaults: () => ({ path: "{query}" }),
+  },
+  {
+    type: "call_external",
+    category: "action",
+    fields: [
+      { key: "workflow", kind: "text", mono: true, placeholder: "my-flow", hint: true },
+      { key: "trigger", kind: "text", mono: true, placeholder: "go", hint: true },
+      { key: "arg", kind: "text", hint: "placeholders" },
+      { key: "pass_variables", kind: "checkbox", optional: true },
+    ],
+    defaults: () => ({ workflow: "", trigger: "", arg: "{query}", pass_variables: false }),
   },
   ] as RawKind[]
 ).map(localize);

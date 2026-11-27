@@ -1212,6 +1212,23 @@
         "shutdown": "Apagar (pregunta antes)",
         "logout": "Cerrar sesión (pregunta antes)",
         "empty_trash": "Vaciar la papelera (pregunta antes)"
+      },
+      "delimiter": {
+        "newline": "Salto de línea",
+        "comma": "Coma",
+        "tab": "Tabulación",
+        "space": "Espacio",
+        "custom": "Texto propio"
+      },
+      "random": {
+        "number": "Número",
+        "line": "Línea de texto",
+        "uuid": "UUID"
+      },
+      "write": {
+        "overwrite": "Reemplazarlo",
+        "append": "Añadir al final",
+        "prepend": "Añadir al principio"
       }
     },
     "program": {
@@ -1481,6 +1498,145 @@
           "markdown": {
             "label": "Markdown",
             "hint": "Muestra el texto como Markdown: títulos, listas, tablas, enlaces."
+          }
+        }
+      },
+      "split_arg": {
+        "label": "Dividir argumento",
+        "summary": "Divide el argumento en una lista y numera las partes como variables.",
+        "fields": {
+          "delimiter": {
+            "label": "Dividir por"
+          },
+          "custom": {
+            "label": "Delimitador propio",
+            "hint": "Se usa cuando \"Dividir por\" es texto propio."
+          },
+          "discard_empty": {
+            "label": "Quitar partes vacías",
+            "hint": "Las partes vacías (tras recortar, si está activado) se omiten."
+          },
+          "trim": {
+            "label": "Recortar espacios de cada parte"
+          },
+          "prefix": {
+            "label": "Prefijo de las variables",
+            "hint": "Las partes se guardan en variables con el prefijo seguido de 1, 2, 3 ... El prefijo seguido de count indica cuántas hay."
+          }
+        }
+      },
+      "join_arg": {
+        "label": "Unir argumento",
+        "summary": "Une una lista (un elemento por línea, o un array JSON) en una sola línea de texto.",
+        "fields": {
+          "separator": {
+            "label": "Separador",
+            "hint": "Se escribe entre los elementos. \\n y \\t significan salto de línea y tabulación."
+          },
+          "discard_empty": {
+            "label": "Quitar elementos vacíos"
+          }
+        }
+      },
+      "random": {
+        "label": "Aleatorio",
+        "summary": "Genera un número aleatorio, elige una línea al azar o crea un UUID.",
+        "fields": {
+          "mode": {
+            "label": "Qué generar"
+          },
+          "min": {
+            "label": "Número menor",
+            "hint": "Para números; incluido."
+          },
+          "max": {
+            "label": "Número mayor",
+            "hint": "Para números; incluido."
+          },
+          "lines": {
+            "label": "Líneas entre las que elegir",
+            "hint": "Para elegir una línea: un candidato por línea."
+          },
+          "variable": {
+            "label": "Guardar en variable",
+            "hint": "Déjalo vacío para que el resultado sea el argumento."
+          }
+        }
+      },
+      "expression": {
+        "label": "Calcular",
+        "summary": "Calcula una expresión matemática y guarda el resultado.",
+        "fields": {
+          "expression": {
+            "label": "Expresión",
+            "hint": "Primero se rellenan los marcadores y luego la calculadora del lanzador la evalúa. Una expresión incorrecta detiene esta rama."
+          },
+          "variable": {
+            "label": "Guardar en variable",
+            "hint": "Obligatorio."
+          },
+          "set_arg": {
+            "label": "Usar también el resultado como argumento",
+            "hint": "Desactívalo para mantener el argumento."
+          }
+        }
+      },
+      "write_file": {
+        "label": "Escribir archivo",
+        "summary": "Escribe texto en un archivo. El flujo debe permitirse antes.",
+        "fields": {
+          "path": {
+            "label": "Archivo",
+            "hint": "Una ruta relativa está dentro de la carpeta de datos del flujo; también sirven ~ y las rutas completas. Los nodos siguientes reciben la ruta."
+          },
+          "content": {
+            "label": "Texto a escribir"
+          },
+          "mode": {
+            "label": "Si el archivo existe"
+          },
+          "create_dirs": {
+            "label": "Crear las carpetas que falten"
+          }
+        }
+      },
+      "debug": {
+        "label": "Depurar",
+        "summary": "Muestra el argumento y las variables en la ventana del lanzador.",
+        "fields": {
+          "passthrough": {
+            "label": "Pasar el argumento",
+            "hint": "Desactivado vacía el argumento para los nodos siguientes. Lo que se muestra nunca se escribe en el registro."
+          }
+        }
+      },
+      "reveal_file": {
+        "label": "Mostrar en el explorador",
+        "summary": "Muestra archivos o carpetas en el explorador de archivos.",
+        "fields": {
+          "path": {
+            "label": "Archivos o carpetas",
+            "hint": "Uno por línea. Una ruta relativa está dentro de la carpeta del flujo."
+          }
+        }
+      },
+      "call_external": {
+        "label": "Llamar a un flujo",
+        "summary": "Ejecuta el disparador externo de otro flujo y espera a que termine.",
+        "fields": {
+          "workflow": {
+            "label": "Carpeta del flujo",
+            "hint": "El nombre de carpeta de un flujo instalado y permitido (puede ser este mismo)."
+          },
+          "trigger": {
+            "label": "Id del disparador externo",
+            "hint": "El id de un nodo de disparador externo de ese flujo."
+          },
+          "arg": {
+            "label": "Texto a enviar"
+          },
+          "pass_variables": {
+            "label": "Enviar también las variables"
           }
         }
       }

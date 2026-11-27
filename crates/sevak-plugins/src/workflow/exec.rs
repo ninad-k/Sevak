@@ -16,14 +16,14 @@
 //! selected or copied is never logged, and neither is a program's output
 //! (unless the node asks for `log_stderr`).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, Weak};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -33,8 +33,8 @@ use sevak_platform::process_tree::ProcessTree;
 use sevak_platform::{PasteOutcome, PlatformProvider, SystemCommand};
 
 use super::model::{
-    Node, NodeKind, Test, TransformOp, Workflow, DEFAULT_SCRIPT_TIMEOUT_MS, ELSE, MAX_DELAY_MS,
-    MAX_SCRIPT_TIMEOUT_MS, OUT, THEN,
+    Delimiter, Node, NodeKind, RandomMode, Test, TransformOp, Workflow, WriteMode,
+    DEFAULT_SCRIPT_TIMEOUT_MS, ELSE, MAX_DELAY_MS, MAX_SCRIPT_TIMEOUT_MS, OUT, THEN,
 };
 use super::template::{expand, expand_command, Scope, Target};
 use super::validate::{compile_regex, valid_variable_name};
@@ -49,6 +49,13 @@ pub const MAX_STEPS: usize = 200;
 pub const RUN_LIMIT: Duration = Duration::from_secs(15 * 60);
 /// Workflows running at once, across all of them.
 pub const MAX_CONCURRENT_RUNS: usize = 8;
+/// How many `call_external` nodes may be nested inside each other.
+pub const MAX_CALL_DEPTH: usize = 8;
+/// Most `<prefix>N` variables one `split_arg` sets (`<prefix>count` and the
+/// argument still carry every item).
+const MAX_SPLIT_VARIABLES: usize = 200;
+/// Largest existing file a `write_file` in `prepend` mode will rewrite.
+const MAX_PREPEND_BYTES: u64 = 16 * 1024 * 1024;
 /// Output kept from one script run.
 const MAX_OUTPUT_BYTES: u64 = 1024 * 1024;
 const MAX_STDERR_BYTES: u64 = 64 * 1024;
@@ -78,6 +85,10 @@ pub trait OutputSink: Send + Sync {
     fn confirm(&self, _question: &str) -> bool {
         false
     }
+    /// Shows what a `debug` node found (the argument and variables). This is
+    /// the user's own data, so an implementation shows it to the user and
+    /// never writes it to a log. Dropped by default.
+    fn debug(&self, _text: &str) {}
 }
 
 /// Drops everything (workflows built without a shell).
@@ -139,6 +150,19 @@ struct Run {
     report: RunReport,
     deadline: Instant,
     stopped: bool,
+    /// How many `call_external` nodes this run is inside of.
+    depth: usize,
+}
+
+/// The runtimes that may run now, by folder; what `call_external` looks in.
+pub type Registry = Mutex<HashMap<String, Arc<Runtime>>>;
+
+type RandomSource = Box<dyn FnMut() -> Option<u64> + Send>;
+
+fn os_random() -> Option<u64> {
+    let mut bytes = [0u8; 8];
+    getrandom::fill(&mut bytes).ok()?;
+    Some(u64::from_le_bytes(bytes))
 }
 
 /// One workflow, ready to run.
@@ -154,6 +178,8 @@ pub struct Runtime {
     shell: ShellConfig,
     restore_clipboard: bool,
     cancelled: AtomicBool,
+    random: Mutex<RandomSource>,
+    registry: Mutex<Option<Weak<Registry>>>,
 }
 
 impl Runtime {
@@ -176,7 +202,46 @@ impl Runtime {
             shell: config.shell.clone(),
             restore_clipboard: config.paste.restore_clipboard,
             cancelled: AtomicBool::new(false),
+            random: Mutex::new(Box::new(os_random)),
+            registry: Mutex::new(None),
         })
+    }
+
+    /// Replaces the source of random numbers (the operating system's by
+    /// default), so tests can be deterministic.
+    pub fn set_random_source(&self, source: impl FnMut() -> u64 + Send + 'static) {
+        let mut source = source;
+        *self.random.lock().unwrap_or_else(|p| p.into_inner()) = Box::new(move || Some(source()));
+    }
+
+    /// Tells the runtime where `call_external` finds the other workflows.
+    pub fn set_registry(&self, registry: Weak<Registry>) {
+        *self.registry.lock().unwrap_or_else(|p| p.into_inner()) = Some(registry);
+    }
+
+    fn next_random(&self) -> Result<u64, String> {
+        (self.random.lock().unwrap_or_else(|p| p.into_inner()))()
+            .ok_or_else(|| "no random numbers are available".to_owned())
+    }
+
+    /// The runtime of the workflow in `folder`, when it may run.
+    fn find_runtime(&self, folder: &str) -> Result<Arc<Runtime>, String> {
+        let registry = self
+            .registry
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .as_ref()
+            .and_then(Weak::upgrade);
+        registry
+            .and_then(|map| {
+                map.lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .get(folder)
+                    .cloned()
+            })
+            .ok_or_else(|| {
+                format!("no workflow \"{folder}\" is ready to run (is it installed, enabled and allowed?)")
+            })
     }
 
     /// The plugin and approval id of this workflow.
@@ -256,6 +321,11 @@ impl Runtime {
     /// and now. `ctx` carries the trigger's argument and variables; the
     /// workflow's own variables fill in whatever it does not set.
     pub fn run_blocking(&self, start: &str, ctx: Ctx) -> RunReport {
+        self.run_blocking_at(start, ctx, 0)
+    }
+
+    /// [`Runtime::run_blocking`] inside `depth` nested `call_external` nodes.
+    fn run_blocking_at(&self, start: &str, ctx: Ctx, depth: usize) -> RunReport {
         let mut vars = self.workflow.variables.clone();
         vars.extend(ctx.vars);
         let ctx = Ctx { arg: ctx.arg, vars };
@@ -263,6 +333,7 @@ impl Runtime {
             report: RunReport::default(),
             deadline: Instant::now() + RUN_LIMIT,
             stopped: false,
+            depth,
         };
         self.follow(start, OUT, &ctx, &mut run);
         run.report
@@ -305,7 +376,7 @@ impl Runtime {
             return;
         };
         run.report.executed.push(id.to_owned());
-        match self.execute(node, &ctx) {
+        match self.execute(node, &ctx, run.depth) {
             Ok(step) => self.follow(id, step.port, &step.ctx, run),
             Err(message) => {
                 tracing::warn!(
@@ -322,7 +393,7 @@ impl Runtime {
         }
     }
 
-    fn execute(&self, node: &Node, ctx: &Ctx) -> Result<Step, String> {
+    fn execute(&self, node: &Node, ctx: &Ctx, depth: usize) -> Result<Step, String> {
         let scope = Scope {
             query: &ctx.arg,
             vars: &ctx.vars,
@@ -512,6 +583,180 @@ impl Runtime {
                 self.sink
                     .text_view_markdown(&heading, &plain(text), *markdown);
             }
+            NodeKind::SplitArg {
+                delimiter,
+                custom,
+                discard_empty,
+                trim,
+                prefix,
+            } => {
+                let items = split_items(&ctx.arg, *delimiter, custom, *trim, *discard_empty)?;
+                let prefix = prefix.trim();
+                // The numbered variables of an earlier split must not linger.
+                next.vars.retain(|name, _| {
+                    name.strip_prefix(prefix).is_none_or(|rest| {
+                        rest != "count"
+                            && (rest.is_empty() || !rest.chars().all(|c| c.is_ascii_digit()))
+                    })
+                });
+                for (i, item) in items.iter().take(MAX_SPLIT_VARIABLES).enumerate() {
+                    next.vars.insert(format!("{prefix}{}", i + 1), item.clone());
+                }
+                next.vars
+                    .insert(format!("{prefix}count"), items.len().to_string());
+                next.arg = items.join("\n");
+            }
+            NodeKind::JoinArg {
+                separator,
+                discard_empty,
+            } => {
+                let mut items = list_items(&ctx.arg);
+                if *discard_empty {
+                    items.retain(|item| !item.trim().is_empty());
+                }
+                next.arg = items.join(&unescape(&plain(separator)));
+            }
+            NodeKind::Random {
+                mode,
+                min,
+                max,
+                lines,
+                variable,
+            } => {
+                let result = match mode {
+                    RandomMode::Number => {
+                        if min > max {
+                            return Err("the smallest number is above the largest".to_owned());
+                        }
+                        let span = (i128::from(*max) - i128::from(*min) + 1) as u128;
+                        let offset = u128::from(self.next_random()?) % span;
+                        (i128::from(*min) + offset as i128).to_string()
+                    }
+                    RandomMode::Line => {
+                        let text = plain(lines);
+                        let candidates: Vec<&str> = text
+                            .split('\n')
+                            .map(|line| line.trim_end_matches('\r'))
+                            .filter(|line| !line.trim().is_empty())
+                            .collect();
+                        if candidates.is_empty() {
+                            return Err("there is no line to pick".to_owned());
+                        }
+                        let at = self.next_random()? % candidates.len() as u64;
+                        candidates[at as usize].to_owned()
+                    }
+                    RandomMode::Uuid => {
+                        let mut bytes = [0u8; 16];
+                        bytes[..8].copy_from_slice(&self.next_random()?.to_le_bytes());
+                        bytes[8..].copy_from_slice(&self.next_random()?.to_le_bytes());
+                        crate::example_uuid::format_v4(bytes)
+                    }
+                };
+                match variable
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|name| !name.is_empty())
+                {
+                    Some(name) => {
+                        next.vars.insert(name.to_owned(), result);
+                    }
+                    None => next.arg = result,
+                }
+            }
+            NodeKind::Expression {
+                expression,
+                variable,
+                set_arg,
+            } => {
+                let name = variable.trim();
+                if !valid_variable_name(name) {
+                    return Err("the variable name is not valid".to_owned());
+                }
+                let value = crate::calculator::evaluate(&plain(expression))
+                    .map_err(|err| format!("could not calculate the expression: {err}"))?;
+                let result = crate::calculator::format_number(value);
+                next.vars.insert(name.to_owned(), result.clone());
+                if *set_arg {
+                    next.arg = result;
+                }
+            }
+            NodeKind::WriteFile {
+                path,
+                content,
+                mode,
+                create_dirs,
+            } => {
+                let path = self.resolve_data_path(&plain(path))?;
+                write_text(&path, &plain(content), *mode, *create_dirs)?;
+                next.arg = path.display().to_string();
+            }
+            NodeKind::Debug { passthrough } => {
+                let mut text = format!("argument:\n{}\n\nvariables ({}):", ctx.arg, ctx.vars.len());
+                for (name, value) in &ctx.vars {
+                    text.push_str(&format!("\n{name} = {value}"));
+                }
+                self.sink.debug(&text);
+                if !*passthrough {
+                    next.arg.clear();
+                }
+            }
+            NodeKind::RevealFile { path } => {
+                let text = plain(path);
+                let paths: Vec<&str> = text
+                    .split('\n')
+                    .map(|line| line.trim_end_matches('\r'))
+                    .filter(|line| !line.trim().is_empty())
+                    .collect();
+                if paths.is_empty() {
+                    return Err("there is no file or folder to show".to_owned());
+                }
+                for line in paths {
+                    let path = self.resolve_path(line)?;
+                    self.platform
+                        .reveal_path(&path)
+                        .map_err(|err| format!("could not show the file: {err}"))?;
+                }
+            }
+            NodeKind::CallExternal {
+                workflow,
+                trigger,
+                arg,
+                pass_variables,
+            } => {
+                if depth >= MAX_CALL_DEPTH {
+                    return Err(format!(
+                        "workflows are calling each other more than {MAX_CALL_DEPTH} levels deep"
+                    ));
+                }
+                let (workflow, trigger) = (workflow.trim(), trigger.trim());
+                let target = self.find_runtime(workflow)?;
+                match target.workflow.node(trigger).map(|n| &n.kind) {
+                    Some(NodeKind::External {}) => {}
+                    Some(_) => {
+                        return Err(format!(
+                            "\"{trigger}\" in \"{workflow}\" is not an external trigger"
+                        ))
+                    }
+                    None => {
+                        return Err(format!("\"{workflow}\" has no node \"{trigger}\""));
+                    }
+                }
+                let called = Ctx {
+                    arg: plain(arg),
+                    vars: if *pass_variables {
+                        ctx.vars.clone()
+                    } else {
+                        BTreeMap::new()
+                    },
+                };
+                let report = target.run_blocking_at(trigger, called, depth + 1);
+                if let Some(failure) = report.errors.first() {
+                    return Err(format!(
+                        "\"{}\" in \"{workflow}\" failed: {}",
+                        failure.node, failure.message
+                    ));
+                }
+            }
         }
         Ok(Step { ctx: next, port })
     }
@@ -543,6 +788,24 @@ impl Runtime {
             path
         } else {
             self.dir.join(path)
+        };
+        sevak_platform::netpath::guard(&path).map_err(|err| err.to_string())?;
+        Ok(path)
+    }
+
+    /// Where `write_file` writes: `~` is the home folder, a relative path is
+    /// inside the workflow's data folder (made when it is missing).
+    fn resolve_data_path(&self, text: &str) -> Result<PathBuf, String> {
+        if text.trim().is_empty() {
+            return Err("no file is set".to_owned());
+        }
+        let path = expand_home(text.trim(), home_dir().as_deref());
+        let path = if path.is_absolute() {
+            path
+        } else {
+            // Best effort: the write reports its own error.
+            let _ = std::fs::create_dir_all(&self.data_dir);
+            self.data_dir.join(path)
         };
         sevak_platform::netpath::guard(&path).map_err(|err| err.to_string())?;
         Ok(path)
@@ -797,6 +1060,118 @@ pub fn script_output(stdout: &[u8]) -> (String, BTreeMap<String, String>) {
         .or_else(|| text.strip_suffix('\n'))
         .unwrap_or(text);
     (trimmed.to_owned(), BTreeMap::new())
+}
+
+/// The items `split_arg` makes of `input`.
+fn split_items(
+    input: &str,
+    delimiter: Delimiter,
+    custom: &str,
+    trim: bool,
+    discard_empty: bool,
+) -> Result<Vec<String>, String> {
+    let parts: Vec<&str> = match delimiter {
+        Delimiter::Newline => input
+            .split('\n')
+            .map(|line| line.strip_suffix('\r').unwrap_or(line))
+            .collect(),
+        Delimiter::Comma => input.split(',').collect(),
+        Delimiter::Tab => input.split('\t').collect(),
+        Delimiter::Space => input.split(' ').collect(),
+        Delimiter::Custom => {
+            if custom.is_empty() {
+                return Err("the text to split at is empty".to_owned());
+            }
+            input.split(custom).collect()
+        }
+    };
+    Ok(parts
+        .into_iter()
+        .map(|part| if trim { part.trim() } else { part })
+        .filter(|part| !(discard_empty && part.is_empty()))
+        .map(str::to_owned)
+        .collect())
+}
+
+/// The items of a list argument: the elements of a JSON array, or the lines.
+fn list_items(arg: &str) -> Vec<String> {
+    if arg.trim_start().starts_with('[') {
+        if let Ok(serde_json::Value::Array(items)) = serde_json::from_str(arg) {
+            return items
+                .into_iter()
+                .map(|item| match item {
+                    serde_json::Value::String(text) => text,
+                    serde_json::Value::Null => String::new(),
+                    other => other.to_string(),
+                })
+                .collect();
+        }
+    }
+    arg.split('\n')
+        .map(|line| line.strip_suffix('\r').unwrap_or(line).to_owned())
+        .collect()
+}
+
+/// `\n`, `\t`, `\r` and `\\` in a separator; anything else stays.
+fn unescape(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
+        match chars.next() {
+            Some('n') => out.push('\n'),
+            Some('t') => out.push('\t'),
+            Some('r') => out.push('\r'),
+            Some('\\') => out.push('\\'),
+            Some(other) => {
+                out.push('\\');
+                out.push(other);
+            }
+            None => out.push('\\'),
+        }
+    }
+    out
+}
+
+/// Writes `text` to `path` the way a `write_file` node says.
+fn write_text(
+    path: &std::path::Path,
+    text: &str,
+    mode: WriteMode,
+    create_dirs: bool,
+) -> Result<(), String> {
+    if create_dirs {
+        if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+            std::fs::create_dir_all(parent)
+                .map_err(|err| format!("could not create the folder: {err}"))?;
+        }
+    }
+    let failed = |err: std::io::Error| format!("could not write the file: {err}");
+    match mode {
+        WriteMode::Overwrite => std::fs::write(path, text).map_err(failed),
+        WriteMode::Append => std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .and_then(|mut file| file.write_all(text.as_bytes()))
+            .map_err(failed),
+        WriteMode::Prepend => {
+            let old = match std::fs::metadata(path) {
+                Ok(meta) if meta.len() > MAX_PREPEND_BYTES => {
+                    return Err("the file is too large to put text in front of".to_owned());
+                }
+                Ok(_) => std::fs::read(path).map_err(failed)?,
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+                Err(err) => return Err(failed(err)),
+            };
+            let mut all = text.as_bytes().to_vec();
+            all.extend_from_slice(&old);
+            std::fs::write(path, all).map_err(failed)
+        }
+    }
 }
 
 /// Applies a `transform` node's operation.
@@ -1722,5 +2097,748 @@ mod tests {
         let third = RunGuard::acquire_from(&COUNTER, 2).unwrap();
         drop((second, third));
         assert_eq!(COUNTER.load(Ordering::SeqCst), 0);
+    }
+}
+
+#[cfg(test)]
+mod utility_node_tests {
+    use super::*;
+    use crate::test_util::MockPlatform;
+    use crate::workflow::model::Connection;
+    use crate::workflow::testing::{
+        clipboard, copy, fixture, keyword, node, wire, Fixture, RecordingSink,
+    };
+
+    fn split(delimiter: Delimiter, custom: &str) -> NodeKind {
+        NodeKind::SplitArg {
+            delimiter,
+            custom: custom.into(),
+            discard_empty: true,
+            trim: true,
+            prefix: "split_".into(),
+        }
+    }
+
+    /// `k -> n -> c` where `c` copies `show`; returns what was copied.
+    fn run_one(kind: NodeKind, show: &str, arg: &str) -> Vec<String> {
+        let f = fixture(
+            vec![keyword("k"), node("n", kind), copy("c", show)],
+            vec![wire("k", "n"), wire("n", "c")],
+        );
+        f.runtime.run_blocking("k", Ctx::with_arg(arg));
+        clipboard(&f)
+    }
+
+    fn errors_of(kind: NodeKind, arg: &str) -> Vec<NodeFailure> {
+        let f = fixture(vec![keyword("k"), node("n", kind)], vec![wire("k", "n")]);
+        f.runtime.run_blocking("k", Ctx::with_arg(arg)).errors
+    }
+
+    #[test]
+    fn split_arg_makes_a_list_and_numbered_variables() {
+        assert_eq!(
+            run_one(
+                split(Delimiter::Comma, ""),
+                "{query}|{var:split_count}|{var:split_1}|{var:split_3}",
+                "a, b ,,c"
+            ),
+            ["a\nb\nc|3|a|c"]
+        );
+        assert_eq!(
+            run_one(
+                split(Delimiter::Newline, ""),
+                "{var:split_2}",
+                "x\r\ny\n\nz"
+            ),
+            ["y"]
+        );
+        assert_eq!(
+            run_one(split(Delimiter::Tab, ""), "{var:split_count}", "a\tb"),
+            ["2"]
+        );
+        assert_eq!(
+            run_one(split(Delimiter::Space, ""), "{var:split_2}", "a  b"),
+            ["b"]
+        );
+        assert_eq!(
+            run_one(split(Delimiter::Custom, "::"), "{var:split_2}", "a::b::c"),
+            ["b"]
+        );
+    }
+
+    #[test]
+    fn split_arg_options_and_prefix() {
+        let kind = NodeKind::SplitArg {
+            delimiter: Delimiter::Comma,
+            custom: String::new(),
+            discard_empty: false,
+            trim: false,
+            prefix: "p_".into(),
+        };
+        assert_eq!(
+            run_one(
+                kind,
+                "{var:p_count}[{var:p_1}][{var:p_2}][{var:p_3}]",
+                "a, ,b"
+            ),
+            ["3[a][ ][b]"]
+        );
+    }
+
+    #[test]
+    fn a_second_split_leaves_no_stale_variables() {
+        let f = fixture(
+            vec![
+                keyword("k"),
+                node("s1", split(Delimiter::Comma, "")),
+                node("s2", split(Delimiter::Comma, "")),
+                copy("c", "[{var:split_3}]{var:split_count}"),
+            ],
+            vec![wire("k", "s1"), wire("s1", "s2"), wire("s2", "c")],
+        );
+        // The second split sees the first one's list (one item per line), so
+        // it holds a single item.
+        f.runtime.run_blocking("k", Ctx::with_arg("a,b,c"));
+        assert_eq!(clipboard(&f), ["[]1"]);
+    }
+
+    #[test]
+    fn a_custom_split_needs_its_text() {
+        // The editor refuses it; a hand-written file that gets here fails.
+        assert!(split_items("a", Delimiter::Custom, "", true, true).is_err());
+    }
+
+    fn join(separator: &str, discard_empty: bool) -> NodeKind {
+        NodeKind::JoinArg {
+            separator: separator.into(),
+            discard_empty,
+        }
+    }
+
+    #[test]
+    fn join_arg_joins_lines_and_json_arrays() {
+        assert_eq!(
+            run_one(join(", ", false), "{query}", "a\nb\n\nc"),
+            ["a, b, , c"]
+        );
+        assert_eq!(
+            run_one(join(", ", true), "{query}", "a\nb\n\n \nc"),
+            ["a, b, c"]
+        );
+        assert_eq!(
+            run_one(join("-", false), "{query}", r#"["x", 2, true, null]"#),
+            ["x-2-true-"]
+        );
+        // Not valid JSON: it is just lines.
+        assert_eq!(run_one(join("+", false), "{query}", "[a\nb"), ["[a+b"]);
+    }
+
+    #[test]
+    fn join_arg_separator_escapes() {
+        assert_eq!(run_one(join(r"\t", false), "{query}", "a\nb"), ["a\tb"]);
+        assert_eq!(run_one(join(r"\\", false), "{query}", "a\nb"), [r"a\b"]);
+        assert_eq!(run_one(join(r"\n", false), "{query}", "a\nb"), ["a\nb"]);
+        assert_eq!(
+            unescape(r"x\ny\tz\qw\"),
+            "x\ny\tz\\qw\\",
+            "unknown escapes stay"
+        );
+    }
+
+    fn random(
+        mode: RandomMode,
+        min: i64,
+        max: i64,
+        lines: &str,
+        variable: Option<&str>,
+    ) -> NodeKind {
+        NodeKind::Random {
+            mode,
+            min,
+            max,
+            lines: lines.into(),
+            variable: variable.map(Into::into),
+        }
+    }
+
+    /// A runtime whose random numbers are `values`, in turn.
+    fn seeded(kind: NodeKind, show: &str, values: Vec<u64>) -> Vec<String> {
+        let f = fixture(
+            vec![keyword("k"), node("n", kind), copy("c", show)],
+            vec![wire("k", "n"), wire("n", "c")],
+        );
+        let mut values = values.into_iter().cycle();
+        f.runtime
+            .set_random_source(move || values.next().unwrap_or_default());
+        f.runtime.run_blocking("k", Ctx::with_arg("in"));
+        clipboard(&f)
+    }
+
+    #[test]
+    fn random_numbers_stay_in_range_and_are_inclusive() {
+        for (value, expected) in [(0, "5"), (1, "6"), (2, "7"), (3, "5"), (u64::MAX, "5")] {
+            assert_eq!(
+                seeded(
+                    random(RandomMode::Number, 5, 7, "", None),
+                    "{query}",
+                    vec![value]
+                ),
+                [expected],
+                "{value}"
+            );
+        }
+        assert_eq!(
+            seeded(
+                random(RandomMode::Number, -2, -2, "", None),
+                "{query}",
+                vec![9]
+            ),
+            ["-2"]
+        );
+        // The whole i64 range does not overflow.
+        let all = random(RandomMode::Number, i64::MIN, i64::MAX, "", None);
+        assert_eq!(seeded(all, "{query}", vec![0]), [i64::MIN.to_string()]);
+    }
+
+    #[test]
+    fn random_line_template_and_variable() {
+        let kind = random(
+            RandomMode::Line,
+            0,
+            0,
+            "red\n\nblue {query}\r\ngreen",
+            Some("pick"),
+        );
+        assert_eq!(
+            seeded(kind.clone(), "{query}/{var:pick}", vec![1]),
+            ["in/blue in"]
+        );
+        assert_eq!(seeded(kind, "{var:pick}", vec![5]), ["green"]);
+    }
+
+    #[test]
+    fn random_uuid_is_version_4_and_follows_the_source() {
+        let make = || {
+            seeded(
+                random(RandomMode::Uuid, 0, 0, "", None),
+                "{query}",
+                vec![0x0123_4567_89ab_cdef],
+            )
+        };
+        let out = make();
+        let uuid = &out[0];
+        assert_eq!(uuid.len(), 36, "{uuid}");
+        assert_eq!(&uuid[14..15], "4", "{uuid}");
+        assert!(matches!(&uuid[19..20], "8" | "9" | "a" | "b"), "{uuid}");
+        assert_eq!(make(), out);
+    }
+
+    #[test]
+    fn random_with_nothing_to_pick_fails() {
+        // Valid in the editor, empty once the placeholder is filled in.
+        let empty = random(RandomMode::Line, 0, 0, "{var:none}", None);
+        assert_eq!(errors_of(empty, "").len(), 1);
+    }
+
+    fn expression(text: &str, variable: &str, set_arg: bool) -> NodeKind {
+        NodeKind::Expression {
+            expression: text.into(),
+            variable: variable.into(),
+            set_arg,
+        }
+    }
+
+    #[test]
+    fn expression_calculates_after_placeholders() {
+        let f = fixture(
+            vec![
+                keyword("k"),
+                node(
+                    "s",
+                    NodeKind::SetVariable {
+                        name: "count".into(),
+                        value: "41".into(),
+                    },
+                ),
+                node("e", expression("{var:count} + 1", "next", true)),
+                copy("c", "{query}/{var:next}"),
+            ],
+            vec![wire("k", "s"), wire("s", "e"), wire("e", "c")],
+        );
+        f.runtime.run_blocking("k", Ctx::with_arg("in"));
+        assert_eq!(clipboard(&f), ["42/42"]);
+        // Only the variable.
+        assert_eq!(
+            run_one(
+                expression("2 * {query}", "twice", false),
+                "{query}/{var:twice}",
+                "21"
+            ),
+            ["21/42"]
+        );
+    }
+
+    #[test]
+    fn an_invalid_expression_is_a_node_error() {
+        let failures = errors_of(expression("2 +", "x", true), "");
+        assert_eq!(failures.len(), 1);
+        assert_eq!(failures[0].node, "n");
+        assert!(failures[0].message.contains("expression"), "{failures:?}");
+        assert_eq!(errors_of(expression("1 / 0", "x", true), "").len(), 1);
+    }
+
+    fn write_file(path: &str, content: &str, mode: WriteMode, create_dirs: bool) -> NodeKind {
+        NodeKind::WriteFile {
+            path: path.into(),
+            content: content.into(),
+            mode,
+            create_dirs,
+        }
+    }
+
+    fn data_file(f: &Fixture, name: &str) -> PathBuf {
+        f.runtime.data_dir.join(name)
+    }
+
+    #[test]
+    fn write_file_overwrites_appends_and_prepends_in_the_data_folder() {
+        let f = fixture(
+            vec![
+                keyword("k"),
+                node(
+                    "a",
+                    write_file("notes.txt", "one\n", WriteMode::Overwrite, false),
+                ),
+                node(
+                    "b",
+                    write_file("notes.txt", "two\n", WriteMode::Append, false),
+                ),
+                node(
+                    "c",
+                    write_file("notes.txt", "zero\n", WriteMode::Prepend, false),
+                ),
+                copy("done", "{query}"),
+            ],
+            vec![
+                wire("k", "a"),
+                wire("a", "b"),
+                wire("b", "c"),
+                wire("c", "done"),
+            ],
+        );
+        f.runtime.run_blocking("k", Ctx::with_arg("ignored"));
+        let path = data_file(&f, "notes.txt");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "zero\none\ntwo\n");
+        // The argument that leaves the node is the path.
+        assert_eq!(clipboard(&f), [path.display().to_string()]);
+    }
+
+    #[test]
+    fn write_file_prepend_and_append_create_a_missing_file() {
+        let f = fixture(
+            vec![
+                keyword("k"),
+                node("a", write_file("new.txt", "x", WriteMode::Prepend, false)),
+                node("b", write_file("also.txt", "y", WriteMode::Append, false)),
+            ],
+            vec![wire("k", "a"), wire("a", "b")],
+        );
+        let report = f.runtime.run_blocking("k", Ctx::default());
+        assert!(report.errors.is_empty(), "{report:?}");
+        assert_eq!(
+            std::fs::read_to_string(data_file(&f, "new.txt")).unwrap(),
+            "x"
+        );
+        assert_eq!(
+            std::fs::read_to_string(data_file(&f, "also.txt")).unwrap(),
+            "y"
+        );
+    }
+
+    #[test]
+    fn write_file_needs_create_dirs_for_new_folders() {
+        let f = fixture(
+            vec![
+                keyword("k"),
+                node(
+                    "a",
+                    write_file("deep/er/x.txt", "{query}", WriteMode::Overwrite, false),
+                ),
+                node(
+                    "b",
+                    write_file("deep/er/x.txt", "{query}", WriteMode::Overwrite, true),
+                ),
+            ],
+            vec![wire("k", "a"), wire("k", "b")],
+        );
+        let report = f.runtime.run_blocking("k", Ctx::with_arg("hi"));
+        assert_eq!(report.errors.len(), 1, "{report:?}");
+        assert_eq!(report.errors[0].node, "a");
+        assert_eq!(
+            std::fs::read_to_string(data_file(&f, "deep/er/x.txt")).unwrap(),
+            "hi"
+        );
+    }
+
+    #[test]
+    fn write_file_takes_absolute_paths_and_templates() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("out-{query}.txt");
+        let f = fixture(
+            vec![
+                keyword("k"),
+                node(
+                    "w",
+                    write_file(
+                        &target.display().to_string(),
+                        "{query}!",
+                        WriteMode::Overwrite,
+                        false,
+                    ),
+                ),
+            ],
+            vec![wire("k", "w")],
+        );
+        let report = f.runtime.run_blocking("k", Ctx::with_arg("abc"));
+        assert!(report.errors.is_empty(), "{report:?}");
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("out-abc.txt")).unwrap(),
+            "abc!"
+        );
+        let blank = write_file("{var:none}", "x", WriteMode::Overwrite, false);
+        assert_eq!(errors_of(blank, "").len(), 1);
+    }
+
+    struct DebugSink(Mutex<Vec<String>>);
+
+    impl OutputSink for DebugSink {
+        fn notify(&self, _: &str, _: &str) {}
+        fn large_type(&self, _: &str) {}
+        fn text_view(&self, _: &str, _: &str) {}
+        fn debug(&self, text: &str) {
+            self.0.lock().unwrap().push(text.to_owned());
+        }
+    }
+
+    #[test]
+    fn debug_shows_the_argument_and_variables_and_passes_through() {
+        let dir = tempfile::tempdir().unwrap();
+        let sink = Arc::new(DebugSink(Mutex::default()));
+        let workflow = Workflow {
+            name: "d".into(),
+            nodes: vec![
+                keyword("k"),
+                node("d", NodeKind::Debug { passthrough: true }),
+                node("e", NodeKind::Debug { passthrough: false }),
+                copy("c", "[{query}]"),
+            ],
+            connections: vec![wire("k", "d"), wire("d", "e"), wire("e", "c")],
+            ..Workflow::default()
+        };
+        let platform = MockPlatform::empty();
+        let runtime = Runtime::new(
+            "d",
+            dir.path().join("wf"),
+            dir.path().join("data"),
+            workflow,
+            platform.clone(),
+            sink.clone(),
+            &Config::default(),
+        );
+        let mut vars = BTreeMap::new();
+        vars.insert("who".to_owned(), "Ada".to_owned());
+        runtime.run_blocking(
+            "k",
+            Ctx {
+                arg: "hello".into(),
+                vars,
+            },
+        );
+        let shown = sink.0.lock().unwrap().clone();
+        assert_eq!(shown.len(), 2);
+        assert!(
+            shown[0].contains("hello") && shown[0].contains("who = Ada"),
+            "{shown:?}"
+        );
+        // `e` clears the argument for what follows.
+        assert_eq!(*platform.clipboard.lock().unwrap(), ["[]"]);
+    }
+
+    #[test]
+    fn the_default_sink_drops_debug_output() {
+        NoSink.debug("anything");
+        let f = fixture(
+            vec![
+                keyword("k"),
+                node("d", NodeKind::Debug { passthrough: true }),
+                copy("c", "{query}"),
+            ],
+            vec![wire("k", "d"), wire("d", "c")],
+        );
+        f.runtime.run_blocking("k", Ctx::with_arg("kept"));
+        assert_eq!(clipboard(&f), ["kept"]);
+    }
+
+    #[test]
+    fn reveal_file_shows_every_line() {
+        let f = fixture(
+            vec![
+                keyword("k"),
+                node(
+                    "r",
+                    NodeKind::RevealFile {
+                        path: "{query}".into(),
+                    },
+                ),
+            ],
+            vec![wire("k", "r")],
+        );
+        let dir = f._dir.path().to_path_buf();
+        let (a, b) = (dir.join("a.txt"), dir.join("b dir"));
+        let arg = format!("{}\n\n{}\r\n", a.display(), b.display());
+        let report = f.runtime.run_blocking("k", Ctx::with_arg(arg));
+        assert!(report.errors.is_empty(), "{report:?}");
+        assert_eq!(*f.platform.revealed.lock().unwrap(), [a, b]);
+        assert_eq!(
+            errors_of(
+                NodeKind::RevealFile {
+                    path: "{query}".into()
+                },
+                ""
+            )
+            .len(),
+            1
+        );
+    }
+
+    // ---- call_external ----------------------------------------------------
+
+    fn flow(nodes: Vec<Node>, connections: Vec<Connection>) -> Workflow {
+        Workflow {
+            name: "w".into(),
+            nodes,
+            connections,
+            ..Workflow::default()
+        }
+    }
+
+    /// Runtimes by folder, wired to find each other.
+    fn registry(
+        dir: &tempfile::TempDir,
+        platform: &Arc<MockPlatform>,
+        workflows: Vec<(&str, Workflow)>,
+    ) -> Arc<Registry> {
+        let map: Arc<Registry> = Arc::new(Mutex::new(HashMap::new()));
+        for (folder, workflow) in workflows {
+            assert!(workflow.is_valid(), "{:?}", workflow.validate());
+            let runtime = Runtime::new(
+                folder,
+                dir.path().join(folder),
+                dir.path().join("data").join(folder),
+                workflow,
+                platform.clone(),
+                Arc::new(RecordingSink::default()),
+                &Config::default(),
+            );
+            runtime.set_registry(Arc::downgrade(&map));
+            map.lock().unwrap().insert(folder.to_owned(), runtime);
+        }
+        map
+    }
+
+    fn call(workflow: &str, trigger: &str, arg: &str, pass_variables: bool) -> NodeKind {
+        NodeKind::CallExternal {
+            workflow: workflow.into(),
+            trigger: trigger.into(),
+            arg: arg.into(),
+            pass_variables,
+        }
+    }
+
+    fn external(id: &str) -> Node {
+        node(id, NodeKind::External {})
+    }
+
+    fn runtime_of(map: &Arc<Registry>, folder: &str) -> Arc<Runtime> {
+        map.lock().unwrap()[folder].clone()
+    }
+
+    #[test]
+    fn call_external_runs_the_other_workflows_trigger() {
+        let dir = tempfile::tempdir().unwrap();
+        let platform = MockPlatform::empty();
+        let map = registry(
+            &dir,
+            &platform,
+            vec![
+                (
+                    "caller",
+                    flow(
+                        vec![
+                            keyword("k"),
+                            node("call", call("callee", "go", "<{query}>", false)),
+                            copy("after", "after {query} {var:shared}"),
+                        ],
+                        vec![wire("k", "call"), wire("call", "after")],
+                    ),
+                ),
+                (
+                    "callee",
+                    flow(
+                        vec![
+                            external("go"),
+                            copy("c", "callee got {query} / {var:shared}"),
+                        ],
+                        vec![wire("go", "c")],
+                    ),
+                ),
+            ],
+        );
+        let mut vars = BTreeMap::new();
+        vars.insert("shared".to_owned(), "S".to_owned());
+        let report = runtime_of(&map, "caller").run_blocking(
+            "k",
+            Ctx {
+                arg: "x".into(),
+                vars,
+            },
+        );
+        assert!(report.errors.is_empty(), "{report:?}");
+        // Variables stay home unless asked for; the caller's own arg goes on.
+        assert_eq!(
+            *platform.clipboard.lock().unwrap(),
+            ["callee got <x> / ", "after x S"]
+        );
+    }
+
+    #[test]
+    fn call_external_can_pass_variables() {
+        let dir = tempfile::tempdir().unwrap();
+        let platform = MockPlatform::empty();
+        let map = registry(
+            &dir,
+            &platform,
+            vec![
+                (
+                    "a",
+                    flow(
+                        vec![keyword("k"), node("call", call("b", "go", "{query}", true))],
+                        vec![wire("k", "call")],
+                    ),
+                ),
+                (
+                    "b",
+                    flow(
+                        vec![external("go"), copy("c", "{var:shared}")],
+                        vec![wire("go", "c")],
+                    ),
+                ),
+            ],
+        );
+        let mut vars = BTreeMap::new();
+        vars.insert("shared".to_owned(), "S".to_owned());
+        runtime_of(&map, "a").run_blocking(
+            "k",
+            Ctx {
+                arg: String::new(),
+                vars,
+            },
+        );
+        assert_eq!(*platform.clipboard.lock().unwrap(), ["S"]);
+    }
+
+    #[test]
+    fn call_external_reports_a_missing_target_and_a_failed_callee() {
+        let dir = tempfile::tempdir().unwrap();
+        let platform = MockPlatform::empty();
+        let map = registry(
+            &dir,
+            &platform,
+            vec![
+                (
+                    "a",
+                    flow(
+                        vec![
+                            keyword("k"),
+                            node("none", call("missing", "go", "", false)),
+                            node("notrigger", call("b", "nope", "", false)),
+                            node("notexternal", call("b", "c", "", false)),
+                            node("fails", call("b", "go", "", false)),
+                        ],
+                        vec![
+                            wire("k", "none"),
+                            wire("k", "notrigger"),
+                            wire("k", "notexternal"),
+                            wire("k", "fails"),
+                        ],
+                    ),
+                ),
+                (
+                    "b",
+                    flow(
+                        vec![
+                            external("go"),
+                            node("bad", expression("1 +", "x", true)),
+                            copy("c", "x"),
+                        ],
+                        vec![wire("go", "bad")],
+                    ),
+                ),
+            ],
+        );
+        let report = runtime_of(&map, "a").run_blocking("k", Ctx::default());
+        let by_node: BTreeMap<&str, &str> = report
+            .errors
+            .iter()
+            .map(|e| (e.node.as_str(), e.message.as_str()))
+            .collect();
+        assert!(by_node["none"].contains("missing"), "{by_node:?}");
+        assert!(by_node["notrigger"].contains("no node"), "{by_node:?}");
+        assert!(
+            by_node["notexternal"].contains("not an external"),
+            "{by_node:?}"
+        );
+        assert!(by_node["fails"].contains("failed"), "{by_node:?}");
+    }
+
+    #[test]
+    fn call_external_stops_endless_recursion() {
+        let dir = tempfile::tempdir().unwrap();
+        let platform = MockPlatform::empty();
+        // `loop` calls itself: every level copies once, until the depth limit.
+        let map = registry(
+            &dir,
+            &platform,
+            vec![(
+                "loop",
+                flow(
+                    vec![
+                        external("go"),
+                        copy("c", "level"),
+                        node("again", call("loop", "go", "", false)),
+                    ],
+                    vec![wire("go", "c"), wire("c", "again")],
+                ),
+            )],
+        );
+        let report = runtime_of(&map, "loop").run_blocking("go", Ctx::default());
+        assert_eq!(
+            platform.clipboard.lock().unwrap().len(),
+            MAX_CALL_DEPTH + 1,
+            "one run per level, including the first"
+        );
+        assert_eq!(report.errors.len(), 1, "{report:?}");
+        assert!(report.errors[0].message.contains("failed"), "{report:?}");
+    }
+
+    #[test]
+    fn call_external_without_a_registry_fails_cleanly() {
+        let f = fixture(
+            vec![keyword("k"), node("c", call("other", "go", "", false))],
+            vec![wire("k", "c")],
+        );
+        let report = f.runtime.run_blocking("k", Ctx::default());
+        assert_eq!(report.errors.len(), 1);
+        assert!(report.errors[0].message.contains("other"), "{report:?}");
     }
 }

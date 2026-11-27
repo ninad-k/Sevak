@@ -1197,6 +1197,23 @@
         "shutdown": "Shut down (asks first)",
         "logout": "Log out (asks first)",
         "empty_trash": "Empty the trash (asks first)"
+      },
+      "delimiter": {
+        "newline": "New line",
+        "comma": "Comma",
+        "tab": "Tab",
+        "space": "Space",
+        "custom": "Custom text"
+      },
+      "random": {
+        "number": "Number",
+        "line": "Line of text",
+        "uuid": "UUID"
+      },
+      "write": {
+        "overwrite": "Replace it",
+        "append": "Add to the end",
+        "prepend": "Add to the start"
       }
     },
     "program": {
@@ -1466,6 +1483,145 @@
           "markdown": {
             "label": "Markdown",
             "hint": "Draw the text as Markdown: headings, lists, tables, links."
+          }
+        }
+      },
+      "split_arg": {
+        "label": "Split argument",
+        "summary": "Cuts the argument into a list and numbers the parts as variables.",
+        "fields": {
+          "delimiter": {
+            "label": "Split at"
+          },
+          "custom": {
+            "label": "Custom delimiter",
+            "hint": "Used when \"Split at\" is custom text."
+          },
+          "discard_empty": {
+            "label": "Drop empty parts",
+            "hint": "Parts that are empty (after trimming, when that is on) are left out."
+          },
+          "trim": {
+            "label": "Trim spaces around each part"
+          },
+          "prefix": {
+            "label": "Variable prefix",
+            "hint": "The parts are stored as variables named the prefix followed by 1, 2, 3 ... The prefix followed by count holds how many there are."
+          }
+        }
+      },
+      "join_arg": {
+        "label": "Join argument",
+        "summary": "Joins a list (one item per line, or a JSON array) into one line of text.",
+        "fields": {
+          "separator": {
+            "label": "Separator",
+            "hint": "Written between the items. \\n and \\t mean a new line and a tab."
+          },
+          "discard_empty": {
+            "label": "Drop empty items"
+          }
+        }
+      },
+      "random": {
+        "label": "Random",
+        "summary": "Makes a random number, picks a random line, or makes a UUID.",
+        "fields": {
+          "mode": {
+            "label": "What to make"
+          },
+          "min": {
+            "label": "Smallest number",
+            "hint": "For numbers; included."
+          },
+          "max": {
+            "label": "Largest number",
+            "hint": "For numbers; included."
+          },
+          "lines": {
+            "label": "Lines to pick from",
+            "hint": "For picking a line: one candidate per line."
+          },
+          "variable": {
+            "label": "Store in variable",
+            "hint": "Leave empty to make the result the argument."
+          }
+        }
+      },
+      "expression": {
+        "label": "Calculate",
+        "summary": "Calculates a math expression and stores the result.",
+        "fields": {
+          "expression": {
+            "label": "Expression",
+            "hint": "Placeholders are filled in first, then the launcher's calculator runs it. A wrong expression stops this branch."
+          },
+          "variable": {
+            "label": "Store in variable",
+            "hint": "Required."
+          },
+          "set_arg": {
+            "label": "Also make the result the argument",
+            "hint": "Leave off to keep the argument as it is."
+          }
+        }
+      },
+      "write_file": {
+        "label": "Write file",
+        "summary": "Writes text to a file. The workflow has to be allowed first.",
+        "fields": {
+          "path": {
+            "label": "File",
+            "hint": "A relative path is inside the workflow's data folder; ~ and full paths work too. The nodes after it get the path."
+          },
+          "content": {
+            "label": "Text to write"
+          },
+          "mode": {
+            "label": "If the file exists"
+          },
+          "create_dirs": {
+            "label": "Create missing folders"
+          }
+        }
+      },
+      "debug": {
+        "label": "Debug",
+        "summary": "Shows the argument and variables in the launcher window.",
+        "fields": {
+          "passthrough": {
+            "label": "Pass the argument on",
+            "hint": "Off empties the argument for the nodes after it. What is shown is never written to the log."
+          }
+        }
+      },
+      "reveal_file": {
+        "label": "Show in file manager",
+        "summary": "Shows files or folders in the file manager.",
+        "fields": {
+          "path": {
+            "label": "Files or folders",
+            "hint": "One per line. A relative path is inside the workflow's folder."
+          }
+        }
+      },
+      "call_external": {
+        "label": "Call workflow",
+        "summary": "Runs another workflow's external trigger and waits for it.",
+        "fields": {
+          "workflow": {
+            "label": "Workflow folder",
+            "hint": "The folder name of an installed, allowed workflow (it may be this one)."
+          },
+          "trigger": {
+            "label": "External trigger id",
+            "hint": "The id of an external trigger node in that workflow."
+          },
+          "arg": {
+            "label": "Text to send"
+          },
+          "pass_variables": {
+            "label": "Send the variables too"
           }
         }
       }

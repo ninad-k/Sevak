@@ -5,6 +5,9 @@
 //! {var:site}         the variable `site` (empty when it is not set)
 //! {query|upper}      filters, left to right: url, raw, upper, lower, trim,
 //!                    json, sh, ps
+//! {date} {time} {datetime}         today, now (snippets' formats)
+//! {isodate} {isotime} {isodatetime} 2026-10-03, 14:05:09, 2026-10-03T14:05:09
+//! {date:%d %B %Y}    strftime format (also `{time:..}`, `{datetime:..}`)
 //! ```
 //!
 //! Anything else in braces is left alone, so JSON and shell snippets need no
@@ -127,25 +130,31 @@ fn placeholder(
     target: Target,
     failure: &mut Option<String>,
 ) -> Option<String> {
-    let mut parts = inner.split('|');
-    let source = parts.next()?.trim();
-    let filters: Vec<&str> = parts.map(str::trim).collect();
-    let value = if source == "query" {
-        scope.query
-    } else {
-        let name = source.strip_prefix("var:")?.trim();
-        if !super::validate::valid_variable_name(name) {
-            return None;
+    let (mut text, filters) = match crate::datefmt::placeholder_now(inner) {
+        Some(date) => (date, Vec::new()),
+        None => {
+            let mut parts = inner.split('|');
+            let source = parts.next()?.trim();
+            let filters: Vec<&str> = parts.map(str::trim).collect();
+            let value = if source == "query" {
+                scope.query
+            } else {
+                let name = source.strip_prefix("var:")?.trim();
+                if !super::validate::valid_variable_name(name) {
+                    return None;
+                }
+                scope.vars.get(name).map_or("", String::as_str)
+            };
+            if filters.iter().any(|filter| !is_filter(filter)) {
+                return None;
+            }
+            let mut text = value.to_owned();
+            for filter in &filters {
+                text = apply(filter, &text);
+            }
+            (text, filters)
         }
-        scope.vars.get(name).map_or("", String::as_str)
     };
-    if filters.iter().any(|filter| !is_filter(filter)) {
-        return None;
-    }
-    let mut text = value.to_owned();
-    for filter in &filters {
-        text = apply(filter, &text);
-    }
     match target {
         Target::Plain => {}
         Target::Url => {
@@ -300,6 +309,56 @@ mod tests {
         assert_eq!(plain("{query}{query}", "ab", &[]), "abab");
         assert_eq!(plain("no placeholders", "x", &[]), "no placeholders");
         assert_eq!(plain("", "x", &[]), "");
+    }
+
+    /// Runs `body` with the clock pinned to 2026-10-03 14:05:09 +05:30.
+    fn at_fixed_time(body: impl FnOnce()) {
+        use chrono::TimeZone;
+        let fixed = chrono::FixedOffset::east_opt(5 * 3600 + 1800)
+            .unwrap()
+            .with_ymd_and_hms(2026, 10, 3, 14, 5, 9)
+            .unwrap();
+        crate::datefmt::set_fixed_now(Some(fixed));
+        body();
+        crate::datefmt::set_fixed_now(None);
+    }
+
+    #[test]
+    fn date_placeholders() {
+        at_fixed_time(|| {
+            assert_eq!(plain("{date}", "", &[]), "2026-10-03");
+            assert_eq!(plain("{time}", "", &[]), "14:05");
+            assert_eq!(plain("{datetime}", "", &[]), "2026-10-03 14:05");
+            assert_eq!(plain("{isodate}", "", &[]), "2026-10-03");
+            assert_eq!(plain("{isotime}", "", &[]), "14:05:09");
+            assert_eq!(plain("{isodatetime}", "", &[]), "2026-10-03T14:05:09");
+            assert_eq!(plain("{date:%d %B %Y}", "", &[]), "03 October 2026");
+            assert_eq!(plain("{ date:%A }", "", &[]), "Saturday");
+            assert_eq!(
+                plain("{isodate}-{query}-{var:v}", "q", &[("v", "w")]),
+                "2026-10-03-q-w"
+            );
+            // A bad format, or a format on an iso name, is not a placeholder.
+            assert_eq!(plain("{date:%Q}", "", &[]), "{date:%Q}");
+            assert_eq!(plain("{isodate:%Y}", "", &[]), "{isodate:%Y}");
+            assert_eq!(plain("{dates}", "", &[]), "{dates}");
+        });
+    }
+
+    #[test]
+    fn date_placeholders_follow_the_target() {
+        at_fixed_time(|| {
+            assert_eq!(url("{date:%d %B}", "", &[]), "03%20October");
+            assert_eq!(url("{isodatetime}", "", &[]), "2026-10-03T14%3A05%3A09");
+            let scope = Scope {
+                query: "",
+                vars: &BTreeMap::new(),
+            };
+            assert_eq!(
+                expand_command("echo {date:%d %B}", &scope, ShellQuoting::Posix).unwrap(),
+                "echo '03 October'"
+            );
+        });
     }
 
     #[test]

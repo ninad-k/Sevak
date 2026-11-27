@@ -127,6 +127,9 @@ workflow, enabled, and valid; otherwise the launcher opens and says why.
 | **Terminal command** | opens your terminal and runs a command line | needs permission; see [quoting](#placeholders-the-argument-and-variables) |
 | **Copy** | puts text on the clipboard | |
 | **Paste** | pastes text into the app you were using | copies instead where pasting is unavailable; types into another app, so needs permission |
+| **Write file** | writes text to a file (*Replace it*, *Add to the end* or *Add to the start*) | needs permission. A relative path is inside the workflow's data folder (the same one scripts get as `SEVAK_WORKFLOW_DATA`); `~` and full paths work. *Create missing folders* makes the folders on the way. The next nodes get the **path** as their argument |
+| **Show in file manager** | reveals each file or folder (one per line) in Finder, Explorer or your file manager | a relative path is inside the workflow's folder |
+| **Call workflow** | runs the `external` trigger *id* of the workflow in folder *name* with the text you give, waits for it, and carries on with its own argument | the other workflow must be installed, enabled and allowed (it may be this one). *Send the variables too* hands the variables over; otherwise it starts with its own. If the other workflow fails, this node fails with its message. Calls nest at most 8 deep, which stops a workflow that calls itself |
 
 #### Run script
 
@@ -170,6 +173,11 @@ matter what it contains.
 | **Transform** | changes the argument, or stores the result in a variable (*Store in variable*): set, UPPER, lower, Title Case, trim, URL-encode/decode, Base64 encode/decode, replace text, replace with a regular expression (`$1` is a group), first line, split at some text and keep part *n* |
 | **Conditional** | continues along *then* when the test holds, *else* otherwise: equals, does not equal, contains, does not contain, starts with, ends with, matches a regular expression, is empty, is not empty (optionally ignoring case) |
 | **Delay** | waits up to 60 seconds |
+| **Split argument** | cuts the argument at a new line, comma, tab, space or text of your own into a list (one item per line) and sets the variables `<prefix>1`, `<prefix>2` ... and `<prefix>count` (prefix `split_` unless you change it). Empty parts are dropped and spaces trimmed, each unless you turn it off. At most 200 numbered variables are set; the list and the count always have every item |
+| **Join argument** | joins a list (one item per line, or a JSON array such as `["a", "b"]`) with a separator; `\n` and `\t` in the separator mean a new line and a tab. *Drop empty items* is optional |
+| **Random** | a whole **number** from the smallest to the largest (both included), a random **line** of the text you give (placeholders allowed), or a version 4 **UUID**. It becomes the argument, or goes into *Store in variable* when that is set |
+| **Calculate** | fills in the placeholders of an expression such as `{var:count} + 1`, calculates it with the launcher's calculator (so its functions and constants work) and stores the result in the variable you name (required). It also becomes the argument unless you turn that off. A wrong expression ends the branch with an error |
+| **Debug** | shows the argument and every variable in the launcher window (as a text view) and passes the argument on; turn *Pass the argument on* off to empty it. Only for you to see: it is **never written to the log**, because it holds what you typed |
 
 Regular expressions are Rust's [`regex` syntax](https://docs.rs/regex): linear
 time, no look-around, and limited in size, so a pattern cannot hang Sevak.
@@ -223,6 +231,17 @@ Text fields of nodes can use placeholders:
 | `{var:name}` | the **variable** `name` (empty when it was never set) |
 | `{query\|upper}` | filters, left to right |
 
+Date and time placeholders use the current local time:
+
+| Write | Becomes |
+|---|---|
+| `{date}`, `{time}`, `{datetime}` | `2026-10-03`, `14:05`, `2026-10-03 14:05` |
+| `{isodate}`, `{isotime}`, `{isodatetime}` | `2026-10-03`, `14:05:09`, `2026-10-03T14:05:09` (24 hour) |
+| `{date:%d %B %Y}` | any [strftime](https://docs.rs/chrono/latest/chrono/format/strftime/index.html) format (`{time:...}` and `{datetime:...}` too): `03 October 2026` |
+
+A format Sevak cannot read leaves the text as written. They are encoded or
+quoted like `{query}` in links and terminal command lines. They take no filters.
+
 Filters: `url` (percent-encode), `raw` (insert as it is: no encoding in a link,
 no quoting in a command line), `upper`, `lower`, `title`, `trim`, `json` (escape
 for a JSON string), `sh` (quote as one POSIX shell word) and `ps` (quote as one
@@ -273,13 +292,14 @@ trigger's (a script filter row's), and nodes can add more.
 
 **Permission.** A workflow whose nodes can run code or commands (**Run script**,
 **Script filter**, **Launch app**, **System command**, **Terminal command**,
-**Open file**, because opening a program or script runs it) or type into other
-apps (**Paste**) does nothing until you allow it. Sevak shows a dialog with the
+**Open file**, because opening a program or script runs it), type into other
+apps (**Paste**) or write files (**Write file**) does nothing until you allow
+it. Sevak shows a dialog with the
 workflow's name, what starts it, whether it will receive your Universal Actions
 selection, every command **with its arguments**, the *names* of the environment
 variables a script node sets, whether it sends text to a program's standard
-input, and "also does:" lines for every node that pastes text or opens a
-file or link. It closes with the folder's name and a short contents id. Text
+input, and "also does:" lines for every node that pastes text, writes a file or opens
+a file or link. It closes with the folder's name and a short contents id. Text
 written by the workflow's author is shown with control and direction-changing
 characters removed and long text cut, so it cannot fake extra lines or hide
 what runs. Sevak remembers your answer in `script-plugin-approvals.json` (the

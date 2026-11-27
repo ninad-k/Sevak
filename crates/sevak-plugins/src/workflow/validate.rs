@@ -16,8 +16,8 @@ use crate::keywords::KeywordOwners;
 #[cfg(test)]
 use super::model::OUT;
 use super::model::{
-    Accepts, Node, NodeKind, Test, TransformOp, Workflow, FORMAT, MAX_CONNECTIONS, MAX_DELAY_MS,
-    MAX_NODES,
+    valid_folder_name, Accepts, Delimiter, Node, NodeKind, RandomMode, Test, TransformOp, Workflow,
+    FORMAT, MAX_CONNECTIONS, MAX_DELAY_MS, MAX_NODES,
 };
 
 /// Largest compiled regular expression a node may use.
@@ -502,6 +502,74 @@ fn check_node(node: &Node, problems: &mut Vec<Problem>) {
             }
         }
         NodeKind::LargeType { .. } | NodeKind::TextView { .. } => {}
+        NodeKind::SplitArg {
+            delimiter,
+            custom,
+            prefix,
+            ..
+        } => {
+            if *delimiter == Delimiter::Custom && custom.is_empty() {
+                error("enter the text to split at");
+            }
+            if !valid_variable_name(&format!("{}1", prefix.trim())) {
+                error("the variable prefix may only use letters, digits, _, - and .");
+            }
+        }
+        NodeKind::JoinArg { .. } | NodeKind::Debug { .. } => {}
+        NodeKind::Random {
+            mode,
+            min,
+            max,
+            lines,
+            variable,
+        } => {
+            match mode {
+                RandomMode::Number if min > max => {
+                    error("the smallest number is above the largest")
+                }
+                RandomMode::Line if lines.trim().is_empty() => {
+                    error("enter the lines to pick from")
+                }
+                _ => {}
+            }
+            if let Some(name) = variable.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
+                if !valid_variable_name(name) {
+                    error("the variable name may only use letters, digits, _, - and .");
+                }
+            }
+        }
+        NodeKind::Expression {
+            expression,
+            variable,
+            ..
+        } => {
+            if expression.trim().is_empty() {
+                error("enter an expression");
+            }
+            if !valid_variable_name(variable.trim()) {
+                error("the variable name may only use letters, digits, _, - and .");
+            }
+        }
+        NodeKind::WriteFile { path, .. } => {
+            if path.trim().is_empty() {
+                error("enter a file path");
+            }
+        }
+        NodeKind::RevealFile { path } => {
+            if path.trim().is_empty() {
+                error("enter a file or folder");
+            }
+        }
+        NodeKind::CallExternal {
+            workflow, trigger, ..
+        } => {
+            if !valid_folder_name(workflow.trim()) {
+                error("enter the folder name of the other workflow");
+            }
+            if trigger.trim().is_empty() {
+                error("enter the id of the external trigger to run");
+            }
+        }
     }
 }
 
@@ -612,6 +680,93 @@ mod tests {
         errors(workflow)
             .iter()
             .any(|message| message.contains(needle))
+    }
+
+    #[test]
+    fn the_utility_nodes_are_checked() {
+        use crate::workflow::model::{Delimiter, RandomMode, WriteMode};
+        let check = |kind: NodeKind| {
+            workflow(
+                vec![keyword("k", "go"), node("n", kind)],
+                vec![wire("k", "n")],
+            )
+        };
+        let split = |delimiter, custom: &str, prefix: &str| NodeKind::SplitArg {
+            delimiter,
+            custom: custom.into(),
+            discard_empty: true,
+            trim: true,
+            prefix: prefix.into(),
+        };
+        assert!(check(split(Delimiter::Comma, "", "split_")).is_valid());
+        assert!(has_error(
+            &check(split(Delimiter::Custom, "", "split_")),
+            "split at"
+        ));
+        assert!(has_error(
+            &check(split(Delimiter::Comma, "", "bad prefix")),
+            "prefix"
+        ));
+
+        let random = |mode, min, max, lines: &str, variable: Option<&str>| NodeKind::Random {
+            mode,
+            min,
+            max,
+            lines: lines.into(),
+            variable: variable.map(Into::into),
+        };
+        assert!(check(random(RandomMode::Number, 1, 1, "", None)).is_valid());
+        assert!(has_error(
+            &check(random(RandomMode::Number, 2, 1, "", None)),
+            "smallest"
+        ));
+        assert!(has_error(
+            &check(random(RandomMode::Line, 0, 0, "  ", None)),
+            "lines"
+        ));
+        assert!(has_error(
+            &check(random(RandomMode::Uuid, 0, 0, "", Some("a b"))),
+            "variable name"
+        ));
+        assert!(check(random(RandomMode::Uuid, 0, 0, "", Some("id"))).is_valid());
+
+        let expression = |text: &str, variable: &str| NodeKind::Expression {
+            expression: text.into(),
+            variable: variable.into(),
+            set_arg: true,
+        };
+        assert!(check(expression("{var:n} + 1", "n")).is_valid());
+        assert!(has_error(&check(expression("1", " ")), "variable name"));
+        assert!(has_error(&check(expression(" ", "n")), "expression"));
+
+        let write = |path: &str| NodeKind::WriteFile {
+            path: path.into(),
+            content: "{query}".into(),
+            mode: WriteMode::Append,
+            create_dirs: false,
+        };
+        assert!(check(write("a.txt")).is_valid());
+        assert!(has_error(&check(write(" ")), "file path"));
+        assert!(has_error(
+            &check(NodeKind::RevealFile { path: " ".into() }),
+            "file or folder"
+        ));
+
+        let call = |workflow: &str, trigger: &str| NodeKind::CallExternal {
+            workflow: workflow.into(),
+            trigger: trigger.into(),
+            arg: "{query}".into(),
+            pass_variables: false,
+        };
+        assert!(check(call("other-flow", "go")).is_valid());
+        assert!(has_error(&check(call("../x", "go")), "folder name"));
+        assert!(has_error(&check(call("other", " ")), "trigger"));
+        assert!(check(NodeKind::Debug { passthrough: true }).is_valid());
+        assert!(check(NodeKind::JoinArg {
+            separator: ",".into(),
+            discard_empty: false
+        })
+        .is_valid());
     }
 
     #[test]

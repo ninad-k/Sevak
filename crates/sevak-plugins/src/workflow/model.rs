@@ -195,6 +195,67 @@ pub enum Test {
     NotEmpty,
 }
 
+/// Where a `split_arg` node cuts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Delimiter {
+    #[default]
+    Newline,
+    Comma,
+    Tab,
+    Space,
+    /// The text in the node's `custom` field.
+    Custom,
+}
+
+/// What a `random` node produces.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RandomMode {
+    /// A whole number from `min` to `max`, both included.
+    #[default]
+    Number,
+    /// One line of `lines`.
+    Line,
+    /// A version 4 UUID.
+    Uuid,
+}
+
+/// How a `write_file` node treats a file that already exists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WriteMode {
+    #[default]
+    Overwrite,
+    Append,
+    /// The new text goes in front of what the file holds.
+    Prepend,
+}
+
+fn yes() -> bool {
+    true
+}
+
+fn is_true(value: &bool) -> bool {
+    *value
+}
+
+fn split_prefix() -> String {
+    "split_".to_owned()
+}
+
+fn join_separator() -> String {
+    ", ".to_owned()
+}
+
+fn default_min() -> i64 {
+    1
+}
+
+fn default_max() -> i64 {
+    100
+}
+
 fn query_template() -> String {
     "{query}".to_owned()
 }
@@ -363,6 +424,88 @@ pub enum NodeKind {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         markdown: bool,
     },
+
+    // ---- more utilities and actions (Alfred parity) -----------------------
+    /// Cuts the argument at a delimiter into a list (one item per line) and
+    /// sets `<prefix>1..N` and `<prefix>count`.
+    SplitArg {
+        #[serde(default)]
+        delimiter: Delimiter,
+        /// The delimiter when `delimiter` is `custom`.
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        custom: String,
+        #[serde(default = "yes", skip_serializing_if = "is_true")]
+        discard_empty: bool,
+        #[serde(default = "yes", skip_serializing_if = "is_true")]
+        trim: bool,
+        #[serde(default = "split_prefix")]
+        prefix: String,
+    },
+    /// Joins a list (lines, or a JSON array) with a separator (`\n` and `\t`
+    /// escapes work).
+    JoinArg {
+        #[serde(default = "join_separator")]
+        separator: String,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        discard_empty: bool,
+    },
+    /// A random number, line or UUID: the argument, or the variable `variable`.
+    Random {
+        #[serde(default)]
+        mode: RandomMode,
+        #[serde(default = "default_min")]
+        min: i64,
+        #[serde(default = "default_max")]
+        max: i64,
+        /// For `line`: the candidates, one per line. May use placeholders.
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        lines: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        variable: Option<String>,
+    },
+    /// Calculates a math expression (placeholders are filled in first).
+    Expression {
+        #[serde(default = "query_template")]
+        expression: String,
+        /// The variable that receives the result.
+        variable: String,
+        /// Also make the result the argument.
+        #[serde(default = "yes", skip_serializing_if = "is_true")]
+        set_arg: bool,
+    },
+    /// Writes text to a file. Relative paths are inside the workflow's data
+    /// folder.
+    WriteFile {
+        path: String,
+        #[serde(default = "query_template")]
+        content: String,
+        #[serde(default)]
+        mode: WriteMode,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        create_dirs: bool,
+    },
+    /// Shows the argument and variables in the launcher window.
+    Debug {
+        /// `false` empties the argument for the nodes after it.
+        #[serde(default = "yes", skip_serializing_if = "is_true")]
+        passthrough: bool,
+    },
+    /// Shows each file or folder (one per line) in the file manager.
+    RevealFile {
+        #[serde(default = "query_template")]
+        path: String,
+    },
+    /// Runs the `external` trigger `trigger` of another workflow.
+    CallExternal {
+        /// The other workflow's folder.
+        workflow: String,
+        trigger: String,
+        #[serde(default = "query_template")]
+        arg: String,
+        /// Hand the current variables to the other workflow.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        pass_variables: bool,
+    },
 }
 
 fn default_accepts() -> Vec<Accepts> {
@@ -407,6 +550,14 @@ impl NodeKind {
             Self::Notification { .. } => "notification",
             Self::LargeType { .. } => "large_type",
             Self::TextView { .. } => "text_view",
+            Self::SplitArg { .. } => "split_arg",
+            Self::JoinArg { .. } => "join_arg",
+            Self::Random { .. } => "random",
+            Self::Expression { .. } => "expression",
+            Self::WriteFile { .. } => "write_file",
+            Self::Debug { .. } => "debug",
+            Self::RevealFile { .. } => "reveal_file",
+            Self::CallExternal { .. } => "call_external",
         }
     }
 
@@ -424,11 +575,19 @@ impl NodeKind {
             | Self::SystemCommand { .. }
             | Self::TerminalCommand { .. }
             | Self::Copy { .. }
-            | Self::Paste { .. } => Category::Action,
+            | Self::Paste { .. }
+            | Self::WriteFile { .. }
+            | Self::RevealFile { .. }
+            | Self::CallExternal { .. } => Category::Action,
             Self::SetVariable { .. }
             | Self::Transform { .. }
             | Self::Conditional { .. }
-            | Self::Delay { .. } => Category::Utility,
+            | Self::Delay { .. }
+            | Self::SplitArg { .. }
+            | Self::JoinArg { .. }
+            | Self::Random { .. }
+            | Self::Expression { .. }
+            | Self::Debug { .. } => Category::Utility,
             Self::Notification { .. } | Self::LargeType { .. } | Self::TextView { .. } => {
                 Category::Output
             }
@@ -454,7 +613,8 @@ impl NodeKind {
     /// program, script or shortcut, and a relative path reaches files shipped
     /// inside the workflow's folder. `Paste` counts: it types text into
     /// whatever app was in front (a terminal, a chat, a form), which is the
-    /// same as the user typing it.
+    /// same as the user typing it. `WriteFile` counts: it changes files on the
+    /// disk and can replace one the user cares about.
     pub fn needs_approval(&self) -> bool {
         matches!(
             self,
@@ -465,6 +625,7 @@ impl NodeKind {
                 | Self::TerminalCommand { .. }
                 | Self::OpenFile { .. }
                 | Self::Paste { .. }
+                | Self::WriteFile { .. }
         )
     }
 }
@@ -731,6 +892,45 @@ mod tests {
                 text: "words".into(),
                 markdown: false,
             },
+            NodeKind::SplitArg {
+                delimiter: Delimiter::Custom,
+                custom: "::".into(),
+                discard_empty: false,
+                trim: false,
+                prefix: "p_".into(),
+            },
+            NodeKind::JoinArg {
+                separator: r"\n".into(),
+                discard_empty: true,
+            },
+            NodeKind::Random {
+                mode: RandomMode::Line,
+                min: -3,
+                max: 9,
+                lines: "a\nb".into(),
+                variable: Some("pick".into()),
+            },
+            NodeKind::Expression {
+                expression: "{var:n} + 1".into(),
+                variable: "next".into(),
+                set_arg: false,
+            },
+            NodeKind::WriteFile {
+                path: "~/log.txt".into(),
+                content: "{query}\n".into(),
+                mode: WriteMode::Prepend,
+                create_dirs: true,
+            },
+            NodeKind::Debug { passthrough: false },
+            NodeKind::RevealFile {
+                path: "{query}".into(),
+            },
+            NodeKind::CallExternal {
+                workflow: "other".into(),
+                trigger: "go".into(),
+                arg: "{query}".into(),
+                pass_variables: true,
+            },
         ];
         let names: std::collections::HashSet<_> = kinds.iter().map(|k| k.type_name()).collect();
         assert_eq!(names.len(), kinds.len(), "a type name is used twice");
@@ -855,6 +1055,105 @@ mod tests {
         ] {
             assert!(!kind.needs_approval(), "{}", kind.type_name());
         }
+    }
+
+    #[test]
+    fn the_utility_nodes_have_defaults_categories_and_approval() {
+        let workflow = Workflow::from_toml(
+            r#"
+            [[node]]
+            id = "s"
+            type = "split_arg"
+            [[node]]
+            id = "j"
+            type = "join_arg"
+            [[node]]
+            id = "r"
+            type = "random"
+            [[node]]
+            id = "e"
+            type = "expression"
+            variable = "v"
+            [[node]]
+            id = "w"
+            type = "write_file"
+            path = "a.txt"
+            [[node]]
+            id = "d"
+            type = "debug"
+            [[node]]
+            id = "f"
+            type = "reveal_file"
+            [[node]]
+            id = "c"
+            type = "call_external"
+            workflow = "w"
+            trigger = "t"
+            "#,
+        )
+        .unwrap();
+        let kinds: Vec<&NodeKind> = workflow.nodes.iter().map(|n| &n.kind).collect();
+        assert!(matches!(
+            kinds[0],
+            NodeKind::SplitArg { delimiter: Delimiter::Newline, discard_empty: true, trim: true, prefix, .. }
+                if prefix == "split_"
+        ));
+        assert!(
+            matches!(kinds[1], NodeKind::JoinArg { separator, discard_empty: false } if separator == ", ")
+        );
+        assert!(matches!(
+            kinds[2],
+            NodeKind::Random {
+                mode: RandomMode::Number,
+                min: 1,
+                max: 100,
+                variable: None,
+                ..
+            }
+        ));
+        assert!(matches!(
+            kinds[3],
+            NodeKind::Expression { expression, set_arg: true, .. } if expression == "{query}"
+        ));
+        assert!(matches!(
+            kinds[4],
+            NodeKind::WriteFile { content, mode: WriteMode::Overwrite, create_dirs: false, .. }
+                if content == "{query}"
+        ));
+        assert!(matches!(kinds[5], NodeKind::Debug { passthrough: true }));
+        assert!(matches!(kinds[6], NodeKind::RevealFile { path } if path == "{query}"));
+        assert!(matches!(
+            kinds[7],
+            NodeKind::CallExternal { arg, pass_variables: false, .. } if arg == "{query}"
+        ));
+        for kind in &kinds {
+            let utility = matches!(
+                kind.type_name(),
+                "split_arg" | "join_arg" | "random" | "expression" | "debug"
+            );
+            let expected = if utility {
+                Category::Utility
+            } else {
+                Category::Action
+            };
+            assert_eq!(kind.category(), expected, "{}", kind.type_name());
+            assert_eq!(kind.output_ports(), [OUT]);
+            // Only writing files needs the user's yes.
+            assert_eq!(
+                kind.needs_approval(),
+                kind.type_name() == "write_file",
+                "{}",
+                kind.type_name()
+            );
+        }
+        assert!(workflow.needs_approval());
+        // Defaults are not spelled out.
+        let text = workflow.to_toml().unwrap();
+        assert!(!text.contains("discard_empty"), "{text}");
+        assert!(!text.contains("passthrough"), "{text}");
+        assert_eq!(Workflow::from_toml(&text).unwrap(), workflow);
+        // `variable` has no default.
+        assert!(Workflow::from_toml("[[node]]\nid = \"e\"\ntype = \"expression\"\n").is_err());
     }
 
     #[test]

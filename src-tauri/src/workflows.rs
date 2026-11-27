@@ -85,6 +85,12 @@ impl OutputSink for TauriSink {
         self.show(OutputKind::TextView, heading, text, markdown);
     }
 
+    // Shown to the user in the launcher window, never logged: it holds what
+    // they typed and selected.
+    fn debug(&self, text: &str) {
+        self.show(OutputKind::TextView, "Workflow debug", text);
+    }
+
     fn confirm(&self, question: &str) -> bool {
         let Some(app) = self.app.get() else {
             return false;
