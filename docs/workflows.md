@@ -60,6 +60,46 @@ side panel shows what else is wrong; a node with a red dot has an error, a
 yellow dot a warning. **Save** is only available when there are no errors.
 Warnings, such as a node nothing leads to, do not stop you.
 
+### Notes, disabling and several boxes at once
+
+- **Notes.** Every node has a **Note** field in the side panel. The first part
+  shows as a small caption under the box (hover for all of it; double-click
+  the caption to edit it). A note is only documentation: it never changes what
+  runs and never asks for permission again.
+- **Disabling.** Select a connection and press `D` (or use the button in the
+  side panel) and it is drawn dashed and dimmed; the run does not follow it.
+  The same for a box: tick **Disable this node** or press `D` with boxes
+  selected. A disabled node does not run and its branch stops there. A disabled
+  trigger (keyword, script filter, list/file filter, running apps, hotkey,
+  Universal Actions, external) is not registered at all, so its keyword and
+  hotkey are free again. A disabled node with an empty required field is a
+  warning instead of an error, so you can park half-built boxes.
+- **Selecting several.** `Shift`, `Ctrl` or `Cmd` plus click adds or removes a
+  box; drag on empty canvas to draw a selection rectangle. Dragging or the arrow
+  keys move every selected box.
+- **Aligning.** With two or more boxes selected, the **Align** buttons in the top
+  bar line them up on the left edge, horizontal centre, top or vertical middle;
+  with three or more, **Space across** and **Space down** spread them evenly
+  between the outer two. `Alt`+click a box aligns the selection to that box
+  using the last Align button you used (left to start with).
+- **Quick connect.** Select a box, then `Shift`+`Alt`+click another: the selected
+  box's first output is connected to it.
+- **Moving around with the keyboard.** `Ctrl`/`Cmd` plus an arrow selects the
+  nearest box that way; `Ctrl`/`Cmd`+`Alt`+`→` follows the connections to the
+  first box after the selected one, `←` to the first box before it. With nothing
+  selected the arrows scroll the canvas. Dragging a new connection to the edge
+  of the canvas scrolls it.
+- **`?`** (or the **?** button) lists all of this. The same table is in
+  [Keyboard shortcuts](keyboard.md#workflow-builder).
+
+Notes and disabled flags are saved as `note = "..."` and `disabled = true` on
+a `[[node]]` and `disabled = true` on a `[[connection]]`; both are left out
+when unused, so existing files do not change on save. Permission: `note` is not
+part of what you allow. A `disabled` flag is, when it is set on a node that
+runs code or on a connection, so a workflow you allowed with something switched
+off asks again if that is later switched on by hand. Files that never use the
+flags keep their old permission.
+
 Saving rewrites `workflow.toml` in the builder's own layout, so comments and
 formatting you added by hand are not kept. The builder never touches the scripts
 and other files in the folder.
@@ -472,7 +512,7 @@ Node types and their fields: `keyword` (`keyword`, `argument`, `subtitle`),
 = `any`, `files` or `folders`), `running_apps` (`keyword`, `output` = `name`,
 `path` or `pid`), `dialog_conditional` (`heading`, `message`, `buttons`; ports
 `button1` to `button3` and `cancel`), `speak` (`text`, `voice`) and
-`play_sound` (`path`). Every node may also have `title`, `x` and `y`. Unknown
+`play_sound` (`path`). Every node may also have `title`, `x`, `y`, `note` and `disabled`; a `[[connection]]` may have `disabled`. Unknown
 `type` values make the whole workflow fail to load ("Not loaded: ..." on its row)
 rather than half-work. The examples in
 [`examples/workflows/`](https://github.com/ninad-k/Sevak/tree/main/examples/workflows) show real files.

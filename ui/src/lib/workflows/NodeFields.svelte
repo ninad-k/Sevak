@@ -266,3 +266,15 @@
 {#if def.fields.length === 0}
   <p class="wf-hint">{@html tHtml("workflows.fields.noSettings", { id: node.id })}</p>
 {/if}
+<div class="wf-field">
+  <label for="node-note">{t("workflows.editor.noteLabel")}</label>
+  <textarea
+    id="node-note"
+    class="wf-input"
+    rows="2"
+    placeholder={t("workflows.editor.notePlaceholder")}
+    value={node.note ?? ""}
+    oninput={(e) => onset("note", e.currentTarget.value === "" ? undefined : e.currentTarget.value)}
+  ></textarea>
+  <p class="wf-hint">{t("workflows.editor.noteHint")}</p>
+</div>

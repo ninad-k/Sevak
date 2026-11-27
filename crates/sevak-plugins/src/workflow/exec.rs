@@ -371,7 +371,10 @@ impl Runtime {
             stopped: false,
             depth,
         };
-        self.follow(start, OUT, &ctx, &mut run);
+        // A disabled start node (a trigger switched off in the editor) runs nothing.
+        if self.workflow.node(start).is_some_and(|node| !node.disabled) {
+            self.follow(start, OUT, &ctx, &mut run);
+        }
         run.report
     }
 
@@ -411,6 +414,10 @@ impl Runtime {
         let Some(node) = self.workflow.node(id) else {
             return;
         };
+        // A disabled node does not run and stops its branch.
+        if node.disabled {
+            return;
+        }
         run.report.executed.push(id.to_owned());
         run.budget.steps.fetch_add(1, Ordering::SeqCst);
         match self.execute(node, &ctx, run.depth, &run.budget) {
@@ -1493,6 +1500,41 @@ mod tests {
         assert_eq!(report.executed, ["a", "a2", "a3", "b"]);
         assert_eq!(clipboard(&f), ["a", "a2", "a3", "b"]);
         assert!(report.errors.is_empty());
+    }
+
+    #[test]
+    fn disabled_connections_and_nodes_are_skipped() {
+        let mut b = copy("b", "b");
+        b.disabled = true; // not run, and its branch stops
+        let mut skipped = wire("k", "a");
+        skipped.disabled = true;
+        let f = fixture(
+            vec![
+                keyword("k"),
+                copy("a", "a"),
+                b,
+                copy("c", "c"),
+                copy("after_b", "after_b"),
+            ],
+            vec![
+                skipped,
+                wire("k", "b"),
+                wire("k", "c"),
+                wire("b", "after_b"),
+            ],
+        );
+        let report = f.runtime.run_blocking("k", Ctx::with_arg("x"));
+        assert_eq!(report.executed, ["c"]);
+        assert_eq!(clipboard(&f), ["c"]);
+    }
+
+    #[test]
+    fn a_disabled_trigger_runs_nothing() {
+        let mut k = keyword("k");
+        k.disabled = true;
+        let f = fixture(vec![k, copy("a", "a")], vec![wire("k", "a")]);
+        let report = f.runtime.run_blocking("k", Ctx::with_arg("x"));
+        assert!(report.executed.is_empty());
     }
 
     #[test]

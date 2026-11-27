@@ -56,6 +56,10 @@ export interface WfNode {
   id: string;
   type: NodeType;
   title?: string;
+  /** A comment shown under the box; never affects what runs. */
+  note?: string;
+  /** Skipped when the workflow runs; its branch stops there. */
+  disabled?: boolean;
   x: number;
   y: number;
   // The fields of the node's kind (`keyword`, `url`, `command`, ...).
@@ -68,6 +72,8 @@ export interface WfConnection {
   /** `out`, `then` / `else` for a conditional, `button1`..`button3` / `cancel` for a dialog. */
   port?: string;
   to: string;
+  /** Not followed when the workflow runs. */
+  disabled?: boolean;
 }
 
 export interface Workflow {
@@ -818,6 +824,9 @@ export function toSave(workflow: Workflow): Workflow {
   for (const node of copy.node) {
     node.x = Math.round(node.x);
     node.y = Math.round(node.y);
+    // Left out when unused, so files that never use them stay as they were.
+    if (!node.note || node.note.trim() === "") delete node.note;
+    if (!node.disabled) delete node.disabled;
     const defs = kindOf(node.type).fields;
     for (const field of defs) {
       const value = node[field.key];
@@ -839,6 +848,7 @@ export function toSave(workflow: Workflow): Workflow {
     from: conn.from,
     port: conn.port ?? OUT,
     to: conn.to,
+    ...(conn.disabled ? { disabled: true } : {}),
   }));
   return copy;
 }

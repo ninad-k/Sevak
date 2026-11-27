@@ -6,13 +6,24 @@
   // Mouse: drag a box to move it, drag from an output dot to another box to
   // connect, click a box or a line to select it, Delete removes the selection.
   // Keyboard: Tab to a box, arrows move it, Enter selects it; the side panel
-  // can add and remove connections without dragging.
+  // can add and remove connections without dragging. Press ? for every shortcut
+  // (the list is SHORTCUTS below, and docs/keyboard.md).
   import "./workflows.css";
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import NodeFields from "./NodeFields.svelte";
   import Markdown from "../Markdown.svelte";
-  import { t, tHtml } from "../i18n.svelte";
+  import { t, tHtml, type MessageKey } from "../i18n.svelte";
   import { checkWorkflow, saveWorkflow } from "./ipc";
+  import {
+    alignBoxes,
+    boxesInRect,
+    distributeBoxes,
+    followConnection,
+    nearestInDirection,
+    type AlignMode,
+    type Axis,
+    type Direction,
+  } from "./layout";
   import {
     CATEGORIES,
     categoryLabel,
@@ -69,6 +80,11 @@
 
   type Selection = { kind: "node"; id: string } | { kind: "edge"; key: string } | null;
   let selection = $state<Selection>(null);
+  /** Every selected box (Shift/Ctrl/Cmd+click, rubber band); `selection` is the one the panel shows. */
+  let multi = $state<string[]>([]);
+  let lastAlign = $state<AlignMode>("left");
+  let helpOpen = $state(false);
+  let rubber = $state<{ x1: number; y1: number; x2: number; y2: number; add: boolean } | null>(null);
   let problems = $state<Problem[]>([]);
   let notice = $state<{ text: string; kind: "ok" | "warn" | "error" } | null>(null);
   let noticeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -81,8 +97,8 @@
   // svelte-ignore state_referenced_locally
   let variableRows = $state(Object.entries(workflow.variables).map(([name, value]) => ({ name, value })));
 
-  /** A node being dragged. */
-  let drag: { id: string; dx: number; dy: number } | null = null;
+  /** A node being dragged, with where every selected box started. */
+  let drag: { id: string; dx: number; dy: number; origins: Map<string, Point> } | null = null;
   /** A connection being drawn from an output port. */
   let link = $state<{ from: string; port: string; x: number; y: number; hover: string | null } | null>(
     null,
@@ -108,6 +124,7 @@
 
   const selectedNode = $derived.by(() => {
     const picked = selection;
+    if (multi.length > 1) return undefined;
     return picked?.kind === "node" ? workflow.node.find((n) => n.id === picked.id) : undefined;
   });
   const selectedEdge = $derived.by(() => {
@@ -124,6 +141,31 @@
     }
     return map;
   });
+
+  /** The shortcut list for the `?` overlay; the keys are the same on every layout. */
+  const SHORTCUTS: [string, MessageKey][] = [
+    ["Click · Shift/Ctrl/Cmd+Click", "workflows.editor.shortcut.select"],
+    ["Drag (empty canvas)", "workflows.editor.shortcut.rubber"],
+    ["Alt+Click", "workflows.editor.shortcut.alignTo"],
+    ["Shift+Alt+Click", "workflows.editor.shortcut.autoConnect"],
+    ["← ↑ → ↓ · Shift", "workflows.editor.shortcut.move"],
+    ["← ↑ → ↓ (nothing selected)", "workflows.editor.shortcut.scroll"],
+    ["Ctrl/Cmd + ← ↑ → ↓", "workflows.editor.shortcut.nearest"],
+    ["Ctrl/Cmd + Alt + ← →", "workflows.editor.shortcut.follow"],
+    ["D", "workflows.editor.shortcut.disable"],
+    ["Delete", "workflows.editor.shortcut.delete"],
+    ["Esc", "workflows.editor.shortcut.escape"],
+    ["Ctrl/Cmd + S", "workflows.editor.shortcut.save"],
+    ["Double-click (note)", "workflows.editor.shortcut.note"],
+    ["?", "workflows.editor.shortcut.help"],
+  ];
+
+  const ALIGNS: [AlignMode, MessageKey][] = [
+    ["left", "workflows.editor.alignLeft"],
+    ["hcenter", "workflows.editor.alignCenter"],
+    ["top", "workflows.editor.alignTop"],
+    ["vmiddle", "workflows.editor.alignMiddle"],
+  ];
 
   const edgeKey = (c: WfConnection) => `${c.from}|${portOf(c)}|${c.to}`;
   const nodeById = (id: string) => workflow.node.find((n) => n.id === id);
@@ -196,44 +238,101 @@
 
   // ---- pointer interaction ------------------------------------------------------
 
+  function selectOnly(id: string) {
+    selection = { kind: "node", id };
+    multi = [id];
+  }
+
+  function clearSelection() {
+    selection = null;
+    multi = [];
+  }
+
   function onNodeDown(e: PointerEvent, node: WfNode) {
     if (e.button !== 0) return;
     e.stopPropagation();
-    selection = { kind: "node", id: node.id };
-    const p = toCanvas(e);
-    drag = { id: node.id, dx: p.x - node.x, dy: p.y - node.y };
-    svg!.setPointerCapture(e.pointerId);
     root?.focus();
+    if (e.altKey && e.shiftKey) {
+      // Shift+Alt+click: wire the selected box's first output to this one.
+      const from = selectedNode ?? (multi.length === 1 ? nodeById(multi[0]) : undefined);
+      if (from && from.id !== node.id) {
+        const port = outputPorts(from)[0];
+        if (port) connect(from.id, port, node.id);
+      }
+      return;
+    }
+    if (e.altKey) {
+      // Alt+click: line the others up with this box.
+      if (multi.length > 0 && !multi.includes(node.id)) multi = [...multi, node.id];
+      if (multi.length > 1) alignSelection(lastAlign, node.id);
+      else selectOnly(node.id);
+      return;
+    }
+    if (e.shiftKey || e.ctrlKey || e.metaKey) {
+      if (multi.includes(node.id)) multi = multi.filter((id) => id !== node.id);
+      else multi = [...multi.filter((id) => nodeById(id)), node.id];
+      selection = multi.length > 0 ? { kind: "node", id: multi[multi.length - 1] } : null;
+      return;
+    }
+    if (!multi.includes(node.id)) selectOnly(node.id);
+    else selection = { kind: "node", id: node.id };
+    const p = toCanvas(e);
+    const origins = new Map<string, Point>();
+    for (const id of multi) {
+      const other = nodeById(id);
+      if (other) origins.set(id, { x: other.x, y: other.y });
+    }
+    drag = { id: node.id, dx: p.x - node.x, dy: p.y - node.y, origins };
+    svg!.setPointerCapture(e.pointerId);
   }
 
   function onPortDown(e: PointerEvent, node: WfNode, port: string) {
     if (e.button !== 0) return;
     e.stopPropagation();
     const p = toCanvas(e);
-    selection = { kind: "node", id: node.id };
+    selectOnly(node.id);
     link = { from: node.id, port, x: p.x, y: p.y, hover: null };
     svg!.setPointerCapture(e.pointerId);
     root?.focus();
   }
 
-  function onBackgroundDown() {
-    selection = null;
+  function onBackgroundDown(e: PointerEvent) {
+    const add = e.shiftKey || e.ctrlKey || e.metaKey;
+    if (!add) clearSelection();
     confirmingDiscard = false;
     root?.focus();
+    if (e.button === 0 && svg) {
+      const p = toCanvas(e);
+      rubber = { x1: p.x, y1: p.y, x2: p.x, y2: p.y, add };
+      svg.setPointerCapture(e.pointerId);
+    }
   }
 
   function onMove(e: PointerEvent) {
     if (drag) {
       const node = nodeById(drag.id);
-      if (!node) return;
+      const start = drag.origins.get(drag.id);
+      if (!node || !start) return;
       const p = toCanvas(e);
-      node.x = snap(p.x - drag.dx);
-      node.y = snap(p.y - drag.dy);
+      const x = snap(p.x - drag.dx);
+      const y = snap(p.y - drag.dy);
+      // Everything selected moves by the same amount as the grabbed box.
+      for (const [id, origin] of drag.origins) {
+        const other = nodeById(id);
+        if (!other) continue;
+        other.x = id === drag.id ? x : Math.max(0, origin.x + (x - start.x));
+        other.y = id === drag.id ? y : Math.max(0, origin.y + (y - start.y));
+      }
+    } else if (rubber) {
+      const p = toCanvas(e);
+      rubber.x2 = p.x;
+      rubber.y2 = p.y;
     } else if (link) {
       const p = toCanvas(e);
       link.x = p.x;
       link.y = p.y;
       link.hover = nodeAt(p)?.id ?? null;
+      autoScroll(e);
     }
   }
 
@@ -241,6 +340,14 @@
     if (svg?.hasPointerCapture(e.pointerId)) svg.releasePointerCapture(e.pointerId);
     if (drag) {
       drag = null;
+    } else if (rubber) {
+      const band = rubber;
+      rubber = null;
+      if (Math.abs(band.x2 - band.x1) > 4 || Math.abs(band.y2 - band.y1) > 4) {
+        const hit = boxesInRect(workflow.node, { x: band.x1, y: band.y1 }, { x: band.x2, y: band.y2 });
+        multi = band.add ? [...new Set([...multi, ...hit])] : hit;
+        selection = multi.length > 0 ? { kind: "node", id: multi[multi.length - 1] } : null;
+      }
     } else if (link) {
       const target = nodeAt(toCanvas(e));
       const from = link;
@@ -252,6 +359,19 @@
   function onCancel() {
     drag = null;
     link = null;
+    rubber = null;
+  }
+
+  /** Dragging a connection near the canvas edge scrolls the canvas. */
+  function autoScroll(e: PointerEvent) {
+    if (!wrap) return;
+    const rect = wrap.getBoundingClientRect();
+    const edge = 40;
+    const speed = 24;
+    if (e.clientX > rect.right - edge) wrap.scrollBy({ left: speed });
+    else if (e.clientX < rect.left + edge) wrap.scrollBy({ left: -speed });
+    if (e.clientY > rect.bottom - edge) wrap.scrollBy({ top: speed });
+    else if (e.clientY < rect.top + edge) wrap.scrollBy({ top: -speed });
   }
 
   function connect(from: string, port: string, to: string) {
@@ -261,6 +381,7 @@
       return;
     }
     workflow.connection.push({ from, port, to });
+    multi = [];
     selection = { kind: "edge", key: `${from}|${port}|${to}` };
   }
 
@@ -277,42 +398,165 @@
       return;
     }
     if (typing) return;
-    if (e.key === "Delete" || e.key === "Backspace") {
+    if (helpOpen) {
+      if (e.key === "Escape" || e.key === "?") {
+        e.preventDefault();
+        helpOpen = false;
+      }
+      return;
+    }
+    const mod = e.ctrlKey || e.metaKey;
+    const arrows: Record<string, Direction> = {
+      ArrowLeft: "left",
+      ArrowRight: "right",
+      ArrowUp: "up",
+      ArrowDown: "down",
+    };
+    if (e.key === "?") {
+      e.preventDefault();
+      helpOpen = true;
+    } else if (e.key === "Delete" || e.key === "Backspace") {
       e.preventDefault();
       deleteSelection();
     } else if (e.key === "Escape") {
       if (link) link = null;
-      else selection = null;
+      else clearSelection();
+    } else if ((e.key === "d" || e.key === "D") && !mod && !e.altKey) {
+      e.preventDefault();
+      toggleDisabled();
+    } else if (arrows[e.key]) {
+      e.preventDefault();
+      onArrow(e, arrows[e.key], mod);
     }
   }
 
   function onNodeKey(e: KeyboardEvent, node: WfNode) {
-    const step = e.shiftKey ? 40 : 10;
-    const moves: Record<string, [number, number]> = {
-      ArrowLeft: [-step, 0],
-      ArrowRight: [step, 0],
-      ArrowUp: [0, -step],
-      ArrowDown: [0, step],
-    };
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      selection = { kind: "node", id: node.id };
-    } else if (moves[e.key]) {
-      e.preventDefault();
-      node.x = Math.max(0, node.x + moves[e.key][0]);
-      node.y = Math.max(0, node.y + moves[e.key][1]);
+      selectOnly(node.id);
     }
   }
 
+  function focusedNodeId(e: KeyboardEvent): string | undefined {
+    return (e.target as HTMLElement).closest?.("[data-node]")?.getAttribute("data-node") ?? undefined;
+  }
+
+  async function reveal(id: string) {
+    selectOnly(id);
+    const node = nodeById(id);
+    if (!node || !wrap) return;
+    wrap.scrollTo({
+      left: Math.max(0, Math.min(wrap.scrollLeft, node.x - 40), node.x + NODE_W + 40 - wrap.clientWidth),
+      top: Math.max(0, Math.min(wrap.scrollTop, node.y - 40), node.y + NODE_H + 40 - wrap.clientHeight),
+    });
+    await tick();
+    svg?.querySelector<SVGElement>(`[data-node="${CSS.escape(id)}"]`)?.focus();
+  }
+
+  function onArrow(e: KeyboardEvent, direction: Direction, mod: boolean) {
+    const focused = focusedNodeId(e);
+    const from = selection?.kind === "node" ? selection.id : focused;
+    if (mod && e.altKey) {
+      // Ctrl/Cmd+Alt: along the connections.
+      if (!from || (direction !== "left" && direction !== "right")) return;
+      const next = followConnection(workflow.connection, from, direction);
+      if (next) void reveal(next);
+      return;
+    }
+    if (mod) {
+      // Ctrl/Cmd: the nearest box that way (the top-left one when none is selected).
+      if (from) {
+        const next = nearestInDirection(workflow.node, from, direction);
+        if (next) void reveal(next);
+      } else if (workflow.node.length > 0) {
+        const first = [...workflow.node].sort((a, b) => a.y - b.y || a.x - b.x)[0];
+        void reveal(first.id);
+      }
+      return;
+    }
+    const step = e.shiftKey ? 40 : 10;
+    const [dx, dy] = {
+      left: [-step, 0],
+      right: [step, 0],
+      up: [0, -step],
+      down: [0, step],
+    }[direction];
+    if (focused && !multi.includes(focused)) selectOnly(focused);
+    if (multi.length === 0) {
+      // Nothing selected: the arrows scroll the canvas, four times as far with Shift.
+      wrap?.scrollBy({ left: dx * 4, top: dy * 4 });
+      return;
+    }
+    for (const id of multi) {
+      const node = nodeById(id);
+      if (!node) continue;
+      node.x = Math.max(0, node.x + dx);
+      node.y = Math.max(0, node.y + dy);
+    }
+  }
+
+  // ---- alignment ----------------------------------------------------------------
+
+  function alignSelection(mode: AlignMode, referenceId?: string) {
+    lastAlign = mode;
+    const picked = multi.map((id) => nodeById(id)).filter((n): n is WfNode => !!n);
+    if (picked.length < 2) return;
+    const reference = referenceId ? nodeById(referenceId) : undefined;
+    applyPlacements(alignBoxes(picked, mode, reference));
+  }
+
+  function distributeSelection(axis: Axis) {
+    const picked = multi.map((id) => nodeById(id)).filter((n): n is WfNode => !!n);
+    if (picked.length < 3) return;
+    applyPlacements(distributeBoxes(picked, axis));
+  }
+
+  function applyPlacements(placed: { id: string; x: number; y: number }[]) {
+    for (const spot of placed) {
+      const node = nodeById(spot.id);
+      if (!node) continue;
+      node.x = Math.max(0, Math.round(spot.x));
+      node.y = Math.max(0, Math.round(spot.y));
+    }
+  }
+
+  // ---- disabling and notes ----------------------------------------------------------
+
+  /** `D`: switch the selected connection, or the selected boxes, off and on. */
+  function toggleDisabled() {
+    if (selection?.kind === "edge") {
+      if (selectedEdge) setConnectionDisabled(selectedEdge, !selectedEdge.disabled);
+    } else if (multi.length > 0) {
+      const picked = multi.map((id) => nodeById(id)).filter((n): n is WfNode => !!n);
+      const off = picked.some((n) => !n.disabled);
+      for (const node of picked) setNodeDisabled(node, off);
+    }
+  }
+
+  function setNodeDisabled(node: WfNode, value: boolean) {
+    if (value) node.disabled = true;
+    else delete node.disabled;
+  }
+
+  function setConnectionDisabled(conn: WfConnection, value: boolean) {
+    if (value) conn.disabled = true;
+    else delete conn.disabled;
+  }
+
+  async function editNote(node: WfNode) {
+    selectOnly(node.id);
+    await tick();
+    document.getElementById("node-note")?.focus();
+  }
+
   function deleteSelection() {
-    if (selection?.kind === "node") {
-      const id = selection.id;
-      removeNode(workflow, id);
+    if (multi.length > 0 && selection?.kind !== "edge") {
+      for (const id of [...multi]) removeNode(workflow, id);
     } else if (selection?.kind === "edge") {
       const key = selection.key;
       workflow.connection = workflow.connection.filter((c) => edgeKey(c) !== key);
     }
-    selection = null;
+    clearSelection();
   }
 
   // ---- adding and editing -----------------------------------------------------------
@@ -336,7 +580,7 @@
     }
     const node = makeNode(workflow, type, snap(x), snap(y));
     workflow.node.push(node);
-    selection = { kind: "node", id: node.id };
+    selectOnly(node.id);
   }
 
   function onAdd(e: Event & { currentTarget: HTMLSelectElement }) {
@@ -365,7 +609,7 @@
     }
     const old = node.id;
     renameNode(workflow, old, next);
-    selection = { kind: "node", id: next };
+    selectOnly(next);
   }
 
   function syncVariables() {
@@ -418,7 +662,7 @@
     if (!problem.node) return;
     const node = nodeById(problem.node);
     if (!node) return;
-    selection = { kind: "node", id: node.id };
+    selectOnly(node.id);
     wrap?.scrollTo({
       left: Math.max(0, node.x - 80),
       top: Math.max(0, node.y - 80),
@@ -487,9 +731,39 @@
         {/each}
       </select>
     </label>
+    <div class="align" role="group" aria-label={t("workflows.editor.alignGroup")}>
+      {#each ALIGNS as [mode, key] (mode)}
+        <button
+          type="button"
+          class="wf-btn small"
+          disabled={multi.length < 2}
+          title="{t('workflows.editor.alignGroup')}: {t(key)}"
+          onclick={() => alignSelection(mode)}>{t(key)}</button
+        >
+      {/each}
+      <button
+        type="button"
+        class="wf-btn small"
+        disabled={multi.length < 3}
+        onclick={() => distributeSelection("horizontal")}>{t("workflows.editor.distributeH")}</button
+      >
+      <button
+        type="button"
+        class="wf-btn small"
+        disabled={multi.length < 3}
+        onclick={() => distributeSelection("vertical")}>{t("workflows.editor.distributeV")}</button
+      >
+    </div>
     <button type="button" class="wf-btn" onclick={tidy} title={t("workflows.editor.tidyTitle")}>
       {t("workflows.editor.tidy")}
     </button>
+    <button
+      type="button"
+      class="wf-btn"
+      aria-label={t("workflows.editor.shortcutsTitle")}
+      title={t("workflows.editor.shortcutsTitle")}
+      onclick={() => (helpOpen = true)}>?</button
+    >
     <button type="button" class="wf-btn primary" disabled={!canSave} onclick={save}>
       {saving ? t("common.saving") : t("common.save")}
     </button>
@@ -546,18 +820,31 @@
             <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
             <g
               class="edge"
+              class:disabled={conn.disabled}
               class:selected={selection?.kind === "edge" && selection.key === edgeKey(conn)}
               onpointerdown={(e) => {
                 e.stopPropagation();
+                multi = [];
                 selection = { kind: "edge", key: edgeKey(conn) };
                 root?.focus();
               }}
             >
               <path {d} class="edge-hit" />
               <path {d} class="edge-line" marker-end="url(#wf-arrow)" />
+              {#if conn.disabled}<title>{t("workflows.editor.disabledConnection")}</title>{/if}
             </g>
           {/if}
         {/each}
+
+        {#if rubber}
+          <rect
+            class="rubber"
+            x={Math.min(rubber.x1, rubber.x2)}
+            y={Math.min(rubber.y1, rubber.y2)}
+            width={Math.abs(rubber.x2 - rubber.x1)}
+            height={Math.abs(rubber.y2 - rubber.y1)}
+          />
+        {/if}
 
         {#if link}
           {@const from = nodeById(link.from)}
@@ -579,14 +866,16 @@
               : null}
           <g
             class="node {def.category}"
-            class:selected={selection?.kind === "node" && selection.id === node.id}
+            class:selected={multi.includes(node.id)}
+            class:disabled={node.disabled}
             class:bad={hasError}
             class:ok-target={target === true}
             class:no-target={target === false}
             transform="translate({node.x} {node.y})"
             role="button"
             tabindex="0"
-            aria-pressed={selection?.kind === "node" && selection.id === node.id}
+            data-node={node.id}
+            aria-pressed={multi.includes(node.id)}
             aria-label={nodeProblems.length > 0
               ? t("workflows.editor.nodeAriaProblems", { label: nodeLabel(node), kind: def.label, count: nodeProblems.length })
               : t("workflows.editor.nodeAria", { label: nodeLabel(node), kind: def.label })}
@@ -599,6 +888,21 @@
             <text class="t2" x="16" y="46">
               {clip(detail(node) ? `${def.label} · ${detail(node)}` : def.label, 30)}
             </text>
+            {#if node.note?.trim()}
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <text
+                class="note"
+                x="2"
+                y={NODE_H + 16}
+                ondblclick={(e) => {
+                  e.stopPropagation();
+                  void editNote(node);
+                }}
+              >
+                {clip(node.note, 34)}
+                <title>{node.note}{"\n"}{t("workflows.editor.noteEdit")}</title>
+              </text>
+            {/if}
             {#if nodeProblems.length > 0}
               <circle
                 class="flag"
@@ -664,6 +968,17 @@
             <p class="wf-hint">{t("workflows.editor.keywordTitleHint")}</p>
           {/if}
         </div>
+        <label class="wf-check">
+          <input
+            type="checkbox"
+            checked={!!selectedNode.disabled}
+            onchange={(e) => setNodeDisabled(selectedNode, e.currentTarget.checked)}
+          />
+          {t("workflows.editor.disableNode")}
+        </label>
+        {#if selectedNode.disabled}
+          <p class="wf-hint">{t("workflows.editor.disableNodeHint")}</p>
+        {/if}
         {#key selectedNode.id}
           <NodeFields node={selectedNode} onset={(key, value) => setField(selectedNode, key, value)} />
         {/key}
@@ -717,6 +1032,9 @@
           </p>
         </div>
         <button type="button" class="wf-btn danger" onclick={deleteSelection}>{t("workflows.editor.deleteNode")}</button>
+      {:else if multi.length > 1}
+        <h2>{t("workflows.editor.multiSelected", { count: multi.length })}</h2>
+        <p class="wf-hint">{t("workflows.editor.multiHint")}</p>
       {:else if selectedEdge}
         <h2>{t("workflows.editor.connection")}</h2>
         <p>
@@ -725,6 +1043,18 @@
           →
           {nodeLabel(nodeById(selectedEdge.to) ?? workflow.node[0])}
         </p>
+        <button
+          type="button"
+          class="wf-btn"
+          onclick={() => setConnectionDisabled(selectedEdge, !selectedEdge.disabled)}
+        >
+          {selectedEdge.disabled
+            ? t("workflows.editor.enableConnection")
+            : t("workflows.editor.disableConnection")}
+        </button>
+        {#if selectedEdge.disabled}
+          <p class="wf-hint">{t("workflows.editor.connectionDisabledHint")}</p>
+        {/if}
         <button type="button" class="wf-btn danger" onclick={deleteSelection}>
           {t("workflows.editor.deleteConnection")}
         </button>
@@ -806,6 +1136,31 @@
       {/if}
     </aside>
   </div>
+
+  {#if helpOpen}
+    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+    <div class="help-backdrop" onclick={() => (helpOpen = false)}>
+      <div
+        class="help"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("workflows.editor.shortcutsTitle")}
+        tabindex="-1"
+        onclick={(e) => e.stopPropagation()}
+      >
+        <h2>{t("workflows.editor.shortcutsTitle")}</h2>
+        <dl>
+          {#each SHORTCUTS as [keys, key] (key)}
+            <dt><kbd>{keys}</kbd></dt>
+            <dd>{t(key)}</dd>
+          {/each}
+        </dl>
+        <button type="button" class="wf-btn" onclick={() => (helpOpen = false)}>
+          {t("workflows.editor.shortcutsClose")}
+        </button>
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -950,6 +1305,80 @@
     stroke: var(--muted);
     stroke-width: 2;
     pointer-events: none;
+  }
+
+  .edge.disabled .edge-line {
+    stroke-dasharray: 6 5;
+    opacity: 0.45;
+  }
+
+  .node.disabled .box,
+  .node.disabled .stripe {
+    opacity: 0.45;
+  }
+
+  .node.disabled .box {
+    stroke-dasharray: 6 4;
+  }
+
+  .note {
+    font-size: 11px;
+    font-style: italic;
+    fill: var(--muted, currentColor);
+    cursor: text;
+  }
+
+  .rubber {
+    fill: color-mix(in srgb, var(--accent, #4c8bf5) 15%, transparent);
+    stroke: var(--accent, #4c8bf5);
+    stroke-dasharray: 4 3;
+    pointer-events: none;
+  }
+
+  .align {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  .help-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: grid;
+    place-items: center;
+    background: rgb(0 0 0 / 0.4);
+  }
+
+  .help {
+    max-width: min(560px, 92vw);
+    max-height: 86vh;
+    overflow: auto;
+    padding: 16px 20px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg);
+    color: var(--fg);
+  }
+
+  .help dl {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 6px 14px;
+    margin: 0 0 12px;
+  }
+
+  .help dd {
+    margin: 0;
+  }
+
+  .help kbd {
+    font-family: inherit;
+    font-size: 12px;
+    padding: 1px 6px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    white-space: nowrap;
   }
 
   .edge-line.temp {

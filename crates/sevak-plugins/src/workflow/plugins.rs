@@ -365,12 +365,17 @@ pub struct TriggersPlugin {
 impl TriggersPlugin {
     /// `None` when the workflow has none of those triggers.
     pub fn new(runtime: Arc<Runtime>) -> Option<Self> {
-        let any = runtime.workflow.nodes.iter().any(|node| {
-            matches!(
-                node.kind,
-                NodeKind::Selection { .. } | NodeKind::Hotkey { .. } | NodeKind::External {}
-            )
-        });
+        let any = runtime
+            .workflow
+            .nodes
+            .iter()
+            .filter(|n| !n.disabled)
+            .any(|node| {
+                matches!(
+                    node.kind,
+                    NodeKind::Selection { .. } | NodeKind::Hotkey { .. } | NodeKind::External {}
+                )
+            });
         any.then(|| Self {
             id: format!("{FAMILY}:{}", runtime.folder),
             runtime,
@@ -461,7 +466,7 @@ impl Plugin for TriggersPlugin {
     fn selection_actions(&self, selection: &Selection) -> Vec<ResultItem> {
         let kind = selection_kind(selection);
         let mut rows = Vec::new();
-        for node in &self.runtime.workflow.nodes {
+        for node in self.runtime.workflow.nodes.iter().filter(|n| !n.disabled) {
             let NodeKind::Selection { accepts } = &node.kind else {
                 continue;
             };
@@ -489,7 +494,11 @@ impl Plugin for TriggersPlugin {
 
     fn resolve(&self, id: &str) -> Option<ResultItem> {
         let node_id = id.strip_prefix(&format!("{}:run:", self.id))?;
-        let node = self.runtime.workflow.node(node_id)?;
+        let node = self
+            .runtime
+            .workflow
+            .node(node_id)
+            .filter(|n| !n.disabled)?;
         matches!(node.kind, NodeKind::Hotkey { .. } | NodeKind::External {})
             .then(|| self.run_row(node))
     }
@@ -505,10 +514,13 @@ impl Plugin for TriggersPlugin {
             .workflow
             .node(&pick.node)
             .filter(|node| {
-                matches!(
-                    node.kind,
-                    NodeKind::Selection { .. } | NodeKind::Hotkey { .. } | NodeKind::External {}
-                )
+                !node.disabled
+                    && matches!(
+                        node.kind,
+                        NodeKind::Selection { .. }
+                            | NodeKind::Hotkey { .. }
+                            | NodeKind::External {}
+                    )
             })
             .ok_or_else(|| PluginError::Unsupported(item.id.clone()))?;
         let mut ctx = Ctx::with_arg(pick.arg);
