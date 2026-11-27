@@ -1164,6 +1164,23 @@
         "shutdown": "Éteindre (demande d'abord)",
         "logout": "Se déconnecter (demande d'abord)",
         "empty_trash": "Vider la corbeille (demande d'abord)"
+      },
+      "delimiter": {
+        "newline": "Saut de ligne",
+        "comma": "Virgule",
+        "tab": "Tabulation",
+        "space": "Espace",
+        "custom": "Texte personnalisé"
+      },
+      "random": {
+        "number": "Nombre",
+        "line": "Ligne de texte",
+        "uuid": "UUID"
+      },
+      "write": {
+        "overwrite": "Le remplacer",
+        "append": "Ajouter à la fin",
+        "prepend": "Ajouter au début"
       }
     },
     "program": {
@@ -1429,6 +1446,145 @@
           },
           "text": {
             "label": "Texte"
+          }
+        }
+      },
+      "split_arg": {
+        "label": "Découper l'argument",
+        "summary": "Découpe l'argument en liste et numérote les parties comme variables.",
+        "fields": {
+          "delimiter": {
+            "label": "Découper à"
+          },
+          "custom": {
+            "label": "Séparateur personnalisé",
+            "hint": "Utilisé quand \"Découper à\" est un texte personnalisé."
+          },
+          "discard_empty": {
+            "label": "Ignorer les parties vides",
+            "hint": "Les parties vides (après rognage, si activé) sont omises."
+          },
+          "trim": {
+            "label": "Rogner les espaces autour de chaque partie"
+          },
+          "prefix": {
+            "label": "Préfixe des variables",
+            "hint": "Les parties sont stockées dans des variables : le préfixe suivi de 1, 2, 3 ... Le préfixe suivi de count donne leur nombre."
+          }
+        }
+      },
+      "join_arg": {
+        "label": "Joindre l'argument",
+        "summary": "Joint une liste (un élément par ligne, ou un tableau JSON) en une seule ligne de texte.",
+        "fields": {
+          "separator": {
+            "label": "Séparateur",
+            "hint": "Écrit entre les éléments. \\n et \\t signifient un saut de ligne et une tabulation."
+          },
+          "discard_empty": {
+            "label": "Ignorer les éléments vides"
+          }
+        }
+      },
+      "random": {
+        "label": "Aléatoire",
+        "summary": "Crée un nombre aléatoire, choisit une ligne au hasard ou crée un UUID.",
+        "fields": {
+          "mode": {
+            "label": "Quoi créer"
+          },
+          "min": {
+            "label": "Plus petit nombre",
+            "hint": "Pour les nombres ; inclus."
+          },
+          "max": {
+            "label": "Plus grand nombre",
+            "hint": "Pour les nombres ; inclus."
+          },
+          "lines": {
+            "label": "Lignes à choisir",
+            "hint": "Pour choisir une ligne : un candidat par ligne."
+          },
+          "variable": {
+            "label": "Stocker dans la variable",
+            "hint": "Laissez vide pour que le résultat devienne l'argument."
+          }
+        }
+      },
+      "expression": {
+        "label": "Calculer",
+        "summary": "Calcule une expression mathématique et stocke le résultat.",
+        "fields": {
+          "expression": {
+            "label": "Expression",
+            "hint": "Les variables de substitution sont remplies d'abord, puis la calculatrice du lanceur l'évalue. Une expression erronée arrête cette branche."
+          },
+          "variable": {
+            "label": "Stocker dans la variable",
+            "hint": "Obligatoire."
+          },
+          "set_arg": {
+            "label": "Faire aussi du résultat l'argument",
+            "hint": "Laissez désactivé pour garder l'argument tel quel."
+          }
+        }
+      },
+      "write_file": {
+        "label": "Écrire un fichier",
+        "summary": "Écrit du texte dans un fichier. Le workflow doit d'abord être autorisé.",
+        "fields": {
+          "path": {
+            "label": "Fichier",
+            "hint": "Un chemin relatif se trouve dans le dossier de données du workflow ; ~ et les chemins complets fonctionnent aussi. Les nœuds suivants reçoivent le chemin."
+          },
+          "content": {
+            "label": "Texte à écrire"
+          },
+          "mode": {
+            "label": "Si le fichier existe"
+          },
+          "create_dirs": {
+            "label": "Créer les dossiers manquants"
+          }
+        }
+      },
+      "debug": {
+        "label": "Débogage",
+        "summary": "Affiche l'argument et les variables dans la fenêtre du lanceur.",
+        "fields": {
+          "passthrough": {
+            "label": "Transmettre l'argument",
+            "hint": "Désactivé, l'argument est vidé pour les nœuds suivants. Ce qui s'affiche n'est jamais écrit dans le journal."
+          }
+        }
+      },
+      "reveal_file": {
+        "label": "Afficher dans le gestionnaire de fichiers",
+        "summary": "Affiche des fichiers ou dossiers dans le gestionnaire de fichiers.",
+        "fields": {
+          "path": {
+            "label": "Fichiers ou dossiers",
+            "hint": "Un par ligne. Un chemin relatif se trouve dans le dossier du workflow."
+          }
+        }
+      },
+      "call_external": {
+        "label": "Appeler un workflow",
+        "summary": "Exécute le déclencheur externe d'un autre workflow et attend sa fin.",
+        "fields": {
+          "workflow": {
+            "label": "Dossier du workflow",
+            "hint": "Le nom de dossier d'un workflow installé et autorisé (ce peut être celui-ci)."
+          },
+          "trigger": {
+            "label": "Id du déclencheur externe",
+            "hint": "L'id d'un nœud de déclencheur externe de ce workflow."
+          },
+          "arg": {
+            "label": "Texte à envoyer"
+          },
+          "pass_variables": {
+            "label": "Envoyer aussi les variables"
           }
         }
       }

@@ -262,7 +262,7 @@ pub(crate) fn random_uuid_v4() -> Option<String> {
 
 /// Stamps the version and variant bits onto 16 random bytes and formats them
 /// as `xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx`, where `y` is one of `8 9 a b`.
-fn format_v4(mut bytes: [u8; 16]) -> String {
+pub(crate) fn format_v4(mut bytes: [u8; 16]) -> String {
     bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
     bytes[8] = (bytes[8] & 0x3f) | 0x80; // RFC 4122 variant
     let mut out = String::with_capacity(36);

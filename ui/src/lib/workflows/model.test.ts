@@ -23,6 +23,7 @@ import {
   toSave,
   uniqueId,
   wouldLoop,
+  type Category,
   type NodeType,
   type Workflow,
 } from "./model";
@@ -81,6 +82,58 @@ describe("the node catalog", () => {
     const needing = KINDS.filter((k) => k.needsApproval).map((k) => k.type).sort();
     expect(needing).toEqual(expect.arrayContaining(["run_script", "script_filter"]));
     expect(kindOf("copy").needsApproval).toBeFalsy();
+  });
+
+  it("offers the utility nodes with their categories, defaults and approval", () => {
+    const expected: Record<string, Category> = {
+      split_arg: "utility",
+      join_arg: "utility",
+      random: "utility",
+      expression: "utility",
+      debug: "utility",
+      write_file: "action",
+      reveal_file: "action",
+      call_external: "action",
+    };
+    for (const [type, category] of Object.entries(expected)) {
+      expect(kindOf(type as NodeType).type, type).toBe(type);
+      expect(kindOf(type as NodeType).category, type).toBe(category);
+    }
+    // Only writing files asks for the user's Allow.
+    const needing = KINDS.filter((k) => k.needsApproval).map((k) => k.type);
+    expect(needing).toContain("write_file");
+    expect(needing).not.toContain("call_external");
+    expect(kindOf("split_arg").defaults()).toEqual({
+      delimiter: "newline",
+      custom: "",
+      discard_empty: true,
+      trim: true,
+      prefix: "split_",
+    });
+    expect(kindOf("random").defaults()).toMatchObject({ mode: "number", min: 1, max: 100 });
+    expect(kindOf("expression").defaults()).toMatchObject({ variable: "result", set_arg: true });
+    expect(kindOf("write_file").fields.find((f) => f.key === "mode")?.options?.map((o) => o.value)).toEqual([
+      "overwrite",
+      "append",
+      "prepend",
+    ]);
+    expect(kindOf("split_arg").fields[0].options?.[4]).toEqual({ value: "custom", label: "Custom text" });
+  });
+
+  it("drops empty optional fields of the new nodes when saving", () => {
+    const w = newWorkflow();
+    w.node.push(
+      { ...makeNode(w, "random", 0, 0), id: "r" },
+      { ...makeNode(w, "join_arg", 0, 0), id: "j" },
+      { ...makeNode(w, "call_external", 0, 0), id: "c", workflow: "other", trigger: "go" },
+    );
+    const saved = toSave(w).node;
+    const random = saved.find((n) => n.id === "r")!;
+    expect(random).not.toHaveProperty("lines");
+    expect(random).not.toHaveProperty("variable");
+    expect(random).toMatchObject({ mode: "number", min: 1, max: 100 });
+    expect(saved.find((n) => n.id === "j")).not.toHaveProperty("discard_empty");
+    expect(saved.find((n) => n.id === "c")).toMatchObject({ workflow: "other", arg: "{query}" });
   });
 
   it("falls back to the first kind for an unknown type", () => {

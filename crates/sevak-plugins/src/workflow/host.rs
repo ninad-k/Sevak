@@ -20,8 +20,10 @@ use sevak_core::bounded_read::{read_to_string_capped, MAX_WORKFLOW_BYTES};
 use sevak_core::{Config, HotkeyBinding, Plugin};
 use sevak_platform::PlatformProvider;
 
-use super::exec::{Ctx, OutputSink, Runtime};
-use super::model::{slug, valid_folder_name, Accepts, Node, NodeKind, Workflow, FAMILY, FILE};
+use super::exec::{Ctx, OutputSink, Registry, Runtime};
+use super::model::{
+    slug, valid_folder_name, Accepts, Node, NodeKind, Workflow, WriteMode, FAMILY, FILE,
+};
 use super::plugins::{run_id, FilterPlugin, KeywordPlugin, TriggersPlugin};
 use super::templates;
 use super::validate::{error_summary, Problem};
@@ -112,7 +114,7 @@ pub struct WorkflowHost {
     declined: Mutex<HashSet<String>>,
     sink: Arc<dyn OutputSink>,
     /// The workflows that may run now, by folder (for `--trigger`).
-    runtimes: Mutex<HashMap<String, Arc<Runtime>>>,
+    runtimes: Arc<Registry>,
 }
 
 impl std::fmt::Debug for WorkflowHost {
@@ -136,7 +138,7 @@ impl WorkflowHost {
             approvals: ApprovalStore::new(approvals_file),
             declined: Mutex::new(HashSet::new()),
             sink,
-            runtimes: Mutex::new(HashMap::new()),
+            runtimes: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -277,6 +279,8 @@ impl WorkflowHost {
             if let Some(plugin) = TriggersPlugin::new(runtime.clone()) {
                 plugins.push(Arc::new(plugin));
             }
+            // For `call_external`: the other workflows that may run.
+            runtime.set_registry(Arc::downgrade(&self.runtimes));
             runtimes.insert(candidate.folder.clone(), runtime);
         }
         let ids: Vec<&str> = plugins.iter().map(|p| p.id()).collect();
@@ -832,6 +836,15 @@ fn node_also_does(node: &Node) -> Option<String> {
         NodeKind::Paste { text, .. } => format!(
             "types text into the app you were using (pastes it): {}",
             dialog::sanitize(text, dialog::MAX_VALUE_CHARS)
+        ),
+        NodeKind::WriteFile { path, mode, .. } => format!(
+            "writes to the file {} ({})",
+            dialog::sanitize(path, dialog::MAX_VALUE_CHARS),
+            match mode {
+                WriteMode::Overwrite => "replacing what it holds",
+                WriteMode::Append => "adding to the end",
+                WriteMode::Prepend => "adding to the start",
+            }
         ),
         NodeKind::OpenUrl { url } => {
             format!(

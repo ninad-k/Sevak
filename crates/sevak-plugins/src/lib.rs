@@ -53,6 +53,7 @@ mod clipboard_store;
 pub mod clock;
 pub mod contacts;
 pub mod currency;
+pub mod datefmt;
 pub mod dictionary;
 pub mod emoji;
 pub mod example_uuid;

@@ -1137,6 +1137,23 @@
         "shutdown": "Herunterfahren (fragt vorher)",
         "logout": "Abmelden (fragt vorher)",
         "empty_trash": "Papierkorb leeren (fragt vorher)"
+      },
+      "delimiter": {
+        "newline": "Zeilenumbruch",
+        "comma": "Komma",
+        "tab": "Tabulator",
+        "space": "Leerzeichen",
+        "custom": "Eigener Text"
+      },
+      "random": {
+        "number": "Zahl",
+        "line": "Textzeile",
+        "uuid": "UUID"
+      },
+      "write": {
+        "overwrite": "Ersetzen",
+        "append": "Am Ende anfügen",
+        "prepend": "Am Anfang einfügen"
       }
     },
     "program": {
@@ -1402,6 +1419,145 @@
           },
           "text": {
             "label": "Text"
+          }
+        }
+      },
+      "split_arg": {
+        "label": "Argument teilen",
+        "summary": "Teilt das Argument in eine Liste und nummeriert die Teile als Variablen.",
+        "fields": {
+          "delimiter": {
+            "label": "Teilen bei"
+          },
+          "custom": {
+            "label": "Eigenes Trennzeichen",
+            "hint": "Wird verwendet, wenn \"Teilen bei\" eigener Text ist."
+          },
+          "discard_empty": {
+            "label": "Leere Teile entfernen",
+            "hint": "Leere Teile (nach dem Kürzen, falls aktiv) werden weggelassen."
+          },
+          "trim": {
+            "label": "Leerzeichen um jeden Teil entfernen"
+          },
+          "prefix": {
+            "label": "Variablenpräfix",
+            "hint": "Die Teile werden als Variablen gespeichert: Präfix plus 1, 2, 3 ... Das Präfix plus count enthält die Anzahl."
+          }
+        }
+      },
+      "join_arg": {
+        "label": "Argument verbinden",
+        "summary": "Verbindet eine Liste (ein Eintrag pro Zeile oder ein JSON-Array) zu einer Textzeile.",
+        "fields": {
+          "separator": {
+            "label": "Trennzeichen",
+            "hint": "Wird zwischen die Einträge geschrieben. \\n und \\t stehen für Zeilenumbruch und Tabulator."
+          },
+          "discard_empty": {
+            "label": "Leere Einträge entfernen"
+          }
+        }
+      },
+      "random": {
+        "label": "Zufall",
+        "summary": "Erzeugt eine Zufallszahl, wählt eine zufällige Zeile oder erzeugt eine UUID.",
+        "fields": {
+          "mode": {
+            "label": "Was erzeugen"
+          },
+          "min": {
+            "label": "Kleinste Zahl",
+            "hint": "Für Zahlen; eingeschlossen."
+          },
+          "max": {
+            "label": "Größte Zahl",
+            "hint": "Für Zahlen; eingeschlossen."
+          },
+          "lines": {
+            "label": "Zeilen zur Auswahl",
+            "hint": "Zum Auswählen einer Zeile: ein Kandidat pro Zeile."
+          },
+          "variable": {
+            "label": "In Variable speichern",
+            "hint": "Leer lassen, damit das Ergebnis zum Argument wird."
+          }
+        }
+      },
+      "expression": {
+        "label": "Berechnen",
+        "summary": "Berechnet einen mathematischen Ausdruck und speichert das Ergebnis.",
+        "fields": {
+          "expression": {
+            "label": "Ausdruck",
+            "hint": "Zuerst werden die Platzhalter ersetzt, dann rechnet der Taschenrechner des Launchers. Ein fehlerhafter Ausdruck beendet diesen Zweig."
+          },
+          "variable": {
+            "label": "In Variable speichern",
+            "hint": "Erforderlich."
+          },
+          "set_arg": {
+            "label": "Ergebnis auch als Argument verwenden",
+            "hint": "Aus lassen, um das Argument zu behalten."
+          }
+        }
+      },
+      "write_file": {
+        "label": "Datei schreiben",
+        "summary": "Schreibt Text in eine Datei. Der Workflow muss vorher erlaubt werden.",
+        "fields": {
+          "path": {
+            "label": "Datei",
+            "hint": "Ein relativer Pfad liegt im Datenordner des Workflows; ~ und vollständige Pfade funktionieren auch. Die folgenden Knoten erhalten den Pfad."
+          },
+          "content": {
+            "label": "Zu schreibender Text"
+          },
+          "mode": {
+            "label": "Falls die Datei existiert"
+          },
+          "create_dirs": {
+            "label": "Fehlende Ordner anlegen"
+          }
+        }
+      },
+      "debug": {
+        "label": "Debug",
+        "summary": "Zeigt das Argument und die Variablen im Launcher-Fenster an.",
+        "fields": {
+          "passthrough": {
+            "label": "Argument weitergeben",
+            "hint": "Aus leert das Argument für die folgenden Knoten. Was angezeigt wird, kommt nie ins Protokoll."
+          }
+        }
+      },
+      "reveal_file": {
+        "label": "Im Dateimanager zeigen",
+        "summary": "Zeigt Dateien oder Ordner im Dateimanager an.",
+        "fields": {
+          "path": {
+            "label": "Dateien oder Ordner",
+            "hint": "Einer pro Zeile. Ein relativer Pfad liegt im Ordner des Workflows."
+          }
+        }
+      },
+      "call_external": {
+        "label": "Workflow aufrufen",
+        "summary": "Führt den externen Auslöser eines anderen Workflows aus und wartet darauf.",
+        "fields": {
+          "workflow": {
+            "label": "Workflow-Ordner",
+            "hint": "Der Ordnername eines installierten, erlaubten Workflows (auch dieser ist möglich)."
+          },
+          "trigger": {
+            "label": "ID des externen Auslösers",
+            "hint": "Die ID eines Knotens für einen externen Auslöser in diesem Workflow."
+          },
+          "arg": {
+            "label": "Zu sendender Text"
+          },
+          "pass_variables": {
+            "label": "Variablen mitschicken"
           }
         }
       }
