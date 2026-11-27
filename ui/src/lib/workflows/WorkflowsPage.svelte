@@ -4,6 +4,7 @@
   import "./workflows.css";
   import { onMount, tick } from "svelte";
   import Toggle from "../Toggle.svelte";
+  import ConfigureForm from "./ConfigureForm.svelte";
   import WorkflowEditor from "./WorkflowEditor.svelte";
   import {
     createWorkflow,
@@ -28,6 +29,8 @@
   let showTemplates = $state(false);
   /** The workflow open in the builder (`folder` null: a new one). */
   let editing = $state<{ folder: string | null; workflow: Workflow } | null>(null);
+  /** The workflow whose settings form is open. */
+  let configuring = $state<string | null>(null);
 
   async function refresh() {
     const result = await listWorkflows();
@@ -75,6 +78,11 @@
     await edit(created.value.folder);
   }
 
+  async function closeConfigure(saved: boolean) {
+    configuring = null;
+    if (saved) await refresh();
+  }
+
   async function remove(row: WorkflowSummary) {
     busy = row.folder;
     const result = await deleteWorkflow(row.folder);
@@ -116,7 +124,7 @@
 </script>
 
 <!-- The list stays out of reach (keyboard included) while the builder covers it. -->
-<div class="wf-page" inert={editing !== null} bind:this={page}>
+<div class="wf-page" inert={editing !== null || configuring !== null} bind:this={page}>
   <h1>{t("workflows.page.title")}</h1>
   <p class="wf-lead">{@html tHtml("workflows.page.lead")}</p>
 
@@ -182,6 +190,11 @@
                 {#if row.warnings > 0}
                   <span class="wf-chip warn">{t("workflows.page.warnings", { count: row.warnings })}</span>
                 {/if}
+                {#if row.missing_config.length > 0 && !row.error}
+                  <span class="wf-chip warn">
+                    {t("workflows.page.needsSettings", { fields: row.missing_config.join(", ") })}
+                  </span>
+                {/if}
                 {#if row.error}
                   <span class="wf-chip error">{t("workflows.page.notLoaded")}</span>
                 {:else if row.needs_approval && !row.approved}
@@ -206,6 +219,16 @@
                   disabled={busy !== null}
                   aria-label={t("workflows.page.reviewLabel", { name: row.name })}
                   onclick={() => review(row)}>{t("workflows.page.review")}</button
+                >
+              {/if}
+              {#if row.configurable && !row.error}
+                <button
+                  type="button"
+                  class="wf-btn small"
+                  class:primary={row.missing_config.length > 0}
+                  disabled={busy !== null}
+                  aria-label={t("workflows.page.configureLabel", { name: row.name })}
+                  onclick={() => (configuring = row.folder)}>{t("workflows.page.configure")}</button
                 >
               {/if}
               {#if !row.error}
@@ -239,6 +262,10 @@
     </ul>
   {/if}
 </div>
+
+{#if configuring}
+  <ConfigureForm folder={configuring} onclose={closeConfigure} />
+{/if}
 
 {#if editing}
   {#key editing.folder ?? "new"}

@@ -19,7 +19,7 @@ use std::path::{Component, Path};
 
 use serde::Serialize;
 
-use crate::config::{AppearanceConfig, WindowConfig};
+use crate::config::{AppearanceConfig, OpenAnimation, WindowConfig};
 use crate::theme_file::ThemeSpec;
 use crate::theme_store;
 
@@ -30,6 +30,8 @@ pub const MIN_OPACITY: u32 = 30;
 pub const MAX_OPACITY: u32 = 100;
 pub const MAX_RADIUS: u32 = 32;
 pub const DEFAULT_RADIUS: u32 = 14;
+pub const MAX_ANIMATION_MS: u32 = 400;
+pub const DEFAULT_ANIMATION_MS: u32 = 150;
 /// Largest custom stylesheet that is loaded.
 pub const MAX_CUSTOM_CSS_BYTES: u64 = 64 * 1024;
 const MAX_FONT_FAMILY_CHARS: usize = 200;
@@ -50,6 +52,10 @@ pub struct ResolvedAppearance {
     pub blur: bool,
     /// The corner radius in pixels the card ends up with.
     pub radius: u32,
+    /// How the launcher appears (`fade`, `fade_scale` or `none`).
+    pub open_animation: OpenAnimation,
+    /// Length of the open animation in milliseconds.
+    pub animation_ms: u32,
 }
 
 /// Windows rounds a backdrop window's corners itself, with a fixed radius.
@@ -181,6 +187,16 @@ pub fn resolve(appearance: &AppearanceConfig, config_dir: &Path) -> ResolvedAppe
     );
     rules.push(format!("--card-opacity: {}", f64::from(opacity) / 100.0));
 
+    let animation_ms = pick(
+        "animation_ms",
+        appearance.animation_ms,
+        DEFAULT_ANIMATION_MS,
+        0..=MAX_ANIMATION_MS,
+        None,
+        &mut warn,
+    );
+    rules.push(format!("--open-ms: {animation_ms}ms"));
+
     let configured_family = appearance.font_family.trim();
     let family = if configured_family.is_empty() {
         themed.as_ref().map_or("", |spec| spec.font.family.as_str())
@@ -214,6 +230,8 @@ pub fn resolve(appearance: &AppearanceConfig, config_dir: &Path) -> ResolvedAppe
         window_width: layout.and_then(|l| l.window_width),
         blur,
         radius,
+        open_animation: appearance.open_animation,
+        animation_ms,
     }
 }
 
@@ -731,6 +749,26 @@ accent = \"#88c0d0\"
         let expected = if cfg!(windows) { 8 } else { 20 };
         assert_eq!(resolved.radius, expected);
         assert!(resolved.css.contains(&format!("--radius: {expected}px")));
+    }
+
+    #[test]
+    fn animation_settings_are_validated_and_resolved() {
+        let mut config = appearance();
+        let resolved = resolve(&config, Path::new(""));
+        assert_eq!(resolved.animation_ms, 150);
+        assert_eq!(resolved.open_animation, OpenAnimation::Fade);
+        assert!(resolved.css.contains("--open-ms: 150ms"));
+        config.animation_ms = 0;
+        config.open_animation = OpenAnimation::None;
+        let resolved = resolve(&config, Path::new(""));
+        assert!(resolved.css.contains("--open-ms: 0ms"));
+        assert_eq!(resolved.open_animation, OpenAnimation::None);
+        assert!(resolved.warnings.is_empty());
+        config.animation_ms = 401;
+        let resolved = resolve(&config, Path::new(""));
+        assert_eq!(resolved.animation_ms, 150);
+        assert_eq!(resolved.warnings.len(), 1);
+        assert!(validate(&config).is_err());
     }
 
     #[test]

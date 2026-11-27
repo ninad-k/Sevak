@@ -9,7 +9,7 @@
 //! A workflow that only opens links, copies or shows text needs no approval:
 //! it cannot do more than the standard result actions can.
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -20,8 +20,12 @@ use sevak_core::bounded_read::{read_to_string_capped, MAX_WORKFLOW_BYTES};
 use sevak_core::{Config, HotkeyBinding, Plugin};
 use sevak_platform::PlatformProvider;
 
-use super::exec::{Ctx, OutputSink, Runtime};
-use super::model::{slug, valid_folder_name, Accepts, Node, NodeKind, Workflow, FAMILY, FILE};
+use super::config::{self, ConfigField};
+use super::exec::{Ctx, OutputSink, Registry, Runtime};
+use super::filters::{FileFilterPlugin, ListFilterPlugin, RunningAppsPlugin};
+use super::model::{
+    slug, valid_folder_name, Accepts, Node, NodeKind, Workflow, WriteMode, FAMILY, FILE,
+};
 use super::plugins::{run_id, FilterPlugin, KeywordPlugin, TriggersPlugin};
 use super::templates;
 use super::validate::{error_summary, Problem};
@@ -86,6 +90,22 @@ pub struct Summary {
     pub keyword_warnings: Vec<String>,
     /// Why it cannot load.
     pub error: Option<String>,
+    /// It has a settings form (`[[config]]`).
+    pub configurable: bool,
+    /// The labels of the required settings that still have no value.
+    pub missing_config: Vec<String>,
+}
+
+/// A workflow's settings form with what the user has set so far.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ConfigForm {
+    pub folder: String,
+    pub name: String,
+    pub fields: Vec<ConfigField>,
+    /// The user's saved values (checkbox `true`/`false`, slider a number, all
+    /// as text).
+    pub values: BTreeMap<String, String>,
+    pub missing: Vec<String>,
 }
 
 /// A workflow opened for editing.
@@ -107,12 +127,14 @@ pub struct WorkflowHost {
     dir: PathBuf,
     /// Parent of the per-workflow data folders.
     data_dir: PathBuf,
+    /// Parent of the per-workflow cache folders (`alfred_workflow_cache`).
+    cache_dir: PathBuf,
     approvals: ApprovalStore,
     /// Workflows the user said "not now" to, until Sevak restarts.
     declined: Mutex<HashSet<String>>,
     sink: Arc<dyn OutputSink>,
     /// The workflows that may run now, by folder (for `--trigger`).
-    runtimes: Mutex<HashMap<String, Arc<Runtime>>>,
+    runtimes: Arc<Registry>,
 }
 
 impl std::fmt::Debug for WorkflowHost {
@@ -132,12 +154,26 @@ impl WorkflowHost {
     ) -> Self {
         Self {
             dir,
+            cache_dir: data_dir.with_file_name("workflows-cache"),
             data_dir,
             approvals: ApprovalStore::new(approvals_file),
             declined: Mutex::new(HashSet::new()),
             sink,
-            runtimes: Mutex::new(HashMap::new()),
+            runtimes: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    /// Where the workflows' cache folders live, apart from their data
+    /// folders (which hold what must be kept).
+    #[must_use]
+    pub fn with_cache_dir(mut self, cache_dir: PathBuf) -> Self {
+        self.cache_dir = cache_dir;
+        self
+    }
+
+    /// The data folder of workflow `folder` (the caller checked the name).
+    fn data_dir_of(&self, folder: &str) -> PathBuf {
+        self.data_dir.join(folder)
     }
 
     /// The folder workflows live in.
@@ -249,21 +285,34 @@ impl WorkflowHost {
                 tracing::info!(workflow = id, "workflow skipped (not approved yet)");
                 continue;
             }
-            let runtime = Runtime::new(
+            let data_dir = self.data_dir_of(&candidate.folder);
+            let runtime = Runtime::configured(
                 &candidate.folder,
                 candidate.dir.clone(),
-                self.data_dir.join(&candidate.folder),
+                data_dir.clone(),
+                self.cache_dir.join(&candidate.folder),
+                config::load_user_values(&data_dir),
                 candidate.workflow.clone(),
                 Arc::clone(platform),
                 Arc::clone(&self.sink),
                 config,
             );
-            for node in &candidate.workflow.nodes {
+            for node in candidate.workflow.nodes.iter().filter(|n| !n.disabled) {
                 let plugin: Option<Arc<dyn Plugin>> = match &node.kind {
                     NodeKind::Keyword { .. } => KeywordPlugin::new(runtime.clone(), node)
                         .map(|plugin| Arc::new(plugin) as Arc<dyn Plugin>),
                     NodeKind::ScriptFilter { .. } => {
                         FilterPlugin::new(runtime.clone(), node, Arc::clone(platform))
+                            .map(|plugin| Arc::new(plugin) as Arc<dyn Plugin>)
+                    }
+                    NodeKind::ListFilter { .. } => ListFilterPlugin::new(runtime.clone(), node)
+                        .map(|plugin| Arc::new(plugin) as Arc<dyn Plugin>),
+                    NodeKind::FileFilter { .. } => {
+                        FileFilterPlugin::new(runtime.clone(), node, &config.files)
+                            .map(|plugin| Arc::new(plugin) as Arc<dyn Plugin>)
+                    }
+                    NodeKind::RunningApps { .. } => {
+                        RunningAppsPlugin::new(runtime.clone(), node, Arc::clone(platform))
                             .map(|plugin| Arc::new(plugin) as Arc<dyn Plugin>)
                     }
                     _ => None,
@@ -277,6 +326,8 @@ impl WorkflowHost {
             if let Some(plugin) = TriggersPlugin::new(runtime.clone()) {
                 plugins.push(Arc::new(plugin));
             }
+            // For `call_external`: the other workflows that may run.
+            runtime.set_registry(Arc::downgrade(&self.runtimes));
             runtimes.insert(candidate.folder.clone(), runtime);
         }
         let ids: Vec<&str> = plugins.iter().map(|p| p.id()).collect();
@@ -323,7 +374,7 @@ impl WorkflowHost {
             if !candidate.approved || !Self::enabled(config, &candidate) {
                 continue;
             }
-            for node in &candidate.workflow.nodes {
+            for node in candidate.workflow.nodes.iter().filter(|n| !n.disabled) {
                 if let NodeKind::Hotkey { key } = &node.kind {
                     bindings.push(HotkeyBinding {
                         key: key.trim().to_owned(),
@@ -351,7 +402,12 @@ impl WorkflowHost {
                      allowed?)."
                 )
             })?;
-        match runtime.workflow.node(node).map(|n| &n.kind) {
+        match runtime
+            .workflow
+            .node(node)
+            .filter(|n| !n.disabled)
+            .map(|n| &n.kind)
+        {
             Some(NodeKind::External {}) => runtime.start(node, Ctx::with_arg(arg)),
             Some(_) => Err(format!(
                 "\"{node}\" in \"{folder}\" is not an external trigger."
@@ -435,6 +491,10 @@ impl WorkflowHost {
                         author: c.workflow.author.clone(),
                         version: c.workflow.version.clone(),
                         error: None,
+                        configurable: !c.workflow.config.is_empty(),
+                        missing_config: c.workflow.missing_config(&config::load_user_values(
+                            &self.data_dir_of(&c.folder),
+                        )),
                         folder: c.folder,
                     }
                 }
@@ -451,6 +511,8 @@ impl WorkflowHost {
                     warnings: 0,
                     keyword_warnings: Vec::new(),
                     error: Some(error),
+                    configurable: false,
+                    missing_config: Vec::new(),
                     folder,
                 },
             })
@@ -526,12 +588,57 @@ impl WorkflowHost {
     }
 
     /// Deletes a workflow folder (the user confirmed in the settings window).
-    pub fn delete(&self, folder: &str) -> Result<(), String> {
+    /// With `with_data` its data folder (files its scripts kept, the user's
+    /// saved settings) and cache folder go too; otherwise they stay, so
+    /// installing the workflow again finds its settings.
+    pub fn delete(&self, folder: &str, with_data: bool) -> Result<(), String> {
         let dir = self.folder_dir(folder)?;
         if !dir.join(FILE).is_file() {
             return Err("that folder is not a workflow".to_owned());
         }
-        fs::remove_dir_all(&dir).map_err(|err| format!("could not delete the workflow: {err}"))
+        fs::remove_dir_all(&dir).map_err(|err| format!("could not delete the workflow: {err}"))?;
+        if with_data {
+            for extra in [self.data_dir_of(folder), self.cache_dir.join(folder)] {
+                match fs::remove_dir_all(&extra) {
+                    Ok(()) => {}
+                    Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+                    Err(err) => {
+                        return Err(format!(
+                            "the workflow is deleted, but its data could not be: {err}"
+                        ))
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    // ---- the settings form -------------------------------------------------
+
+    /// The settings form of `folder` and the user's values.
+    pub fn config_form(&self, folder: &str) -> Result<ConfigForm, String> {
+        let loaded = self.load(folder)?;
+        let values = config::load_user_values(&self.data_dir_of(folder));
+        Ok(ConfigForm {
+            folder: folder.to_owned(),
+            name: display_name(&loaded.workflow, folder),
+            missing: loaded.workflow.missing_config(&values),
+            fields: loaded.workflow.config.clone(),
+            values,
+        })
+    }
+
+    /// Saves what the user entered in the settings form. Every value is
+    /// checked against its field first; nothing is written when one is wrong.
+    pub fn set_config_values(
+        &self,
+        folder: &str,
+        values: &BTreeMap<String, serde_json::Value>,
+    ) -> Result<(), String> {
+        let loaded = self.load(folder)?;
+        let checked = loaded.workflow.check_user_values(values)?;
+        config::save_user_values(&self.data_dir_of(folder), &checked)
+            .map_err(|err| format!("could not save the settings: {err}"))
     }
 
     /// Switches a workflow on or off by rewriting its `enabled` field.
@@ -592,6 +699,13 @@ fn write_atomic(path: &Path, text: &str) -> io::Result<()> {
 /// that cannot run code, so moving a box or retitling a node does not ask
 /// again, while editing a script does.
 ///
+/// `note` is documentation and is not hashed. `disabled` flags only remove
+/// behaviour, but they are hashed *when set*: otherwise a workflow approved
+/// with a disabled connection or node could later be hand-edited to switch it
+/// on, running something the user approved only as dormant. Workflows that do
+/// not use the flags hash exactly as before. Disabled nodes outside the code
+/// running ones are not hashed (they cannot run code either way).
+///
 /// `None` for a workflow that runs nothing.
 pub fn approval_key(workflow: &Workflow, dir: &Path) -> Option<String> {
     if !workflow.needs_approval() {
@@ -608,18 +722,46 @@ pub fn approval_key(workflow: &Workflow, dir: &Path) -> Option<String> {
                 .unwrap_or_default()
                 .as_bytes(),
         );
+        if node.disabled {
+            hasher.feed("disabled", b"node");
+        }
         for file in script_files(node) {
             hasher.file(dir, &file);
+        }
+        // A UI's `{file:...}` includes, however deep, are part of what it is.
+        if let NodeKind::ShowUi {
+            definition, file, ..
+        } = &node.kind
+        {
+            for included in super::ui::include_files(definition.as_deref(), file.as_deref(), dir) {
+                hasher.file(dir, &included);
+            }
         }
     }
     for conn in &workflow.connections {
         hasher.feed("from", conn.from.as_bytes());
         hasher.feed("port", conn.port.as_bytes());
         hasher.feed("to", conn.to.as_bytes());
+        // Fed only when set, so keys of existing workflows stay valid.
+        if conn.disabled {
+            hasher.feed("disabled", b"connection");
+        }
     }
     for (name, value) in &workflow.variables {
         hasher.feed("var", name.as_bytes());
         hasher.feed("value", value.as_bytes());
+    }
+    // The author's `[[config]]` (names, kinds, defaults, options) can set the
+    // same variables as `[variables]`, so it is part of what was approved.
+    // Only the values the user saves stay outside the key. Fed only when
+    // present, so keys of existing workflows stay valid.
+    if !workflow.config.is_empty() {
+        hasher.feed(
+            "config",
+            serde_json::to_string(&workflow.config)
+                .unwrap_or_default()
+                .as_bytes(),
+        );
     }
     Some(hasher.finish())
 }
@@ -634,6 +776,16 @@ fn script_files(node: &Node) -> Vec<String> {
         | NodeKind::ScriptFilter {
             command, script, ..
         } => (command.as_slice(), script.as_deref()),
+        // The UI file whose buttons run the node's scripts.
+        NodeKind::ShowUi {
+            file: Some(file), ..
+        } => {
+            return if relative_inside(Path::new(""), file).is_some() {
+                vec![file.clone()]
+            } else {
+                Vec::new()
+            };
+        }
         // The file an open-file node starts, when it ships in the folder.
         NodeKind::OpenFile { path } => {
             return if relative_inside(Path::new(""), path).is_some() {
@@ -670,7 +822,10 @@ pub fn describe(workflow: &Workflow, dir: &Path) -> String {
             NodeKind::Keyword { keyword, .. } => {
                 starts.insert(format!("typing the keyword {}", show(keyword)));
             }
-            NodeKind::ScriptFilter { keyword, .. } => {
+            NodeKind::ScriptFilter { keyword, .. }
+            | NodeKind::ListFilter { keyword, .. }
+            | NodeKind::FileFilter { keyword, .. }
+            | NodeKind::RunningApps { keyword, .. } => {
                 starts.insert(format!("typing the keyword {}", show(keyword)));
             }
             NodeKind::Hotkey { key } => {
@@ -820,6 +975,23 @@ fn node_runs(node: &Node) -> Option<String> {
         NodeKind::TerminalCommand { command } => {
             format!("runs in a terminal: {}", dialog::sanitize_command(command))
         }
+        NodeKind::ShowUi { scripts, .. } if !scripts.is_empty() => {
+            let listed: Vec<String> = scripts
+                .iter()
+                .map(|(id, script)| {
+                    format!(
+                        "{} ({}): {}",
+                        show(id),
+                        show(&script.language),
+                        dialog::sanitize_command(&script.script)
+                    )
+                })
+                .collect();
+            format!(
+                "opens a window whose buttons can run these scripts: {}",
+                listed.join("; ")
+            )
+        }
         _ => return None,
     })
 }
@@ -832,6 +1004,31 @@ fn node_also_does(node: &Node) -> Option<String> {
         NodeKind::Paste { text, .. } => format!(
             "types text into the app you were using (pastes it): {}",
             dialog::sanitize(text, dialog::MAX_VALUE_CHARS)
+        ),
+        NodeKind::WriteFile { path, mode, .. } => format!(
+            "writes to the file {} ({})",
+            dialog::sanitize(path, dialog::MAX_VALUE_CHARS),
+            match mode {
+                WriteMode::Overwrite => "replacing what it holds",
+                WriteMode::Append => "adding to the end",
+                WriteMode::Prepend => "adding to the start",
+            }
+        ),
+        NodeKind::CallExternal {
+            workflow,
+            trigger,
+            arg,
+            pass_variables,
+        } => format!(
+            "runs workflow {}'s trigger {} with the argument {}{}",
+            dialog::sanitize(workflow, dialog::MAX_VALUE_CHARS),
+            dialog::sanitize(trigger, dialog::MAX_VALUE_CHARS),
+            dialog::sanitize(arg, dialog::MAX_VALUE_CHARS),
+            if *pass_variables {
+                " and passes this workflow's variables to it"
+            } else {
+                ""
+            }
         ),
         NodeKind::OpenUrl { url } => {
             format!(
@@ -1042,6 +1239,28 @@ mod tests {
     }
 
     #[test]
+    fn a_disabled_keyword_trigger_is_not_registered_and_notes_do_not_matter() {
+        let f = fixture();
+        let dir = write(&f, "scripted", &scripted(r#"["python3", "main.py"]"#));
+        fs::write(dir.join("main.py"), "print(1)").unwrap();
+        let config = Config::default();
+        f.host.approve(&f.host.pending(&config)[0]).unwrap();
+        assert!(!f.host.keyword_uses(&config).is_empty());
+
+        // A note is documentation: still approved.
+        let noted =
+            scripted(r#"["python3", "main.py"]"#).replace("x = 10", "x = 10\n note = \"hi\"");
+        write(&f, "scripted", &noted);
+        assert!(f.host.pending(&config).is_empty(), "notes are not behavior");
+
+        // Disabling the trigger drops its keyword...
+        let off =
+            scripted(r#"["python3", "main.py"]"#).replace("x = 10", "x = 10\n disabled = true");
+        write(&f, "scripted", &off);
+        assert!(f.host.keyword_uses(&config).is_empty());
+    }
+
+    #[test]
     fn approval_keys_ignore_everything_that_cannot_run_code() {
         let dir = Path::new("wf");
         let a = Workflow::from_toml(&scripted(r#"["tool"]"#)).unwrap();
@@ -1058,6 +1277,8 @@ mod tests {
             title: String::new(),
             x: 0.0,
             y: 0.0,
+            note: String::new(),
+            disabled: false,
             kind: NodeKind::Copy { text: "x".into() },
         });
         assert_eq!(approval_key(&a, dir), approval_key(&c, dir));
@@ -1336,6 +1557,7 @@ mod tests {
             from: "o".into(),
             port: "out".into(),
             to: "k".into(),
+            disabled: false,
         });
         let err = f.host.save(Some("harmless"), &broken).unwrap_err();
         assert!(err.contains("problems"), "{err}");
@@ -1348,7 +1570,7 @@ mod tests {
         for bad in ["../x", "a/b", "..", ""] {
             assert!(f.host.save(Some(bad), &workflow).is_err(), "{bad:?}");
             assert!(f.host.load(bad).is_err(), "{bad:?}");
-            assert!(f.host.delete(bad).is_err(), "{bad:?}");
+            assert!(f.host.delete(bad, true).is_err(), "{bad:?}");
         }
         assert!(f.host.load("missing").is_err());
     }
@@ -1366,12 +1588,155 @@ mod tests {
         assert!(rows[0].needs_approval && !rows[0].approved);
         assert!(f.host.create_from_template("nope").is_err());
 
-        f.host.delete("script-filter").unwrap();
+        f.host.delete("script-filter", false).unwrap();
         assert!(!dir.exists());
-        assert!(f.host.delete("script-filter").is_err());
+        assert!(f.host.delete("script-filter", false).is_err());
         // Only workflow folders can be deleted this way.
         fs::create_dir_all(f.root.path().join("config/workflows/precious")).unwrap();
-        assert!(f.host.delete("precious").is_err());
+        assert!(f.host.delete("precious", false).is_err());
+    }
+
+    const CONFIGURED: &str = r#"
+        name = "Configured"
+        [[node]]
+        id = "k"
+        type = "keyword"
+        keyword = "cfg"
+        [[node]]
+        id = "c"
+        type = "copy"
+        text = "{var:host}"
+        [[connection]]
+        from = "k"
+        to = "c"
+        [[config]]
+        variable = "host"
+        label = "Server"
+        required = true
+        [[config]]
+        variable = "volume"
+        kind = "slider"
+        min = 0
+        max = 10
+        [[config]]
+        variable = "flag"
+        kind = "checkbox"
+    "#;
+
+    fn data_of(f: &Fixture, folder: &str) -> PathBuf {
+        f.root.path().join("data").join("workflows").join(folder)
+    }
+
+    #[test]
+    fn settings_are_saved_outside_the_workflow_folder_and_survive_a_reinstall() {
+        let f = fixture();
+        let dir = write(&f, "configured", CONFIGURED);
+        let form = f.host.config_form("configured").unwrap();
+        assert_eq!(form.fields.len(), 3);
+        assert_eq!(form.missing, ["Server"]);
+        assert!(form.values.is_empty());
+        let summary = &f
+            .host
+            .summaries(&Config::default(), &KeywordOwners::default())[0];
+        assert!(summary.configurable);
+        assert_eq!(summary.missing_config, ["Server"]);
+
+        let values = serde_json::json!({"host": "h.example", "volume": 7, "flag": true});
+        let values = serde_json::from_value(values).unwrap();
+        f.host.set_config_values("configured", &values).unwrap();
+        let form = f.host.config_form("configured").unwrap();
+        assert!(form.missing.is_empty());
+        assert_eq!(form.values["host"], "h.example");
+        assert_eq!(form.values["volume"], "7");
+        assert_eq!(form.values["flag"], "true");
+        assert!(data_of(&f, "configured").join("user-config.json").is_file());
+        assert!(
+            !dir.join("user-config.json").exists(),
+            "never inside the workflow folder"
+        );
+
+        let plugins = f.host.plugins(&Config::default(), &platform());
+        let keyword = plugins
+            .iter()
+            .find(|p| p.id() == "workflow:configured:k")
+            .unwrap();
+        assert_eq!(keyword.query("cfg")[0].subtitle, "");
+
+        // Deleting and installing again finds the settings.
+        f.host.delete("configured", false).unwrap();
+        write(&f, "configured", CONFIGURED);
+        assert_eq!(
+            f.host.config_form("configured").unwrap().values["host"],
+            "h.example"
+        );
+    }
+
+    #[test]
+    fn settings_are_validated_before_anything_is_written() {
+        let f = fixture();
+        write(&f, "configured", CONFIGURED);
+        let set = |value: serde_json::Value| {
+            f.host
+                .set_config_values("configured", &serde_json::from_value(value).unwrap())
+        };
+        assert!(set(serde_json::json!({"volume": 11})).is_err());
+        assert!(set(serde_json::json!({"flag": "maybe"})).is_err());
+        assert!(set(serde_json::json!({"host": 5})).is_err());
+        assert!(set(serde_json::json!({"nope": "x"})).is_err());
+        assert!(
+            !data_of(&f, "configured").join("user-config.json").exists(),
+            "a refused form writes nothing"
+        );
+        assert!(f.host.config_form("missing").is_err());
+    }
+
+    #[test]
+    fn an_unconfigured_workflow_loads_but_says_it_needs_settings() {
+        let f = fixture();
+        write(&f, "configured", CONFIGURED);
+        let plugins = f.host.plugins(&Config::default(), &platform());
+        let keyword = plugins
+            .iter()
+            .find(|p| p.id() == "workflow:configured:k")
+            .unwrap();
+        let rows = keyword.query("cfg");
+        assert_eq!(rows[0].subtitle, "Configure Configured first: Server");
+    }
+
+    #[test]
+    fn deleting_with_data_removes_data_cache_and_settings_and_without_keeps_them() {
+        let f = fixture();
+        let cache = f.root.path().join("data").join("workflows-cache");
+        for folder in ["keep", "wipe"] {
+            write(&f, folder, HARMLESS);
+            fs::create_dir_all(data_of(&f, folder)).unwrap();
+            fs::write(data_of(&f, folder).join("state.txt"), "x").unwrap();
+            fs::write(data_of(&f, folder).join("user-config.json"), "{}").unwrap();
+            fs::create_dir_all(cache.join(folder)).unwrap();
+            fs::write(cache.join(folder).join("c.bin"), "x").unwrap();
+        }
+        // A neighbour's data is never touched.
+        fs::create_dir_all(data_of(&f, "neighbour")).unwrap();
+
+        f.host.delete("keep", false).unwrap();
+        assert!(!f.root.path().join("config/workflows/keep").exists());
+        assert!(data_of(&f, "keep").join("state.txt").is_file());
+        assert!(cache.join("keep").join("c.bin").is_file());
+
+        f.host.delete("wipe", true).unwrap();
+        assert!(!f.root.path().join("config/workflows/wipe").exists());
+        assert!(!data_of(&f, "wipe").exists());
+        assert!(!cache.join("wipe").exists());
+        assert!(data_of(&f, "neighbour").is_dir());
+        assert!(data_of(&f, "keep").is_dir());
+    }
+
+    #[test]
+    fn deleting_with_data_works_when_there_is_no_data_yet() {
+        let f = fixture();
+        write(&f, "plain", HARMLESS);
+        f.host.delete("plain", true).unwrap();
+        assert!(f.host.delete("../x", true).is_err());
     }
 
     #[test]
@@ -1576,6 +1941,39 @@ mod tests {
     }
 
     #[test]
+    fn a_workflow_that_calls_another_needs_approval_and_names_the_target() {
+        let f = fixture();
+        write(
+            &f,
+            "caller",
+            r#"
+            name = "Caller"
+            [[node]]
+            id = "k"
+            type = "keyword"
+            keyword = "cl"
+            [[node]]
+            id = "c"
+            type = "call_external"
+            workflow = "victim"
+            trigger = "wipe"
+            arg = "{query}"
+            pass_variables = true
+            [[connection]]
+            from = "k"
+            to = "c"
+            "#,
+        );
+        let config = Config::default();
+        assert!(f.host.plugins(&config, &platform()).is_empty());
+        let pending = f.host.pending(&config);
+        assert_eq!(pending.len(), 1);
+        let shown = pending[0].describe();
+        assert!(shown.contains("runs workflow victim's trigger wipe"));
+        assert!(shown.contains("passes this workflow's variables"));
+    }
+
+    #[test]
     fn author_text_in_the_workflow_dialog_cannot_fake_lines_or_hide() {
         let shown = described(
             "name = \"x\"\n\
@@ -1634,6 +2032,8 @@ mod tests {
             title: String::new(),
             x: 0.0,
             y: 0.0,
+            note: String::new(),
+            disabled: false,
             kind: NodeKind::RunScript {
                 command: command.iter().map(|s| (*s).to_owned()).collect(),
                 script: script.map(str::to_owned),

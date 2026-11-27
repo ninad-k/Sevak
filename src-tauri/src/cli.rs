@@ -30,7 +30,9 @@ Options:
       --startup-result PATH
                          Write the startup command's numeric exit code to PATH
                          (for installers running it as the signed-in user)
-      --settings         Open the settings window
+      --settings [SECTION]
+                         Open the settings window, on SECTION if given (for
+                         example `clipboard`, `hotkeys`, `usage`)
       --quit             Quit the running instance
       --setup-hotkey [KEY]
                          Bind KEY (default: the hotkey from config.toml) to
@@ -74,6 +76,8 @@ pub enum Launch {
     Toggle,
     Background,
     Settings,
+    /// Settings, opened on this section.
+    SettingsAt(String),
     Quit,
     /// Show the search bar with this text typed in.
     Query(String),
@@ -98,6 +102,7 @@ impl fmt::Debug for Launch {
             Self::Toggle => f.write_str("Toggle"),
             Self::Background => f.write_str("Background"),
             Self::Settings => f.write_str("Settings"),
+            Self::SettingsAt(section) => write!(f, "SettingsAt({section})"),
             Self::Quit => f.write_str("Quit"),
             Self::Query(text) => write!(f, "Query({} chars)", text.chars().count()),
             Self::Run(id) => write!(f, "Run({id})"),
@@ -292,7 +297,24 @@ where
         match name {
             "--toggle" => set(&mut invocation, Invocation::Run(Launch::Toggle))?,
             "--background" => set(&mut invocation, Invocation::Run(Launch::Background))?,
-            "--settings" => set(&mut invocation, Invocation::Run(Launch::Settings))?,
+            "--settings" => {
+                // The section is optional; an option after it is not the section.
+                let launch = match args.peek() {
+                    Some(next) if !next.starts_with('-') => {
+                        let section = next.trim().to_lowercase();
+                        if !sevak_plugins::settings_search::settings_index()
+                            .iter()
+                            .any(|entry| entry.id == section && entry.section == section)
+                        {
+                            return Err(format!("--settings: unknown section \"{next}\""));
+                        }
+                        args.next();
+                        Launch::SettingsAt(section)
+                    }
+                    _ => Launch::Settings,
+                };
+                set(&mut invocation, Invocation::Run(launch))?;
+            }
             "--quit" => set(&mut invocation, Invocation::Run(Launch::Quit))?,
             "--actions" => set(&mut invocation, Invocation::Run(Launch::Actions))?,
             "-h" | "--help" => set(&mut invocation, Invocation::Help)?,
@@ -820,6 +842,15 @@ mod tests {
         assert_eq!(launch(&["sevak", "--toggle"]), Launch::Toggle);
         assert_eq!(launch(&["sevak", "--quit"]), Launch::Quit);
         assert_eq!(launch(&["sevak", "--settings"]), Launch::Settings);
+        assert_eq!(
+            launch(&["sevak", "--settings", "clipboard"]),
+            Launch::SettingsAt("clipboard".to_owned())
+        );
+        assert!(parse(["--settings", "nope"]).is_err());
+        assert_eq!(
+            launch(&["sevak", "--settings", "--config", "c.toml"]),
+            Launch::Settings
+        );
         assert_eq!(launch(&["sevak", "--background"]), Launch::Background);
         assert_eq!(launch(&["sevak", "--actions"]), Launch::Actions);
         assert_eq!(

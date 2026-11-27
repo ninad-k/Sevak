@@ -58,6 +58,9 @@
     >
       <Toggle bind:checked={config.contacts.use_system} label={t("pages.integrations.systemContacts")} />
     </Row>
+    <Row label={t("pages.integrations.contactPhotos")} hint={t("pages.integrations.contactPhotosHint")}>
+      <Toggle bind:checked={config.contacts.show_photos} label={t("pages.integrations.contactPhotos")} />
+    </Row>
     <ListEditor
       id="contacts-vcards"
       bind:items={config.contacts.vcard_files}

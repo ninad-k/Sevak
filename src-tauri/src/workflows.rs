@@ -14,10 +14,13 @@ use sevak_plugins::keywords::{workflow_key, KeywordOwners};
 use sevak_plugins::workflow::gallery::{self, Dirs, Entry, Kind};
 use sevak_plugins::workflow::templates;
 use sevak_plugins::workflow::{
-    Candidate, Loaded, OutputSink, Problem, Saved, Scanned, Summary, Workflow,
+    Candidate, ConfigForm, Loaded, OutputSink, Problem, Saved, Scanned, Summary, UiHost, UiOutcome,
+    UiSession, Workflow,
 };
 use tauri::{AppHandle, Manager};
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+use tauri_plugin_dialog::{
+    DialogExt, MessageDialogButtons, MessageDialogKind, MessageDialogResult,
+};
 use tauri_plugin_notification::NotificationExt;
 
 use crate::direct::{OutputKind, OutputPayload, ShowPayload};
@@ -42,7 +45,7 @@ impl TauriSink {
         let _ = self.app.set(app.clone());
     }
 
-    fn show(&self, kind: OutputKind, heading: &str, text: &str) {
+    fn show(&self, kind: OutputKind, heading: &str, text: &str, markdown: bool) {
         let Some(app) = self.app.get() else { return };
         window::show_with(
             app,
@@ -51,6 +54,7 @@ impl TauriSink {
                     kind,
                     heading: heading.to_owned(),
                     text: text.to_owned(),
+                    markdown,
                 }),
                 ..ShowPayload::default()
             },
@@ -73,11 +77,21 @@ impl OutputSink for TauriSink {
     }
 
     fn large_type(&self, text: &str) {
-        self.show(OutputKind::LargeType, "", text);
+        self.show(OutputKind::LargeType, "", text, false);
     }
 
     fn text_view(&self, heading: &str, text: &str) {
-        self.show(OutputKind::TextView, heading, text);
+        self.show(OutputKind::TextView, heading, text, false);
+    }
+
+    fn text_view_markdown(&self, heading: &str, text: &str, markdown: bool) {
+        self.show(OutputKind::TextView, heading, text, markdown);
+    }
+
+    // Shown to the user in the launcher window, never logged: it holds what
+    // they typed and selected.
+    fn debug(&self, text: &str) {
+        self.show(OutputKind::TextView, "Workflow debug", text, false);
     }
 
     fn confirm(&self, question: &str) -> bool {
@@ -85,6 +99,55 @@ impl OutputSink for TauriSink {
             return false;
         };
         commands::confirmed(app, "Continue", question.to_owned())
+    }
+
+    fn ask(&self, heading: &str, message: &str, buttons: &[String]) -> Option<usize> {
+        let app = self.app.get()?;
+        // One or two buttons get an explicit Cancel, so closing the dialog is
+        // told apart from a button; with three, the third doubles as Cancel.
+        let layout = match buttons {
+            [only] => MessageDialogButtons::OkCancelCustom(only.clone(), CANCEL_LABEL.to_owned()),
+            [first, second] => MessageDialogButtons::YesNoCancelCustom(
+                first.clone(),
+                second.clone(),
+                CANCEL_LABEL.to_owned(),
+            ),
+            [first, second, third] => MessageDialogButtons::YesNoCancelCustom(
+                first.clone(),
+                second.clone(),
+                third.clone(),
+            ),
+            _ => return None,
+        };
+        // Runs on the workflow's own thread, never the main thread.
+        let result = app
+            .dialog()
+            .message(message.to_owned())
+            .title(heading.to_owned())
+            .kind(MessageDialogKind::Info)
+            .buttons(layout)
+            .blocking_show_with_result();
+        answer_index(&result, buttons)
+    }
+
+    fn show_ui(&self, session: &UiSession, host: &dyn UiHost) -> Option<UiOutcome> {
+        let app = self.app.get()?;
+        crate::sevak_ui::show(app, session, host)
+    }
+}
+
+/// The label of the button that dismisses a dialog with fewer than three buttons.
+const CANCEL_LABEL: &str = "Cancel";
+
+/// Which button of `buttons` the dialog's answer names (`None`: dismissed).
+/// macOS answers with the label of the pressed button; the other systems may
+/// answer Yes / No / Cancel by position.
+fn answer_index(result: &MessageDialogResult, buttons: &[String]) -> Option<usize> {
+    match result {
+        MessageDialogResult::Custom(label) => buttons.iter().position(|b| b == label),
+        MessageDialogResult::Yes | MessageDialogResult::Ok => Some(0),
+        MessageDialogResult::No => Some(1).filter(|index| *index < buttons.len()),
+        MessageDialogResult::Cancel => Some(2).filter(|index| *index < buttons.len()),
     }
 }
 
@@ -401,7 +464,50 @@ pub async fn create_workflow(app: AppHandle, template: String) -> Result<Saved, 
     .await
 }
 
-/// Deletes a workflow folder after asking.
+const DELETE_LABEL: &str = "Delete";
+const DELETE_WITH_DATA_LABEL: &str = "Delete with data";
+
+/// What the user chose in the delete dialog.
+enum DeleteChoice {
+    Cancel,
+    Delete,
+    DeleteWithData,
+}
+
+/// A native dialog with three buttons: Delete, Delete with data, Cancel.
+/// Anything else (closing it, no dialog) cancels: a deletion never happens by
+/// accident. Blocks, so only call it off the main thread.
+fn ask_delete(app: &AppHandle, name: &str) -> DeleteChoice {
+    let buttons = [
+        DELETE_LABEL.to_owned(),
+        DELETE_WITH_DATA_LABEL.to_owned(),
+        CANCEL_LABEL.to_owned(),
+    ];
+    let result = app
+        .dialog()
+        .message(format!(
+            "Delete the workflow \"{name}\" and everything in its folder?\n\n\
+             \"{DELETE_LABEL}\" keeps the files it saved and its settings, so installing it \
+             again finds them. \"{DELETE_WITH_DATA_LABEL}\" also removes its data folder, \
+             cache and settings."
+        ))
+        .title("Sevak")
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::YesNoCancelCustom(
+            buttons[0].clone(),
+            buttons[1].clone(),
+            buttons[2].clone(),
+        ))
+        .blocking_show_with_result();
+    match answer_index(&result, &buttons) {
+        Some(0) => DeleteChoice::Delete,
+        Some(1) => DeleteChoice::DeleteWithData,
+        _ => DeleteChoice::Cancel,
+    }
+}
+
+/// Deletes a workflow folder after asking: plainly, or together with its
+/// data, cache and settings.
 #[tauri::command]
 pub async fn delete_workflow(app: AppHandle, folder: String) -> Result<bool, String> {
     blocking(move || {
@@ -410,17 +516,47 @@ pub async fn delete_workflow(app: AppHandle, folder: String) -> Result<bool, Str
             .load(&folder)
             .map(|loaded| display_name(&loaded.workflow, &folder))
             .unwrap_or_else(|_| folder.clone());
-        if !commands::confirmed(
-            &app,
-            "Delete",
-            format!("Delete the workflow \"{name}\" and everything in its folder?"),
-        ) {
-            return Ok(false);
-        }
-        workflows.delete(&folder)?;
-        tracing::info!(workflow = folder, "workflow deleted");
+        let with_data = match ask_delete(&app, &name) {
+            DeleteChoice::Cancel => return Ok(false),
+            DeleteChoice::Delete => false,
+            DeleteChoice::DeleteWithData => true,
+        };
+        workflows.delete(&folder, with_data)?;
+        tracing::info!(workflow = folder, with_data, "workflow deleted");
         app::reload(&app);
         Ok(true)
+    })
+    .await
+}
+
+/// The settings form of a workflow with the user's values.
+#[tauri::command]
+pub async fn get_workflow_config(app: AppHandle, folder: String) -> Result<ConfigForm, String> {
+    blocking(move || {
+        app.state::<AppState>()
+            .search
+            .workflows
+            .config_form(&folder)
+    })
+    .await
+}
+
+/// Saves the settings form (every value is checked against its field) and
+/// reloads, so the workflow runs with the new values.
+#[tauri::command]
+pub async fn set_workflow_config(
+    app: AppHandle,
+    folder: String,
+    values: std::collections::BTreeMap<String, serde_json::Value>,
+) -> Result<(), String> {
+    blocking(move || {
+        app.state::<AppState>()
+            .search
+            .workflows
+            .set_config_values(&folder, &values)?;
+        tracing::info!(workflow = folder, "workflow settings saved");
+        app::reload(&app);
+        Ok(())
     })
     .await
 }
@@ -663,6 +799,20 @@ pub async fn gallery_install(app: AppHandle, id: String) -> Result<Installed, St
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_dialog_answer_names_a_button_or_nothing() {
+        let two = ["Yes".to_owned(), "No".to_owned()];
+        let three = ["A".to_owned(), "B".to_owned(), "C".to_owned()];
+        let custom = |label: &str| MessageDialogResult::Custom(label.to_owned());
+        assert_eq!(answer_index(&custom("No"), &two), Some(1));
+        assert_eq!(answer_index(&custom("Cancel"), &two), None);
+        assert_eq!(answer_index(&MessageDialogResult::Yes, &two), Some(0));
+        assert_eq!(answer_index(&MessageDialogResult::No, &two), Some(1));
+        assert_eq!(answer_index(&MessageDialogResult::Cancel, &two), None);
+        assert_eq!(answer_index(&MessageDialogResult::Cancel, &three), Some(2));
+        assert_eq!(answer_index(&MessageDialogResult::No, &two[..1]), None);
+    }
 
     #[test]
     fn the_template_list_matches_the_engine() {

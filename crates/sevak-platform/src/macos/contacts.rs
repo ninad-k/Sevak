@@ -179,5 +179,6 @@ unsafe fn convert(contact: &CNContact) -> Option<Contact> {
         phones,
         company,
         card_id: Some(identifier).filter(|id| !id.is_empty()),
+        photo: None,
     })
 }

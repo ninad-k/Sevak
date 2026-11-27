@@ -49,9 +49,22 @@ fn engine_options(config: &Config) -> EngineOptions {
             .fallback_web_search
             .keywords()
             .iter()
-            .map(|keyword| format!("web:{keyword}"))
+            .map(|keyword| {
+                // The plugin is named after its engine's first alias, and the
+                // fallback may name any of them.
+                let primary = config
+                    .web_search
+                    .iter()
+                    .find(|engine| sevak_core::keyword::matches(&engine.keyword, keyword))
+                    .map_or(keyword.as_str(), |engine| {
+                        sevak_core::keyword::primary(&engine.keyword)
+                    });
+                format!("web:{primary}")
+            })
             .collect(),
         query_history: config.search.query_history,
+        history_persist: config.search.history_persist,
+        history_retention_secs: config.search.history_retention_secs(),
     }
 }
 
@@ -72,6 +85,14 @@ fn all_plugins(
     // The `backup settings` / `restore settings` commands (see `backup`).
     if config.plugins.is_enabled("backup") {
         plugins.push(Arc::new(crate::backup::BackupPlugin));
+    }
+    // `? ` finds a setting and opens Settings on its section.
+    if config.plugins.is_enabled("settings") {
+        plugins.push(Arc::new(
+            sevak_plugins::settings_search::SettingsSearchPlugin::new(Arc::new(
+                crate::settings::open_from_launcher,
+            )),
+        ));
     }
     plugins.extend(extensions.plugins(config));
     // A keyword two plugins answer is not an error, but say so once.
@@ -266,19 +287,25 @@ impl Search {
     pub fn new(paths: &AppPaths, config: &Config) -> Self {
         let platform: Arc<dyn PlatformProvider> = Arc::from(native_provider());
         let usage = load_usage(&paths.usage_file);
-        let scripts = Arc::new(ScriptPluginHost::new(
-            paths.config_dir.join("plugins"),
-            paths.data_dir.join("plugins"),
-            paths.data_dir.join("script-plugin-approvals.json"),
-        ));
+        let scripts = Arc::new(
+            ScriptPluginHost::new(
+                paths.config_dir.join("plugins"),
+                paths.data_dir.join("plugins"),
+                paths.data_dir.join("script-plugin-approvals.json"),
+            )
+            .with_cache_dir(paths.local_data_dir.join("cache").join("plugins")),
+        );
         let sink = Arc::new(TauriSink::default());
-        let workflows = Arc::new(WorkflowHost::new(
-            paths.config_dir.join("workflows"),
-            paths.data_dir.join("workflows"),
-            // The same file as the script plugins': one list of what is allowed.
-            paths.data_dir.join("script-plugin-approvals.json"),
-            sink.clone(),
-        ));
+        let workflows = Arc::new(
+            WorkflowHost::new(
+                paths.config_dir.join("workflows"),
+                paths.data_dir.join("workflows"),
+                // The same file as the script plugins': one list of what is allowed.
+                paths.data_dir.join("script-plugin-approvals.json"),
+                sink.clone(),
+            )
+            .with_cache_dir(paths.local_data_dir.join("cache").join("workflows")),
+        );
         let extensions = extensions::build_host(paths);
         let engine = build_engine(
             config,
@@ -288,6 +315,11 @@ impl Search {
             &workflows,
             &extensions,
         );
+        let saver = UsageSaver::new(paths.usage_file.clone());
+        if !config.search.history_persist {
+            // The engine dropped the history it loaded; write the file without it.
+            saver.poke();
+        }
         Self {
             icons: IconStore::new(platform.clone()),
             platform,
@@ -299,7 +331,7 @@ impl Search {
             latest: Mutex::new(Latest::default()),
             next_ticket: AtomicU64::new(1),
             selection_ticket: AtomicU64::new(0),
-            saver: UsageSaver::new(paths.usage_file.clone()),
+            saver,
             indexing: AtomicUsize::new(0),
             reload_generation: AtomicU64::new(0),
             refresh_failures: Mutex::new(Vec::new()),
@@ -367,6 +399,7 @@ impl Search {
         plugins: Vec<Arc<dyn Plugin>>,
         options: EngineOptions,
     ) -> bool {
+        let transient = !options.history_persist;
         let old = {
             let mut current = self
                 .engine
@@ -381,6 +414,10 @@ impl Search {
         // The replaced plugins' background work (script plugin processes) stops
         // now rather than whenever the last in-flight query lets go of them.
         old.shutdown();
+        if transient {
+            // Whatever history an earlier setting saved is removed from the file.
+            self.saver.poke();
+        }
         true
     }
 }
@@ -450,6 +487,7 @@ pub fn start(app: &AppHandle) {
         .attach_notifier(&results_notifier(app));
     state.search.sink.attach(app);
     extensions::attach(app);
+    crate::settings::attach(app);
     script_plugins::review_new(app);
     workflows::review_new(app);
 

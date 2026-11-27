@@ -90,8 +90,9 @@ and were built and validated in [this native-extension workflow run](https://git
 A package for a platform appears here only once it was built by that workflow;
 Sevak shows "no build for your platform" for any platform an entry does not list.
 
-**Themes** (`themes/<Name>.toml`): the eight built-in ones (Sevak Light and
-Dark, Nord, Dracula, Solarized Light and Dark, Gruvbox, High Contrast) and
+**Themes** (`themes/<Name>.toml`): the eleven built-in ones (Sevak Light and
+Dark, Nord, Dracula, Solarized Light and Dark, Gruvbox, High Contrast, Sevak Glass
+Light and Dark, Sevak Violet) and
 Tokyo Night, Catppuccin Mocha, Catppuccin Latte, Rosé Pine, One Dark, Everforest
 Dark, Ayu Mirage, Nightfox, GitHub Light, GitHub Dark and Sevak Amber Glass.
 

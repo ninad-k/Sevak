@@ -6,7 +6,10 @@
 //! keyword and both show results. [`KeywordOwners`] is the one list of every
 //! keyword in use that those checks share. Keywords are compared
 //! case-insensitively; an empty keyword (a search turned off) is not in use.
+//! A keyword written `a||b` has several aliases (see `sevak_core::keyword`):
+//! each one is in use on its own.
 
+use sevak_core::keyword::{self, ALIAS_SEPARATOR};
 use sevak_core::Config;
 
 use crate::script::ScriptPluginHost;
@@ -21,13 +24,15 @@ pub const FIXED_KEYWORDS: &[(&str, &str)] = &[
     (":", "the emoji picker"),
     ("@", "contacts"),
     ("uuid", "the UUID generator"),
+    ("?", "the Sevak settings search"),
+    ("!", "the query history"),
     ("ext", "the extension store"),
     ("store", "the extension store"),
 ];
 
 /// A keyword the user can change in `[files]`, `[bookmarks]`, `[tasks]`,
 /// `[media]`, `[window_management]`, `[contacts]`, `[onepassword]`, `[dictionary]`, `[ai]`,
-/// `[ssh]`, `[projects]`, `[calendar]`, `[clock]` or `[passwords]`.
+/// `[ssh]`, `[projects]`, `[calendar]`, `[recent]`, `[clock]` or `[passwords]`.
 #[derive(Debug, Clone, Copy)]
 pub struct ConfigurableKeyword<'a> {
     /// How an error message names the setting ("files", "dictionary").
@@ -42,7 +47,7 @@ pub struct ConfigurableKeyword<'a> {
 
 /// Every configurable built-in keyword, as the config has it (untrimmed, and
 /// empty when the search is off).
-pub fn configurable_keywords(config: &Config) -> [ConfigurableKeyword<'_>; 18] {
+pub fn configurable_keywords(config: &Config) -> [ConfigurableKeyword<'_>; 19] {
     let entry = |label, keyword, owner| ConfigurableKeyword {
         label,
         keyword,
@@ -102,6 +107,11 @@ pub fn configurable_keywords(config: &Config) -> [ConfigurableKeyword<'_>; 18] {
             "recent projects",
         ),
         required("calendar", &config.calendar.keyword, "the calendar"),
+        required(
+            "recent documents",
+            &config.recent.keyword,
+            "recent documents",
+        ),
         required("world clock", &config.clock.keyword, "the world clock"),
         required(
             "password generator",
@@ -201,10 +211,20 @@ impl KeywordOwners {
         owners
     }
 
-    /// Adds one keyword. An empty one (a search that is off) is ignored.
+    /// Adds one keyword, or one use per alias of `a||b`. An empty one (a
+    /// search that is off) is ignored.
     pub fn push(&mut self, usage: KeywordUse) {
-        if !usage.keyword.is_empty() {
-            self.uses.push(usage);
+        if !usage.keyword.contains(ALIAS_SEPARATOR) {
+            if !usage.keyword.is_empty() {
+                self.uses.push(usage);
+            }
+            return;
+        }
+        for alias in keyword::aliases(&usage.keyword) {
+            self.uses.push(KeywordUse {
+                keyword: alias.to_owned(),
+                ..usage.clone()
+            });
         }
     }
 
@@ -243,8 +263,7 @@ impl KeywordOwners {
     ) -> Vec<(String, String)> {
         let mut seen: Vec<String> = Vec::new();
         let mut warnings = Vec::new();
-        for keyword in keywords {
-            let keyword = keyword.trim();
+        for keyword in keywords.into_iter().flat_map(keyword::aliases) {
             let lower = keyword.to_lowercase();
             if lower.is_empty() || seen.contains(&lower) {
                 continue;
@@ -357,6 +376,25 @@ mod tests {
         assert_eq!(owners.owners_of("f", None), ["the files search"]);
         assert_eq!(owners.owners_of(">", None), ["terminal commands"]);
         assert_eq!(owners.owners_of("define", None), ["the dictionary"]);
+    }
+
+    #[test]
+    fn every_alias_of_a_keyword_is_in_use() {
+        let mut config = Config::default();
+        config.tasks.keyword = "todo||t2".into();
+        config.web_search[0].keyword = "g||google".into();
+        let owners = KeywordOwners::builtin(&config);
+        assert_eq!(owners.owners_of("t2", None), ["automation tasks"]);
+        assert_eq!(owners.owners_of("TODO", None), ["automation tasks"]);
+        assert_eq!(owners.owners_of("google", None), ["web search Google"]);
+        assert!(owners.owners_of("todo||t2", None).is_empty());
+        // A workflow answering one alias is a warning for that alias only.
+        let mut owners = owners;
+        owners.push(workflow("x||t2", "docs", "Docs"));
+        let warnings = owners.warnings_for(Some(&workflow_key("docs")), ["x||t2"]);
+        assert_eq!(warnings.len(), 1);
+        assert_eq!(warnings[0].0, "t2");
+        assert_eq!(owners.shared().len(), 1);
     }
 
     #[test]

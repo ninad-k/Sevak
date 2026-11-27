@@ -225,3 +225,14 @@ textarea.wf-input {
 .wf-msg.warn {
   color: var(--warn);
 }
+
+.wf-item {
+  display: grid;
+  gap: 4px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border, rgba(128, 128, 128, 0.25));
+}
+
+.wf-item .wf-btn {
+  justify-self: start;
+}

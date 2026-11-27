@@ -34,7 +34,22 @@ export type NodeType =
   | "delay"
   | "notification"
   | "large_type"
-  | "text_view";
+  | "text_view"
+  | "split_arg"
+  | "join_arg"
+  | "random"
+  | "expression"
+  | "write_file"
+  | "debug"
+  | "reveal_file"
+  | "call_external"
+  | "list_filter"
+  | "file_filter"
+  | "running_apps"
+  | "dialog_conditional"
+  | "speak"
+  | "play_sound"
+  | "show_ui";
 
 export type Category = "trigger" | "input" | "action" | "utility" | "output";
 
@@ -42,6 +57,10 @@ export interface WfNode {
   id: string;
   type: NodeType;
   title?: string;
+  /** A comment shown under the box; never affects what runs. */
+  note?: string;
+  /** Skipped when the workflow runs; its branch stops there. */
+  disabled?: boolean;
   x: number;
   y: number;
   // The fields of the node's kind (`keyword`, `url`, `command`, ...).
@@ -51,9 +70,11 @@ export interface WfNode {
 
 export interface WfConnection {
   from: string;
-  /** `out`, or `then` / `else` for a conditional. */
+  /** `out`, `then` / `else` for a conditional, `button1`..`button3` / `cancel` for a dialog. */
   port?: string;
   to: string;
+  /** Not followed when the workflow runs. */
+  disabled?: boolean;
 }
 
 export interface Workflow {
@@ -66,6 +87,77 @@ export interface Workflow {
   variables: Record<string, string>;
   node: WfNode[];
   connection: WfConnection[];
+  /** The settings form the user fills in (`[[config]]`); see `ConfigField`. */
+  config?: ConfigField[];
+}
+
+export type ConfigKind = "textfield" | "textarea" | "checkbox" | "popup" | "slider" | "filepicker";
+
+export const CONFIG_KINDS: readonly ConfigKind[] = [
+  "textfield",
+  "textarea",
+  "checkbox",
+  "popup",
+  "slider",
+  "filepicker",
+];
+
+export interface ConfigOption {
+  label: string;
+  value: string;
+}
+
+/** One setting of a workflow's form (what the author declares). */
+export interface ConfigField {
+  /** The variable, and environment variable, the value becomes. */
+  variable: string;
+  kind: ConfigKind;
+  label?: string;
+  description?: string;
+  /** Text; a checkbox is "true" or "false", a slider a number. */
+  default?: string;
+  required?: boolean;
+  options?: ConfigOption[];
+  min?: number | null;
+  max?: number | null;
+  step?: number | null;
+  mode?: "file" | "folder";
+  placeholder?: string;
+}
+
+/** The slider range when the author gives none (matches Rust). */
+export const DEFAULT_SLIDER_MIN = 0;
+export const DEFAULT_SLIDER_MAX = 100;
+
+/** A new field with a variable name no other field uses. */
+export function newConfigField(existing: readonly ConfigField[]): ConfigField {
+  const taken = new Set(existing.map((field) => field.variable));
+  let variable = "setting";
+  for (let n = 2; taken.has(variable); n++) variable = `setting_${n}`;
+  return { variable, kind: "textfield", label: "", required: false };
+}
+
+/** Whether `name` can be a configuration variable (matches Rust). */
+export const isConfigVariable = (name: string) => /^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(name);
+
+/** A popup's options as the editor's lines: `value` or `label = value`. */
+export function optionsToText(options: readonly ConfigOption[] | undefined): string {
+  return (options ?? [])
+    .map((option) => (option.label && option.label !== option.value ? `${option.label} = ${option.value}` : option.value))
+    .join("\n");
+}
+
+export function optionsFromText(text: string): ConfigOption[] {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "")
+    .map((line) => {
+      const at = line.lastIndexOf("=");
+      if (at < 0) return { label: line, value: line };
+      const value = line.slice(at + 1).trim();
+      return { label: line.slice(0, at).trim() || value, value };
+    });
 }
 
 export type Severity = "error" | "warning";
@@ -79,6 +171,9 @@ export interface Problem {
 export const OUT = "out";
 export const THEN = "then";
 export const ELSE = "else";
+export const CANCEL = "cancel";
+/** Most buttons a dialog node shows. */
+export const MAX_DIALOG_BUTTONS = 3;
 
 // ---- the catalog ----------------------------------------------------------
 
@@ -91,7 +186,9 @@ export type FieldKind =
   | "lines"
   | "env"
   | "accepts"
-  | "tristate";
+  | "tristate"
+  | "items"
+  | "json";
 
 export interface FieldDef {
   key: string;
@@ -186,6 +283,12 @@ const TESTS = [
   "not_empty",
 ] as const;
 
+const DELIMITERS = ["newline", "comma", "tab", "space", "custom"] as const;
+
+const RANDOM_MODES = ["number", "line", "uuid"] as const;
+
+const WRITE_MODES = ["overwrite", "append", "prepend"] as const;
+
 const SYSTEM_COMMANDS = [
   "lock",
   "sleep",
@@ -195,6 +298,10 @@ const SYSTEM_COMMANDS = [
   "logout",
   "empty_trash",
 ] as const;
+
+const FILE_SCOPES = ["any", "files", "folders"] as const;
+
+const APP_OUTPUTS = ["name", "path", "pid"] as const;
 
 const PROGRAM_FIELDS: RawField[] = [
   {
@@ -298,6 +405,7 @@ export const KINDS: KindDef[] = (
         max: 60000,
         placeholder: "3000",
       },
+      { key: "filter_results", kind: "checkbox", optional: true, hint: true },
     ],
     defaults: () => ({ keyword: "", command: [], script: "script.py" }),
   },
@@ -514,8 +622,204 @@ export const KINDS: KindDef[] = (
     fields: [
       { key: "heading", kind: "text", optional: true },
       { key: "text", kind: "textarea", hint: "placeholders" },
+      { key: "markdown", kind: "checkbox", optional: true, hint: true },
     ],
     defaults: () => ({ text: "{query}" }),
+  },
+  {
+    type: "split_arg",
+    category: "utility",
+    fields: [
+      { key: "delimiter", kind: "select", options: { set: "delimiter", values: DELIMITERS } },
+      { key: "custom", kind: "text", mono: true, optional: true, hint: true },
+      { key: "discard_empty", kind: "checkbox", hint: true },
+      { key: "trim", kind: "checkbox" },
+      { key: "prefix", kind: "text", mono: true, placeholder: "split_", hint: true },
+    ],
+    defaults: () => ({
+      delimiter: "newline",
+      custom: "",
+      discard_empty: true,
+      trim: true,
+      prefix: "split_",
+    }),
+  },
+  {
+    type: "join_arg",
+    category: "utility",
+    fields: [
+      { key: "separator", kind: "text", mono: true, hint: true },
+      { key: "discard_empty", kind: "checkbox", optional: true },
+    ],
+    defaults: () => ({ separator: ", ", discard_empty: false }),
+  },
+  {
+    type: "random",
+    category: "utility",
+    fields: [
+      { key: "mode", kind: "select", options: { set: "random", values: RANDOM_MODES } },
+      { key: "min", kind: "number", hint: true },
+      { key: "max", kind: "number", hint: true },
+      { key: "lines", kind: "textarea", optional: true, hint: "placeholders" },
+      { key: "variable", kind: "text", mono: true, optional: true, hint: true },
+    ],
+    defaults: () => ({ mode: "number", min: 1, max: 100, lines: "", variable: "" }),
+  },
+  {
+    type: "expression",
+    category: "utility",
+    fields: [
+      { key: "expression", kind: "text", mono: true, placeholder: "{var:count} + 1", hint: true },
+      { key: "variable", kind: "text", mono: true, hint: true },
+      { key: "set_arg", kind: "checkbox", hint: true },
+    ],
+    defaults: () => ({ expression: "{query}", variable: "result", set_arg: true }),
+  },
+  {
+    type: "write_file",
+    category: "action",
+    needsApproval: true,
+    fields: [
+      { key: "path", kind: "text", mono: true, placeholder: "notes.txt", hint: true },
+      { key: "content", kind: "textarea", hint: "placeholders" },
+      { key: "mode", kind: "select", options: { set: "write", values: WRITE_MODES } },
+      { key: "create_dirs", kind: "checkbox", optional: true },
+    ],
+    defaults: () => ({ path: "", content: "{query}", mode: "overwrite", create_dirs: false }),
+  },
+  {
+    type: "debug",
+    category: "utility",
+    fields: [{ key: "passthrough", kind: "checkbox", hint: true }],
+    defaults: () => ({ passthrough: true }),
+  },
+  {
+    type: "reveal_file",
+    category: "action",
+    fields: [{ key: "path", kind: "textarea", mono: true, hint: true }],
+    defaults: () => ({ path: "{query}" }),
+  },
+  {
+    type: "call_external",
+    category: "action",
+    needsApproval: true,
+    fields: [
+      { key: "workflow", kind: "text", mono: true, placeholder: "my-flow", hint: true },
+      { key: "trigger", kind: "text", mono: true, placeholder: "go", hint: true },
+      { key: "arg", kind: "text", hint: "placeholders" },
+      { key: "pass_variables", kind: "checkbox", optional: true },
+    ],
+    defaults: () => ({ workflow: "", trigger: "", arg: "{query}", pass_variables: false }),
+  },
+  {
+    type: "list_filter",
+    category: "input",
+    fields: [
+      { key: "keyword", kind: "text", mono: true, placeholder: "pick" },
+      { key: "items", kind: "items", hint: true },
+    ],
+    defaults: () => ({ keyword: "", items: [{ title: "", subtitle: "", arg: "" }] }),
+  },
+  {
+    type: "file_filter",
+    category: "input",
+    fields: [
+      { key: "keyword", kind: "text", mono: true, placeholder: "docs" },
+      {
+        key: "folders",
+        kind: "lines",
+        mono: true,
+        optional: true,
+        placeholder: "~/Documents",
+        hint: true,
+      },
+      {
+        key: "extensions",
+        kind: "lines",
+        mono: true,
+        optional: true,
+        placeholder: "pdf",
+        hint: true,
+      },
+      {
+        key: "scope",
+        kind: "select",
+        optional: true,
+        options: { set: "fileScope", values: FILE_SCOPES },
+      },
+    ],
+    defaults: () => ({ keyword: "", folders: [], extensions: [], scope: "any" }),
+  },
+  {
+    type: "running_apps",
+    category: "input",
+    fields: [
+      { key: "keyword", kind: "text", mono: true, placeholder: "apps" },
+      {
+        key: "output",
+        kind: "select",
+        optional: true,
+        options: { set: "appOutput", values: APP_OUTPUTS },
+        hint: true,
+      },
+    ],
+    defaults: () => ({ keyword: "", output: "name" }),
+  },
+  {
+    type: "dialog_conditional",
+    category: "utility",
+    fields: [
+      { key: "heading", kind: "text", optional: true },
+      { key: "message", kind: "textarea", hint: "placeholders" },
+      { key: "buttons", kind: "lines", hint: true },
+    ],
+    defaults: () => ({ heading: "", message: "{query}", buttons: ["OK", "Cancel"] }),
+  },
+  {
+    type: "speak",
+    category: "output",
+    fields: [
+      { key: "text", kind: "textarea", hint: "placeholders" },
+      { key: "voice", kind: "text", optional: true, hint: true },
+    ],
+    defaults: () => ({ text: "{query}" }),
+  },
+  {
+    type: "play_sound",
+    category: "output",
+    fields: [
+      {
+        key: "path",
+        kind: "text",
+        mono: true,
+        placeholder: "~/Sounds/ding.wav",
+        hint: true,
+      },
+    ],
+    defaults: () => ({ path: "" }),
+  },
+  {
+    type: "show_ui",
+    category: "output",
+    fields: [
+      {
+        key: "target",
+        kind: "select",
+        options: { set: "uiTarget", values: ["launcher", "window"] },
+      },
+      { key: "definition", kind: "textarea", mono: true, optional: true, hint: true },
+      { key: "file", kind: "text", mono: true, optional: true, placeholder: "ui.json", hint: true },
+      { key: "scripts", kind: "json", mono: true, optional: true, hint: true },
+      { key: "ports", kind: "lines", mono: true, optional: true, hint: true },
+      { key: "titlebar", kind: "checkbox" },
+      { key: "always_on_top", kind: "checkbox" },
+    ],
+    needsApproval: false,
+    defaults: () => ({
+      target: "launcher",
+      definition: SHOW_UI_EXAMPLE,
+      titlebar: true,
+    }),
   },
   ] as RawKind[]
 ).map(localize);
@@ -535,8 +839,59 @@ export const isStart = (node: WfNode) => {
   return category === "trigger" || category === "input";
 };
 
-export const outputPorts = (node: WfNode): string[] =>
-  node.type === "conditional" ? [THEN, ELSE] : [OUT];
+/** A dialog has a port per button (as many as it has labels, at most three) and `cancel`. */
+/** The starting point of a new `show_ui` node. */
+const SHOW_UI_EXAMPLE = JSON.stringify(
+  {
+    title: "Hello",
+    state: { name: "" },
+    root: {
+      type: "column",
+      children: [
+        { type: "textfield", id: "name", placeholder: "Your name", events: { submit: { output: "done" } } },
+        { type: "button", label: "Done", style: "primary", events: { click: { output: "done" } } },
+      ],
+    },
+  },
+  null,
+  2,
+);
+
+/** The `output` ports a show_ui definition names (an estimate; Rust decides). */
+function uiPorts(node: WfNode): string[] {
+  const found: string[] = [];
+  const add = (port: unknown) => {
+    if (typeof port === "string" && port !== "closed" && !found.includes(port)) found.push(port);
+  };
+  const walk = (value: unknown) => {
+    if (Array.isArray(value)) value.forEach(walk);
+    else if (value && typeof value === "object") {
+      const object = value as Record<string, unknown>;
+      add(object.output);
+      Object.values(object).forEach(walk);
+    }
+  };
+  try {
+    const parsed = JSON.parse(String(node.definition ?? "{}")) as Record<string, unknown>;
+    walk(parsed.root);
+    // Templates only count when something uses them.
+    if (JSON.stringify(parsed.root ?? null).includes('"use"')) walk(parsed.templates);
+  } catch {
+    // An unfinished definition names no ports yet.
+  }
+  if (Array.isArray(node.ports)) node.ports.forEach(add);
+  return [...found.filter((p) => /^[a-z0-9_-]{1,32}$/.test(p)), "closed"];
+}
+
+export const outputPorts = (node: WfNode): string[] => {
+  if (node.type === "show_ui") return uiPorts(node);
+  if (node.type === "conditional") return [THEN, ELSE];
+  if (node.type === "dialog_conditional") {
+    const count = Array.isArray(node.buttons) ? Math.min(node.buttons.length, MAX_DIALOG_BUTTONS) : 0;
+    return [...Array.from({ length: Math.max(count, 1) }, (_, i) => `button${i + 1}`), CANCEL];
+  }
+  return [OUT];
+};
 
 export const portOf = (conn: WfConnection) => conn.port ?? OUT;
 
@@ -551,6 +906,7 @@ export function newWorkflow(): Workflow {
     version: "",
     enabled: true,
     variables: {},
+    config: [],
     node: [
       {
         id: "keyword",
@@ -598,6 +954,7 @@ export function normalize(workflow: Workflow): Workflow {
     variables: { ...(workflow.variables ?? {}) },
     node: (workflow.node ?? []).map((node) => ({ ...node, x: node.x ?? 0, y: node.y ?? 0 })),
     connection: (workflow.connection ?? []).map((conn) => ({ ...conn, port: conn.port ?? OUT })),
+    config: (workflow.config ?? []).map((field) => ({ ...field })),
   };
 }
 
@@ -610,6 +967,9 @@ export function toSave(workflow: Workflow): Workflow {
   for (const node of copy.node) {
     node.x = Math.round(node.x);
     node.y = Math.round(node.y);
+    // Left out when unused, so files that never use them stay as they were.
+    if (!node.note || node.note.trim() === "") delete node.note;
+    if (!node.disabled) delete node.disabled;
     const defs = kindOf(node.type).fields;
     for (const field of defs) {
       const value = node[field.key];
@@ -631,8 +991,31 @@ export function toSave(workflow: Workflow): Workflow {
     from: conn.from,
     port: conn.port ?? OUT,
     to: conn.to,
+    ...(conn.disabled ? { disabled: true } : {}),
   }));
+  copy.config = (copy.config ?? []).map(toSaveConfigField);
   return copy;
+}
+
+/** A settings field without what its kind does not use or the author left empty. */
+function toSaveConfigField(field: ConfigField): ConfigField {
+  const kept: ConfigField = { variable: field.variable.trim(), kind: field.kind };
+  const label = field.label?.trim();
+  if (label) kept.label = label;
+  if (field.description?.trim()) kept.description = field.description.trim();
+  if (field.default !== undefined && field.default !== "") kept.default = field.default;
+  if (field.required) kept.required = true;
+  if (field.kind === "popup") kept.options = (field.options ?? []).filter((o) => o.value !== "");
+  if (field.kind === "slider") {
+    if (typeof field.min === "number") kept.min = field.min;
+    if (typeof field.max === "number") kept.max = field.max;
+    if (typeof field.step === "number") kept.step = field.step;
+  }
+  if (field.kind === "filepicker" && field.mode === "folder") kept.mode = "folder";
+  if ((field.kind === "textfield" || field.kind === "textarea") && field.placeholder) {
+    kept.placeholder = field.placeholder;
+  }
+  return kept;
 }
 
 // ---- graph logic ------------------------------------------------------------------
@@ -713,7 +1096,9 @@ export function outPoint(node: WfNode, port: string): Point {
   const ports = outputPorts(node);
   if (ports.length === 1) return { x: node.x + NODE_W, y: node.y + NODE_H / 2 };
   const index = Math.max(0, ports.indexOf(port));
-  return { x: node.x + NODE_W, y: node.y + 22 + index * 24 };
+  // Three or four ports are packed closer to fit the box.
+  const [top, step] = ports.length > 2 ? [10, 15] : [22, 24];
+  return { x: node.x + NODE_W, y: node.y + top + index * step };
 }
 
 export function inPoint(node: WfNode): Point {

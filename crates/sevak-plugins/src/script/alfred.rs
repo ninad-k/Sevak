@@ -21,7 +21,14 @@
 //! | `icon.path`                    | an icon inside the plugin folder                   |
 //! | `valid: false`                 | the row is shown; Enter copies its title           |
 //! | `type: "file"` / `file:skipcheck` | `arg` is a path to open                         |
-//! | `quicklookurl`, `variables`, `text`, `rerun` | ignored                              |
+//! | `quicklookurl`                 | the preview pane: a file path shows the file, an `http(s)` URL is shown as a link (never fetched) |
+//! | `text.copy`, `text.largetype`  | what Ctrl+C copies and what Large Type shows       |
+//! | `match`                        | what the query is matched against, when the workflow node has "Sevak filters results" on |
+//! | `variables` (item and top level) | a workflow's rows pass them on; the item's win   |
+//! | `skipknowledge: true` (top level) | usage statistics never reorder the rows         |
+//! | `cache: {seconds, loosereload}` | results are kept per query, see [`CacheSpec`]     |
+//! | `rerun`                        | the script runs again on that interval, see [`Parsed::rerun`] |
+//! | `strictmods`, `icon.resize`, `iconresize` | accepted and ignored                    |
 //!
 //! `arg` becomes an action by shape: an `http://`, `https://` or `mailto:`
 //! address opens in the browser or mail client; an existing absolute path (or
@@ -49,10 +56,12 @@
 
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use sevak_core::{Action, Modifier, ResultItem};
+use sevak_core::fuzzy::FuzzyQuery;
+use sevak_core::{Action, Modifier, PreviewHint, ResultItem};
 
 use super::items::{clamp_score, expand_tilde, plugin_icon, ItemContext, KeyAllocator, MAX_ITEMS};
 
@@ -60,6 +69,75 @@ use super::items::{clamp_score, expand_tilde, plugin_icon, ItemContext, KeyAlloc
 struct Document {
     #[serde(default)]
     items: Vec<Value>,
+    /// Read leniently (see [`cache_spec`]): a malformed value never fails the
+    /// whole answer.
+    #[serde(default)]
+    cache: Option<Value>,
+    #[serde(default)]
+    rerun: Option<Value>,
+    #[serde(default)]
+    variables: Option<Value>,
+    #[serde(default)]
+    skipknowledge: Option<Value>,
+}
+
+/// Shortest and longest time a script's answer may be cached.
+pub const MIN_CACHE_SECONDS: u64 = 5;
+pub const MAX_CACHE_SECONDS: u64 = 86_400;
+/// Shortest and longest `rerun` interval.
+pub const MIN_RERUN: Duration = Duration::from_millis(100);
+pub const MAX_RERUN: Duration = Duration::from_secs(5);
+
+/// The top-level `cache` of a Script Filter answer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CacheSpec {
+    /// How long the answer counts as fresh (5 to 86 400).
+    pub seconds: u64,
+    /// After that, show the old answer at once while the script runs again.
+    pub loose_reload: bool,
+}
+
+/// Everything one Script Filter answer says.
+#[derive(Debug)]
+pub struct Parsed {
+    pub items: Vec<ResultItem>,
+    pub cache: Option<CacheSpec>,
+    /// Run the script again this often while the same query stays on screen
+    /// (0.1 to 5 seconds).
+    pub rerun: Option<Duration>,
+}
+
+/// How to read an answer.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ParseOptions<'a> {
+    /// Rows carry a [`RawPick`] (a workflow's script filter).
+    pub raw: bool,
+    /// Sevak matches this query against each row's `match` (or title) and
+    /// drops the rows that do not match: the node's "Sevak filters results".
+    pub filter_query: Option<&'a str>,
+}
+
+fn cache_spec(value: &Option<Value>) -> Option<CacheSpec> {
+    let object = value.as_ref()?.as_object()?;
+    let seconds = object.get("seconds")?.as_f64()?;
+    if !seconds.is_finite() || seconds <= 0.0 {
+        return None;
+    }
+    Some(CacheSpec {
+        seconds: (seconds as u64).clamp(MIN_CACHE_SECONDS, MAX_CACHE_SECONDS),
+        loose_reload: object
+            .get("loosereload")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+    })
+}
+
+fn rerun_interval(value: &Option<Value>) -> Option<Duration> {
+    let seconds = value.as_ref()?.as_f64()?;
+    if !seconds.is_finite() || seconds <= 0.0 {
+        return None;
+    }
+    Some(Duration::from_secs_f64(seconds).clamp(MIN_RERUN, MAX_RERUN))
 }
 
 #[derive(Debug, Deserialize)]
@@ -75,6 +153,16 @@ struct AlfredItem {
     kind: Option<String>,
     mods: Option<Map<String, Value>>,
     variables: Option<Map<String, Value>>,
+    quicklookurl: Option<String>,
+    text: Option<AlfredText>,
+    #[serde(rename = "match")]
+    matcher: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct AlfredText {
+    copy: Option<String>,
+    largetype: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -128,20 +216,46 @@ impl RawPick {
 }
 
 /// Parses the whole stdout of an Alfred script.
+#[cfg(test)]
 pub fn parse(ctx: ItemContext<'_>, stdout: &str) -> Result<Vec<ResultItem>, String> {
-    parse_with(ctx, stdout, false)
+    parse_document(ctx, stdout, ParseOptions::default()).map(|parsed| parsed.items)
 }
 
 /// Like [`parse`], for a workflow's script filter: rows carry a [`RawPick`]
 /// instead of an action.
+#[cfg(test)]
 pub fn parse_workflow(ctx: ItemContext<'_>, stdout: &str) -> Result<Vec<ResultItem>, String> {
-    parse_with(ctx, stdout, true)
+    parse_document(
+        ctx,
+        stdout,
+        ParseOptions {
+            raw: true,
+            filter_query: None,
+        },
+    )
+    .map(|parsed| parsed.items)
 }
 
-fn parse_with(ctx: ItemContext<'_>, stdout: &str, raw: bool) -> Result<Vec<ResultItem>, String> {
+/// The rows plus what the top level of the answer asks for.
+pub fn parse_document(
+    ctx: ItemContext<'_>,
+    stdout: &str,
+    options: ParseOptions<'_>,
+) -> Result<Parsed, String> {
+    let raw = options.raw;
     let text = stdout.trim_start_matches('\u{feff}').trim();
     let document: Document = serde_json::from_str(text)
         .map_err(|err| format!("the output is not Script Filter JSON: {err}"))?;
+    let top_variables = match &document.variables {
+        Some(Value::Object(map)) => variables_of(&Some(map.clone())),
+        _ => BTreeMap::new(),
+    };
+    let keep_order = matches!(document.skipknowledge, Some(Value::Bool(true)));
+    let mut matcher = options
+        .filter_query
+        .map(str::trim)
+        .filter(|query| !query.is_empty())
+        .map(FuzzyQuery::new);
     let mut keys = KeyAllocator::default();
     let mut items = Vec::new();
     for (index, value) in document.items.iter().take(MAX_ITEMS).enumerate() {
@@ -156,6 +270,21 @@ fn parse_with(ctx: ItemContext<'_>, stdout: &str, raw: bool) -> Result<Vec<Resul
         if title.is_empty() {
             continue;
         }
+        let mut score = clamp_score(None, index);
+        if let Some(matcher) = matcher.as_mut() {
+            let haystack = item
+                .matcher
+                .as_deref()
+                .filter(|text| !text.trim().is_empty())
+                .unwrap_or(&title);
+            let Some(found) = matcher.score(haystack) else {
+                continue;
+            };
+            if !keep_order {
+                // The script's order breaks ties.
+                score = clamp_score(Some(f64::from(found) + 1.0 / (index as f64 + 2.0)), index);
+            }
+        }
         let key = keys.unique(
             item.uid
                 .as_deref()
@@ -163,14 +292,17 @@ fn parse_with(ctx: ItemContext<'_>, stdout: &str, raw: bool) -> Result<Vec<Resul
                 .unwrap_or(&title),
         );
         let action = if raw {
-            pick_action(&item, None)
+            pick_action(&item, None, &top_variables)
         } else {
             action_for(&item, &title)
         };
         // Alfred orders by the script, so scripts never give a score.
         let mut result = ResultItem::new(ctx.plugin_id, key, title.clone(), action)
             .with_subtitle(item.subtitle.clone().unwrap_or_default().trim())
-            .with_score(clamp_score(None, index));
+            .with_score(score);
+        if keep_order {
+            result = result.keep_order();
+        }
         if let Some(autocomplete) = item.autocomplete.as_deref().filter(|a| !a.is_empty()) {
             result = result.with_autocomplete(autocomplete);
         }
@@ -184,10 +316,53 @@ fn parse_with(ctx: ItemContext<'_>, stdout: &str, raw: bool) -> Result<Vec<Resul
         if let Some(icon) = icon {
             result = result.with_icon(icon);
         }
-        result = add_mods(result, &item, &title, raw);
+        if let Some(preview) = item
+            .quicklookurl
+            .as_deref()
+            .and_then(|url| preview_hint(url, &title))
+        {
+            result = result.with_preview(preview);
+        }
+        if let Some(text) = &item.text {
+            if let Some(copy) = text.copy.as_deref().filter(|text| !text.is_empty()) {
+                result = result.with_copy_text(copy);
+            }
+            if let Some(large) = text.largetype.as_deref().filter(|text| !text.is_empty()) {
+                result = result.with_large_text(large);
+            }
+        }
+        result = add_mods(result, &item, &title, raw, &top_variables);
         items.push(result);
     }
-    Ok(items)
+    Ok(Parsed {
+        items,
+        cache: cache_spec(&document.cache),
+        rerun: rerun_interval(&document.rerun),
+    })
+}
+
+/// `quicklookurl` as a preview: a web address is shown as a link (the preview
+/// never fetches it); an absolute path, `~/...` or `file://` URL shows the
+/// file. Anything else (a relative path, another scheme) is ignored.
+fn preview_hint(url: &str, title: &str) -> Option<PreviewHint> {
+    let url = url.trim();
+    let lower = url.to_ascii_lowercase();
+    if lower.starts_with("http://") || lower.starts_with("https://") {
+        return Some(PreviewHint::Url {
+            url: url.to_owned(),
+            title: Some(title.to_owned()),
+        });
+    }
+    let path_text = if lower.starts_with("file://") {
+        url["file://".len()..].to_owned()
+    } else {
+        url.to_owned()
+    };
+    if path_text.is_empty() || path_text.contains("://") {
+        return None;
+    }
+    let path = expand_tilde(&path_text);
+    path.is_absolute().then_some(PreviewHint::Path { path })
 }
 
 /// The `arg` of an item or a mod: the first string of an array, a plain
@@ -219,8 +394,14 @@ fn variables_of(variables: &Option<Map<String, Value>>) -> BTreeMap<String, Stri
 }
 
 /// The row's main action in a workflow: the raw `arg` and `variables`.
-fn pick_action(item: &AlfredItem, modifier: Option<&AlfredMod>) -> Action {
-    let mut variables = variables_of(&item.variables);
+fn pick_action(
+    item: &AlfredItem,
+    modifier: Option<&AlfredMod>,
+    top_variables: &BTreeMap<String, String>,
+) -> Action {
+    // The answer's own variables sit under the item's.
+    let mut variables = top_variables.clone();
+    variables.extend(variables_of(&item.variables));
     let (arg, valid, modifier_name) = match modifier {
         None => (arg_text(&item.arg), item.valid != Some(false), None),
         Some(entry) => {
@@ -292,7 +473,13 @@ fn display_modifier(name: &str) -> String {
 }
 
 /// Adds the item's `mods` as secondary actions.
-fn add_mods(mut result: ResultItem, item: &AlfredItem, title: &str, raw: bool) -> ResultItem {
+fn add_mods(
+    mut result: ResultItem,
+    item: &AlfredItem,
+    title: &str,
+    raw: bool,
+    top_variables: &BTreeMap<String, String>,
+) -> ResultItem {
     let Some(mods) = &item.mods else {
         return result;
     };
@@ -327,7 +514,7 @@ fn add_mods(mut result: ResultItem, item: &AlfredItem, title: &str, raw: bool) -
     let mut claimed: Vec<Modifier> = Vec::new();
     for (name, entry) in entries {
         let action = if raw {
-            match pick_action(item, Some(&entry)) {
+            match pick_action(item, Some(&entry), top_variables) {
                 Action::Custom { payload } => {
                     let mut pick = RawPick::from_payload(&payload).unwrap_or(RawPick {
                         arg: String::new(),
@@ -742,5 +929,236 @@ mod tests {
         assert_eq!(canonical_modifier("cmd+banana"), None);
         assert_eq!(canonical_modifier(""), None);
         assert_eq!(display_modifier("cmd+alt"), "Cmd+Alt");
+    }
+    fn document(doc: Value, raw: bool, filter_query: Option<&str>) -> Parsed {
+        let ctx = ItemContext {
+            plugin_id: "workflow:w:f",
+            dir: Path::new("p"),
+            allow_custom: false,
+            allow_launch: false,
+        };
+        parse_document(ctx, &doc.to_string(), ParseOptions { raw, filter_query }).unwrap()
+    }
+
+    #[test]
+    fn cache_is_read_and_clamped() {
+        let parsed = |cache: Value| document(json!({"cache": cache, "items": []}), false, None);
+        assert_eq!(
+            parsed(json!({"seconds": 60, "loosereload": true})).cache,
+            Some(CacheSpec {
+                seconds: 60,
+                loose_reload: true
+            })
+        );
+        assert_eq!(parsed(json!({"seconds": 1})).cache.unwrap().seconds, 5);
+        assert_eq!(
+            parsed(json!({"seconds": 10_000_000}))
+                .cache
+                .unwrap()
+                .seconds,
+            86_400
+        );
+        assert!(!parsed(json!({"seconds": 9})).cache.unwrap().loose_reload);
+        // Anything malformed is no cache, never an error.
+        for bad in [
+            json!({}),
+            json!({"seconds": "x"}),
+            json!({"seconds": -3}),
+            json!(7),
+            json!(null),
+        ] {
+            assert_eq!(parsed(bad).cache, None);
+        }
+        assert_eq!(document(json!({"items": []}), false, None).cache, None);
+    }
+
+    #[test]
+    fn rerun_is_read_and_clamped() {
+        let rerun =
+            |value: Value| document(json!({"rerun": value, "items": []}), false, None).rerun;
+        assert_eq!(rerun(json!(0.5)), Some(Duration::from_millis(500)));
+        assert_eq!(rerun(json!(2)), Some(Duration::from_secs(2)));
+        assert_eq!(rerun(json!(0.01)), Some(MIN_RERUN));
+        assert_eq!(rerun(json!(60)), Some(MAX_RERUN));
+        assert_eq!(rerun(json!(0)), None);
+        assert_eq!(rerun(json!("fast")), None);
+        assert_eq!(document(json!({"items": []}), false, None).rerun, None);
+    }
+
+    #[test]
+    fn top_level_variables_sit_under_the_items_and_mods_variables() {
+        let parsed = document(
+            json!({
+                "variables": {"theme": "dark", "n": 1, "skipped": [1]},
+                "items": [
+                    {"title": "A", "arg": "a", "variables": {"n": 2},
+                     "mods": {"alt": {"variables": {"theme": "light"}}}},
+                    {"title": "B", "arg": "b"}
+                ]
+            }),
+            true,
+            None,
+        );
+        let first = pick(&parsed.items[0].action);
+        assert_eq!(first.variables["theme"], "dark");
+        assert_eq!(first.variables["n"], "2", "the item's own value wins");
+        assert!(!first.variables.contains_key("skipped"));
+        assert_eq!(pick(&parsed.items[1].action).variables["n"], "1");
+        let alt = pick(&parsed.items[0].secondary[0].action);
+        assert_eq!(alt.variables["theme"], "light");
+        assert_eq!(alt.variables["n"], "2");
+    }
+
+    #[test]
+    fn skipknowledge_keeps_the_scripts_order_against_usage() {
+        let parsed = |doc: Value| document(doc, false, None).items;
+        let on = parsed(json!({"skipknowledge": true, "items": [{"title": "A"}, {"title": "B"}]}));
+        assert!(on.iter().all(|item| item.keep_order));
+        let off = parsed(json!({"items": [{"title": "A"}]}));
+        assert!(!off[0].keep_order);
+        let not_true = parsed(json!({"skipknowledge": "yes", "items": [{"title": "A"}]}));
+        assert!(!not_true[0].keep_order);
+    }
+
+    #[test]
+    fn quicklookurl_becomes_a_preview() {
+        let preview = |url: &str| {
+            document(
+                json!({"items": [{"title": "T", "quicklookurl": url}]}),
+                false,
+                None,
+            )
+            .items
+            .remove(0)
+            .preview
+        };
+        assert_eq!(
+            preview("https://example.com/a"),
+            Some(PreviewHint::Url {
+                url: "https://example.com/a".into(),
+                title: Some("T".into())
+            })
+        );
+        let absolute = std::env::temp_dir().join("note.txt");
+        assert_eq!(
+            preview(&absolute.to_string_lossy()),
+            Some(PreviewHint::Path {
+                path: absolute.clone()
+            })
+        );
+        assert!(matches!(
+            preview(&format!("file://{}", absolute.to_string_lossy())),
+            Some(PreviewHint::Path { .. })
+        ));
+        // Never relative, never another scheme.
+        assert_eq!(preview("notes/a.txt"), None);
+        assert_eq!(preview("ftp://example.com/a"), None);
+        assert_eq!(preview(""), None);
+    }
+
+    #[test]
+    fn text_overrides_what_copy_and_large_type_use() {
+        let items = document(
+            json!({"items": [
+                {"title": "T", "arg": "https://example.com",
+                 "text": {"copy": "copied", "largetype": "BIG"}},
+                {"title": "U", "arg": "u", "text": {"copy": ""}}
+            ]}),
+            false,
+            None,
+        )
+        .items;
+        assert_eq!(items[0].copy_text().as_deref(), Some("copied"));
+        assert_eq!(items[0].large_text.as_deref(), Some("BIG"));
+        assert_eq!(items[1].copy_text().as_deref(), Some("u"));
+        assert_eq!(items[1].large_text, None);
+    }
+
+    #[test]
+    fn match_filters_only_when_asked_and_falls_back_to_the_title() {
+        let doc = json!({"items": [
+            {"title": "Alpha", "match": "zebra crossing"},
+            {"title": "Beta"},
+            {"title": "Gamma", "match": "beta tester"}
+        ]});
+        let titles = |parsed: Parsed| {
+            parsed
+                .items
+                .iter()
+                .map(|item| item.title.clone())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(titles(document(doc.clone(), true, None)).len(), 3);
+        assert_eq!(
+            titles(document(doc.clone(), true, Some("beta"))),
+            ["Beta", "Gamma"]
+        );
+        assert_eq!(
+            titles(document(doc.clone(), true, Some("zebra"))),
+            ["Alpha"]
+        );
+        assert_eq!(titles(document(doc.clone(), true, Some("  "))).len(), 3);
+        assert!(titles(document(doc, true, Some("qqqq"))).is_empty());
+    }
+
+    #[test]
+    fn a_filtered_answer_is_ranked_by_match_unless_skipknowledge() {
+        let items = |skip: bool| {
+            document(
+                json!({"skipknowledge": skip, "items": [
+                    {"title": "hxoxmxe"}, {"title": "home"}]}),
+                false,
+                Some("home"),
+            )
+            .items
+        };
+        let ranked = items(false);
+        assert!(
+            ranked[1].score > ranked[0].score,
+            "the closer match scores higher"
+        );
+        let kept = items(true);
+        assert!(kept[0].score > kept[1].score, "the script's order stands");
+    }
+
+    #[test]
+    fn mods_with_ctrl_and_fn_are_listed_without_a_key_of_their_own() {
+        let items = run_workflow(json!({"items": [{
+            "title": "T", "arg": "a",
+            "mods": {
+                "ctrl": {"arg": "c", "subtitle": "Control", "valid": true, "variables": {"v": "1"}},
+                "fn": {"arg": "f", "subtitle": "Function"},
+                "cmd": {"arg": "m", "subtitle": "Command"},
+                "alt": {"valid": false}
+            }
+        }]}));
+        let secondary = &items[0].secondary;
+        assert_eq!(secondary.len(), 3, "valid:false drops a mod");
+        let by_label = |label: &str| secondary.iter().find(|s| s.label == label).unwrap();
+        assert_eq!(by_label("Command").modifier, Some(Modifier::Ctrl));
+        assert_eq!(by_label("Control").modifier, None);
+        assert_eq!(by_label("Function").modifier, None);
+        let control = pick(&by_label("Control").action);
+        assert_eq!(control.arg, "c");
+        assert_eq!(control.variables["v"], "1");
+        assert_eq!(control.modifier.as_deref(), Some("ctrl"));
+    }
+
+    #[test]
+    fn strictmods_and_icon_resize_are_accepted_and_ignored() {
+        let parsed = document(
+            json!({
+                "strictmods": true,
+                "items": [{
+                    "title": "T", "arg": "a", "strictmods": true, "iconresize": true,
+                    "icon": {"path": "missing.png", "resize": true},
+                    "mods": {"alt": {"strictmods": true, "icon": {"path": "x.png"}}}
+                }]
+            }),
+            false,
+            None,
+        );
+        assert_eq!(parsed.items.len(), 1);
+        assert_eq!(parsed.items[0].title, "T");
     }
 }

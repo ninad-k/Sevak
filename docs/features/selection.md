@@ -96,6 +96,11 @@ Select file paths or drag files from a file manager:
 | **Open in terminal** | Opens a terminal in the folder (folders only) |
 | **Run as administrator** | Runs the program with elevated privileges (Windows .exe programs only) |
 | **Send to Sevak** | Fills Sevak's search box with the path for browsing (path browsing) |
+| **View in Sevak** | Shows the selected images, PDFs, Markdown and text files inside the launcher (see below) |
+
+### View in Sevak
+
+For selected pictures (PNG, JPEG, GIF, WebP, BMP, ICO, SVG), PDFs, Markdown files and common text files (`.txt`, `.log`, `.json`, `.toml`, `.yaml`, `.csv`, source code and the like), **View in Sevak** opens the file in the launcher, full height, using the same drawing as the [preview pane](../usage.md#preview-pane): the picture, the first page of a PDF, the text, or Markdown rendered as such. If you selected several viewable files, ++arrow-left++ and ++arrow-right++ step through them (the count shows at the top); ++arrow-up++, ++arrow-down++, ++pageup++, ++pagedown++, ++home++ and ++end++ scroll. ++escape++ goes back to the list of actions. The action is only offered when at least one selected item is an existing file of these kinds, and shows just those, in the order selected. The usual preview limits apply (4 MB pictures, 64 KB of text, 50 MB PDFs), and network locations are never read.
 
 ### Text that looks like a path
 

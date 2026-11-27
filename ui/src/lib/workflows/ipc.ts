@@ -3,7 +3,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { hasTauri } from "../ipc";
-import type { Problem, Workflow } from "./model";
+import type { ConfigField, Problem, Workflow } from "./model";
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 
@@ -31,7 +31,25 @@ export interface WorkflowSummary {
   /** Why it cannot load. */
   error: string | null;
   hotkey_errors: HotkeyError[];
+  /** It has a settings form. */
+  configurable: boolean;
+  /** The labels of the required settings that still have no value. */
+  missing_config: string[];
 }
+
+/** A workflow's settings form with what the user has saved so far. */
+export interface WorkflowConfigForm {
+  folder: string;
+  name: string;
+  fields: ConfigField[];
+  /** Saved values as text (a checkbox "true"/"false", a slider a number). */
+  values: Record<string, string>;
+  /** The labels of the required settings that have no value. */
+  missing: string[];
+}
+
+/** What the form sends: a checkbox a boolean, a slider a number, the rest text. */
+export type ConfigValues = Record<string, string | number | boolean>;
 
 export interface WorkflowList {
   /** The folder workflows live in. */
@@ -165,6 +183,20 @@ export async function createWorkflow(template: string): Promise<Result<SavedWork
 export async function deleteWorkflow(folder: string): Promise<Result<boolean>> {
   if (preview()) return (await mock()).remove(folder);
   return call("delete_workflow", { folder });
+}
+
+export async function getWorkflowConfig(folder: string): Promise<Result<WorkflowConfigForm>> {
+  if (preview()) return (await mock()).getConfig(folder);
+  return call("get_workflow_config", { folder });
+}
+
+/** Saves the settings form; the backend checks every value against its field. */
+export async function setWorkflowConfig(
+  folder: string,
+  values: ConfigValues,
+): Promise<Result<null>> {
+  if (preview()) return (await mock()).setConfig(folder, values);
+  return call("set_workflow_config", { folder, values });
 }
 
 export async function setWorkflowEnabled(folder: string, enabled: boolean): Promise<Result<null>> {

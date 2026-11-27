@@ -595,7 +595,7 @@ pub fn contrast_checks(palette: &Palette, mode: Mode) -> Vec<ContrastCheck> {
 
 /// The themes that ship with Sevak. They are also in the online gallery
 /// (`gallery/themes.json`), which points at these same files.
-const BUILTIN_SOURCES: [&str; 8] = [
+const BUILTIN_SOURCES: [&str; 11] = [
     include_str!("../../../gallery/themes/Sevak-Light.toml"),
     include_str!("../../../gallery/themes/Sevak-Dark.toml"),
     include_str!("../../../gallery/themes/Nord.toml"),
@@ -604,6 +604,9 @@ const BUILTIN_SOURCES: [&str; 8] = [
     include_str!("../../../gallery/themes/Solarized-Dark.toml"),
     include_str!("../../../gallery/themes/Gruvbox.toml"),
     include_str!("../../../gallery/themes/High-Contrast.toml"),
+    include_str!("../../../gallery/themes/Sevak-Glass-Light.toml"),
+    include_str!("../../../gallery/themes/Sevak-Glass-Dark.toml"),
+    include_str!("../../../gallery/themes/Sevak-Violet.toml"),
 ];
 
 /// The built-in themes, parsed once.
@@ -1097,11 +1100,11 @@ accent = 7
     #[test]
     fn built_in_themes_are_valid_complete_and_distinct() {
         let themes = builtin_themes();
-        assert_eq!(themes.len(), 8);
+        assert_eq!(themes.len(), 11);
         let mut names: Vec<&str> = themes.iter().map(|t| t.spec.name.as_str()).collect();
         names.sort_unstable();
         names.dedup();
-        assert_eq!(names.len(), 8);
+        assert_eq!(names.len(), 11);
         for expected in [
             "Sevak Light",
             "Sevak Dark",
@@ -1111,6 +1114,9 @@ accent = 7
             "Solarized Dark",
             "Gruvbox",
             "High Contrast",
+            "Sevak Glass Light",
+            "Sevak Glass Dark",
+            "Sevak Violet",
         ] {
             assert!(builtin_by_name(expected).is_some(), "{expected}");
         }

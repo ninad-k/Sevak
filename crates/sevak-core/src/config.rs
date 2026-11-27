@@ -83,9 +83,16 @@ max_results = 8
 # Keyword of the web search engine offered when nothing else matches ("" to
 # disable). A list offers several, in order: ["g", "yt", "gh"].
 fallback_web_search = "g"
-# Up/Down on an empty search box recalls the last 50 searches you ran. They are
-# kept in usage.json in the data folder; false stops recording and forgets them.
+# Up/Down on an empty search box recalls the searches you ran (the last 500 at
+# most), and the "!" keyword lists them. They are kept in usage.json in the data
+# folder; false stops recording and forgets them.
 query_history = true
+# How long a remembered search is kept: "24h", "7d", "30d", "90d" (any number
+# of hours "h" or days "d" up to 3650d works). Older ones are dropped.
+history_retention = "30d"
+# false keeps the history in memory for this session only: it is never written
+# to usage.json, and what was saved there is removed.
+history_persist = true
 
 [appearance]
 # "system", "light" or "dark".
@@ -109,6 +116,15 @@ theme_file = ""
 # A stylesheet inside this config folder that overrides the theme's CSS variables
 # (see docs/themes.md), for example "theme.css". "" loads none.
 custom_css = ""
+# Light/dark mode of the Settings window only: "follow" (use `theme`), "light",
+# "dark" or "system".
+settings_theme = "follow"
+# How the launcher appears: "fade" (a short fade and settle), "fade_scale"
+# (the same with a stronger zoom) or "none". The system's reduced-motion
+# setting always turns it off.
+open_animation = "fade"
+# Length of that animation in milliseconds (0-400).
+animation_ms = 150
 
 [plugins]
 # Ids of built-in plugins to turn off: "apps", "calculator", "files",
@@ -135,6 +151,11 @@ include_hidden = false
 keyword = "f"
 # Also show (lower-ranked) file results for plain queries.
 global = true
+# Order of file results: "relevance" (best name match first), "name" (A to Z)
+# or "modified" (newest first).
+sort = "relevance"
+# Most file results per search. 0 uses [search] max_results; otherwise 1 to 50.
+max_results = 0
 # Whole-disk search through the operating system's own index (Windows Search,
 # Spotlight, locate / Tracker / Baloo). Nothing leaves your computer. Type
 # "<index_keyword> <name>" for file names and "<content_keyword> <words>" for
@@ -275,6 +296,10 @@ max_image_bytes = 10485760
 # readable by you only. Files already stored plain are encrypted on the next
 # start.
 encrypt = true
+# Rows shown in the history list (5-100) and characters of an entry shown in
+# its title (40-500).
+viewer_rows = 20
+preview_chars = 100
 # Never record text copied from these apps, e.g. ["Signal", "Messages"].
 # Matched case-insensitively against the program or app name.
 ignore_apps = []
@@ -298,6 +323,9 @@ use_system = true
 # vCard files (.vcf) or folders of them, e.g. ["~/contacts.vcf", "~/Contacts"].
 # This works everywhere and needs no permission.
 vcard_files = []
+# Show a contact's photo (vCard PHOTO, JPEG/PNG) as its icon. Photos are decoded
+# into memory only, never written to disk.
+show_photos = true
 
 [onepassword]
 # Search your 1Password logins ("1p github"): Enter opens the item's website,
@@ -457,6 +485,15 @@ keyword = "code"
 # "jetbrains". [] reads every one that is installed.
 editors = []
 
+[recent]
+# "recent <name>" searches the files you used lately, newest first, from the
+# operating system's own recent lists (Linux recently-used.xbel, the Windows
+# Recent folder, macOS Spotlight). Read locally; nothing is sent anywhere.
+enabled = true
+keyword = "recent"
+# How many files are kept in the list (10-500).
+max_items = 50
+
 [calendar]
 # "cal" shows today's and upcoming events from local .ics files: "cal tomorrow",
 # "cal fri", "cal 2026-12-24", or "cal <text>" to find an event. No accounts and
@@ -523,6 +560,8 @@ pub struct Config {
     pub projects: ProjectsConfig,
     /// `[calendar]`: events from local `.ics` files (`cal`).
     pub calendar: CalendarConfig,
+    /// `[recent]`: search over recently used files (`recent <name>`).
+    pub recent: RecentConfig,
 }
 
 impl Default for Config {
@@ -559,6 +598,7 @@ impl Default for Config {
             ssh: SshConfig::default(),
             projects: ProjectsConfig::default(),
             calendar: CalendarConfig::default(),
+            recent: RecentConfig::default(),
         }
     }
 }
@@ -669,6 +709,47 @@ pub struct SearchConfig {
     pub fallback_web_search: FallbackSearch,
     /// Remember executed queries so Up/Down can recall them.
     pub query_history: bool,
+    /// How long a remembered query is kept: `<n>h` or `<n>d` (see
+    /// [`parse_retention`]).
+    pub history_retention: String,
+    /// Write the query history to `usage.json`; false keeps it in memory for
+    /// the session only.
+    pub history_persist: bool,
+}
+
+/// The default `[search] history_retention`.
+pub const DEFAULT_HISTORY_RETENTION: &str = "30d";
+
+/// Longest `[search] history_retention`, in days.
+pub const MAX_HISTORY_RETENTION_DAYS: u64 = 3650;
+
+/// `"24h"` / `"7d"` as seconds; `None` when it is not `<n>h` or `<n>d` with
+/// `n` from 1 up to [`MAX_HISTORY_RETENTION_DAYS`] days.
+pub fn parse_retention(text: &str) -> Option<u64> {
+    let text = text.trim().to_ascii_lowercase();
+    let (digits, unit) = text.split_at(text.len().checked_sub(1)?);
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let n: u64 = digits.parse().ok()?;
+    let secs = match unit {
+        "h" => n.checked_mul(3600)?,
+        "d" => n.checked_mul(86_400)?,
+        _ => return None,
+    };
+    (1..=MAX_HISTORY_RETENTION_DAYS * 86_400)
+        .contains(&secs)
+        .then_some(secs)
+}
+
+impl SearchConfig {
+    /// [`SearchConfig::history_retention`] in seconds; the default when it
+    /// does not parse.
+    pub fn history_retention_secs(&self) -> u64 {
+        parse_retention(&self.history_retention)
+            .or_else(|| parse_retention(DEFAULT_HISTORY_RETENTION))
+            .unwrap_or(30 * 86_400)
+    }
 }
 
 impl Default for SearchConfig {
@@ -677,6 +758,8 @@ impl Default for SearchConfig {
             max_results: 8,
             fallback_web_search: FallbackSearch::single("g"),
             query_history: true,
+            history_retention: DEFAULT_HISTORY_RETENTION.to_owned(),
+            history_persist: true,
         }
     }
 }
@@ -765,6 +848,40 @@ pub enum Theme {
     Dark,
 }
 
+/// Light/dark mode of the Settings window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SettingsTheme {
+    /// Same as the launcher's `theme`.
+    #[default]
+    Follow,
+    Light,
+    Dark,
+    System,
+}
+
+impl SettingsTheme {
+    /// The mode the Settings window uses, given the launcher's `theme`.
+    pub fn resolve(self, launcher: Theme) -> Theme {
+        match self {
+            Self::Follow => launcher,
+            Self::Light => Theme::Light,
+            Self::Dark => Theme::Dark,
+            Self::System => Theme::System,
+        }
+    }
+}
+
+/// How the launcher appears when it opens.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OpenAnimation {
+    #[default]
+    Fade,
+    FadeScale,
+    None,
+}
+
 /// Appearance settings. Values are stored as written; [`crate::theme::resolve`]
 /// validates them (falling back to the defaults) when they are applied, so a typo
 /// never costs the user the rest of the file.
@@ -789,6 +906,12 @@ pub struct AppearanceConfig {
     pub theme_file: String,
     /// Stylesheet inside the config directory; empty loads none.
     pub custom_css: String,
+    /// Light/dark mode of the Settings window.
+    pub settings_theme: SettingsTheme,
+    /// How the launcher appears when it opens.
+    pub open_animation: OpenAnimation,
+    /// Length of the open animation in milliseconds.
+    pub animation_ms: u32,
 }
 
 impl Default for AppearanceConfig {
@@ -803,6 +926,9 @@ impl Default for AppearanceConfig {
             radius: crate::theme::DEFAULT_RADIUS,
             theme_file: String::new(),
             custom_css: String::new(),
+            settings_theme: SettingsTheme::default(),
+            open_animation: OpenAnimation::default(),
+            animation_ms: crate::theme::DEFAULT_ANIMATION_MS,
         }
     }
 }
@@ -873,6 +999,22 @@ pub struct CalculatorConfig {
     pub currency: bool,
 }
 
+/// How the files plugin orders its results (`[files] sort`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FileSort {
+    /// Best name match first (the engine's usual order).
+    #[default]
+    Relevance,
+    /// Alphabetical by name, ignoring case.
+    Name,
+    /// Newest change first, from the index's recorded times.
+    Modified,
+}
+
+/// Most file results `[files] max_results` may ask for.
+pub const MAX_FILES_RESULTS_LIMIT: usize = 50;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct FilesConfig {
@@ -883,6 +1025,10 @@ pub struct FilesConfig {
     pub include_hidden: bool,
     pub keyword: String,
     pub global: bool,
+    /// Order of file results: best name match, name, or newest first.
+    pub sort: FileSort,
+    /// Most file results per search; 0 uses `[search] max_results`.
+    pub max_results: usize,
     /// Search the whole disk through the OS index (`index_keyword`,
     /// `content_keyword`). The folder index above still answers `keyword` and
     /// plain queries, and stands in when the OS index cannot be reached.
@@ -908,6 +1054,8 @@ impl Default for FilesConfig {
             include_hidden: false,
             keyword: "f".to_owned(),
             global: true,
+            sort: FileSort::default(),
+            max_results: 0,
             use_os_index: true,
             index_keyword: "ff".to_owned(),
             content_keyword: "in".to_owned(),
@@ -1072,6 +1220,10 @@ pub struct ClipboardConfig {
     /// user, where the system can (Windows: DPAPI). Elsewhere the files are
     /// plain but readable by the owner only.
     pub encrypt: bool,
+    /// Most history rows shown at once (5..=100).
+    pub viewer_rows: usize,
+    /// Characters of an entry shown as the row title (40..=500).
+    pub preview_chars: usize,
 }
 
 impl Default for ClipboardConfig {
@@ -1086,6 +1238,8 @@ impl Default for ClipboardConfig {
             files: true,
             max_image_bytes: 10 * 1024 * 1024,
             encrypt: true,
+            viewer_rows: 20,
+            preview_chars: 100,
         }
     }
 }
@@ -1101,6 +1255,9 @@ pub struct ContactsConfig {
     pub use_system: bool,
     /// `.vcf` files and folders of them; `~` is the home folder.
     pub vcard_files: Vec<String>,
+    /// Show a contact's photo (from its vCard) as the result icon. Photos are
+    /// decoded into memory only; nothing is written to disk.
+    pub show_photos: bool,
 }
 
 impl Default for ContactsConfig {
@@ -1110,6 +1267,7 @@ impl Default for ContactsConfig {
             keyword: "c".to_owned(),
             use_system: true,
             vcard_files: Vec::new(),
+            show_photos: true,
         }
     }
 }
@@ -1445,6 +1603,31 @@ impl ProjectsConfig {
     }
 }
 
+/// Bounds of `[recent] max_items`.
+pub const MIN_RECENT_ITEMS: u32 = 10;
+pub const MAX_RECENT_ITEMS: u32 = 500;
+
+/// The recent documents plugin (`recent <name>`): files the OS says were used
+/// lately.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RecentConfig {
+    pub enabled: bool,
+    pub keyword: String,
+    /// Files kept in the list ([`MIN_RECENT_ITEMS`] to [`MAX_RECENT_ITEMS`]).
+    pub max_items: u32,
+}
+
+impl Default for RecentConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            keyword: "recent".to_owned(),
+            max_items: 50,
+        }
+    }
+}
+
 /// Largest `[calendar] days`.
 pub const MAX_CALENDAR_DAYS: u32 = 60;
 
@@ -1634,6 +1817,12 @@ impl Config {
     pub fn normalized(mut self) -> Self {
         self.window.width = self.window.width.clamp(MIN_WINDOW_WIDTH, MAX_WINDOW_WIDTH);
         self.search.max_results = self.search.max_results.clamp(1, MAX_RESULTS_LIMIT);
+        if self.files.max_results != 0 {
+            self.files.max_results = self.files.max_results.clamp(1, MAX_FILES_RESULTS_LIMIT);
+        }
+        if parse_retention(&self.search.history_retention).is_none() {
+            self.search.history_retention = DEFAULT_HISTORY_RETENTION.to_owned();
+        }
         // Engines without a keyword or a `{query}` placeholder cannot work.
         self.web_search
             .retain(|engine| !engine.keyword.trim().is_empty() && engine.url.contains("{query}"));
@@ -1648,6 +1837,8 @@ impl Config {
             .clipboard
             .max_image_bytes
             .clamp(1, MAX_CLIPBOARD_IMAGE_BYTES_LIMIT);
+        self.clipboard.viewer_rows = self.clipboard.viewer_rows.clamp(5, 100);
+        self.clipboard.preview_chars = self.clipboard.preview_chars.clamp(40, 500);
         self.clipboard
             .ignore_apps
             .retain(|app| !app.trim().is_empty());
@@ -1659,7 +1850,7 @@ impl Config {
             (&mut self.clock.keyword, "time"),
             (&mut self.passwords.keyword, "pass"),
         ] {
-            *keyword = keyword.trim().to_owned();
+            *keyword = crate::keyword::normalize(keyword);
             if keyword.is_empty() || keyword.contains(char::is_whitespace) {
                 *keyword = default.to_owned();
             }
@@ -1674,7 +1865,7 @@ impl Config {
             &mut self.window_management.keyword,
             &mut self.window_management.switcher_keyword,
         ] {
-            *keyword = keyword.trim().to_owned();
+            *keyword = crate::keyword::normalize(keyword);
         }
         self.window_management.gap = self
             .window_management
@@ -1738,6 +1929,7 @@ impl Config {
             (&mut self.ssh.keyword, "ssh"),
             (&mut self.projects.keyword, "code"),
             (&mut self.calendar.keyword, "cal"),
+            (&mut self.recent.keyword, "recent"),
         ] {
             *keyword = keyword.trim().to_owned();
             if keyword.is_empty() || keyword.contains(char::is_whitespace) {
@@ -1748,6 +1940,10 @@ impl Config {
             list.retain(|entry| !entry.trim().is_empty());
         }
         self.calendar.days = self.calendar.days.clamp(1, MAX_CALENDAR_DAYS);
+        self.recent.max_items = self
+            .recent
+            .max_items
+            .clamp(MIN_RECENT_ITEMS, MAX_RECENT_ITEMS);
         self
     }
 }
@@ -2016,6 +2212,21 @@ days = 1000
     }
 
     #[test]
+    fn recent_defaults_and_normalizing() {
+        let defaults = Config::default();
+        assert!(defaults.recent.enabled);
+        assert_eq!(defaults.recent.keyword, "recent");
+        assert_eq!(defaults.recent.max_items, 50);
+        let config = Config::from_toml_str("[recent]\nkeyword = \"a b\"\nmax_items = 2\n").unwrap();
+        assert_eq!(config.recent.keyword, "recent");
+        assert_eq!(config.recent.max_items, MIN_RECENT_ITEMS);
+        let config =
+            Config::from_toml_str("[recent]\nenabled = false\nmax_items = 9000\n").unwrap();
+        assert!(!config.recent.enabled);
+        assert_eq!(config.recent.max_items, MAX_RECENT_ITEMS);
+    }
+
+    #[test]
     fn clock_and_passwords_are_normalized() {
         let defaults = Config::default();
         assert_eq!(defaults.clock.keyword, "time");
@@ -2078,6 +2289,38 @@ symbols = false
         let text = saved(Some(DEFAULT_CONFIG_TOML), &config);
         assert!(text.contains("allow_network_paths = true"), "{text}");
         assert!(text.contains("# Windows only. Use paths on other computers"));
+    }
+
+    #[test]
+    fn files_sort_and_result_limit() {
+        let defaults = Config::default();
+        assert_eq!(defaults.files.sort, FileSort::Relevance);
+        assert_eq!(defaults.files.max_results, 0);
+
+        let config =
+            Config::from_toml_str("[files]\nsort = \"modified\"\nmax_results = 12\n").unwrap();
+        assert_eq!(config.files.sort, FileSort::Modified);
+        assert_eq!(config.files.max_results, 12);
+        assert_eq!(
+            Config::from_toml_str("[files]\nsort = \"name\"\n")
+                .unwrap()
+                .files
+                .sort,
+            FileSort::Name
+        );
+        assert!(Config::from_toml_str("[files]\nsort = \"size\"\n").is_err());
+
+        // 0 means "the global limit"; anything else is kept within 1..=50.
+        let mut config = Config::default();
+        config.files.max_results = 0;
+        assert_eq!(config.clone().normalized().files.max_results, 0);
+        config.files.max_results = 500;
+        assert_eq!(
+            config.clone().normalized().files.max_results,
+            MAX_FILES_RESULTS_LIMIT
+        );
+        config.files.max_results = 7;
+        assert_eq!(config.normalized().files.max_results, 7);
     }
 
     #[test]
@@ -2314,6 +2557,28 @@ keep_between_shows = true
             MAX_CLIPBOARD_ITEM_BYTES_LIMIT
         );
         assert_eq!(config.clipboard.ignore_apps, ["KeePassXC"]);
+    }
+
+    #[test]
+    fn clipboard_viewer_options_and_contact_photos_have_defaults_and_ranges() {
+        let config = Config::default();
+        assert_eq!(config.clipboard.viewer_rows, 20);
+        assert_eq!(config.clipboard.preview_chars, 100);
+        assert!(config.contacts.show_photos);
+        let low =
+            Config::from_toml_str("[clipboard]\nviewer_rows = 1\npreview_chars = 1\n").unwrap();
+        assert_eq!(
+            (low.clipboard.viewer_rows, low.clipboard.preview_chars),
+            (5, 40)
+        );
+        let high = Config::from_toml_str("[clipboard]\nviewer_rows = 999\npreview_chars = 9999\n")
+            .unwrap();
+        assert_eq!(
+            (high.clipboard.viewer_rows, high.clipboard.preview_chars),
+            (100, 500)
+        );
+        let off = Config::from_toml_str("[contacts]\nshow_photos = false\n").unwrap();
+        assert!(!off.contacts.show_photos);
     }
 
     #[test]
@@ -2906,6 +3171,24 @@ text = "Best,\nme"
     }
 
     #[test]
+    fn history_retention_parses_hours_and_days() {
+        assert_eq!(parse_retention("24h"), Some(86_400));
+        assert_eq!(parse_retention(" 7D "), Some(7 * 86_400));
+        assert_eq!(parse_retention("90d"), Some(90 * 86_400));
+        for bad in [
+            "", "d", "0h", "0d", "7", "7w", "-1d", "1.5d", "3651d", "x7d",
+        ] {
+            assert_eq!(parse_retention(bad), None, "{bad}");
+        }
+        let defaults = Config::default().search;
+        assert_eq!(defaults.history_retention, "30d");
+        assert!(defaults.history_persist);
+        assert_eq!(defaults.history_retention_secs(), 30 * 86_400);
+        let bad = Config::from_toml_str("[search]\nhistory_retention = \"soon\"\n").unwrap();
+        assert_eq!(bad.search.history_retention, "30d");
+    }
+
+    #[test]
     fn query_history_defaults_on_and_is_added_to_older_files() {
         assert!(Config::default().search.query_history);
         let old = "[search]\nmax_results = 8\n";
@@ -3148,9 +3431,20 @@ query = "no key, dropped"
         config.appearance.radius = 4;
         config.appearance.theme_file = "themes/Nord.toml".to_owned();
         config.appearance.custom_css = "theme.css".to_owned();
+        config.appearance.settings_theme = SettingsTheme::Dark;
+        config.appearance.open_animation = OpenAnimation::FadeScale;
+        config.appearance.animation_ms = 220;
         let text = saved(Some(DEFAULT_CONFIG_TOML), &config);
         assert!(text.contains("# Corner radius of the search bar in pixels (0-32)."));
         assert_eq!(Config::from_toml_str(&text).unwrap(), config);
+    }
+
+    #[test]
+    fn settings_theme_follows_or_overrides_the_launcher_theme() {
+        assert_eq!(SettingsTheme::Follow.resolve(Theme::Dark), Theme::Dark);
+        assert_eq!(SettingsTheme::Light.resolve(Theme::Dark), Theme::Light);
+        assert_eq!(SettingsTheme::Dark.resolve(Theme::Light), Theme::Dark);
+        assert_eq!(SettingsTheme::System.resolve(Theme::Dark), Theme::System);
     }
 
     #[test]

@@ -4,6 +4,7 @@
   // (Ctrl+T on a row that has text; Esc or Left goes back to the list). Scrolling
   // keys are handled by App.svelte, which calls `scrollBy` / `scrollTo`.
   import type { TextViewContent } from "./ipc";
+  import Markdown from "./Markdown.svelte";
 
   let { content, mac = false }: { content: TextViewContent | null; mac?: boolean } = $props();
 
@@ -32,7 +33,11 @@
 <section class="view" aria-label={t("launcher.textView.label")}>
   <div class="body" bind:this={body}>
     {#if content}
-      <pre>{content.text}</pre>
+      {#if content.markdown}
+        <Markdown source={content.text} />
+      {:else}
+        <pre>{content.text}</pre>
+      {/if}
       {#if content.truncated}<div class="note">{t("launcher.textView.truncated")}</div>{/if}
     {:else}
       <div class="note">{t("launcher.textView.loading")}</div>

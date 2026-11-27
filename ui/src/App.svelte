@@ -5,6 +5,11 @@
   import PreviewPane from "./lib/PreviewPane.svelte";
   import ResultRow from "./lib/ResultRow.svelte";
   import TextView from "./lib/TextView.svelte";
+  import FileView from "./lib/FileView.svelte";
+  import Markdown from "./lib/Markdown.svelte";
+  import SevakUi from "./lib/sevak-ui/SevakUi.svelte";
+  import { sendUiEvent } from "./lib/sevak-ui/ipc";
+  import type { UiPayload } from "./lib/sevak-ui/types";
   import { displayAccelerator } from "./lib/accelerator";
   import { debouncedAnnouncer, launcherAnnouncement } from "./lib/announce";
   import { applyAppearance } from "./lib/appearance";
@@ -50,6 +55,7 @@
     type Status,
     type TextViewContent,
     type WindowAction,
+    viewSelectionFile,
   } from "./lib/ipc";
 
   let query = $state("");
@@ -85,7 +91,24 @@
    */
   let selection = $state<SelectionPayload | null>(null);
   /** A workflow's text view node: a block of text under the search bar. */
-  let outputView = $state<{ heading: string; text: string } | null>(null);
+  let outputView = $state<{ heading: string; text: string; markdown: boolean } | null>(null);
+  /** A workflow's Sevak UI shown in place of the results. */
+  let uiPayload = $state<UiPayload | null>(null);
+  let uiRef: ReturnType<typeof SevakUi> | undefined = $state();
+  /**
+   * "View in Sevak": one of the selected files shown full height. `back` is the
+   * Universal Actions list to return to; `ticket`/`id` name the stored action.
+   */
+  let fileView = $state<{
+    ticket: number;
+    id: string;
+    count: number;
+    index: number;
+    content: PreviewContent | null;
+    back: SelectionPayload | null;
+  } | null>(null);
+  let fileSeq = 0;
+  let fileViewEl: ReturnType<typeof FileView> | undefined = $state();
   /** Large Type: the text shown huge, or `null` when it is not showing. */
   let largeText = $state<string | null>(null);
   /** The window was stretched over the screen (else the text shows inside the launcher). */
@@ -229,7 +252,7 @@
   const gridMode = $derived(results.length > 0 && results.every((result) => result.tile));
   /** The pane is shown (it gives way to the action panel, Large Type and the Text View). */
   const paneVisible = $derived(
-    previewOpen && !!current && !panelOpen && largeText === null && !textViewOpen,
+    previewOpen && !!current && !panelOpen && largeText === null && !textViewOpen && !fileView,
   );
 
   const hotkeyError = $derived(status?.hotkey.error ?? null);
@@ -323,9 +346,18 @@
   }
 
   function reset() {
+    // A UI that is still open when the launcher resets (hidden, or another
+    // show) is dismissed, so its workflow continues from `closed`.
+    if (uiPayload) {
+      const open = uiPayload;
+      uiPayload = null;
+      void sendUiEvent(open.id, { kind: "close", state: null }).catch(() => null);
+    }
     searchSeq++; // drop any search still in flight
     panelOpen = false;
     selection = null;
+    fileSeq++;
+    fileView = null;
     destination = null;
     bufferNote = null;
     outputView = null;
@@ -354,6 +386,10 @@
       showOutput(payload.output);
       return;
     }
+    if (payload?.ui) {
+      uiPayload = payload.ui;
+      return;
+    }
     if (payload?.error) error = payload.error;
     if (payload?.query) {
       prefill(payload.query);
@@ -374,7 +410,7 @@
       void openLargeType(output.text);
       return;
     }
-    outputView = { heading: output.heading, text: output.text };
+    outputView = { heading: output.heading, text: output.text, markdown: output.markdown === true };
     focusInput(true);
   }
 
@@ -407,6 +443,7 @@
   function selectionVerb(action: SelectionActionDto): string {
     if (action.window?.kind === "large_type") return t("launcher.verbs.show");
     if (action.window?.kind === "search") return t("launcher.verbs.browse");
+    if (action.window?.kind === "view") return t("launcher.verbs.show");
     if (action.action === "paste_text") return t("launcher.verbs.replace");
     return verb(action);
   }
@@ -581,7 +618,7 @@
       alternative = action.secondary.findIndex((s) => s.modifier === modifier);
       if (alternative < 0) return;
     } else if (action.window) {
-      runWindowAction(action.window);
+      runWindowAction(action.window, action.id, set);
       return;
     }
     executing = true;
@@ -593,12 +630,81 @@
     }
   }
 
-  function runWindowAction(action: WindowAction) {
+  function runWindowAction(action: WindowAction, id: string, set: SelectionPayload) {
     if (action.kind === "large_type") {
       void openLargeType(action.text);
+    } else if (action.kind === "view") {
+      void openFileView(set, id, action.count);
     } else {
       leaveSelection();
       prefill(action.query);
+    }
+  }
+
+  /** "View in Sevak": shows the first selected file; the arrows step through the rest. */
+  async function openFileView(set: SelectionPayload, id: string, count: number) {
+    if (count < 1) return;
+    leaveSelection();
+    fileView = { ticket: set.ticket, id, count, index: 0, content: null, back: set };
+    await loadFile(0);
+  }
+
+  async function loadFile(index: number) {
+    const view = fileView;
+    if (!view) return;
+    const mine = ++fileSeq;
+    fileView = { ...view, index, content: null };
+    const content = await viewSelectionFile(view.id, view.ticket, index);
+    if (mine !== fileSeq || !fileView) return;
+    fileView = {
+      ...fileView,
+      content: content ?? {
+        title: "",
+        subtitle: "",
+        body: { kind: "none" },
+        meta: [],
+        modified: null,
+        note: t("launcher.nothingToShow"),
+      },
+    };
+  }
+
+  function stepFile(delta: number) {
+    const view = fileView;
+    if (!view || view.count < 2) return;
+    void loadFile((view.index + delta + view.count) % view.count);
+  }
+
+  /** Back to the Universal Actions it was opened from. */
+  function closeFileView() {
+    const view = fileView;
+    fileSeq++;
+    fileView = null;
+    if (view?.back) openSelection(view.back);
+  }
+
+  function scrollFileView(key: string): boolean {
+    switch (key) {
+      case "ArrowDown":
+        fileViewEl?.scrollBy(48);
+        return true;
+      case "ArrowUp":
+        fileViewEl?.scrollBy(-48);
+        return true;
+      case "PageDown":
+        fileViewEl?.scrollBy("page");
+        return true;
+      case "PageUp":
+        fileViewEl?.scrollBy("-page");
+        return true;
+      case "Home":
+        fileViewEl?.scrollToEdge(false);
+        return true;
+      case "End":
+        fileViewEl?.scrollToEdge(true);
+        return true;
+      default:
+        return false;
     }
   }
 
@@ -956,6 +1062,14 @@
   }
 
   function onKeydown(e: KeyboardEvent) {
+    // A workflow's UI owns the keyboard (Tab order, Enter on buttons); Esc dismisses it.
+    if (uiPayload) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        uiRef?.dismiss();
+      }
+      return;
+    }
     // A lone Shift is a candidate tap. Any other key meanwhile (Shift+Enter, a
     // capital letter, Alt+Shift switching the keyboard layout) or key repeat
     // (holding Shift) makes it not one.
@@ -974,6 +1088,21 @@
       if (e.repeat || ["Control", "Shift", "Alt", "Meta"].includes(key)) return;
       e.preventDefault();
       closeLargeType();
+      return;
+    }
+
+    if (fileView) {
+      const several = fileView.count > 1;
+      if (key === "Escape" || (key === "ArrowLeft" && !several && !e.shiftKey)) {
+        e.preventDefault();
+        closeFileView();
+      } else if (several && !ctrl && !e.altKey && (key === "ArrowLeft" || key === "ArrowRight")) {
+        e.preventDefault();
+        stepFile(key === "ArrowRight" ? 1 : -1);
+      } else if (!ctrl && !e.altKey && !e.shiftKey && scrollFileView(key)) {
+        e.preventDefault();
+      }
+      // Anything else is ignored: the file stays until Esc.
       return;
     }
 
@@ -1132,6 +1261,7 @@
       e.preventDefault();
       const modifier = modifierOf(e);
       if (modifier === null && current?.text_on_enter) void openTextView();
+      else if (modifier === null && current?.complete_on_enter && current.autocomplete) complete(false);
       else if (modifier === null) void run(selected);
       else runModified(modifier);
     } else if (ctrl && /^[1-9]$/.test(key)) {
@@ -1315,7 +1445,7 @@
       onremove={(index) => void removeFromBuffer(index)}
     />
 
-    {#if gridMode && !textViewOpen}
+    {#if gridMode && !textViewOpen && !fileView}
       <GridView
         items={results}
         {selected}
@@ -1332,7 +1462,7 @@
       class="results"
       class:empty={results.length === 0}
       class:compact={paneVisible}
-      class:hidden={textViewOpen}
+      class:hidden={textViewOpen || !!fileView}
       role="listbox"
       aria-label={t("launcher.results")}
       bind:this={list}
@@ -1356,7 +1486,9 @@
     </div>
     {/if}
 
-    {#if textViewOpen}
+    {#if fileView}
+      <FileView bind:this={fileViewEl} content={fileView.content} index={fileView.index} count={fileView.count} />
+    {:else if textViewOpen}
       <TextView bind:this={textViewEl} content={textContent} {mac} />
     {:else if paneVisible}
       <PreviewPane
@@ -1412,7 +1544,7 @@
           </div>
         {/each}
       </div>
-    {:else if current && !textViewOpen && !destination && (current.secondary.length > 0 || current.autocomplete)}
+    {:else if current && !textViewOpen && !fileView && !destination && (current.secondary.length > 0 || current.autocomplete)}
       <div class="hints" aria-hidden="true">
         <span class="chips">
           {#if current.autocomplete}
@@ -1433,10 +1565,28 @@
       </div>
     {/if}
 
+    {#if uiPayload}
+      {#key uiPayload.id}
+        <SevakUi
+          bind:this={uiRef}
+          payload={uiPayload}
+          send={(event) => sendUiEvent(uiPayload!.id, event)}
+          onend={() => {
+            uiPayload = null;
+            void hideWindow();
+          }}
+        />
+      {/key}
+    {/if}
+
     {#if outputView}
       <div class="output" role="region" aria-label={outputView.heading || t("launcher.workflowOutput")}>
         {#if outputView.heading}<div class="output-heading">{outputView.heading}</div>{/if}
-        <pre class="output-text">{outputView.text}</pre>
+        {#if outputView.markdown}
+          <Markdown source={outputView.text} />
+        {:else}
+          <pre class="output-text">{outputView.text}</pre>
+        {/if}
       </div>
     {/if}
 
@@ -1479,7 +1629,7 @@
   }
 
   .card.opening {
-    animation: open 150ms cubic-bezier(0.2, 0.8, 0.25, 1);
+    animation: open var(--open-ms, 150ms) cubic-bezier(0.2, 0.8, 0.25, 1);
   }
 
   @keyframes open {
@@ -1487,6 +1637,21 @@
       opacity: 0.4;
       transform: translateY(-6px) scale(0.985);
     }
+  }
+
+  :global(:root[data-open-animation="fade_scale"]) .card.opening {
+    animation-name: open-scale;
+  }
+
+  @keyframes open-scale {
+    from {
+      opacity: 0.2;
+      transform: translateY(-10px) scale(0.94);
+    }
+  }
+
+  :global(:root[data-open-animation="none"]) .card.opening {
+    animation: none;
   }
 
   /* A blurred backdrop fills the whole window: no padding or drop shadow around the card. */

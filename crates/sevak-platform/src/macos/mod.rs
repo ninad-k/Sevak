@@ -86,6 +86,7 @@ impl PlatformProvider for MacProvider {
             IconSource::File { path } => icon_file::load(path),
             IconSource::Shell { .. } => Err(PlatformError::Unsupported("shell icons")),
             IconSource::Builtin { .. } => Err(PlatformError::Unsupported("built-in icons")),
+            IconSource::Inline { .. } => Err(PlatformError::Unsupported("inline icons")),
         }
     }
 

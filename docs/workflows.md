@@ -14,6 +14,7 @@ the small `workflow.toml` file yourself.
 - [How a run works](#how-a-run-works)
 - [Permission, privacy and limits](#permission-privacy-and-limits)
 - [The gallery](#the-gallery)
+- [Settings the user fills in](#settings-the-user-fills-in)
 - [The file format](#the-file-format)
 - [Coming from Alfred](#coming-from-alfred)
 - [Troubleshooting](#troubleshooting)
@@ -59,6 +60,46 @@ node, or one that would make a loop), and the **Problems** list under the
 side panel shows what else is wrong; a node with a red dot has an error, a
 yellow dot a warning. **Save** is only available when there are no errors.
 Warnings, such as a node nothing leads to, do not stop you.
+
+### Notes, disabling and several boxes at once
+
+- **Notes.** Every node has a **Note** field in the side panel. The first part
+  shows as a small caption under the box (hover for all of it; double-click
+  the caption to edit it). A note is only documentation: it never changes what
+  runs and never asks for permission again.
+- **Disabling.** Select a connection and press `D` (or use the button in the
+  side panel) and it is drawn dashed and dimmed; the run does not follow it.
+  The same for a box: tick **Disable this node** or press `D` with boxes
+  selected. A disabled node does not run and its branch stops there. A disabled
+  trigger (keyword, script filter, list/file filter, running apps, hotkey,
+  Universal Actions, external) is not registered at all, so its keyword and
+  hotkey are free again. A disabled node with an empty required field is a
+  warning instead of an error, so you can park half-built boxes.
+- **Selecting several.** `Shift`, `Ctrl` or `Cmd` plus click adds or removes a
+  box; drag on empty canvas to draw a selection rectangle. Dragging or the arrow
+  keys move every selected box.
+- **Aligning.** With two or more boxes selected, the **Align** buttons in the top
+  bar line them up on the left edge, horizontal centre, top or vertical middle;
+  with three or more, **Space across** and **Space down** spread them evenly
+  between the outer two. `Alt`+click a box aligns the selection to that box
+  using the last Align button you used (left to start with).
+- **Quick connect.** Select a box, then `Shift`+`Alt`+click another: the selected
+  box's first output is connected to it.
+- **Moving around with the keyboard.** `Ctrl`/`Cmd` plus an arrow selects the
+  nearest box that way; `Ctrl`/`Cmd`+`Alt`+`→` follows the connections to the
+  first box after the selected one, `←` to the first box before it. With nothing
+  selected the arrows scroll the canvas. Dragging a new connection to the edge
+  of the canvas scrolls it.
+- **`?`** (or the **?** button) lists all of this. The same table is in
+  [Keyboard shortcuts](keyboard.md#workflow-builder).
+
+Notes and disabled flags are saved as `note = "..."` and `disabled = true` on
+a `[[node]]` and `disabled = true` on a `[[connection]]`; both are left out
+when unused, so existing files do not change on save. Permission: `note` is not
+part of what you allow. A `disabled` flag is, when it is set on a node that
+runs code or on a connection, so a workflow you allowed with something switched
+off asks again if that is later switched on by hand. Files that never use the
+flags keep their old permission.
 
 Saving rewrites `workflow.toml` in the builder's own layout, so comments and
 formatting you added by hand are not kept. The builder never touches the scripts
@@ -127,6 +168,9 @@ workflow, enabled, and valid; otherwise the launcher opens and says why.
 | **Terminal command** | opens your terminal and runs a command line | needs permission; see [quoting](#placeholders-the-argument-and-variables) |
 | **Copy** | puts text on the clipboard | |
 | **Paste** | pastes text into the app you were using | copies instead where pasting is unavailable; types into another app, so needs permission |
+| **Write file** | writes text to a file (*Replace it*, *Add to the end* or *Add to the start*) | needs permission. A relative path is inside the workflow's data folder (the same one scripts get as `SEVAK_WORKFLOW_DATA`); `~` and full paths work. *Create missing folders* makes the folders on the way. The next nodes get the **path** as their argument |
+| **Show in file manager** | reveals each file or folder (one per line) in Finder, Explorer or your file manager | a relative path is inside the workflow's folder |
+| **Call workflow** | runs the `external` trigger *id* of the workflow in folder *name* with the text you give, waits for it, and carries on with its own argument | the other workflow must be installed, enabled and allowed (it may be this one). *Send the variables too* hands the variables over; otherwise it starts with its own. If the other workflow fails, this node fails with its message. Calls nest at most 8 deep, which stops a workflow that calls itself |
 
 #### Run script
 
@@ -170,6 +214,12 @@ matter what it contains.
 | **Transform** | changes the argument, or stores the result in a variable (*Store in variable*): set, UPPER, lower, Title Case, trim, URL-encode/decode, Base64 encode/decode, replace text, replace with a regular expression (`$1` is a group), first line, split at some text and keep part *n* |
 | **Conditional** | continues along *then* when the test holds, *else* otherwise: equals, does not equal, contains, does not contain, starts with, ends with, matches a regular expression, is empty, is not empty (optionally ignoring case) |
 | **Delay** | waits up to 60 seconds |
+| **Split argument** | cuts the argument at a new line, comma, tab, space or text of your own into a list (one item per line) and sets the variables `<prefix>1`, `<prefix>2` ... and `<prefix>count` (prefix `split_` unless you change it). Empty parts are dropped and spaces trimmed, each unless you turn it off. At most 200 numbered variables are set; the list and the count always have every item |
+| **Join argument** | joins a list (one item per line, or a JSON array such as `["a", "b"]`) with a separator; `\n` and `\t` in the separator mean a new line and a tab. *Drop empty items* is optional |
+| **Random** | a whole **number** from the smallest to the largest (both included), a random **line** of the text you give (placeholders allowed), or a version 4 **UUID**. It becomes the argument, or goes into *Store in variable* when that is set |
+| **Calculate** | fills in the placeholders of an expression such as `{var:count} + 1`, calculates it with the launcher's calculator (so its functions and constants work) and stores the result in the variable you name (required). It also becomes the argument unless you turn that off. A wrong expression ends the branch with an error |
+| **Debug** | shows the argument and every variable in the launcher window (as a text view) and passes the argument on; turn *Pass the argument on* off to empty it. Only for you to see: it is **never written to the log**, because it holds what you typed |
+| **Dialog** | shows a window with a heading, a message and one to three buttons (all may use placeholders); continues along the output of the button pressed (*button 1* to *button 3*), or along *cancel* when the window is closed |
 
 Regular expressions are Rust's [`regex` syntax](https://docs.rs/regex): linear
 time, no look-around, and limited in size, so a pattern cannot hang Sevak.
@@ -180,7 +230,13 @@ time, no look-around, and limited in size, so a pattern cannot hang Sevak.
 |---|---|
 | **Notification** | a system notification (heading defaults to the workflow's name) |
 | **Large Type** | the text huge on screen (dismiss with any key or a click) |
-| **Text view** | the text in the launcher window, below the search bar |
+| **Text view** | the text in the launcher window, below the search bar; tick **Markdown** (`"markdown": true`) to draw it as Markdown with headings, lists, tables, code and links (links open in your browser) |
+| **Speak** | reads the text aloud with the system voice (text defaults to `{query}`; *Voice* names an installed voice, empty is the system one). It does not wait for the speech to finish. macOS uses `say`, Windows the .NET speech synthesizer, Linux `spd-say` or `espeak-ng`/`espeak`; the text never goes through a shell |
+| **Play sound** | plays a sound file: `wav`, `mp3`, `aiff`, `aif`, `m4a`, `ogg` or `flac` (macOS `afplay`, Windows PowerShell, Linux `paplay`, `pw-play` or `aplay`). A relative path is inside the workflow's folder; it does not wait for the sound to finish |
+| **Show UI** | opens a small interface described in JSON, in the launcher or a window, waits for it and continues from the output a button names (or `closed`). See [Sevak UI](sevak-ui.md). A UI that declares scripts needs your Allow |
+
+The workflow's **Description** in the editor is also read as Markdown: a preview
+under the box shows how it will look.
 
 ### Script filter
 
@@ -201,14 +257,54 @@ plus:
 | `autocomplete` | what `Tab` types (after the keyword) |
 | `mods` | secondary actions: `cmd` is `Ctrl+Enter` (`⌘↵` on macOS), `alt` is `Alt+Enter`, `shift` is `Shift+Enter`; `ctrl`, `fn` and combinations are in the action panel (`→` or `Ctrl+K`). A mod's own `arg` and `variables` replace the row's, and the variable `mod` tells the next nodes which one was picked (`alt`, `cmd+alt`, ...) |
 | `uid`, `title`, `subtitle`, `icon.path` | as in script plugins |
+| `quicklookurl` | the preview pane (`Shift` or `Ctrl+Y`): a file path shows the file, an `http(s)` address is shown as a link and never fetched |
+| `text.copy`, `text.largetype` | what `Ctrl+C` (`⌘C`) copies and what Large Type (`Ctrl+L`) shows, instead of the `arg` and the title |
+| `match` | what the typed text is matched against when the node has **Sevak filters the results** on (the title otherwise). Rows that do not match are hidden, the rest are ranked by the match |
+
+Top-level keys of the answer:
+
+| Key | Effect |
+|---|---|
+| `variables` | variables for the next nodes, under each row's own (the row's value wins) |
+| `skipknowledge: true` | the rows keep the script's order: what you pick often never moves them |
+| `cache: {"seconds": N, "loosereload": true}` | the answer for that exact query is kept for N seconds (5 to 86 400, 64 queries per node, in memory only) and the script is not run again meanwhile. With `loosereload`, an expired answer is shown at once while the script runs again and the list then refreshes |
+| `rerun: 0.5` | while the same text stays in the launcher, the script runs again after that many seconds (0.1 to 5) and the list refreshes. It stops when the text changes or the launcher hides |
+| `strictmods`, `icon.resize`, `iconresize` | accepted and ignored |
+
+`mods` also accepts `ctrl` and `fn` and combinations such as `cmd+alt`. Sevak's
+launcher has no Enter-with-`Ctrl`-or-`fn` key of its own for those (its `Ctrl`
+is Alfred's `cmd`), so they appear in the action panel only; each entry's
+`arg`, `subtitle`, `valid` and `variables` work as for the others.
 
 Use a *Conditional* on `{var:mod}` to treat an `alt` pick differently.
 
-The script filter uses the workflow's variables as environment variables (and
-`SEVAK_WORKFLOW_*`), and stops a run after *Stop the script after* (3 seconds by
+The script filter uses the workflow's variables (and the values of its
+[settings](#settings-the-user-fills-in)) as environment variables, plus
+`SEVAK_WORKFLOW_*` and the names Alfred scripts read: `alfred_workflow_bundleid`,
+`alfred_workflow_name`, `alfred_workflow_keyword` (the keyword that started it),
+`alfred_workflow_data` (files to keep), `alfred_workflow_cache` (a folder of its
+own, apart from the data folder, for what can be thrown away), `alfred_version`
+(`5.5`) and `alfred_debug` (`0`). It stops a run after *Stop the script after* (3 seconds by
 default). A script filter that gives both a `script` and extra arguments looks
 for its interpreter when the workflow loads, so choose **Reload index** after
 installing Python or Node.
+
+### Filters without a script
+
+Three inputs list rows like a script filter does, with no program to run, so
+they need no approval. Each has its own keyword; picking a row starts the nodes
+after it with the row's argument.
+
+| Node | Rows | Argument |
+|---|---|---|
+| **List filter** | the items you write in the builder (*title*, *subtitle*, *argument*), narrowed by the typed text with Sevak's fuzzy matching (a subtitle match counts for less) | the item's argument, or its title when that is empty |
+| **File filter** | file and folder names from *Folders* (the `[files] directories` when empty; `[files]` depth, hidden-file and network-path settings apply), optionally only the listed *extensions* and only files or only folders | the full path |
+| **Running apps** | the apps that have a window, as the `quit` task lists them | *The name*, *the path* (known for apps Sevak also lists in its launcher; the name otherwise) or *the process id* (the first one) |
+
+The file list is scanned in the background (up to 20 000 entries, refreshed
+with the file index) and the list of running apps is cached for three seconds,
+so typing never waits for the disk or the system. Type the keyword and a space
+to list everything.
 
 ## Placeholders, the argument and variables
 
@@ -219,6 +315,17 @@ Text fields of nodes can use placeholders:
 | `{query}` | the **argument** that reached the node |
 | `{var:name}` | the **variable** `name` (empty when it was never set) |
 | `{query\|upper}` | filters, left to right |
+
+Date and time placeholders use the current local time:
+
+| Write | Becomes |
+|---|---|
+| `{date}`, `{time}`, `{datetime}` | `2026-10-03`, `14:05`, `2026-10-03 14:05` |
+| `{isodate}`, `{isotime}`, `{isodatetime}` | `2026-10-03`, `14:05:09`, `2026-10-03T14:05:09` (24 hour) |
+| `{date:%d %B %Y}` | any [strftime](https://docs.rs/chrono/latest/chrono/format/strftime/index.html) format (`{time:...}` and `{datetime:...}` too): `03 October 2026` |
+
+A format Sevak cannot read leaves the text as written. They are encoded or
+quoted like `{query}` in links and terminal command lines. They take no filters.
 
 Filters: `url` (percent-encode), `raw` (insert as it is: no encoding in a link,
 no quoting in a command line), `upper`, `lower`, `title`, `trim`, `json` (escape
@@ -270,13 +377,14 @@ trigger's (a script filter row's), and nodes can add more.
 
 **Permission.** A workflow whose nodes can run code or commands (**Run script**,
 **Script filter**, **Launch app**, **System command**, **Terminal command**,
-**Open file**, because opening a program or script runs it) or type into other
-apps (**Paste**) does nothing until you allow it. Sevak shows a dialog with the
+**Open file**, because opening a program or script runs it), type into other
+apps (**Paste**) or write files (**Write file**) does nothing until you allow
+it. Sevak shows a dialog with the
 workflow's name, what starts it, whether it will receive your Universal Actions
 selection, every command **with its arguments**, the *names* of the environment
 variables a script node sets, whether it sends text to a program's standard
-input, and "also does:" lines for every node that pastes text or opens a
-file or link. It closes with the folder's name and a short contents id. Text
+input, and "also does:" lines for every node that pastes text, writes a file or opens
+a file or link. It closes with the folder's name and a short contents id. Text
 written by the workflow's author is shown with control and direction-changing
 characters removed and long text cut, so it cannot fake extra lines or hide
 what runs. Sevak remembers your answer in `script-plugin-approvals.json` (the
@@ -377,6 +485,70 @@ rules a package has to meet and a pre-merge checklist are in
 [gallery/README.md](https://github.com/ninad-k/Sevak/blob/main/gallery/README.md); see also
 [plugins.md](plugins.md#workflows-for-contributors).
 
+## Settings the user fills in
+
+A workflow can ask for settings (a server name, an API key, a folder, a unit)
+instead of having them edited into its scripts. Add them in the builder, under
+the workflow's own properties (**Settings form**), or as `[[config]]` tables:
+
+```toml
+[[config]]
+variable = "api_host"          # becomes {var:api_host} and an environment variable
+kind = "textfield"             # textfield | textarea | checkbox | popup | slider | filepicker
+label = "Server"
+description = "Without https://"
+required = true                # the workflow does not run until it has a value
+placeholder = "example.com"
+
+[[config]]
+variable = "units"
+kind = "popup"
+default = "metric"
+options = [{ label = "Metric", value = "metric" }, { label = "Imperial", value = "imperial" }]
+
+[[config]]
+variable = "volume"
+kind = "slider"                # min, max (default 0 to 100) and step
+default = 40
+min = 0
+max = 100
+step = 5
+
+[[config]]
+variable = "root"
+kind = "filepicker"
+mode = "folder"                # file (default) or folder
+```
+
+The user opens the form with **Configure…** on the workflow's row in **Settings →
+Workflows**, and straight after installing a workflow that needs it from the
+gallery. Rules:
+
+- Variable names start with a letter or `_` and use letters, digits and `_`,
+  each at most once. A popup needs at least one option with a value; a slider's
+  `min` must be less than `max`; a default must fit its kind. Names such as
+  `PATH` that change how programs start are refused.
+- A value is the user's value, else the field's `default`, else the workflow's
+  own `[variables]` entry of that name, else nothing. A checkbox is `true` or
+  `false`, a slider a number, a file picker a path (`~` is expanded).
+- The values are saved in
+  `<data folder>/workflows/<folder>/user-config.json`, **outside the workflow
+  folder**: editing, updating or reinstalling the workflow keeps them. They are
+  your data, not part of what you allowed, so changing them never asks for
+  permission again. The `[[config]]` declaration itself (names, kinds,
+  defaults, options) comes from the workflow's author and is part of what you
+  allowed: editing it asks again.
+- A workflow with a required setting still empty does not run. Its trigger row
+  says *Configure <name> first: <settings>*, running it shows the same
+  notification, and a script filter lists that one row instead of running its
+  script.
+- Values reach scripts as environment variables and as arguments, never as
+  script source. In a terminal command `{var:name}` is quoted as one literal
+  word for the shell; in links it is percent-encoded.
+- Deleting a workflow keeps these values (and anything its scripts saved) unless
+  you choose **Delete with data**, which also removes its data folder, its cache
+  folder and its settings.
+
 ## The file format
 
 A workflow is the folder `<config folder>/workflows/<name>/` with `workflow.toml`
@@ -412,19 +584,29 @@ url = "{var:site|raw}/std/?search={query}"
 [[connection]]
 from = "kw"
 to = "open"                     # port = "then" / "else" after a conditional
+
+# [[config]] tables describe the settings form, see "Settings the user fills in".
 ```
 
 Node types and their fields: `keyword` (`keyword`, `argument`, `subtitle`),
 `hotkey` (`key`), `selection` (`accepts`), `external`, `script_filter`
-(`keyword`, `command` or `script`, `args`, `timeout_ms`, `hard_timeout_ms`),
+(`keyword`, `command` or `script`, `args`, `timeout_ms`, `hard_timeout_ms`,
+`filter_results`),
 `run_script` (`command` or `script`, `args`, `stdin`, `env`, `timeout_ms`,
 `log_stderr`), `open_url` (`url`), `open_file` (`path`), `launch_app` (`app`,
 `args`), `system_command` (`command`), `terminal_command` (`command`), `copy`
 (`text`), `paste` (`text`, `restore_clipboard`), `set_variable` (`name`,
 `value`), `transform` (`op`, `input`, `find`, `replace`, `index`, `into`),
 `conditional` (`left`, `test`, `right`, `ignore_case`), `delay` (`ms`),
-`notification` (`heading`, `body`), `large_type` (`text`) and `text_view`
-(`heading`, `text`). Every node may also have `title`, `x` and `y`. Unknown
+`notification` (`heading`, `body`), `large_type` (`text`), `text_view`
+(`heading`, `text`, `markdown`), `list_filter` (`keyword`, `[[node.items]]` with `title`,
+`subtitle`, `arg`), `file_filter` (`keyword`, `folders`, `extensions`, `scope`
+= `any`, `files` or `folders`), `running_apps` (`keyword`, `output` = `name`,
+`path` or `pid`), `dialog_conditional` (`heading`, `message`, `buttons`; ports
+`button1` to `button3` and `cancel`), `speak` (`text`, `voice`) and
+`play_sound` (`path`) and `show_ui` (`target`, `definition`, `file`, `scripts`, `ports`,
+`titlebar`, `always_on_top`; ports are the names its `output` actions use, and
+`closed`; see [Sevak UI](sevak-ui.md)). Every node may also have `title`, `x`, `y`, `note` and `disabled`; a `[[connection]]` may have `disabled`. Unknown
 `type` values make the whole workflow fail to load ("Not loaded: ..." on its row)
 rather than half-work. The examples in
 [`examples/workflows/`](https://github.com/ninad-k/Sevak/tree/main/examples/workflows) show real files.

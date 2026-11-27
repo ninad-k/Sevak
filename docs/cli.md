@@ -159,9 +159,10 @@ The workflow must be enabled, valid and allowed to run; otherwise the launcher o
 
 ```bash
 sevak --settings
+sevak --settings clipboard
 ```
 
-Open the Settings window. If Sevak is not running, start it with the Settings window shown.
+Open the Settings window. If Sevak is not running, start it with the Settings window shown. Give a section id to open on that section (an open Settings window switches to it): `general`, `hotkeys`, `appearance`, `search`, `plugins`, `workflows`, `gallery`, `extensions`, `web`, `files`, `clipboard`, `tasks`, `windows`, `integrations`, `ai`, `system`, `usage`, `linux`, `backup` or `help`. An unknown id is an error.
 
 #### `--quit`
 

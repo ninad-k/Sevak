@@ -129,7 +129,7 @@ impl IconStore {
         let new_keys = items
             .iter()
             .filter_map(|item| item.icon.as_ref())
-            .filter(|icon| !matches!(icon, IconSource::Builtin { .. }))
+            .filter(|icon| !matches!(icon, IconSource::Builtin { .. } | IconSource::Inline { .. }))
             .count();
         if sources.len() + new_keys > MAX_REGISTERED {
             sources.clear();
@@ -139,6 +139,9 @@ impl IconStore {
             .map(|item| {
                 item.icon.as_ref().map(|icon| match icon {
                     IconSource::Builtin { name } => IconDto::Builtin { name: name.clone() },
+                    IconSource::Inline { mime, base64 } => IconDto::Url {
+                        url: format!("data:{mime};base64,{base64}"),
+                    },
                     other => {
                         let key = key_for(other);
                         let url = icon_url(&key);

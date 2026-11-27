@@ -11,11 +11,15 @@ import {
   canConnect,
   categoryLabel,
   inPoint,
+  isConfigVariable,
   isStart,
   kindOf,
   makeNode,
+  newConfigField,
   newWorkflow,
   normalize,
+  optionsFromText,
+  optionsToText,
   outPoint,
   outputPorts,
   removeNode,
@@ -23,6 +27,7 @@ import {
   toSave,
   uniqueId,
   wouldLoop,
+  type Category,
   type NodeType,
   type Workflow,
 } from "./model";
@@ -83,6 +88,58 @@ describe("the node catalog", () => {
     expect(kindOf("copy").needsApproval).toBeFalsy();
   });
 
+  it("offers the utility nodes with their categories, defaults and approval", () => {
+    const expected: Record<string, Category> = {
+      split_arg: "utility",
+      join_arg: "utility",
+      random: "utility",
+      expression: "utility",
+      debug: "utility",
+      write_file: "action",
+      reveal_file: "action",
+      call_external: "action",
+    };
+    for (const [type, category] of Object.entries(expected)) {
+      expect(kindOf(type as NodeType).type, type).toBe(type);
+      expect(kindOf(type as NodeType).category, type).toBe(category);
+    }
+    // Writing files and calling another workflow ask for the user's Allow.
+    const needing = KINDS.filter((k) => k.needsApproval).map((k) => k.type);
+    expect(needing).toContain("write_file");
+    expect(needing).toContain("call_external");
+    expect(kindOf("split_arg").defaults()).toEqual({
+      delimiter: "newline",
+      custom: "",
+      discard_empty: true,
+      trim: true,
+      prefix: "split_",
+    });
+    expect(kindOf("random").defaults()).toMatchObject({ mode: "number", min: 1, max: 100 });
+    expect(kindOf("expression").defaults()).toMatchObject({ variable: "result", set_arg: true });
+    expect(kindOf("write_file").fields.find((f) => f.key === "mode")?.options?.map((o) => o.value)).toEqual([
+      "overwrite",
+      "append",
+      "prepend",
+    ]);
+    expect(kindOf("split_arg").fields[0].options?.[4]).toEqual({ value: "custom", label: "Custom text" });
+  });
+
+  it("drops empty optional fields of the new nodes when saving", () => {
+    const w = newWorkflow();
+    w.node.push(
+      { ...makeNode(w, "random", 0, 0), id: "r" },
+      { ...makeNode(w, "join_arg", 0, 0), id: "j" },
+      { ...makeNode(w, "call_external", 0, 0), id: "c", workflow: "other", trigger: "go" },
+    );
+    const saved = toSave(w).node;
+    const random = saved.find((n) => n.id === "r")!;
+    expect(random).not.toHaveProperty("lines");
+    expect(random).not.toHaveProperty("variable");
+    expect(random).toMatchObject({ mode: "number", min: 1, max: 100 });
+    expect(saved.find((n) => n.id === "j")).not.toHaveProperty("discard_empty");
+    expect(saved.find((n) => n.id === "c")).toMatchObject({ workflow: "other", arg: "{query}" });
+  });
+
   it("falls back to the first kind for an unknown type", () => {
     expect(kindOf("nonsense" as NodeType)).toBe(KINDS[0]);
   });
@@ -99,6 +156,59 @@ describe("the node catalog", () => {
   it("gives a conditional two output ports and every other node one", () => {
     expect(outputPorts({ id: "c", type: "conditional", x: 0, y: 0 })).toEqual([THEN, ELSE]);
     expect(outputPorts({ id: "t", type: "transform", x: 0, y: 0 })).toEqual([OUT]);
+  });
+});
+
+describe("filters, dialog, speech and sound nodes", () => {
+  it("offers the three new inputs as starts and none of them needs approval", () => {
+    for (const type of ["list_filter", "file_filter", "running_apps"] as NodeType[]) {
+      expect(kindOf(type).category).toBe("input");
+      expect(isStart({ id: "x", type, x: 0, y: 0 })).toBe(true);
+      expect(kindOf(type).needsApproval).toBeFalsy();
+    }
+    expect(kindOf("dialog_conditional").category).toBe("utility");
+    expect(kindOf("speak").category).toBe("output");
+    expect(kindOf("play_sound").category).toBe("output");
+  });
+
+  it("gives a dialog a port per button, then cancel", () => {
+    const dialog = (buttons: string[]) => ({ id: "d", type: "dialog_conditional" as const, x: 0, y: 0, buttons });
+    expect(outputPorts(dialog(["Yes", "No"]))).toEqual(["button1", "button2", "cancel"]);
+    expect(outputPorts(dialog(["Only"]))).toEqual(["button1", "cancel"]);
+    expect(outputPorts(dialog(["a", "b", "c", "d"]))).toEqual(["button1", "button2", "button3", "cancel"]);
+    // The defaults of a new node are two buttons.
+    const made = makeNode(newWorkflow(), "dialog_conditional", 0, 0);
+    expect(outputPorts(made)).toEqual(["button1", "button2", "cancel"]);
+  });
+
+  it("connects only the ports a dialog has", () => {
+    const w = newWorkflow();
+    const dialog = makeNode(w, "dialog_conditional", 0, 0);
+    const copy = makeNode(w, "copy", 0, 0);
+    w.node.push(dialog, copy);
+    expect(canConnect(w, dialog.id, "button2", copy.id).ok).toBe(true);
+    expect(canConnect(w, dialog.id, "button3", copy.id).ok).toBe(false);
+    expect(canConnect(w, dialog.id, "cancel", copy.id).ok).toBe(true);
+  });
+
+  it("packs the ports of a dialog into the box", () => {
+    const node = { id: "d", type: "dialog_conditional" as const, x: 0, y: 0, buttons: ["a", "b", "c"] };
+    const ys = ["button1", "button2", "button3", "cancel"].map((port) => outPoint(node, port).y);
+    expect(ys).toEqual([...ys].sort((a, b) => a - b));
+    expect(ys[ys.length - 1]).toBeLessThan(NODE_H);
+  });
+
+  it("keeps the list items and drops empty optional lists when saving", () => {
+    const w = newWorkflow();
+    const list = makeNode(w, "list_filter", 0, 0);
+    list.items = [{ title: "Apple", subtitle: "", arg: "a-1" }];
+    const files = makeNode(w, "file_filter", 0, 0);
+    w.node.push(list, files);
+    const saved = toSave(w);
+    expect(saved.node.find((n) => n.id === list.id)?.items).toEqual([{ title: "Apple", subtitle: "", arg: "a-1" }]);
+    const savedFiles = saved.node.find((n) => n.id === files.id)!;
+    expect(savedFiles.folders).toBeUndefined();
+    expect(savedFiles.extensions).toBeUndefined();
   });
 });
 
@@ -178,6 +288,24 @@ describe("toSave", () => {
     const w = chain();
     w.connection = [{ from: "a", to: "b" }];
     expect(toSave(w).connection).toEqual([{ from: "a", port: OUT, to: "b" }]);
+  });
+
+  it("writes notes and disabled flags only when they are used", () => {
+    const w = chain();
+    w.node[0].note = "  ";
+    w.node[0].disabled = false;
+    w.node[1].note = "why";
+    w.node[1].disabled = true;
+    w.connection = [
+      { from: "a", to: "b", disabled: false },
+      { from: "b", to: "a", disabled: true },
+    ];
+    const saved = toSave(w);
+    expect("note" in saved.node[0] || "disabled" in saved.node[0]).toBe(false);
+    expect(saved.node[1].note).toBe("why");
+    expect(saved.node[1].disabled).toBe(true);
+    expect(saved.connection[0]).toEqual({ from: "a", port: OUT, to: "b" });
+    expect(saved.connection[1].disabled).toBe(true);
   });
 
   it("does not modify the workflow it is given", () => {
@@ -261,5 +389,51 @@ describe("geometry", () => {
   it("puts the input at the left edge", () => {
     const node = { id: "n", type: "copy" as const, x: 100, y: 50 };
     expect(inPoint(node).x).toBe(100);
+  });
+});
+
+describe("the settings form", () => {
+  it("names new fields so that no variable is used twice", () => {
+    const first = newConfigField([]);
+    expect(first.variable).toBe("setting");
+    expect(newConfigField([first]).variable).toBe("setting_2");
+    expect(newConfigField([first, { variable: "setting_2", kind: "textfield" }]).variable).toBe("setting_3");
+  });
+
+  it("accepts the variable names Rust accepts", () => {
+    for (const ok of ["a", "_x", "api_host2"]) expect(isConfigVariable(ok)).toBe(true);
+    for (const bad of ["", "1a", "has space", "dash-ed", "a.b"]) expect(isConfigVariable(bad)).toBe(false);
+  });
+
+  it("round-trips options as lines", () => {
+    const options = optionsFromText("Metric = metric\nimperial\n\n");
+    expect(options).toEqual([
+      { label: "Metric", value: "metric" },
+      { label: "imperial", value: "imperial" },
+    ]);
+    expect(optionsToText(options)).toBe("Metric = metric\nimperial");
+  });
+
+  it("is saved without what its kind does not use", () => {
+    const w = newWorkflow();
+    w.config = [
+      { variable: " host ", kind: "textfield", label: " Server ", required: true, placeholder: "x", options: [{ label: "a", value: "a" }], min: 3 },
+      { variable: "mode", kind: "popup", default: "a", options: [{ label: "A", value: "a" }, { label: "", value: "" }] },
+      { variable: "vol", kind: "slider", min: 0, max: 10, step: null, default: "" },
+      { variable: "dir", kind: "filepicker", mode: "folder" },
+      { variable: "file", kind: "filepicker", mode: "file" },
+    ];
+    expect(toSave(w).config).toEqual([
+      { variable: "host", kind: "textfield", label: "Server", required: true, placeholder: "x" },
+      { variable: "mode", kind: "popup", default: "a", options: [{ label: "A", value: "a" }] },
+      { variable: "vol", kind: "slider", min: 0, max: 10 },
+      { variable: "dir", kind: "filepicker", mode: "folder" },
+      { variable: "file", kind: "filepicker" },
+    ]);
+  });
+
+  it("normalizes a workflow without settings to an empty form and offers the filter option", () => {
+    expect(normalize({ ...newWorkflow(), config: undefined }).config).toEqual([]);
+    expect(kindOf("script_filter").fields.map((f) => f.key)).toContain("filter_results");
   });
 });

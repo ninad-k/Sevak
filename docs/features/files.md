@@ -112,6 +112,20 @@ flowchart TD
 
 Use ++ctrl+k++ to see all available actions.
 
+## Recent documents
+
+`recent` searches the files you used lately, newest first, instead of the files in your search folders. Type `recent` alone to list them, or `recent report` to fuzzy-filter by file name. Rows work like file results: ++enter++ opens, ++ctrl+enter++ shows the file in its folder, ++shift+enter++ copies the path, and the [preview pane](../usage.md#preview-text-view-and-grid-view) and the [file buffer](#file-buffer) accept them.
+
+The list is read from the operating system's own recent lists, in the background and not while you type (at startup, and again when you search after more than 30 seconds):
+
+| System | Source |
+|---|---|
+| Linux | `~/.local/share/recently-used.xbel` (`file://` entries only) |
+| Windows | the shortcuts in `%APPDATA%\Microsoft\Windows\Recent`, newest shortcut first |
+| macOS | a Spotlight query for files used in the last 14 days, without folders, apps or anything under `~/Library`. Spotlight's own "last used" date is not read per file (too slow), so the order is approximated by each file's access and modification times |
+
+Files that no longer exist, folders and network locations are left out. Set the keyword, the number of files kept (10-500, default 50) or turn it off under **Settings → Files** (`[recent]` in [configuration](../configuration.md#recent)).
+
 ## File buffer
 
 ![Search bar with a file buffer strip above the results: three collected items shown as chips, with Alt+Right for actions and Alt+Backspace to clear.](../media/launcher-buffer.png)
@@ -160,6 +174,8 @@ What to expect:
 | Allow network paths | `false` | Windows: use `\\server\share` paths and mapped network drives (see [Path browsing](#path-browsing)) | [`[files] allow_network_paths`](../configuration.md#files) |
 | Keyword | `f` | Keyword to search only files | [`[files] keyword`](../configuration.md#files) |
 | Global | `true` | Also show file results in ordinary searches without the keyword | [`[files] global`](../configuration.md#files) |
+| Sort | Best match | Order of file results: best match, name (A to Z), or newest first | [`[files] sort`](../configuration.md#files) |
+| Results per search | `0` | Most file results per search; `0` uses the general search limit (up to 50) | [`[files] max_results`](../configuration.md#files) |
 | Use the OS index | `true` | Turn whole-disk (`ff`) and content (`in`) search on or off | [`[files] use_os_index`](../configuration.md#files) |
 | Whole-disk keyword | `ff` | Keyword for names anywhere; `""` turns that search off | [`[files] index_keyword`](../configuration.md#files) |
 | Contents keyword | `in` | Keyword for words inside files; `""` turns that search off | [`[files] content_keyword`](../configuration.md#files) |

@@ -1,0 +1,90 @@
+# Type "tx" in the launcher: a small Sevak UI opens with a text box, a choice
+# of transformation and a Transform button. The button runs a Python script
+# (declared on the node, so Sevak asks for your Allow once) that reads the UI's
+# state from standard input and replies with JSON, which updates the result
+# label live. "Copy" copies the result; "Done" continues the workflow and
+# copies it too. Needs Python 3 on PATH. Documented in docs/sevak-ui.md.
+format = 1
+name = "Text transformer"
+description = "A Sevak UI: type text, pick uppercase, lowercase, title case or slug, and transform it."
+author = "Sevak"
+version = "1.0"
+
+[[node]]
+id = "keyword"
+type = "keyword"
+title = "tx"
+x = 40.0
+y = 100.0
+keyword = "tx"
+argument = "optional"
+
+[[node]]
+id = "ui"
+type = "show_ui"
+title = "Text transformer"
+x = 320.0
+y = 100.0
+target = "launcher"
+definition = '''
+{
+  "title": "Text transformer",
+  "state": { "text": "{query}", "mode": "upper", "result": "" },
+  "root": {
+    "type": "column",
+    "gap": 10,
+    "children": [
+      { "type": "label", "text": "Text transformer", "style": "heading" },
+      { "type": "textarea", "id": "text", "rows": 4, "placeholder": "Text to transform" },
+      { "type": "picker", "id": "mode", "options": [
+        { "label": "UPPERCASE", "value": "upper" },
+        { "label": "lowercase", "value": "lower" },
+        { "label": "Title Case", "value": "title" },
+        { "label": "slug-case", "value": "slug" }
+      ], "events": { "change": { "run": "transform" } } },
+      { "type": "row", "children": [
+        { "type": "button", "label": "Transform", "style": "primary", "events": { "click": { "run": "transform" } } },
+        { "type": "button", "label": "Copy", "events": { "click": [ { "copy": "{state:result}" }, { "notify": "Copied" } ] } },
+        { "type": "button", "label": "Done", "events": { "click": { "output": "done", "arg": "{state:result}" } } }
+      ] },
+      { "type": "separator" },
+      { "type": "label", "text": "{state:result}", "style": "mono" }
+    ]
+  }
+}
+'''
+
+[node.scripts.transform]
+language = "python"
+script = '''
+import json, re, sys
+event = json.load(sys.stdin)
+state = event["state"]
+text, mode = state.get("text", ""), state.get("mode", "upper")
+if mode == "upper":
+    out = text.upper()
+elif mode == "lower":
+    out = text.lower()
+elif mode == "title":
+    out = text.title()
+else:
+    out = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+print(json.dumps({"set": {"result": out}}))
+'''
+
+[[node]]
+id = "copy"
+type = "copy"
+title = "Copy the result"
+x = 600.0
+y = 100.0
+text = "{query}"
+
+[[connection]]
+from = "keyword"
+to = "ui"
+
+[[connection]]
+from = "ui"
+port = "done"
+to = "copy"

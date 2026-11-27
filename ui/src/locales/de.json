@@ -116,7 +116,16 @@
       "bookmarksGlobalToggle": "Lesezeichen in normalen Suchen anzeigen",
       "browsers": "Browser",
       "browsersHint": "Hake die Browser an, die gelesen werden sollen, mit allen ihren Profilen. Ist keiner angehakt, liest Sevak jeden Browser, den es findet. Safari gibt es nur unter macOS, und Sevak braucht dort „Festplattenvollzugriff“, um es zu lesen.",
-      "bookmarksPlugin": "Lesezeichen"
+      "bookmarksPlugin": "Lesezeichen",
+      "recentTitle": "Zuletzt verwendete Dokumente",
+      "recentSub": "Tippe <code>{keyword}</code>, um die zuletzt verwendeten Dateien aufzulisten (neueste zuerst), oder <code>{keyword} bericht</code>, um nach Namen zu filtern.",
+      "recentEnabled": "Zuletzt verwendete Dokumente",
+      "recentEnabledHint": "Aus entfernt die Suche; nichts wird gelesen.",
+      "recentEnabledToggle": "Zuletzt verwendete Dateien durchsuchen",
+      "recentItems": "Gemerkte Dateien",
+      "recentItemsHint": "Wie viele zuletzt verwendete Dateien die Liste enthält (10 bis 500).",
+      "recentPrivacy": "<strong>Datenschutz:</strong> Die Liste stammt aus den eigenen Zuletzt-verwendet-Listen des Betriebssystems (Linux recently-used.xbel, der Windows-Ordner „Recent“, macOS Spotlight) und wird nur auf diesem Computer gelesen. Netzwerkorte werden übersprungen; nichts wird irgendwohin gesendet.",
+      "recentPlugin": "Zuletzt verwendete Dokumente"
     },
     "clock": {
       "title": "Weltuhr",
@@ -240,6 +249,10 @@
       "keepTitle": "Was gespeichert wird",
       "keepSub": "Diese Einstellungen gelten, solange der Verlauf eingeschaltet ist.",
       "items": "Anzahl der Einträge",
+      "viewerRows": "Rows shown",
+      "viewerRowsHint": "Most entries listed at once. 5 to 100.",
+      "previewChars": "Preview length",
+      "previewCharsHint": "Characters of an entry shown in its title. 40 to 500.",
       "itemsHint": "Ältere Einträge werden zusammen mit ihren Bilddateien verworfen.",
       "longestText": "Längster Text",
       "longestTextHint": "Längerer Text wird nicht aufgezeichnet. 1 bis {max} KB.",
@@ -288,6 +301,8 @@
       "vcardsHint": "Exportiere eine .vcf-Datei aus deinem Adressbuch, Outlook, Google Kontakte oder einem Telefon. Ein Ordner fügt jede .vcf-Datei darin hinzu. Funktioniert überall ohne Berechtigung.",
       "pickVcard": "vCard-Datei auswählen",
       "pickVcardFolder": "Ordner mit vCard-Dateien auswählen",
+      "contactPhotos": "Show contact photos",
+      "contactPhotosHint": "Use the photo in a vCard as the result icon. Photos stay in memory and are never written to disk.",
       "contactsPrivacy": "<strong>Datenschutz:</strong> Kontakte werden beim Start von Sevak und alle zehn Minuten in den Arbeitsspeicher gelesen. Sie werden nie auf die Festplatte geschrieben, protokolliert oder irgendwohin gesendet, und Suchen hier bleiben aus dem Suchverlauf heraus.",
       "contactsPlugin": "Kontakte",
       "opSub": "Finde eine Anmeldung über Titel oder Website: <code>{keyword} github</code>. Sevak verwendet das offizielle Befehlszeilenwerkzeug <code>op</code> und liest nie ein Passwort, einen Einmalcode oder eine Notiz.",
@@ -525,6 +540,10 @@
         "noneWithEnv": "Noch kein Schlüssel. Füge hier einen ein oder setze die Umgebungsvariable {variable}.",
         "none": "Noch kein Schlüssel."
       }
+    },
+    "fileView": {
+      "label": "Datei",
+      "step": "Dateien durchblättern"
     }
   },
   "announce": {
@@ -712,6 +731,36 @@
     "submit": "Deine Erweiterung einreichen",
     "opensBrowser": "(öffnet deinen Browser)"
   },
+  "usage": {
+    "title": "Nutzung",
+    "lead": "Was Sevak auf diesem Computer zählt, um Ergebnisse zu ordnen. Nichts verlässt ihn.",
+    "total": "Erfasste Starts",
+    "items": "Erfasste Einträge",
+    "history": "Verlaufseinträge",
+    "top": "Meistgenutzte Einträge",
+    "item": "Eintrag",
+    "plugin": "Plugin",
+    "count": "Starts",
+    "last": "Zuletzt genutzt",
+    "perPlugin": "Starts pro Plugin",
+    "copy": "Statistik kopieren",
+    "copied": "Kopiert.",
+    "empty": "Noch nichts gezählt. Starte etwas, dann erscheint es hier.",
+    "privacy": "Nur Namen von Einträgen: keine eingetippten Suchen, keine Ordnerpfade. Statistik kopieren kopiert denselben Text.",
+    "loadFailed": "Die Nutzungsstatistik konnte nicht gelesen werden."
+  },
+  "filters": {
+    "sections": {
+      "label": "Einstellungen filtern",
+      "placeholder": "Bereiche filtern",
+      "none": "Kein Bereich passt."
+    },
+    "tasks": {
+      "label": "Aufgaben filtern",
+      "placeholder": "Aufgaben nach Namen filtern",
+      "none": "Keine Aufgabe passt."
+    }
+  },
   "settings": {
     "title": "Sevak-Einstellungen",
     "loadFailed": "Die Einstellungen konnten nicht geladen werden. Schließe dieses Fenster und versuche es erneut über das Infobereich-Menü.",
@@ -735,7 +784,8 @@
       "system": "System & Terminal",
       "linux": "Linux",
       "backup": "Sichern & Wiederherstellen",
-      "help": "Hilfe"
+      "help": "Hilfe",
+      "usage": "Nutzung"
     },
     "problems": {
       "one": "{count} Problem",
@@ -829,7 +879,18 @@
       "none": "Keine",
       "missing": "{keyword} (fehlt)",
       "remember": "Suchen merken",
-      "rememberHint": "Pfeil nach oben und unten in einer leeren Suchleiste rufen zuletzt Ausgeführtes ab. Wird nur auf diesem Computer gespeichert."
+      "rememberHint": "Pfeil nach oben und unten in einer leeren Suchleiste rufen zuletzt Ausgeführtes ab. Wird nur auf diesem Computer gespeichert.",
+      "retention": "Suchen aufbewahren für",
+      "retentionHint": "Ältere Suchen werden vergessen. Sie erscheinen auch nach ! im Launcher.",
+      "retention24h": "24 Stunden",
+      "retention7d": "7 Tage",
+      "retention30d": "30 Tage",
+      "retention90d": "90 Tage",
+      "persist": "Suchen auf der Festplatte speichern",
+      "persistHint": "Aus behält sie nur im Speicher, bis Sevak beendet wird, und löscht das Gespeicherte.",
+      "clear": "Verlauf löschen",
+      "clearHint": "Alle gemerkten Suchen jetzt vergessen.",
+      "cleared": "Gelöscht."
     },
     "plugins": {
       "enable": "{name} aktivieren",
@@ -892,7 +953,14 @@
       "indexKeyword": "Schlüsselwort für die ganze Festplatte",
       "indexKeywordHint": "Leer schaltet die Namenssuche aus.",
       "contentKeyword": "Schlüsselwort für Inhalte",
-      "contentKeywordHint": "Leer schaltet die Inhaltssuche aus."
+      "contentKeywordHint": "Leer schaltet die Inhaltssuche aus.",
+      "sort": "Reihenfolge der Ergebnisse",
+      "sortHint": "Relevanz sortiert nach Namenstreffer, Name von A bis Z, Neueste zuerst nach Änderungsdatum.",
+      "sortRelevance": "Beste Übereinstimmung",
+      "sortName": "Name (A bis Z)",
+      "sortModified": "Neueste zuerst",
+      "maxResults": "Ergebnisse pro Suche",
+      "maxResultsHint": "0 verwendet das Suchlimit unter Suche. Hier bis 50."
     },
     "linux": {
       "xwayland": "XWayland unter Wayland verwenden",
@@ -945,6 +1013,9 @@
     "size": "Gib eine Größe über 0 und bis zu {max} ein",
     "wholeNumber": "Gib eine ganze Zahl von {min} bis {max} ein",
     "fallbackGone": "Die Suchmaschine „{keyword}“ gibt es nicht mehr.",
+    "emptyAlias": "Der Alias darf nicht leer sein",
+    "aliasTwice": "„{alias}“ steht doppelt",
+    "retention": "Stunden oder Tage verwenden, etwa 24h, 7d oder 90d",
     "owner": {
       "terminal": "Terminalbefehle",
       "clipboard": "Zwischenablage-Verlauf",
@@ -952,6 +1023,8 @@
       "emoji": "Emoji-Auswahl",
       "contacts": "Kontakte",
       "uuid": "UUID-Generator",
+      "settings": "die Suche in den Sevak-Einstellungen",
+      "history": "der Suchverlauf",
       "files": "Dateisuche",
       "indexFiles": "Dateisuche auf der ganzen Festplatte",
       "contentFiles": "Suche in Dateiinhalten",
@@ -967,6 +1040,7 @@
       "ssh": "SSH-Hosts",
       "projects": "Letzte Projekte",
       "calendar": "Kalender",
+      "recent": "zuletzt verwendete Dokumente",
       "clock": "Weltuhr",
       "passwords": "Passwortgenerator"
     }
@@ -1006,7 +1080,10 @@
       "edit": "Bearbeiten",
       "editLabel": "{name} bearbeiten",
       "delete": "Löschen",
-      "deleteLabel": "{name} löschen"
+      "deleteLabel": "{name} löschen",
+      "configure": "Konfigurieren…",
+      "configureLabel": "{name} konfigurieren",
+      "needsSettings": "Braucht Einstellungen: {fields}"
     },
     "editor": {
       "region": "Workflow-Editor",
@@ -1069,7 +1146,48 @@
       "saved": "Gespeichert.",
       "savedNeedsAllow": "Gespeichert. Sevak bittet dich um Erlaubnis, bevor etwas ausgeführt wird.",
       "badId": "Eine ID besteht aus 1 bis 40 Buchstaben, Ziffern, Bindestrichen oder Unterstrichen.",
-      "idTaken": "Ein anderer Knoten hat bereits diese ID."
+      "idTaken": "Ein anderer Knoten hat bereits diese ID.",
+      "descriptionPreview": "Vorschau der Beschreibung",
+      "portButton": "Wenn Schaltfläche {n} gedrückt wird, weiter zu",
+      "portCancel": "Wenn geschlossen, weiter zu",
+      "noteLabel": "Notiz",
+      "notePlaceholder": "Ein Kommentar unter dem Kasten",
+      "noteHint": "Nur Dokumentation: Eine Notiz ändert nie, was der Workflow tut.",
+      "disableNode": "Diesen Knoten deaktivieren",
+      "disableNodeHint": "Ein deaktivierter Knoten läuft nicht und sein Zweig endet dort. Ein deaktivierter Auslöser reagiert nicht auf sein Schlüsselwort oder seinen Hotkey.",
+      "disableConnection": "Diese Verbindung deaktivieren",
+      "enableConnection": "Diese Verbindung aktivieren",
+      "connectionDisabledHint": "Eine deaktivierte Verbindung wird beim Ausführen des Workflows nicht verfolgt.",
+      "disabledConnection": "deaktiviert",
+      "multiSelected": "Ausgewählte Kästen: {count}",
+      "multiHint": "Verschiebe sie mit den Pfeiltasten oder per Ziehen. Mit den Ausrichten-Schaltflächen oben richtest du sie aus.",
+      "alignGroup": "Ausrichten",
+      "alignLeft": "Links",
+      "alignCenter": "Mitte",
+      "alignTop": "Oben",
+      "alignMiddle": "Mittig",
+      "distributeH": "Waagerecht verteilen",
+      "distributeV": "Senkrecht verteilen",
+      "shortcuts": "Kürzel",
+      "shortcutsTitle": "Tastenkürzel und Gesten",
+      "shortcutsClose": "Schließen",
+      "noteEdit": "Doppelklick, um die Notiz zu bearbeiten",
+      "shortcut": {
+        "select": "Einen Kasten auswählen (mit Umschalt, Strg oder Cmd weitere hinzufügen oder entfernen)",
+        "rubber": "Auf der leeren Fläche ziehen, um mehrere Kästen auszuwählen",
+        "alignTo": "Die Auswahl am angeklickten Kasten ausrichten (mit der zuletzt gewählten Ausrichten-Schaltfläche)",
+        "autoConnect": "Den ausgewählten Kasten mit dem angeklickten verbinden",
+        "move": "Ausgewählte Kästen verschieben (Umschalt: 40-px-Schritte)",
+        "scroll": "Die Fläche scrollen, wenn nichts ausgewählt ist",
+        "nearest": "Den nächsten Kasten in dieser Richtung auswählen",
+        "follow": "Den ersten Kasten danach oder davor entlang der Verbindungen auswählen",
+        "disable": "Die ausgewählte Verbindung oder Kästen deaktivieren oder aktivieren",
+        "delete": "Die Auswahl entfernen",
+        "save": "Speichern",
+        "escape": "Auswahl aufheben oder eine Verbindung abbrechen",
+        "help": "Diese Liste ein- oder ausblenden",
+        "note": "Eine Notiz bearbeiten (Doppelklick auf den Text)"
+      }
     },
     "fields": {
       "acceptText": "Text",
@@ -1078,7 +1196,15 @@
       "pasteDefault": "Einstellung unter [paste] verwenden",
       "yes": "Ja",
       "no": "Nein",
-      "noSettings": "Dieser Auslöser hat keine Einstellungen. Starte ihn mit <code>sevak --trigger &lt;Ordner&gt;/{id}</code> (hänge Text an, um ihn als <code>{query}</code> zu übergeben)."
+      "noSettings": "Dieser Auslöser hat keine Einstellungen. Starte ihn mit <code>sevak --trigger &lt;Ordner&gt;/{id}</code> (hänge Text an, um ihn als <code>{query}</code> zu übergeben).",
+      "itemTitle": "Titel",
+      "itemSubtitle": "Untertitel",
+      "itemArg": "Argument (der Titel, wenn leer)",
+      "addItem": "Eintrag hinzufügen",
+      "removeItem": "Eintrag {n} entfernen",
+      "jsonInvalid": "Das ist noch kein JSON-Objekt.",
+      "validateUi": "Prüfen",
+      "uiValid": "Sieht gut aus: {components} Komponenten. Ausgänge: {ports}."
     },
     "connect": {
       "missing": "Diesen Knoten gibt es nicht.",
@@ -1137,6 +1263,37 @@
         "shutdown": "Herunterfahren (fragt vorher)",
         "logout": "Abmelden (fragt vorher)",
         "empty_trash": "Papierkorb leeren (fragt vorher)"
+      },
+      "delimiter": {
+        "newline": "Zeilenumbruch",
+        "comma": "Komma",
+        "tab": "Tabulator",
+        "space": "Leerzeichen",
+        "custom": "Eigener Text"
+      },
+      "random": {
+        "number": "Zahl",
+        "line": "Textzeile",
+        "uuid": "UUID"
+      },
+      "write": {
+        "overwrite": "Ersetzen",
+        "append": "Am Ende anfügen",
+        "prepend": "Am Anfang einfügen"
+      },
+      "fileScope": {
+        "any": "Dateien und Ordner",
+        "files": "Nur Dateien",
+        "folders": "Nur Ordner"
+      },
+      "appOutput": {
+        "name": "Der Name",
+        "path": "Der Pfad",
+        "pid": "Die Prozess-ID"
+      },
+      "uiTarget": {
+        "launcher": "Im Launcher",
+        "window": "In einem Fenster"
       }
     },
     "program": {
@@ -1205,6 +1362,10 @@
           },
           "hard_timeout_ms": {
             "label": "Skript beenden nach (ms)"
+          },
+          "filter_results": {
+            "label": "Sevak filtert die Ergebnisse",
+            "hint": "Vergleicht die Eingabe mit dem Treffertext jeder Zeile (oder ihrem Titel) und blendet den Rest aus. Lass es aus, wenn das Skript selbst filtert."
           }
         }
       },
@@ -1402,9 +1563,318 @@
           },
           "text": {
             "label": "Text"
+          },
+          "markdown": {
+            "label": "Markdown",
+            "hint": "Zeigt den Text als Markdown an: Überschriften, Listen, Tabellen, Links."
+          }
+        }
+      },
+      "split_arg": {
+        "label": "Argument teilen",
+        "summary": "Teilt das Argument in eine Liste und nummeriert die Teile als Variablen.",
+        "fields": {
+          "delimiter": {
+            "label": "Teilen bei"
+          },
+          "custom": {
+            "label": "Eigenes Trennzeichen",
+            "hint": "Wird verwendet, wenn \"Teilen bei\" eigener Text ist."
+          },
+          "discard_empty": {
+            "label": "Leere Teile entfernen",
+            "hint": "Leere Teile (nach dem Kürzen, falls aktiv) werden weggelassen."
+          },
+          "trim": {
+            "label": "Leerzeichen um jeden Teil entfernen"
+          },
+          "prefix": {
+            "label": "Variablenpräfix",
+            "hint": "Die Teile werden als Variablen gespeichert: Präfix plus 1, 2, 3 ... Das Präfix plus count enthält die Anzahl."
+          }
+        }
+      },
+      "join_arg": {
+        "label": "Argument verbinden",
+        "summary": "Verbindet eine Liste (ein Eintrag pro Zeile oder ein JSON-Array) zu einer Textzeile.",
+        "fields": {
+          "separator": {
+            "label": "Trennzeichen",
+            "hint": "Wird zwischen die Einträge geschrieben. \\n und \\t stehen für Zeilenumbruch und Tabulator."
+          },
+          "discard_empty": {
+            "label": "Leere Einträge entfernen"
+          }
+        }
+      },
+      "random": {
+        "label": "Zufall",
+        "summary": "Erzeugt eine Zufallszahl, wählt eine zufällige Zeile oder erzeugt eine UUID.",
+        "fields": {
+          "mode": {
+            "label": "Was erzeugen"
+          },
+          "min": {
+            "label": "Kleinste Zahl",
+            "hint": "Für Zahlen; eingeschlossen."
+          },
+          "max": {
+            "label": "Größte Zahl",
+            "hint": "Für Zahlen; eingeschlossen."
+          },
+          "lines": {
+            "label": "Zeilen zur Auswahl",
+            "hint": "Zum Auswählen einer Zeile: ein Kandidat pro Zeile."
+          },
+          "variable": {
+            "label": "In Variable speichern",
+            "hint": "Leer lassen, damit das Ergebnis zum Argument wird."
+          }
+        }
+      },
+      "expression": {
+        "label": "Berechnen",
+        "summary": "Berechnet einen mathematischen Ausdruck und speichert das Ergebnis.",
+        "fields": {
+          "expression": {
+            "label": "Ausdruck",
+            "hint": "Zuerst werden die Platzhalter ersetzt, dann rechnet der Taschenrechner des Launchers. Ein fehlerhafter Ausdruck beendet diesen Zweig."
+          },
+          "variable": {
+            "label": "In Variable speichern",
+            "hint": "Erforderlich."
+          },
+          "set_arg": {
+            "label": "Ergebnis auch als Argument verwenden",
+            "hint": "Aus lassen, um das Argument zu behalten."
+          }
+        }
+      },
+      "write_file": {
+        "label": "Datei schreiben",
+        "summary": "Schreibt Text in eine Datei. Der Workflow muss vorher erlaubt werden.",
+        "fields": {
+          "path": {
+            "label": "Datei",
+            "hint": "Ein relativer Pfad liegt im Datenordner des Workflows; ~ und vollständige Pfade funktionieren auch. Die folgenden Knoten erhalten den Pfad."
+          },
+          "content": {
+            "label": "Zu schreibender Text"
+          },
+          "mode": {
+            "label": "Falls die Datei existiert"
+          },
+          "create_dirs": {
+            "label": "Fehlende Ordner anlegen"
+          }
+        }
+      },
+      "debug": {
+        "label": "Debug",
+        "summary": "Zeigt das Argument und die Variablen im Launcher-Fenster an.",
+        "fields": {
+          "passthrough": {
+            "label": "Argument weitergeben",
+            "hint": "Aus leert das Argument für die folgenden Knoten. Was angezeigt wird, kommt nie ins Protokoll."
+          }
+        }
+      },
+      "reveal_file": {
+        "label": "Im Dateimanager zeigen",
+        "summary": "Zeigt Dateien oder Ordner im Dateimanager an.",
+        "fields": {
+          "path": {
+            "label": "Dateien oder Ordner",
+            "hint": "Einer pro Zeile. Ein relativer Pfad liegt im Ordner des Workflows."
+          }
+        }
+      },
+      "call_external": {
+        "label": "Workflow aufrufen",
+        "summary": "Führt den externen Auslöser eines anderen Workflows aus und wartet darauf.",
+        "fields": {
+          "workflow": {
+            "label": "Workflow-Ordner",
+            "hint": "Der Ordnername eines installierten, erlaubten Workflows (auch dieser ist möglich)."
+          },
+          "trigger": {
+            "label": "ID des externen Auslösers",
+            "hint": "Die ID eines Knotens für einen externen Auslöser in diesem Workflow."
+          },
+          "arg": {
+            "label": "Zu sendender Text"
+          },
+          "pass_variables": {
+            "label": "Variablen mitschicken"
+          }
+        }
+      },
+      "list_filter": {
+        "label": "Listenfilter",
+        "summary": "Ein Stichwort, das hier geschriebene Zeilen auflistet, eingegrenzt durch deine Eingabe.",
+        "fields": {
+          "keyword": {
+            "label": "Stichwort"
+          },
+          "items": {
+            "label": "Einträge",
+            "hint": "Die gewählte Zeile gibt ihr Argument weiter (ihren Titel, wenn das Argument leer ist)."
+          }
+        }
+      },
+      "file_filter": {
+        "label": "Dateifilter",
+        "summary": "Ein Stichwort, das Datei- und Ordnernamen aus den gewählten Ordnern auflistet.",
+        "fields": {
+          "keyword": {
+            "label": "Stichwort"
+          },
+          "folders": {
+            "label": "Ordner",
+            "hint": "Einer pro Zeile. Leer lassen, um die Ordner aus Einstellungen > Dateien zu nutzen."
+          },
+          "extensions": {
+            "label": "Nur diese Endungen",
+            "hint": "Eine pro Zeile, etwa pdf oder png. Leer lassen für alle Dateien."
+          },
+          "scope": {
+            "label": "Anzeigen"
+          }
+        }
+      },
+      "running_apps": {
+        "label": "Laufende Apps",
+        "summary": "Ein Stichwort, das die laufenden Apps auflistet.",
+        "fields": {
+          "keyword": {
+            "label": "Stichwort"
+          },
+          "output": {
+            "label": "Weitergeben",
+            "hint": "Der Pfad ist für Apps bekannt, die Sevak auch im Starter listet; sonst wird der Name weitergegeben."
+          }
+        }
+      },
+      "dialog_conditional": {
+        "label": "Dialog",
+        "summary": "Stellt eine Frage mit ein bis drei Schaltflächen und geht beim gedrückten Knopf weiter.",
+        "fields": {
+          "heading": {
+            "label": "Überschrift"
+          },
+          "message": {
+            "label": "Nachricht"
+          },
+          "buttons": {
+            "label": "Schaltflächen",
+            "hint": "Eine pro Zeile, höchstens drei. Jede Schaltfläche hat einen eigenen Ausgang; Schließen des Dialogs nimmt den Abbruch-Ausgang. Bei drei Schaltflächen kann das Schließen auf manchen Systemen als dritte gelten."
+          }
+        }
+      },
+      "speak": {
+        "label": "Vorlesen",
+        "summary": "Liest Text mit der Systemstimme vor.",
+        "fields": {
+          "text": {
+            "label": "Text"
+          },
+          "voice": {
+            "label": "Stimme",
+            "hint": "Der Name einer auf diesem Computer installierten Stimme. Leer lassen für die Systemstimme."
+          }
+        }
+      },
+      "play_sound": {
+        "label": "Ton abspielen",
+        "summary": "Spielt eine Audiodatei ab (wav, mp3, aiff, m4a, ogg oder flac).",
+        "fields": {
+          "path": {
+            "label": "Audiodatei",
+            "hint": "Ein vollständiger Pfad, ein Pfad mit ~ am Anfang oder eine Datei im Workflow-Ordner."
+          }
+        }
+      },
+      "show_ui": {
+        "label": "Oberfläche anzeigen",
+        "summary": "Öffnet eine kleine, per JSON beschriebene Oberfläche, wartet darauf und macht mit dem Ausgang weiter, den eine Schaltfläche nennt (oder „closed“).",
+        "fields": {
+          "target": {
+            "label": "Wo"
+          },
+          "definition": {
+            "label": "Definition (JSON)",
+            "hint": "Komponenten, Zustand und Ereignisse. Siehe die Sevak-UI-Anleitung. Entweder dies oder eine Datei."
+          },
+          "file": {
+            "label": "Definitionsdatei",
+            "hint": "Eine JSON-Datei im Workflow-Ordner. {file:andere.json} darin bindet weitere Dateien ein."
+          },
+          "scripts": {
+            "label": "Skripte (JSON)",
+            "hint": "Skripte, die „run“-Aktionen starten dürfen, z. B. {\"up\": {\"language\": \"shell\", \"script\": \"...\"}}. Sprachen: shell, python, javascript, powershell. Eine Oberfläche mit Skripten braucht Ihre Erlaubnis."
+          },
+          "ports": {
+            "label": "Ausgangsnamen",
+            "hint": "Einer pro Zeile. Nur mit einer Definitionsdatei nötig; eine eingebettete Definition nennt ihre Ausgänge selbst. „closed“ gibt es immer."
+          },
+          "titlebar": {
+            "label": "Titelleiste des Fensters"
+          },
+          "always_on_top": {
+            "label": "Fenster immer im Vordergrund"
           }
         }
       }
+    },
+    "config": {
+      "title": "{name} konfigurieren",
+      "lead": "Diese Einstellungen gehören dir. Sie liegen außerhalb des Workflows, daher ändern ein Update oder eine Neuinstallation sie nicht.",
+      "empty": "Dieser Workflow hat keine Einstellungen.",
+      "required": "Erforderlich",
+      "fillIn": "Fülle {fields} aus, um zu speichern.",
+      "choose": "Auswählen…",
+      "browse": "Durchsuchen…",
+      "chooseFile": "Datei auswählen",
+      "chooseFolder": "Ordner auswählen"
+    },
+    "builder": {
+      "title": "Einstellungsformular",
+      "hint": "Was der Nutzer unter „Konfigurieren…“ ausfüllt. Jede Einstellung wird zur Variablen <code>{var:name}</code> und zu einer Umgebungsvariable für Skripte. Eine erforderliche Einstellung hält den Workflow an, bis sie einen Wert hat.",
+      "add": "Einstellung hinzufügen",
+      "moveUp": "{name} nach oben",
+      "moveDown": "{name} nach unten",
+      "remove": "Einstellung {name} entfernen",
+      "label": "Beschriftung",
+      "variable": "Variable",
+      "kind": "Typ",
+      "kinds": {
+        "textfield": "Textfeld",
+        "textarea": "Textbereich",
+        "checkbox": "Kontrollkästchen",
+        "popup": "Auswahlliste",
+        "slider": "Schieberegler",
+        "filepicker": "Datei oder Ordner"
+      },
+      "required": "Erforderlich",
+      "description": "Beschreibung",
+      "options": "Auswahlmöglichkeiten",
+      "optionLabel": "Beschriftung von Auswahl {n}",
+      "optionValue": "Wert von Auswahl {n}",
+      "optionLabelPlaceholder": "Beschriftung",
+      "optionValuePlaceholder": "Wert",
+      "addOption": "Auswahl hinzufügen",
+      "removeOption": "Auswahl {n} entfernen",
+      "default": "Standard",
+      "noDefault": "(keiner)",
+      "off": "Aus",
+      "on": "An",
+      "min": "Minimum",
+      "max": "Maximum",
+      "step": "Schrittweite",
+      "mode": "Wählt",
+      "modeFile": "Eine Datei",
+      "modeFolder": "Einen Ordner",
+      "placeholder": "Platzhaltertext"
     }
   },
   "gallery": {
@@ -1625,7 +2095,8 @@
   },
   "appearance": {
     "units": {
-      "px": "{value} px"
+      "px": "{value} px",
+      "ms": "{value} ms"
     },
     "extras": {
       "accent": "Akzentfarbe",
@@ -1642,6 +2113,19 @@
       "blurHint": "Zeichnet den Desktop hinter der Suchleiste unscharf. Verringere oben die Deckkraft, um es zu sehen.",
       "radius": "Eckenradius",
       "radiusHint": "Rundung der Suchleiste.",
+      "settingsTheme": "Modus des Einstellungsfensters",
+      "settingsThemeHint": "Hell oder dunkel nur für dieses Fenster. „Wie Launcher“ übernimmt das Design der Suchleiste.",
+      "settingsThemeFollow": "Wie Launcher",
+      "settingsThemeLight": "Hell",
+      "settingsThemeDark": "Dunkel",
+      "settingsThemeSystem": "System",
+      "openAnimation": "Öffnungsanimation",
+      "openAnimationHint": "Wie die Suchleiste erscheint. Die Systemeinstellung „Bewegung reduzieren“ schaltet sie immer aus.",
+      "openFade": "Einblenden",
+      "openFadeScale": "Einblenden und zoomen",
+      "openNone": "Keine",
+      "animationMs": "Animationsdauer",
+      "animationMsHint": "Wie lange die Öffnungsanimation dauert.",
       "customCss": "Eigenes Stylesheet",
       "customCssHint": "Eine CSS-Datei im Konfigurationsordner, die die Theme-Variablen überschreibt, etwa <code>theme.css</code>. Siehe docs/themes.md."
     },
@@ -1876,5 +2360,19 @@
       "saveBeforeExport": "Speichere das Theme zuerst (Speichern unter…) und exportiere es dann.",
       "exported": "Das Theme wurde exportiert."
     }
+  },
+  "markdown": {
+    "note": "Hinweis",
+    "tip": "Tipp",
+    "important": "Wichtig",
+    "warning": "Warnung",
+    "caution": "Vorsicht"
+  },
+  "sevakUi": {
+    "scriptFailed": "Das Skript ist fehlgeschlagen: {message}",
+    "progress": "Fortschritt",
+    "imageMissing": "Bild nicht verfügbar",
+    "running": "Läuft …",
+    "gone": "Dieses Fenster ist nicht mehr offen."
   }
 }

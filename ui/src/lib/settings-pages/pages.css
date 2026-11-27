@@ -397,3 +397,17 @@
     flex-wrap: wrap;
   }
 }
+
+.sp-filter {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 320px;
+  margin: 6px 0 8px;
+  padding: 5px 9px;
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  background: var(--input-bg);
+  color: inherit;
+  font: inherit;
+  font-size: 12.5px;
+}
