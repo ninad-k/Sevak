@@ -164,9 +164,16 @@ struct Step {
     port: &'static str,
 }
 
+/// What a whole call chain may spend: every `call_external` shares the
+/// budget of the run that started it, so nesting cannot multiply the caps.
+struct Budget {
+    deadline: Instant,
+    steps: AtomicUsize,
+}
+
 struct Run {
     report: RunReport,
-    deadline: Instant,
+    budget: Arc<Budget>,
     stopped: bool,
     /// How many `call_external` nodes this run is inside of.
     depth: usize,
@@ -339,17 +346,28 @@ impl Runtime {
     /// and now. `ctx` carries the trigger's argument and variables; the
     /// workflow's own variables fill in whatever it does not set.
     pub fn run_blocking(&self, start: &str, ctx: Ctx) -> RunReport {
-        self.run_blocking_at(start, ctx, 0)
+        let budget = Arc::new(Budget {
+            deadline: Instant::now() + RUN_LIMIT,
+            steps: AtomicUsize::new(0),
+        });
+        self.run_blocking_at(start, ctx, 0, budget)
     }
 
-    /// [`Runtime::run_blocking`] inside `depth` nested `call_external` nodes.
-    fn run_blocking_at(&self, start: &str, ctx: Ctx, depth: usize) -> RunReport {
+    /// [`Runtime::run_blocking`] inside `depth` nested `call_external` nodes,
+    /// which spend the `budget` of the run that called them.
+    fn run_blocking_at(
+        &self,
+        start: &str,
+        ctx: Ctx,
+        depth: usize,
+        budget: Arc<Budget>,
+    ) -> RunReport {
         let mut vars = self.workflow.variables.clone();
         vars.extend(ctx.vars);
         let ctx = Ctx { arg: ctx.arg, vars };
         let mut run = Run {
             report: RunReport::default(),
-            deadline: Instant::now() + RUN_LIMIT,
+            budget,
             stopped: false,
             depth,
         };
@@ -374,9 +392,9 @@ impl Runtime {
         }
         let reason = if self.cancelled() {
             Some("Sevak is closing or reloading")
-        } else if run.report.executed.len() >= MAX_STEPS {
+        } else if run.budget.steps.load(Ordering::SeqCst) >= MAX_STEPS {
             Some("the run reached the limit of steps")
-        } else if Instant::now() > run.deadline {
+        } else if Instant::now() > run.budget.deadline {
             Some("the run took too long")
         } else {
             None
@@ -394,7 +412,8 @@ impl Runtime {
             return;
         };
         run.report.executed.push(id.to_owned());
-        match self.execute(node, &ctx, run.depth) {
+        run.budget.steps.fetch_add(1, Ordering::SeqCst);
+        match self.execute(node, &ctx, run.depth, &run.budget) {
             Ok(step) => self.follow(id, step.port, &step.ctx, run),
             Err(message) => {
                 tracing::warn!(
@@ -411,7 +430,13 @@ impl Runtime {
         }
     }
 
-    fn execute(&self, node: &Node, ctx: &Ctx, depth: usize) -> Result<Step, String> {
+    fn execute(
+        &self,
+        node: &Node,
+        ctx: &Ctx,
+        depth: usize,
+        budget: &Arc<Budget>,
+    ) -> Result<Step, String> {
         let scope = Scope {
             query: &ctx.arg,
             vars: &ctx.vars,
@@ -770,7 +795,7 @@ impl Runtime {
                         BTreeMap::new()
                     },
                 };
-                let report = target.run_blocking_at(trigger, called, depth + 1);
+                let report = target.run_blocking_at(trigger, called, depth + 1, Arc::clone(budget));
                 if let Some(failure) = report.errors.first() {
                     return Err(format!(
                         "\"{}\" in \"{workflow}\" failed: {}",
@@ -3043,6 +3068,43 @@ mod utility_node_tests {
         );
         assert_eq!(report.errors.len(), 1, "{report:?}");
         assert!(report.errors[0].message.contains("failed"), "{report:?}");
+    }
+
+    #[test]
+    fn nested_calls_share_the_step_budget_of_the_run() {
+        let dir = tempfile::tempdir().unwrap();
+        let platform = MockPlatform::empty();
+        // Five workflows of 60 steps each, every one calling the next: 300 in
+        // all, more than one run may take, although none is over on its own.
+        let names: Vec<String> = (0..5).map(|i| format!("w{i}")).collect();
+        let workflows = names
+            .iter()
+            .enumerate()
+            .map(|(i, name)| {
+                let start = if i == 0 { "k" } else { "go" };
+                let mut nodes = vec![if i == 0 { keyword("k") } else { external("go") }];
+                let mut connections = Vec::new();
+                let mut previous = start.to_owned();
+                for n in 0..59 {
+                    let id = format!("s{n}");
+                    nodes.push(crate::workflow::testing::set_var(&id, "x", "1"));
+                    connections.push(wire(&previous, &id));
+                    previous = id;
+                }
+                if let Some(next) = names.get(i + 1) {
+                    nodes.push(node("call", call(next, "go", "", false)));
+                    connections.push(wire(&previous, "call"));
+                }
+                (name.as_str(), flow(nodes, connections))
+            })
+            .collect();
+        let map = registry(&dir, &platform, workflows);
+        let report = runtime_of(&map, "w0").run_blocking("k", Ctx::default());
+        assert_eq!(report.errors.len(), 1, "{report:?}");
+        assert!(
+            report.errors[0].message.contains("limit of steps"),
+            "{report:?}"
+        );
     }
 
     #[test]
