@@ -1175,7 +1175,10 @@
       "itemSubtitle": "Subtítulo",
       "itemArg": "Argumento (el título si está vacío)",
       "addItem": "Añadir un elemento",
-      "removeItem": "Quitar el elemento {n}"
+      "removeItem": "Quitar el elemento {n}",
+      "jsonInvalid": "Esto aún no es un objeto JSON.",
+      "validateUi": "Validar",
+      "uiValid": "Todo bien: {components} componentes. Salidas: {ports}."
     },
     "connect": {
       "missing": "Ese nodo no existe.",
@@ -1261,6 +1264,10 @@
         "name": "El nombre",
         "path": "La ruta",
         "pid": "El id de proceso"
+      },
+      "uiTarget": {
+        "launcher": "En el lanzador",
+        "window": "En una ventana"
       }
     },
     "program": {
@@ -1754,6 +1761,37 @@
           "path": {
             "label": "Archivo de sonido",
             "hint": "Una ruta completa, una ruta que empiece por ~ o un archivo de la carpeta del flujo."
+          }
+        }
+      },
+      "show_ui": {
+        "label": "Mostrar interfaz",
+        "summary": "Abre una pequeña interfaz descrita en JSON, la espera y continúa por la salida que nombra un botón (o closed).",
+        "fields": {
+          "target": {
+            "label": "Dónde"
+          },
+          "definition": {
+            "label": "Definición (JSON)",
+            "hint": "Componentes, estado y eventos. Consulta la guía de Sevak UI. Usa esto o un archivo."
+          },
+          "file": {
+            "label": "Archivo de definición",
+            "hint": "Un archivo JSON en la carpeta del flujo. {file:otro.json} dentro incluye más archivos."
+          },
+          "scripts": {
+            "label": "Scripts (JSON)",
+            "hint": "Scripts que las acciones \"run\" pueden iniciar, como {\"up\": {\"language\": \"shell\", \"script\": \"...\"}}. Lenguajes: shell, python, javascript, powershell. Una interfaz con scripts necesita tu permiso."
+          },
+          "ports": {
+            "label": "Nombres de salida",
+            "hint": "Uno por línea. Solo hace falta con un archivo de definición; una definición en línea nombra sus propias salidas. \"closed\" siempre existe."
+          },
+          "titlebar": {
+            "label": "Barra de título de la ventana"
+          },
+          "always_on_top": {
+            "label": "Mantener la ventana encima"
           }
         }
       }
@@ -2250,5 +2288,12 @@
     "important": "Importante",
     "warning": "Advertencia",
     "caution": "Precaución"
+  },
+  "sevakUi": {
+    "scriptFailed": "El script falló: {message}",
+    "progress": "Progreso",
+    "imageMissing": "Imagen no disponible",
+    "running": "Ejecutando…",
+    "gone": "Esta ventana ya no está abierta."
   }
 }

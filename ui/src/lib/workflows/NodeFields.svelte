@@ -4,14 +4,18 @@
   // the editor that owns the workflow does the mutation.
   import "./workflows.css";
   import { kindOf, type FieldDef, type WfNode } from "./model";
+  import { validateUiDefinition, type UiCheck } from "../sevak-ui/ipc";
   import { t, tHtml } from "../i18n.svelte";
 
   let {
     node,
     onset,
+    folder = null,
   }: {
     node: WfNode;
     onset: (key: string, value: unknown) => void;
+    /** The workflow's folder (for a UI's `file`), when it is saved. */
+    folder?: string | null;
   } = $props();
 
   const def = $derived(kindOf(node.type));
@@ -23,7 +27,7 @@
   const local = $state<Record<string, string>>(
     Object.fromEntries(
       kindOf(node.type)
-        .fields.filter((f) => f.kind === "lines" || f.kind === "env")
+        .fields.filter((f) => f.kind === "lines" || f.kind === "env" || f.kind === "json")
         .map((f) => [f.key, initialText(f, node)]),
     ),
   );
@@ -31,6 +35,11 @@
   function initialText(field: FieldDef, source: WfNode): string {
     const value = source[field.key];
     if (field.kind === "lines") return Array.isArray(value) ? value.join("\n") : "";
+    if (field.kind === "json") {
+      return value && typeof value === "object" && Object.keys(value).length > 0
+        ? JSON.stringify(value, null, 2)
+        : "";
+    }
     if (value && typeof value === "object") {
       return Object.entries(value as Record<string, string>)
         .map(([name, text]) => `${name}=${text}`)
@@ -42,6 +51,43 @@
   function setLines(field: FieldDef, text: string) {
     local[field.key] = text;
     onset(field.key, text === "" ? [] : text.split("\n"));
+  }
+
+  // A field that holds a JSON object (a UI's scripts): kept as typed, and
+  // only a complete object is passed on.
+  let jsonError = $state<Record<string, boolean>>({});
+  function setJson(field: FieldDef, text: string) {
+    local[field.key] = text;
+    if (text.trim() === "") {
+      jsonError[field.key] = false;
+      onset(field.key, {});
+      return;
+    }
+    try {
+      const value = JSON.parse(text);
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        jsonError[field.key] = false;
+        onset(field.key, value);
+        return;
+      }
+    } catch {
+      // fall through
+    }
+    jsonError[field.key] = true;
+  }
+
+  // The Validate button of a show_ui node.
+  let check = $state<{ ok: true; value: UiCheck } | { ok: false; error: string } | null>(null);
+  let checking = $state(false);
+  async function validateUi() {
+    checking = true;
+    check = await validateUiDefinition({
+      definition: typeof node.definition === "string" && node.definition.trim() ? node.definition : null,
+      file: typeof node.file === "string" && node.file.trim() ? node.file : null,
+      scripts: Object.keys((node.scripts as Record<string, unknown> | undefined) ?? {}),
+      folder,
+    });
+    checking = false;
   }
 
   function setEnv(field: FieldDef, text: string) {
@@ -248,6 +294,18 @@
           value={local[field.key] ?? ""}
           oninput={(e) => setLines(field, e.currentTarget.value)}
         ></textarea>
+      {:else if field.kind === "json"}
+        <textarea
+          id={id(field.key)}
+          class="wf-input mono"
+          rows="6"
+          spellcheck="false"
+          aria-invalid={jsonError[field.key] === true}
+          placeholder={'{"up": {"language": "shell", "script": "echo {}"}}'}
+          value={local[field.key] ?? ""}
+          oninput={(e) => setJson(field, e.currentTarget.value)}
+        ></textarea>
+        {#if jsonError[field.key]}<p class="wf-hint" role="alert">{t("workflows.fields.jsonInvalid")}</p>{/if}
       {:else if field.kind === "env"}
         <textarea
           id={id(field.key)}
@@ -263,6 +321,24 @@
     {#if field.hint}<p class="wf-hint">{field.hint}</p>{/if}
   </div>
 {/each}
+{#if node.type === "show_ui"}
+  <div class="wf-field">
+    <button type="button" class="wf-btn" disabled={checking} onclick={validateUi}>
+      {t("workflows.fields.validateUi")}
+    </button>
+    {#if check?.ok}
+      <p class="wf-hint" role="status">
+        {t("workflows.fields.uiValid", {
+          components: check.value.components,
+          ports: check.value.ports.join(", "),
+        })}
+        {#each check.value.warnings as warning, i (i)}<br />{warning}{/each}
+      </p>
+    {:else if check}
+      <p class="wf-hint" role="alert">{check.error}</p>
+    {/if}
+  </div>
+{/if}
 {#if def.fields.length === 0}
   <p class="wf-hint">{@html tHtml("workflows.fields.noSettings", { id: node.id })}</p>
 {/if}

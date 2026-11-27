@@ -665,7 +665,11 @@
           {/if}
         </div>
         {#key selectedNode.id}
-          <NodeFields node={selectedNode} onset={(key, value) => setField(selectedNode, key, value)} />
+          <NodeFields
+            node={selectedNode}
+            folder={currentFolder}
+            onset={(key, value) => setField(selectedNode, key, value)}
+          />
         {/key}
 
         {#each outputPorts(selectedNode) as port (port)}

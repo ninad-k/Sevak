@@ -1187,7 +1187,10 @@
       "itemSubtitle": "Sous-titre",
       "itemArg": "Argument (le titre si vide)",
       "addItem": "Ajouter un élément",
-      "removeItem": "Retirer l'élément {n}"
+      "removeItem": "Retirer l'élément {n}",
+      "jsonInvalid": "Ce n’est pas encore un objet JSON.",
+      "validateUi": "Valider",
+      "uiValid": "Tout est bon : {components} composants. Sorties : {ports}."
     },
     "connect": {
       "missing": "Ce nœud n'existe pas.",
@@ -1273,6 +1276,10 @@
         "name": "Le nom",
         "path": "Le chemin",
         "pid": "L'identifiant de processus"
+      },
+      "uiTarget": {
+        "launcher": "Dans le lanceur",
+        "window": "Dans une fenêtre"
       }
     },
     "program": {
@@ -1766,6 +1773,37 @@
           "path": {
             "label": "Fichier son",
             "hint": "Un chemin complet, un chemin commençant par ~ ou un fichier du dossier du workflow."
+          }
+        }
+      },
+      "show_ui": {
+        "label": "Afficher une interface",
+        "summary": "Ouvre une petite interface décrite en JSON, l’attend et continue par la sortie nommée par un bouton (ou closed).",
+        "fields": {
+          "target": {
+            "label": "Où"
+          },
+          "definition": {
+            "label": "Définition (JSON)",
+            "hint": "Composants, état et événements. Voir le guide Sevak UI. Utilisez ceci ou un fichier."
+          },
+          "file": {
+            "label": "Fichier de définition",
+            "hint": "Un fichier JSON dans le dossier du workflow. {file:autre.json} à l’intérieur inclut d’autres fichiers."
+          },
+          "scripts": {
+            "label": "Scripts (JSON)",
+            "hint": "Scripts que les actions « run » peuvent lancer, comme {\"up\": {\"language\": \"shell\", \"script\": \"...\"}}. Langages : shell, python, javascript, powershell. Une interface avec scripts demande votre autorisation."
+          },
+          "ports": {
+            "label": "Noms de sortie",
+            "hint": "Un par ligne. Utile seulement avec un fichier de définition ; une définition intégrée nomme ses propres sorties. « closed » existe toujours."
+          },
+          "titlebar": {
+            "label": "Barre de titre de la fenêtre"
+          },
+          "always_on_top": {
+            "label": "Garder la fenêtre au premier plan"
           }
         }
       }
@@ -2271,5 +2309,12 @@
     "important": "Important",
     "warning": "Avertissement",
     "caution": "Attention"
+  },
+  "sevakUi": {
+    "scriptFailed": "Le script a échoué : {message}",
+    "progress": "Progression",
+    "imageMissing": "Image indisponible",
+    "running": "En cours…",
+    "gone": "Cette fenêtre n’est plus ouverte."
   }
 }

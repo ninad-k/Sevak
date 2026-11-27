@@ -1160,7 +1160,10 @@
       "itemSubtitle": "Subtitle",
       "itemArg": "Argument (the title when empty)",
       "addItem": "Add an item",
-      "removeItem": "Remove item {n}"
+      "removeItem": "Remove item {n}",
+      "jsonInvalid": "This is not a JSON object yet.",
+      "validateUi": "Validate",
+      "uiValid": "Looks good: {components} components. Outputs: {ports}."
     },
     "connect": {
       "missing": "That node does not exist.",
@@ -1246,6 +1249,10 @@
         "name": "The name",
         "path": "The path",
         "pid": "The process id"
+      },
+      "uiTarget": {
+        "launcher": "In the launcher",
+        "window": "In a window"
       }
     },
     "program": {
@@ -1741,6 +1748,37 @@
             "hint": "A full path, a path starting with ~, or a file inside the workflow folder."
           }
         }
+      },
+      "show_ui": {
+        "label": "Show UI",
+        "summary": "Opens a small interface described in JSON, waits for it, and continues from the output a button names (or closed).",
+        "fields": {
+          "target": {
+            "label": "Where"
+          },
+          "definition": {
+            "label": "Definition (JSON)",
+            "hint": "Components, state and events. See the Sevak UI guide. Use this or a file."
+          },
+          "file": {
+            "label": "Definition file",
+            "hint": "A JSON file in the workflow folder. {file:other.json} inside it includes more files."
+          },
+          "scripts": {
+            "label": "Scripts (JSON)",
+            "hint": "Scripts that \"run\" actions may start, like {\"up\": {\"language\": \"shell\", \"script\": \"...\"}}. Languages: shell, python, javascript, powershell. A UI with scripts needs your Allow."
+          },
+          "ports": {
+            "label": "Output names",
+            "hint": "One per line. Only needed with a definition file; an inline definition names its own outputs. \"closed\" is always there."
+          },
+          "titlebar": {
+            "label": "Window title bar"
+          },
+          "always_on_top": {
+            "label": "Keep the window on top"
+          }
+        }
       }
     }
   },
@@ -2234,5 +2272,12 @@
     "important": "Important",
     "warning": "Warning",
     "caution": "Caution"
+  },
+  "sevakUi": {
+    "scriptFailed": "The script failed: {message}",
+    "progress": "Progress",
+    "imageMissing": "Image not available",
+    "running": "Running…",
+    "gone": "This window is no longer open."
   }
 }
