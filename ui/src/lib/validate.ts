@@ -65,6 +65,7 @@ export type KeywordField =
   | "ssh.keyword"
   | "projects.keyword"
   | "calendar.keyword"
+  | "recent.keyword"
   | "clock.keyword"
   | "passwords.keyword";
 
@@ -89,6 +90,8 @@ export interface Problems {
   windowGap?: string;
   /** `[calendar] days` out of range. */
   calendarDays?: string;
+  /** `[recent] max_items` out of range. */
+  recentItems?: string;
   fallback?: string;
   filesDepth?: string;
   filesResults?: string;
@@ -115,6 +118,9 @@ export const MAX_CACHE_MINUTES = 24 * 60;
 export const MAX_WINDOW_GAP = 200;
 /** Largest `[calendar] days` (as in Rust's `config::MAX_CALENDAR_DAYS`). */
 export const MAX_CALENDAR_DAYS = 60;
+/** Bounds of `[recent] max_items` (as in Rust's `config::MIN_RECENT_ITEMS` / `MAX_RECENT_ITEMS`). */
+export const MIN_RECENT_ITEMS = 10;
+export const MAX_RECENT_ITEMS = 500;
 
 /** What answers a keyword, as the message key of its name ("the emoji picker"). */
 type Owner = MessageKey & `validate.owner.${string}`;
@@ -158,6 +164,7 @@ const KEYWORDS: KeywordSpec[] = [
   { field: "ssh.keyword", owner: "validate.owner.ssh", required: true, section: "integrations", read: (c) => c.ssh.keyword },
   { field: "projects.keyword", owner: "validate.owner.projects", required: true, section: "integrations", read: (c) => c.projects.keyword },
   { field: "calendar.keyword", owner: "validate.owner.calendar", required: true, section: "integrations", read: (c) => c.calendar.keyword },
+  { field: "recent.keyword", owner: "validate.owner.recent", required: true, section: "files", read: (c) => c.recent.keyword },
   { field: "clock.keyword", owner: "validate.owner.clock", required: true, section: "integrations", read: (c) => c.clock.keyword },
   { field: "passwords.keyword", owner: "validate.owner.passwords", required: true, section: "integrations", read: (c) => c.passwords.keyword },
 ];
@@ -367,6 +374,12 @@ export function validate(config: Config): Problems {
   if (!Number.isInteger(days) || days < 1 || days > MAX_CALENDAR_DAYS) {
     problems.calendarDays = wholeNumber(1, MAX_CALENDAR_DAYS);
     count.integrations++;
+  }
+
+  const recentItems = config.recent.max_items;
+  if (!Number.isInteger(recentItems) || recentItems < MIN_RECENT_ITEMS || recentItems > MAX_RECENT_ITEMS) {
+    problems.recentItems = wholeNumber(MIN_RECENT_ITEMS, MAX_RECENT_ITEMS);
+    count.files++;
   }
 
   const missing = fallbackList(config.search.fallback_web_search).find(

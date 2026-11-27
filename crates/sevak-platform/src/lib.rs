@@ -36,6 +36,7 @@ pub mod private_file;
 pub mod process;
 pub mod process_tree;
 pub mod provider;
+pub mod recent;
 pub mod secret;
 mod secret_hint;
 pub mod session;

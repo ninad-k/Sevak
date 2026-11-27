@@ -461,6 +461,7 @@ export function mockSettings(): SettingsDto {
       ssh: { keyword: "ssh", known_hosts: false },
       projects: { keyword: "code", editors: [] },
       calendar: { keyword: "cal", files: [], days: 7 },
+      recent: { enabled: true, keyword: "recent", max_items: 50 },
     },
     catalog: [
       { id: "apps", name: "Applications", description: "Launches installed applications.", keyword: null, enabled: true },

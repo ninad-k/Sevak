@@ -320,6 +320,16 @@ fn validate_limits(config: &Config) -> Result<(), String> {
             "Calendar: the days ahead must be from 1 to {max_days}."
         ));
     }
+    let items = config.recent.max_items;
+    let (min_items, max_items) = (
+        sevak_core::config::MIN_RECENT_ITEMS,
+        sevak_core::config::MAX_RECENT_ITEMS,
+    );
+    if !(min_items..=max_items).contains(&items) {
+        return Err(format!(
+            "Recent documents: the number of files must be from {min_items} to {max_items}."
+        ));
+    }
     let gap = config.window_management.gap;
     if !(0..=sevak_core::window_layout::MAX_GAP).contains(&gap) {
         return Err(format!(
@@ -1024,6 +1034,13 @@ mod tests {
         config.calendar.days = 0;
         assert!(check(&config).unwrap_err().contains("Calendar"));
         config.calendar.days = 14;
+        config.recent.keyword = "rdoc".into();
+        config.recent.max_items = 9;
+        assert!(check(&config).unwrap_err().contains("Recent documents"));
+        config.recent.max_items = 501;
+        assert!(check(&config).unwrap_err().contains("Recent documents"));
+        config.recent.max_items = 500;
+        assert_eq!(check(&config), Ok(()));
         config.calendar.keyword = "ssh".into();
         config.ssh.keyword = "ssh".into();
         assert!(check(&config).is_err());

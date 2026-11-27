@@ -151,12 +151,14 @@ const GROUPS: &[(&str, &[Field])] = &[
     ),
     // How many calendar files, never their names or the events in them.
     (
-        "SSH, projects and calendar",
+        "SSH, projects, calendar and recent documents",
         &[
             ("ssh.known_hosts", Show::Value),
             ("projects.editors", Show::Value),
             ("calendar.files", Show::Count),
             ("calendar.days", Show::Value),
+            ("recent.enabled", Show::Value),
+            ("recent.max_items", Show::Value),
         ],
     ),
     // How many cities, not which (they can say where the user's people are).
@@ -257,6 +259,7 @@ const KEYWORD_PATHS: &[&str] = &[
     "ssh.keyword",
     "projects.keyword",
     "calendar.keyword",
+    "recent.keyword",
     "clock.keyword",
     "passwords.keyword",
 ];

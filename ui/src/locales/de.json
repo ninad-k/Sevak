@@ -116,7 +116,16 @@
       "bookmarksGlobalToggle": "Lesezeichen in normalen Suchen anzeigen",
       "browsers": "Browser",
       "browsersHint": "Hake die Browser an, die gelesen werden sollen, mit allen ihren Profilen. Ist keiner angehakt, liest Sevak jeden Browser, den es findet. Safari gibt es nur unter macOS, und Sevak braucht dort „Festplattenvollzugriff“, um es zu lesen.",
-      "bookmarksPlugin": "Lesezeichen"
+      "bookmarksPlugin": "Lesezeichen",
+      "recentTitle": "Zuletzt verwendete Dokumente",
+      "recentSub": "Tippe <code>{keyword}</code>, um die zuletzt verwendeten Dateien aufzulisten (neueste zuerst), oder <code>{keyword} bericht</code>, um nach Namen zu filtern.",
+      "recentEnabled": "Zuletzt verwendete Dokumente",
+      "recentEnabledHint": "Aus entfernt die Suche; nichts wird gelesen.",
+      "recentEnabledToggle": "Zuletzt verwendete Dateien durchsuchen",
+      "recentItems": "Gemerkte Dateien",
+      "recentItemsHint": "Wie viele zuletzt verwendete Dateien die Liste enthält (10 bis 500).",
+      "recentPrivacy": "<strong>Datenschutz:</strong> Die Liste stammt aus den eigenen Zuletzt-verwendet-Listen des Betriebssystems (Linux recently-used.xbel, der Windows-Ordner „Recent“, macOS Spotlight) und wird nur auf diesem Computer gelesen. Netzwerkorte werden übersprungen; nichts wird irgendwohin gesendet.",
+      "recentPlugin": "Zuletzt verwendete Dokumente"
     },
     "clock": {
       "title": "Weltuhr",
@@ -1012,6 +1021,7 @@
       "ssh": "SSH-Hosts",
       "projects": "Letzte Projekte",
       "calendar": "Kalender",
+      "recent": "zuletzt verwendete Dokumente",
       "clock": "Weltuhr",
       "passwords": "Passwortgenerator"
     }

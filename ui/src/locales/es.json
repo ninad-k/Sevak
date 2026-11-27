@@ -116,7 +116,16 @@
       "bookmarksGlobalToggle": "Mostrar los marcadores en las búsquedas normales",
       "browsers": "Navegadores",
       "browsersHint": "Marca los navegadores que quieres leer, con todos sus perfiles. Si no marcas ninguno, se leen todos los que Sevak encuentre. Safari solo existe en macOS, y allí Sevak necesita Acceso total al disco para leerlo.",
-      "bookmarksPlugin": "Marcadores"
+      "bookmarksPlugin": "Marcadores",
+      "recentTitle": "Documentos recientes",
+      "recentSub": "Escribe <code>{keyword}</code> para ver los archivos usados hace poco, los más recientes primero, o <code>{keyword} informe</code> para filtrarlos por nombre.",
+      "recentEnabled": "Documentos recientes",
+      "recentEnabledHint": "Desactivado quita la búsqueda; no se lee nada.",
+      "recentEnabledToggle": "Buscar archivos usados recientemente",
+      "recentItems": "Archivos guardados",
+      "recentItemsHint": "Cuántos archivos recientes guarda la lista (de 10 a 500).",
+      "recentPrivacy": "<strong>Privacidad:</strong> la lista sale de los archivos recientes del propio sistema operativo (recently-used.xbel en Linux, la carpeta Recent de Windows, Spotlight en macOS) y se lee solo en este equipo. Se omiten las ubicaciones de red; no se envía nada a ningún sitio.",
+      "recentPlugin": "Documentos recientes"
     },
     "clock": {
       "title": "Reloj mundial",
@@ -1027,6 +1036,7 @@
       "ssh": "los hosts SSH",
       "projects": "los proyectos recientes",
       "calendar": "el calendario",
+      "recent": "documentos recientes",
       "clock": "el reloj mundial",
       "passwords": "el generador de contraseñas"
     }

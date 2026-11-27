@@ -473,6 +473,13 @@ pub trait PlatformProvider: Send + Sync {
         Err(crate::error::PlatformError::Unsupported("listing displays"))
     }
 
+    /// The files the user used most recently, newest first, at most `limit`
+    /// (the OS's own recent lists; see [`crate::recent`]). Reads files or runs
+    /// a local search: call it from a background thread.
+    fn recent_files(&self, limit: usize) -> Vec<crate::recent::RecentFile> {
+        crate::recent::recent_files(limit)
+    }
+
     /// Like [`PlatformProvider::set_clipboard_text`], for a secret (a generated
     /// password): the text is marked so that the OS clipboard history and cloud
     /// sync (Windows Win+V, macOS clipboard managers honouring

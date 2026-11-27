@@ -35,7 +35,9 @@ use crate::{
     ShellPlugin, SnippetsPlugin, SystemPlugin, TasksPlugin, UuidPlugin, WebSearchPlugin,
     WindowManagerPlugin,
 };
-use crate::{CalendarPlugin, ClockPlugin, PasswordPlugin, ProjectsPlugin, SshPlugin};
+use crate::{
+    CalendarPlugin, ClockPlugin, PasswordPlugin, ProjectsPlugin, RecentDocsPlugin, SshPlugin,
+};
 
 /// Builds the instances of one plugin family.
 ///
@@ -327,6 +329,18 @@ impl PluginRegistry {
             |config, platform| vec![Arc::new(ProjectsPlugin::new(&config.projects, platform.clone()))],
         ));
         registry.register(PluginDescriptor::new(
+            "recent",
+            "Recent documents",
+            "Type `recent` to search the files you used lately, newest first, from the OS's own recent lists. Read locally; nothing is sent anywhere.",
+            |config, platform| {
+                if config.recent.enabled {
+                    vec![Arc::new(RecentDocsPlugin::new(&config.recent, platform.clone()))]
+                } else {
+                    Vec::new()
+                }
+            },
+        ));
+        registry.register(PluginDescriptor::new(
             "calendar",
             "Calendar",
             "Type `cal` for today's and upcoming events from local .ics files (`cal tomorrow`, `cal fri`). No accounts, no network.",
@@ -472,6 +486,7 @@ mod tests {
                 "ai",
                 "ssh",
                 "projects",
+                "recent",
                 "calendar",
                 "clock",
                 "pwgen"
@@ -513,6 +528,7 @@ mod tests {
                 "ai",
                 "ssh",
                 "projects",
+                "recent",
                 "calendar",
                 "clock",
                 "pwgen"
@@ -552,6 +568,7 @@ mod tests {
                 "ai",
                 "ssh",
                 "projects",
+                "recent",
                 "calendar",
                 "clock",
                 "pwgen"
@@ -591,6 +608,7 @@ mod tests {
                 "ai",
                 "ssh",
                 "projects",
+                "recent",
                 "calendar",
                 "clock",
                 "pwgen"
@@ -645,6 +663,7 @@ mod tests {
                 ("ai", true),
                 ("ssh", true),
                 ("projects", true),
+                ("recent", true),
                 ("calendar", true),
                 ("clock", true),
                 ("pwgen", true),

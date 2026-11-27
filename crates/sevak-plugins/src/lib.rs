@@ -27,6 +27,7 @@
 //! | `ai`             | [`AiPlugin`] (opt-in AI assistant)      | `ai`    | no     |
 //! | `ssh`            | [`SshPlugin`] (hosts in ~/.ssh/config)  | `ssh`   | no     |
 //! | `projects`       | [`ProjectsPlugin`] (recent editor projects) | `code` | no  |
+//! | `recent`         | [`RecentDocsPlugin`] (recently used files) | `recent` | no  |
 //! | `calendar`       | [`CalendarPlugin`] (local .ics files)   | `cal`   | no     |
 //! | `clock`          | [`ClockPlugin`] (world clock)           | `time`  | no     |
 //! | `pwgen`          | [`PasswordPlugin`] (password generator) | `pass`  | no     |
@@ -68,6 +69,7 @@ pub mod onepassword;
 pub mod os_files;
 pub mod path_browse;
 pub mod pwgen;
+pub mod recent;
 pub mod registry;
 pub mod script;
 pub mod selection;
@@ -109,6 +111,7 @@ pub use onepassword::OnePasswordPlugin;
 pub use os_files::{files_family, OsFilesPlugin};
 pub use projects::ProjectsPlugin;
 pub use pwgen::PasswordPlugin;
+pub use recent::RecentDocsPlugin;
 pub use registry::{PluginDescriptor, PluginFactory, PluginInfo, PluginRegistry};
 pub use script::{ScriptPlugin, ScriptPluginHost};
 pub use selection::SelectionPlugin;
@@ -124,7 +127,7 @@ pub use workflow::WorkflowHost;
 /// Instantiates every enabled built-in plugin (`apps`, `calculator`, one
 /// `web:<keyword>` per `[[web_search]]` engine, `files`, `bookmarks`, `system`,
 /// `tasks`, `media`, `shell`, `clipboard`, `snippets`, `emoji`, `selection`,
-/// `contacts`, `1password`, `dict`, `uuid`, `ai`, `ssh`, `projects`,
+/// `contacts`, `1password`, `dict`, `uuid`, `ai`, `ssh`, `projects`, `recent`,
 /// `calendar`, `clock`, `pwgen`).
 ///
 /// Shorthand for `PluginRegistry::builtin().instantiate(config, platform)`.
@@ -184,6 +187,7 @@ mod tests {
                 "ai",
                 "ssh",
                 "projects",
+                "recent",
                 "calendar",
                 "clock",
                 "pwgen"
@@ -222,6 +226,7 @@ mod tests {
                 "ai",
                 "ssh",
                 "projects",
+                "recent",
                 "calendar",
                 "clock",
                 "pwgen"
