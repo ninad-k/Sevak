@@ -19,7 +19,7 @@
 //! content and never navigates.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -356,17 +356,22 @@ pub struct Source<'a> {
 /// action may name. Errors are one readable sentence.
 pub fn load(source: &Source, scripts: &BTreeSet<String>) -> Result<UiDefinition, String> {
     let mut budget = MAX_DEFINITION_BYTES;
+    // Distinct files read, by canonical path: capped like `include_files`, so
+    // the approval hash always covers every file a loaded UI used.
+    let mut seen = BTreeSet::new();
     let text = match (source.inline.map(str::trim), source.file) {
         (Some(inline), _) if !inline.is_empty() => {
             take(&mut budget, inline.len())?;
             inline.to_owned()
         }
-        (_, Some(file)) if !file.trim().is_empty() => read_inside(source.dir, file, &mut budget)?,
+        (_, Some(file)) if !file.trim().is_empty() => {
+            read_inside(source.dir, file, &mut budget, &mut seen)?
+        }
         _ => return Err("the UI has no definition (write one, or name a file)".to_owned()),
     };
     let value: Value = serde_json::from_str(&text)
         .map_err(|err| format!("the UI definition is not valid JSON: {err}"))?;
-    let value = resolve_includes(value, source.dir, 0, &mut budget)?;
+    let value = resolve_includes(value, source.dir, 0, &mut budget, &mut seen)?;
     parse_value(value, scripts)
 }
 
@@ -410,7 +415,12 @@ fn take(budget: &mut usize, bytes: usize) -> Result<(), String> {
 
 /// Reads `relative` inside `dir`, refusing anything that leaves it (a `..`, an
 /// absolute path, or a link that points elsewhere).
-fn read_inside(dir: &Path, relative: &str, budget: &mut usize) -> Result<String, String> {
+fn read_inside(
+    dir: &Path,
+    relative: &str,
+    budget: &mut usize,
+    seen: &mut BTreeSet<PathBuf>,
+) -> Result<String, String> {
     let path = relative_inside(dir, relative.trim())
         .ok_or_else(|| format!("\"{relative}\" must be a path inside the workflow folder"))?;
     let real = path
@@ -421,6 +431,12 @@ fn read_inside(dir: &Path, relative: &str, budget: &mut usize) -> Result<String,
         .map_err(|err| format!("the workflow folder cannot be read: {err}"))?;
     if !real.starts_with(&root) {
         return Err(format!("\"{relative}\" points outside the workflow folder"));
+    }
+    seen.insert(real.clone());
+    if seen.len() > MAX_INCLUDE_FILES {
+        return Err(format!(
+            "the UI includes more than {MAX_INCLUDE_FILES} files"
+        ));
     }
     let size = std::fs::metadata(&real)
         .map_err(|err| format!("could not read \"{relative}\": {err}"))?
@@ -459,6 +475,15 @@ pub fn include_files(inline: Option<&str>, file: Option<&str>, dir: &Path) -> Ve
             _ => {}
         }
     }
+    // Deduplicated by canonical path, as `load` counts them, so `a.json` and
+    // `./a.json` take one slot.
+    let key = |relative: &str| -> String {
+        relative_inside(dir, relative)
+            .and_then(|path| path.canonicalize().ok())
+            .map(|path| path.to_string_lossy().into_owned())
+            .unwrap_or_else(|| relative.to_owned())
+    };
+    let mut keys: BTreeSet<String> = BTreeSet::new();
     let mut found: Vec<String> = Vec::new();
     let mut queue: Vec<String> = Vec::new();
     if let Some(file) = file.map(str::trim).filter(|f| !f.is_empty()) {
@@ -470,15 +495,18 @@ pub fn include_files(inline: Option<&str>, file: Option<&str>, dir: &Path) -> Ve
         }
     }
     while let Some(next) = queue.pop() {
-        if found.contains(&next) {
+        if !keys.insert(key(&next)) {
             continue;
         }
         if found.len() >= MAX_INCLUDE_FILES {
+            // `load` refuses such a UI; the marker still changes the key.
+            found.push(format!("<more than {MAX_INCLUDE_FILES} included files>"));
             break;
         }
         found.push(next.clone());
         let mut budget = MAX_DEFINITION_BYTES;
-        if let Ok(text) = read_inside(dir, &next, &mut budget) {
+        let mut seen = BTreeSet::new();
+        if let Ok(text) = read_inside(dir, &next, &mut budget, &mut seen) {
             if let Ok(value) = serde_json::from_str::<Value>(&text) {
                 scan(&value, &mut queue);
             }
@@ -495,6 +523,7 @@ fn resolve_includes(
     dir: &Path,
     depth: usize,
     budget: &mut usize,
+    seen: &mut BTreeSet<PathBuf>,
 ) -> Result<Value, String> {
     Ok(match value {
         Value::String(text) => match text
@@ -506,22 +535,22 @@ fn resolve_includes(
                 if depth >= MAX_INCLUDE_DEPTH {
                     return Err("files include each other too deeply".to_owned());
                 }
-                let body = read_inside(dir, relative, budget)?;
+                let body = read_inside(dir, relative, budget, seen)?;
                 let parsed: Value = serde_json::from_str(&body)
                     .map_err(|err| format!("\"{relative}\" is not valid JSON: {err}"))?;
-                resolve_includes(parsed, dir, depth + 1, budget)?
+                resolve_includes(parsed, dir, depth + 1, budget, seen)?
             }
             None => Value::String(text),
         },
         Value::Array(items) => Value::Array(
             items
                 .into_iter()
-                .map(|item| resolve_includes(item, dir, depth, budget))
+                .map(|item| resolve_includes(item, dir, depth, budget, seen))
                 .collect::<Result<_, _>>()?,
         ),
         Value::Object(map) => Value::Object(
             map.into_iter()
-                .map(|(key, item)| Ok((key, resolve_includes(item, dir, depth, budget)?)))
+                .map(|(key, item)| Ok((key, resolve_includes(item, dir, depth, budget, seen)?)))
                 .collect::<Result<Map<_, _>, String>>()?,
         ),
         other => other,
@@ -1460,6 +1489,40 @@ mod tests {
         assert!(load(&source, &BTreeSet::new())
             .unwrap_err()
             .contains("outside"));
+    }
+
+    #[test]
+    fn loading_and_hashing_agree_on_the_include_cap() {
+        let dir = tempfile::tempdir().unwrap();
+        let names: Vec<String> = (0..=MAX_INCLUDE_FILES)
+            .map(|i| format!("p{i}.json"))
+            .collect();
+        for name in &names {
+            std::fs::write(dir.path().join(name), r#"{"type": "label", "text": "x"}"#).unwrap();
+        }
+        let items: Vec<Value> = names
+            .iter()
+            .map(|n| json!(format!("{{file:{n}}}")))
+            .collect();
+        let inline = json!({"root": {"type": "column", "children": items}}).to_string();
+        let scripts = BTreeSet::new();
+        let source = Source {
+            inline: Some(&inline),
+            file: None,
+            dir: dir.path(),
+        };
+        let err = load(&source, &scripts).unwrap_err();
+        assert!(err.contains("more than"), "{err}");
+        let listed = include_files(Some(&inline), None, dir.path());
+        assert!(
+            listed.iter().any(|f| f.starts_with("<more than")),
+            "{listed:?}"
+        );
+        // Path spellings of one file take one slot.
+        let inline =
+            json!({"root": {"type": "column", "children": ["{file:p0.json}", "{file:./p0.json}"]}})
+                .to_string();
+        assert_eq!(include_files(Some(&inline), None, dir.path()).len(), 1);
     }
 
     #[test]
