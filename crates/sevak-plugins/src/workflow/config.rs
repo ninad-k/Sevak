@@ -20,7 +20,9 @@
 //! The user fills them in a form. Their values live **outside** the workflow
 //! folder, in `<data dir>/workflows/<folder>/user-config.json`, so updating or
 //! reinstalling the workflow never overwrites them, and they are not part of
-//! what the user approved (they are the user's own data).
+//! what the user approved (they are the user's own data). The declaration
+//! itself (names, kinds, defaults, options) is the author's and is approved
+//! with the rest of the workflow.
 //!
 //! At run time a field's value is a variable (`{var:api_host}`, and an
 //! environment variable of the script nodes), with this precedence: the
@@ -669,8 +671,9 @@ mode = "folder"
             "{errors:?}"
         );
 
-        // Settings are the user's data: declaring them never changes what was
-        // approved.
+        // The author's declaration (names, defaults) is part of what was
+        // approved: a default can set the same variable as `[variables]`.
+        // The values the user saves are not.
         let run = node(
             "r",
             NodeKind::RunScript {
@@ -690,10 +693,21 @@ mode = "folder"
         configured.config = vec![field("host", ConfigKind::Textfield)];
         let dir = tempfile::tempdir().unwrap();
         assert!(approval_key(&plain, dir.path()).is_some());
-        assert_eq!(
+        assert_ne!(
             approval_key(&plain, dir.path()),
             approval_key(&configured, dir.path())
         );
+        let mut new_default = configured.clone();
+        new_default.config[0].default = "evil.example".into();
+        assert_ne!(
+            approval_key(&configured, dir.path()),
+            approval_key(&new_default, dir.path())
+        );
+        // Saved user values live in another folder and never reach the key.
+        std::fs::write(dir.path().join("user-config.json"), r#"{"host":"x"}"#).unwrap();
+        let before = approval_key(&configured, dir.path());
+        std::fs::write(dir.path().join("user-config.json"), r#"{"host":"y"}"#).unwrap();
+        assert_eq!(before, approval_key(&configured, dir.path()));
     }
 
     #[test]

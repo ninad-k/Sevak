@@ -751,6 +751,18 @@ pub fn approval_key(workflow: &Workflow, dir: &Path) -> Option<String> {
         hasher.feed("var", name.as_bytes());
         hasher.feed("value", value.as_bytes());
     }
+    // The author's `[[config]]` (names, kinds, defaults, options) can set the
+    // same variables as `[variables]`, so it is part of what was approved.
+    // Only the values the user saves stay outside the key. Fed only when
+    // present, so keys of existing workflows stay valid.
+    if !workflow.config.is_empty() {
+        hasher.feed(
+            "config",
+            serde_json::to_string(&workflow.config)
+                .unwrap_or_default()
+                .as_bytes(),
+        );
+    }
     Some(hasher.finish())
 }
 

@@ -535,7 +535,9 @@ gallery. Rules:
   `<data folder>/workflows/<folder>/user-config.json`, **outside the workflow
   folder**: editing, updating or reinstalling the workflow keeps them. They are
   your data, not part of what you allowed, so changing them never asks for
-  permission again.
+  permission again. The `[[config]]` declaration itself (names, kinds,
+  defaults, options) comes from the workflow's author and is part of what you
+  allowed: editing it asks again.
 - A workflow with a required setting still empty does not run. Its trigger row
   says *Configure <name> first: <settings>*, running it shows the same
   notification, and a script filter lists that one row instead of running its
