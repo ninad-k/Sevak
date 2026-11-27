@@ -164,4 +164,8 @@ pub trait Plugin: Send + Sync {
     /// quits; plugins are also dropped when the config reloads, so anything
     /// that must not outlive the instance should be stopped in `Drop` too.
     fn shutdown(&self) {}
+
+    /// The launcher was hidden: whatever the plugin keeps refreshing for the
+    /// query on screen (a script's `rerun`) can stop. Does nothing by default.
+    fn launcher_hidden(&self) {}
 }

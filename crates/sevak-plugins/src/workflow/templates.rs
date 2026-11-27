@@ -220,6 +220,7 @@ fn script_filter() -> Template {
                 args: Vec::new(),
                 timeout_ms: None,
                 hard_timeout_ms: None,
+                filter_results: false,
             },
         ),
         node(

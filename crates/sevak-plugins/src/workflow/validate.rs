@@ -187,6 +187,9 @@ impl Workflow {
                 format!("a workflow may have at most {MAX_CONNECTIONS} connections"),
             ));
         }
+        for message in super::config::field_problems(&self.config) {
+            problems.push(Problem::error(None, message));
+        }
         for name in self.variables.keys() {
             if !valid_variable_name(name) {
                 problems.push(Problem::error(

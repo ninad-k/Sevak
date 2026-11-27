@@ -1142,7 +1142,8 @@ inherited; a manifest that lists one does not load. The script also gets:
 | `SEVAK_PLUGIN_DIR` | the plugin folder |
 | `SEVAK_PLUGIN_DATA` | a folder for the script's own files (created on demand, `<data dir>/plugins/<folder>`) |
 | `SEVAK_VERSION` | Sevak's version |
-| `alfred_workflow_bundleid`, `alfred_workflow_name`, `alfred_workflow_data`, `alfred_workflow_cache` | only with `format = "alfred"`, the Alfred equivalents |
+| `SEVAK_PLUGIN_CACHE` | a folder for what can be thrown away (`<local data dir>/cache/plugins/<folder>`), apart from `SEVAK_PLUGIN_DATA` |
+| `alfred_workflow_bundleid`, `alfred_workflow_name`, `alfred_workflow_data`, `alfred_workflow_cache`, `alfred_workflow_keyword`, `alfred_version`, `alfred_debug` | only with `format = "alfred"`, the Alfred equivalents (`alfred_workflow_cache` is the cache folder, `alfred_version` is `5.5`, `alfred_debug` is `0`) |
 
 On Windows the script gets no console window.
 
@@ -1323,6 +1324,11 @@ mode. Mapping:
 | `autocomplete` | what `Tab` turns the input into, relative to the plugin's own input: for `gh rep`, an `autocomplete` of `repo` makes `gh repo`, as for built-in plugins (`ResultItem::autocomplete`) |
 | `mods` | secondary actions of the row ([below](#modifiers-mods)) |
 | item order | kept (Sevak's scores follow the order) |
+| `quicklookurl` | the preview pane: a file path (absolute, `~/...` or `file://`) shows the file; an `http(s)` address is shown as a link and never fetched |
+| `text.copy`, `text.largetype` | what `Ctrl+C` copies and what Large Type (`Ctrl+L`) shows |
+| top-level `skipknowledge: true` | the rows keep the script's order; what you pick often never moves them |
+| top-level `cache: {"seconds": N, "loosereload": bool}` | the answer for that exact query is kept for N seconds (5 to 86 400; 64 queries, in memory) and the script is not run meanwhile; with `loosereload` an expired answer is shown at once while the script runs again |
+| top-level `rerun` | the script runs again after that many seconds (0.1 to 5) while the same query stays in the launcher, and the list refreshes; it stops when the query changes or the launcher hides |
 
 #### Modifiers (`mods`)
 
@@ -1348,9 +1354,10 @@ key held on Enter or picked in the action panel (`→` or `Ctrl+K`):
   then combinations), not in the order the script printed them.
 - `variables` of an entry only matter to [workflows](workflows.md#script-filter).
 
-Ignored: `quicklookurl`, `variables`, `text`, `match`, `icon.type` (`fileicon`
-and `filetype` ask macOS for a file's icon), and the top-level `rerun`,
-`variables` and `cache`. A scheme other than web or mail in
+Accepted and ignored: `strictmods`, `icon.resize`, `iconresize`, `icon.type`
+(`fileicon` and `filetype` ask macOS for a file's icon), and `variables`, `match`
+here: they only matter to [workflows](workflows.md#script-filter), where the node
+can let Sevak filter by `match`. A scheme other than web or mail in
 `arg` (`slack://`, `obsidian://`) is copied rather than opened because Sevak
 does not open arbitrary schemes. Scripts that call `osascript`, read
 `~/Library`, or expect an Alfred preferences file need changes to run elsewhere.

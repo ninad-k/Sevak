@@ -7,6 +7,7 @@ use sevak_core::{Action, Plugin, PluginError, PluginResult, ResultItem, ResultsN
 use sevak_platform::PlatformProvider;
 
 use super::delivery::Begin;
+use super::filter_cache::Lookup;
 use super::items::vet_action;
 use super::runner::{Runner, Spec};
 use crate::actions::execute_action;
@@ -62,6 +63,11 @@ impl Plugin for ScriptPlugin {
 
     fn query(&self, input: &str) -> Vec<ResultItem> {
         let delivery = &self.runner.delivery;
+        let stale = match self.runner.cache_lookup(input) {
+            Lookup::Fresh(items) => return items,
+            Lookup::Stale(items) => Some(items),
+            Lookup::Miss => None,
+        };
         let id = match delivery.begin(input) {
             Begin::Cached(items) => return items,
             Begin::InFlight(id) => id,
@@ -74,7 +80,17 @@ impl Plugin for ScriptPlugin {
                 id
             }
         };
+        if let Some(items) = stale {
+            // `loosereload`: the expired answer now, the new one when it
+            // arrives (the notifier then runs the query again).
+            delivery.wait(id, Duration::ZERO);
+            return items;
+        }
         delivery.wait(id, self.manifest().timeout)
+    }
+
+    fn launcher_hidden(&self) {
+        self.runner.launcher_hidden();
     }
 
     fn execute(&self, item: &ResultItem) -> PluginResult<()> {

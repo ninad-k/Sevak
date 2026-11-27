@@ -133,6 +133,8 @@ pub fn run(
             workflows::save_workflow,
             workflows::create_workflow,
             workflows::delete_workflow,
+            workflows::get_workflow_config,
+            workflows::set_workflow_config,
             workflows::set_workflow_enabled,
             workflows::review_workflow,
             workflows::workflow_templates,

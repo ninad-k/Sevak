@@ -14,6 +14,7 @@ the small `workflow.toml` file yourself.
 - [How a run works](#how-a-run-works)
 - [Permission, privacy and limits](#permission-privacy-and-limits)
 - [The gallery](#the-gallery)
+- [Settings the user fills in](#settings-the-user-fills-in)
 - [The file format](#the-file-format)
 - [Coming from Alfred](#coming-from-alfred)
 - [Troubleshooting](#troubleshooting)
@@ -215,11 +216,34 @@ plus:
 | `autocomplete` | what `Tab` types (after the keyword) |
 | `mods` | secondary actions: `cmd` is `Ctrl+Enter` (`⌘↵` on macOS), `alt` is `Alt+Enter`, `shift` is `Shift+Enter`; `ctrl`, `fn` and combinations are in the action panel (`→` or `Ctrl+K`). A mod's own `arg` and `variables` replace the row's, and the variable `mod` tells the next nodes which one was picked (`alt`, `cmd+alt`, ...) |
 | `uid`, `title`, `subtitle`, `icon.path` | as in script plugins |
+| `quicklookurl` | the preview pane (`Shift` or `Ctrl+Y`): a file path shows the file, an `http(s)` address is shown as a link and never fetched |
+| `text.copy`, `text.largetype` | what `Ctrl+C` (`⌘C`) copies and what Large Type (`Ctrl+L`) shows, instead of the `arg` and the title |
+| `match` | what the typed text is matched against when the node has **Sevak filters the results** on (the title otherwise). Rows that do not match are hidden, the rest are ranked by the match |
+
+Top-level keys of the answer:
+
+| Key | Effect |
+|---|---|
+| `variables` | variables for the next nodes, under each row's own (the row's value wins) |
+| `skipknowledge: true` | the rows keep the script's order: what you pick often never moves them |
+| `cache: {"seconds": N, "loosereload": true}` | the answer for that exact query is kept for N seconds (5 to 86 400, 64 queries per node, in memory only) and the script is not run again meanwhile. With `loosereload`, an expired answer is shown at once while the script runs again and the list then refreshes |
+| `rerun: 0.5` | while the same text stays in the launcher, the script runs again after that many seconds (0.1 to 5) and the list refreshes. It stops when the text changes or the launcher hides |
+| `strictmods`, `icon.resize`, `iconresize` | accepted and ignored |
+
+`mods` also accepts `ctrl` and `fn` and combinations such as `cmd+alt`. Sevak's
+launcher has no Enter-with-`Ctrl`-or-`fn` key of its own for those (its `Ctrl`
+is Alfred's `cmd`), so they appear in the action panel only; each entry's
+`arg`, `subtitle`, `valid` and `variables` work as for the others.
 
 Use a *Conditional* on `{var:mod}` to treat an `alt` pick differently.
 
-The script filter uses the workflow's variables as environment variables (and
-`SEVAK_WORKFLOW_*`), and stops a run after *Stop the script after* (3 seconds by
+The script filter uses the workflow's variables (and the values of its
+[settings](#settings-the-user-fills-in)) as environment variables, plus
+`SEVAK_WORKFLOW_*` and the names Alfred scripts read: `alfred_workflow_bundleid`,
+`alfred_workflow_name`, `alfred_workflow_keyword` (the keyword that started it),
+`alfred_workflow_data` (files to keep), `alfred_workflow_cache` (a folder of its
+own, apart from the data folder, for what can be thrown away), `alfred_version`
+(`5.5`) and `alfred_debug` (`0`). It stops a run after *Stop the script after* (3 seconds by
 default). A script filter that gives both a `script` and extra arguments looks
 for its interpreter when the workflow loads, so choose **Reload index** after
 installing Python or Node.
@@ -420,6 +444,68 @@ rules a package has to meet and a pre-merge checklist are in
 [gallery/README.md](https://github.com/ninad-k/Sevak/blob/main/gallery/README.md); see also
 [plugins.md](plugins.md#workflows-for-contributors).
 
+## Settings the user fills in
+
+A workflow can ask for settings (a server name, an API key, a folder, a unit)
+instead of having them edited into its scripts. Add them in the builder, under
+the workflow's own properties (**Settings form**), or as `[[config]]` tables:
+
+```toml
+[[config]]
+variable = "api_host"          # becomes {var:api_host} and an environment variable
+kind = "textfield"             # textfield | textarea | checkbox | popup | slider | filepicker
+label = "Server"
+description = "Without https://"
+required = true                # the workflow does not run until it has a value
+placeholder = "example.com"
+
+[[config]]
+variable = "units"
+kind = "popup"
+default = "metric"
+options = [{ label = "Metric", value = "metric" }, { label = "Imperial", value = "imperial" }]
+
+[[config]]
+variable = "volume"
+kind = "slider"                # min, max (default 0 to 100) and step
+default = 40
+min = 0
+max = 100
+step = 5
+
+[[config]]
+variable = "root"
+kind = "filepicker"
+mode = "folder"                # file (default) or folder
+```
+
+The user opens the form with **Configure…** on the workflow's row in **Settings →
+Workflows**, and straight after installing a workflow that needs it from the
+gallery. Rules:
+
+- Variable names start with a letter or `_` and use letters, digits and `_`,
+  each at most once. A popup needs at least one option with a value; a slider's
+  `min` must be less than `max`; a default must fit its kind. Names such as
+  `PATH` that change how programs start are refused.
+- A value is the user's value, else the field's `default`, else the workflow's
+  own `[variables]` entry of that name, else nothing. A checkbox is `true` or
+  `false`, a slider a number, a file picker a path (`~` is expanded).
+- The values are saved in
+  `<data folder>/workflows/<folder>/user-config.json`, **outside the workflow
+  folder**: editing, updating or reinstalling the workflow keeps them. They are
+  your data, not part of what you allowed, so changing them never asks for
+  permission again.
+- A workflow with a required setting still empty does not run. Its trigger row
+  says *Configure <name> first: <settings>*, running it shows the same
+  notification, and a script filter lists that one row instead of running its
+  script.
+- Values reach scripts as environment variables and as arguments, never as
+  script source. In a terminal command `{var:name}` is quoted as one literal
+  word for the shell; in links it is percent-encoded.
+- Deleting a workflow keeps these values (and anything its scripts saved) unless
+  you choose **Delete with data**, which also removes its data folder, its cache
+  folder and its settings.
+
 ## The file format
 
 A workflow is the folder `<config folder>/workflows/<name>/` with `workflow.toml`
@@ -455,11 +541,14 @@ url = "{var:site|raw}/std/?search={query}"
 [[connection]]
 from = "kw"
 to = "open"                     # port = "then" / "else" after a conditional
+
+# [[config]] tables describe the settings form, see "Settings the user fills in".
 ```
 
 Node types and their fields: `keyword` (`keyword`, `argument`, `subtitle`),
 `hotkey` (`key`), `selection` (`accepts`), `external`, `script_filter`
-(`keyword`, `command` or `script`, `args`, `timeout_ms`, `hard_timeout_ms`),
+(`keyword`, `command` or `script`, `args`, `timeout_ms`, `hard_timeout_ms`,
+`filter_results`),
 `run_script` (`command` or `script`, `args`, `stdin`, `env`, `timeout_ms`,
 `log_stderr`), `open_url` (`url`), `open_file` (`path`), `launch_app` (`app`,
 `args`), `system_command` (`command`), `terminal_command` (`command`), `copy`

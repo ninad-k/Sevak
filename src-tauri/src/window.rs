@@ -119,6 +119,7 @@ pub fn unhide_app(_app: &AppHandle) {}
 /// The actions for a selection (Universal Actions) are dropped with it.
 pub fn announce_hidden(app: &AppHandle) {
     if let Some(state) = app.try_state::<AppState>() {
+        state.search.engine().launcher_hidden();
         state.search.forget_selection();
         state
             .file_buffer

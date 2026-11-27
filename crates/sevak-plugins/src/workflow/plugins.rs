@@ -70,6 +70,14 @@ fn custom(payload: &impl Serialize) -> Action {
     }
 }
 
+/// The subtitle of a trigger row: what the workflow does, or that it needs
+/// its settings first.
+fn trigger_subtitle(runtime: &Runtime) -> String {
+    runtime
+        .configure_message()
+        .unwrap_or_else(|| runtime.workflow.description.trim().to_owned())
+}
+
 /// The label of a node on a result row: its title, else the workflow's name.
 fn row_title(node: &Node, runtime: &Runtime) -> String {
     let title = node.title.trim();
@@ -116,7 +124,7 @@ impl KeywordPlugin {
     }
 
     fn describe(&self, text: &str) -> (String, String) {
-        let vars = &self.runtime.workflow.variables;
+        let vars = self.runtime.base_variables();
         let scope = Scope { query: text, vars };
         let title = expand(&self.title, &scope, Target::Plain);
         let subtitle = expand(&self.subtitle, &scope, Target::Plain);
@@ -131,7 +139,9 @@ impl KeywordPlugin {
     fn row(&self, text: &str) -> ResultItem {
         let missing = self.argument == Argument::Required && text.is_empty();
         let (title, subtitle) = self.describe(text);
-        let subtitle = if missing {
+        let subtitle = if let Some(message) = self.runtime.configure_message() {
+            message
+        } else if missing {
             "Type some text after the keyword".to_owned()
         } else {
             subtitle
@@ -230,6 +240,7 @@ impl FilterPlugin {
             args,
             timeout_ms,
             hard_timeout_ms,
+            filter_results,
         } = &node.kind
         else {
             return None;
@@ -290,6 +301,8 @@ impl FilterPlugin {
             manifest,
             dir: runtime.dir.clone(),
             data_dir: runtime.data_dir.clone(),
+            cache_dir: runtime.cache_dir.clone(),
+            filter_results: *filter_results,
             env: runtime.script_environment(),
             expected_key: None,
         };
@@ -323,7 +336,31 @@ impl Plugin for FilterPlugin {
     }
 
     fn query(&self, input: &str) -> Vec<ResultItem> {
+        // A workflow that still needs its settings does not run its script.
+        if let Some(message) = self.runtime.configure_message() {
+            return vec![ResultItem::new(
+                self.inner.id(),
+                "configure",
+                message,
+                Action::Custom {
+                    payload: RawPick {
+                        arg: String::new(),
+                        variables: Default::default(),
+                        valid: false,
+                        modifier: None,
+                    }
+                    .payload(),
+                },
+            )
+            .with_subtitle("Open Sevak's Workflows settings and choose Configure")
+            .with_icon(icon())
+            .with_score(score::KEYWORD - 1.0)];
+        }
         self.inner.query(input)
+    }
+
+    fn launcher_hidden(&self) {
+        self.inner.launcher_hidden();
     }
 
     fn execute(&self, item: &ResultItem) -> PluginResult<()> {
@@ -388,7 +425,7 @@ impl TriggersPlugin {
                 kind: None,
             }),
         )
-        .with_subtitle(self.runtime.workflow.description.trim())
+        .with_subtitle(trigger_subtitle(&self.runtime))
         .with_icon(icon())
     }
 }
@@ -480,7 +517,7 @@ impl Plugin for TriggersPlugin {
                         kind: Some(kind.to_owned()),
                     }),
                 )
-                .with_subtitle(self.runtime.workflow.description.trim())
+                .with_subtitle(trigger_subtitle(&self.runtime))
                 .with_icon(icon()),
             );
         }

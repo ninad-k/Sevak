@@ -14,7 +14,7 @@ use sevak_plugins::keywords::{workflow_key, KeywordOwners};
 use sevak_plugins::workflow::gallery::{self, Dirs, Entry, Kind};
 use sevak_plugins::workflow::templates;
 use sevak_plugins::workflow::{
-    Candidate, Loaded, OutputSink, Problem, Saved, Scanned, Summary, Workflow,
+    Candidate, ConfigForm, Loaded, OutputSink, Problem, Saved, Scanned, Summary, Workflow,
 };
 use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::{
@@ -458,7 +458,50 @@ pub async fn create_workflow(app: AppHandle, template: String) -> Result<Saved, 
     .await
 }
 
-/// Deletes a workflow folder after asking.
+const DELETE_LABEL: &str = "Delete";
+const DELETE_WITH_DATA_LABEL: &str = "Delete with data";
+
+/// What the user chose in the delete dialog.
+enum DeleteChoice {
+    Cancel,
+    Delete,
+    DeleteWithData,
+}
+
+/// A native dialog with three buttons: Delete, Delete with data, Cancel.
+/// Anything else (closing it, no dialog) cancels: a deletion never happens by
+/// accident. Blocks, so only call it off the main thread.
+fn ask_delete(app: &AppHandle, name: &str) -> DeleteChoice {
+    let buttons = [
+        DELETE_LABEL.to_owned(),
+        DELETE_WITH_DATA_LABEL.to_owned(),
+        CANCEL_LABEL.to_owned(),
+    ];
+    let result = app
+        .dialog()
+        .message(format!(
+            "Delete the workflow \"{name}\" and everything in its folder?\n\n\
+             \"{DELETE_LABEL}\" keeps the files it saved and its settings, so installing it \
+             again finds them. \"{DELETE_WITH_DATA_LABEL}\" also removes its data folder, \
+             cache and settings."
+        ))
+        .title("Sevak")
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::YesNoCancelCustom(
+            buttons[0].clone(),
+            buttons[1].clone(),
+            buttons[2].clone(),
+        ))
+        .blocking_show_with_result();
+    match answer_index(&result, &buttons) {
+        Some(0) => DeleteChoice::Delete,
+        Some(1) => DeleteChoice::DeleteWithData,
+        _ => DeleteChoice::Cancel,
+    }
+}
+
+/// Deletes a workflow folder after asking: plainly, or together with its
+/// data, cache and settings.
 #[tauri::command]
 pub async fn delete_workflow(app: AppHandle, folder: String) -> Result<bool, String> {
     blocking(move || {
@@ -467,17 +510,47 @@ pub async fn delete_workflow(app: AppHandle, folder: String) -> Result<bool, Str
             .load(&folder)
             .map(|loaded| display_name(&loaded.workflow, &folder))
             .unwrap_or_else(|_| folder.clone());
-        if !commands::confirmed(
-            &app,
-            "Delete",
-            format!("Delete the workflow \"{name}\" and everything in its folder?"),
-        ) {
-            return Ok(false);
-        }
-        workflows.delete(&folder)?;
-        tracing::info!(workflow = folder, "workflow deleted");
+        let with_data = match ask_delete(&app, &name) {
+            DeleteChoice::Cancel => return Ok(false),
+            DeleteChoice::Delete => false,
+            DeleteChoice::DeleteWithData => true,
+        };
+        workflows.delete(&folder, with_data)?;
+        tracing::info!(workflow = folder, with_data, "workflow deleted");
         app::reload(&app);
         Ok(true)
+    })
+    .await
+}
+
+/// The settings form of a workflow with the user's values.
+#[tauri::command]
+pub async fn get_workflow_config(app: AppHandle, folder: String) -> Result<ConfigForm, String> {
+    blocking(move || {
+        app.state::<AppState>()
+            .search
+            .workflows
+            .config_form(&folder)
+    })
+    .await
+}
+
+/// Saves the settings form (every value is checked against its field) and
+/// reloads, so the workflow runs with the new values.
+#[tauri::command]
+pub async fn set_workflow_config(
+    app: AppHandle,
+    folder: String,
+    values: std::collections::BTreeMap<String, serde_json::Value>,
+) -> Result<(), String> {
+    blocking(move || {
+        app.state::<AppState>()
+            .search
+            .workflows
+            .set_config_values(&folder, &values)?;
+        tracing::info!(workflow = folder, "workflow settings saved");
+        app::reload(&app);
+        Ok(())
     })
     .await
 }
