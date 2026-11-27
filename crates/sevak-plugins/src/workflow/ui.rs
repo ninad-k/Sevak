@@ -942,6 +942,16 @@ fn script_wildcard(text: &str) -> BTreeSet<String> {
     found
 }
 
+/// How many components `root` holds (itself included).
+pub fn count_components(root: &Component) -> usize {
+    1 + match root {
+        Component::Column(layout) | Component::Row(layout) | Component::Grid(layout) => {
+            layout.children.iter().map(count_components).sum()
+        }
+        _ => 0,
+    }
+}
+
 // ---- images ---------------------------------------------------------------
 
 fn has_image_extension(path: &str) -> bool {

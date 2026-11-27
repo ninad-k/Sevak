@@ -17,7 +17,7 @@ use crate::window;
 const INDEX_WAIT: Duration = Duration::from_secs(15);
 
 /// What the UI is told when the launcher is shown (`sevak:show`).
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct ShowPayload {
     /// Text to put in the search field, caret at the end.
     pub query: Option<String>,
@@ -27,6 +27,8 @@ pub struct ShowPayload {
     pub selection: Option<SelectionPayload>,
     /// Text a workflow's output node shows in the launcher.
     pub output: Option<OutputPayload>,
+    /// A Sevak UI a workflow's `show_ui` node opens in the launcher panel.
+    pub ui: Option<crate::sevak_ui::UiPayload>,
 }
 
 impl ShowPayload {
@@ -35,6 +37,7 @@ impl ShowPayload {
             && self.error.is_none()
             && self.selection.is_none()
             && self.output.is_none()
+            && self.ui.is_none()
     }
 }
 

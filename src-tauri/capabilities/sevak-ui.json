@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "sevak-ui",
+  "description": "Workflow UI windows: no plugin permissions at all. They call only Sevak's own commands (sevak_ui_session, sevak_ui_event) and load nothing but the app page.",
+  "windows": ["sevak-ui-*"],
+  "permissions": []
+}

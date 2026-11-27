@@ -20,6 +20,7 @@ mod script_plugins;
 mod search;
 mod selection;
 mod settings;
+mod sevak_ui;
 mod state;
 mod takeover;
 mod themes;
