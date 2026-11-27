@@ -1084,7 +1084,9 @@
       "saved": "Guardado.",
       "savedNeedsAllow": "Guardado. Sevak te pedirá que lo permitas antes de que ejecute nada.",
       "badId": "Un id usa de 1 a 40 letras, dígitos, guiones o guiones bajos.",
-      "idTaken": "Otro nodo ya tiene ese id."
+      "idTaken": "Otro nodo ya tiene ese id.",
+      "portButton": "Cuando se pulsa el botón {n}, ir a",
+      "portCancel": "Cuando se cierra, ir a"
     },
     "fields": {
       "acceptText": "Texto",
@@ -1093,7 +1095,12 @@
       "pasteDefault": "Usar el ajuste de [paste]",
       "yes": "Sí",
       "no": "No",
-      "noSettings": "Este disparador no tiene ajustes. Inícialo con <code>sevak --trigger &lt;carpeta&gt;/{id}</code> (añade texto después para pasarlo como <code>{query}</code>)."
+      "noSettings": "Este disparador no tiene ajustes. Inícialo con <code>sevak --trigger &lt;carpeta&gt;/{id}</code> (añade texto después para pasarlo como <code>{query}</code>).",
+      "itemTitle": "Título",
+      "itemSubtitle": "Subtítulo",
+      "itemArg": "Argumento (el título si está vacío)",
+      "addItem": "Añadir un elemento",
+      "removeItem": "Quitar el elemento {n}"
     },
     "connect": {
       "missing": "Ese nodo no existe.",
@@ -1152,6 +1159,16 @@
         "shutdown": "Apagar (pregunta antes)",
         "logout": "Cerrar sesión (pregunta antes)",
         "empty_trash": "Vaciar la papelera (pregunta antes)"
+      },
+      "fileScope": {
+        "any": "Archivos y carpetas",
+        "files": "Solo archivos",
+        "folders": "Solo carpetas"
+      },
+      "appOutput": {
+        "name": "El nombre",
+        "path": "La ruta",
+        "pid": "El id de proceso"
       }
     },
     "program": {
@@ -1417,6 +1434,91 @@
           },
           "text": {
             "label": "Texto"
+          }
+        }
+      },
+      "list_filter": {
+        "label": "Filtro de lista",
+        "summary": "Una palabra clave que lista las filas escritas aquí, filtradas por lo que escribes.",
+        "fields": {
+          "keyword": {
+            "label": "Palabra clave"
+          },
+          "items": {
+            "label": "Elementos",
+            "hint": "La fila elegida pasa su argumento (su título si el argumento está vacío)."
+          }
+        }
+      },
+      "file_filter": {
+        "label": "Filtro de archivos",
+        "summary": "Una palabra clave que lista nombres de archivos y carpetas de las carpetas elegidas.",
+        "fields": {
+          "keyword": {
+            "label": "Palabra clave"
+          },
+          "folders": {
+            "label": "Carpetas",
+            "hint": "Una por línea. Déjalo vacío para usar las carpetas de Ajustes > Archivos."
+          },
+          "extensions": {
+            "label": "Solo estas extensiones",
+            "hint": "Una por línea, como pdf o png. Déjalo vacío para todos los archivos."
+          },
+          "scope": {
+            "label": "Mostrar"
+          }
+        }
+      },
+      "running_apps": {
+        "label": "Apps en ejecución",
+        "summary": "Una palabra clave que lista las apps en ejecución.",
+        "fields": {
+          "keyword": {
+            "label": "Palabra clave"
+          },
+          "output": {
+            "label": "Pasar",
+            "hint": "La ruta se conoce para las apps que Sevak también lista en su lanzador; si no, se pasa el nombre."
+          }
+        }
+      },
+      "dialog_conditional": {
+        "label": "Diálogo",
+        "summary": "Hace una pregunta con uno a tres botones y continúa según el botón pulsado.",
+        "fields": {
+          "heading": {
+            "label": "Encabezado"
+          },
+          "message": {
+            "label": "Mensaje"
+          },
+          "buttons": {
+            "label": "Botones",
+            "hint": "Uno por línea, como máximo tres. Cada botón tiene su propia salida; cerrar el diálogo toma la salida de cancelar. Con tres botones, cerrar puede contar como el tercero en algunos sistemas."
+          }
+        }
+      },
+      "speak": {
+        "label": "Decir en voz alta",
+        "summary": "Lee el texto en voz alta con la voz del sistema.",
+        "fields": {
+          "text": {
+            "label": "Texto"
+          },
+          "voice": {
+            "label": "Voz",
+            "hint": "El nombre de una voz instalada en este equipo. Déjalo vacío para la voz del sistema."
+          }
+        }
+      },
+      "play_sound": {
+        "label": "Reproducir sonido",
+        "summary": "Reproduce un archivo de sonido (wav, mp3, aiff, m4a, ogg o flac).",
+        "fields": {
+          "path": {
+            "label": "Archivo de sonido",
+            "hint": "Una ruta completa, una ruta que empiece por ~ o un archivo de la carpeta del flujo."
           }
         }
       }

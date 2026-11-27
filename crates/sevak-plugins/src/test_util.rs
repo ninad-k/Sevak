@@ -90,6 +90,10 @@ pub struct MockPlatform {
     pub spellings: Mutex<Vec<(String, Spelling)>>,
     /// Text put on the clipboard as a secret (`set_clipboard_text_private`).
     pub private_clipboard: Mutex<Vec<String>>,
+    /// `(text, voice)` of every `speak` call.
+    pub spoken: Mutex<Vec<(String, Option<String>)>>,
+    /// Every sound file `play_sound` was given.
+    pub sounds: Mutex<Vec<PathBuf>>,
 }
 
 impl MockPlatform {
@@ -362,6 +366,19 @@ impl PlatformProvider for MockPlatform {
 
     fn set_clipboard_text_private(&self, text: &str) -> Result<()> {
         self.private_clipboard.lock().unwrap().push(text.to_owned());
+        Ok(())
+    }
+
+    fn speak(&self, text: &str, voice: Option<&str>) -> Result<()> {
+        self.spoken
+            .lock()
+            .unwrap()
+            .push((text.to_owned(), voice.map(str::to_owned)));
+        Ok(())
+    }
+
+    fn play_sound(&self, path: &Path) -> Result<()> {
+        self.sounds.lock().unwrap().push(path.to_path_buf());
         Ok(())
     }
 }

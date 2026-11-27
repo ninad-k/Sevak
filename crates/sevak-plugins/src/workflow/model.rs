@@ -37,7 +37,8 @@ pub const FILE: &str = "workflow.toml";
 /// Every workflow plugin id starts with this; it is also the family id, so
 /// `[plugins] disabled = ["workflow"]` switches all workflows off.
 pub const FAMILY: &str = "workflow";
-/// The output port of every node except [`NodeKind::Conditional`].
+/// The output port of every node except [`NodeKind::Conditional`] and
+/// [`NodeKind::DialogConditional`].
 pub const OUT: &str = "out";
 /// The branch of a conditional taken when its test holds.
 pub const THEN: &str = "then";
@@ -194,6 +195,52 @@ pub enum Test {
     IsEmpty,
     NotEmpty,
 }
+
+/// Which entries a `file_filter` node lists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FileScope {
+    /// Files and folders.
+    #[default]
+    Any,
+    Files,
+    Folders,
+}
+
+/// What a `running_apps` node passes on for the app that was picked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AppOutput {
+    #[default]
+    Name,
+    /// The application's path, when it can be found (else its name).
+    Path,
+    /// The process id of its first process.
+    Pid,
+}
+
+/// One row of a `list_filter` node.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ListItem {
+    pub title: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub subtitle: String,
+    /// What the nodes after the filter receive; the title when empty.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub arg: String,
+}
+
+/// Most buttons a `dialog_conditional` node shows.
+pub const MAX_DIALOG_BUTTONS: usize = 3;
+/// The output port taken when the dialog is dismissed (or cannot be shown).
+pub const CANCEL: &str = "cancel";
+/// The output ports of a `dialog_conditional`, one per button, then `cancel`.
+pub const DIALOG_PORTS: [&str; 4] = ["button1", "button2", "button3", CANCEL];
+/// Most rows of a `list_filter`.
+pub const MAX_LIST_ITEMS: usize = 500;
+/// File extensions a `play_sound` node accepts.
+pub const SOUND_EXTENSIONS: [&str; 7] = ["wav", "mp3", "aiff", "aif", "m4a", "ogg", "flac"];
 
 fn query_template() -> String {
     "{query}".to_owned()
@@ -360,6 +407,66 @@ pub enum NodeKind {
         #[serde(default = "query_template")]
         text: String,
     },
+
+    // ---- Alfred parity: filters, dialog, speech and sound -------------------
+    /// A keyword that lists fixed rows (edited in the builder), filtered by the
+    /// typed text; the row you pick starts the nodes after it.
+    ListFilter {
+        keyword: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        items: Vec<ListItem>,
+    },
+    /// A keyword that lists files and folders by name; the path you pick
+    /// starts the nodes after it.
+    FileFilter {
+        keyword: String,
+        /// Folders to look in (`~` is the home folder); the `[files]
+        /// directories` when empty.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        folders: Vec<String>,
+        /// Only names with one of these extensions (`pdf`, `.png`); any when
+        /// empty.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        extensions: Vec<String>,
+        #[serde(default, skip_serializing_if = "is_any_scope")]
+        scope: FileScope,
+    },
+    /// A keyword that lists the running apps; the one you pick starts the
+    /// nodes after it.
+    RunningApps {
+        keyword: String,
+        #[serde(default, skip_serializing_if = "is_default_output")]
+        output: AppOutput,
+    },
+    /// Shows a dialog and continues along the port of the button pressed
+    /// (`button1` to `button3`), or `cancel`.
+    DialogConditional {
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        heading: String,
+        #[serde(default = "query_template")]
+        message: String,
+        /// One to three button labels. May use `{query}`.
+        #[serde(default)]
+        buttons: Vec<String>,
+    },
+    /// Speaks text with the system voice.
+    Speak {
+        #[serde(default = "query_template")]
+        text: String,
+        /// The voice's name; the system's own when empty.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        voice: Option<String>,
+    },
+    /// Plays a sound file (`wav`, `mp3`, `aiff`, `aif`, `m4a`, `ogg`, `flac`).
+    PlaySound { path: String },
+}
+
+fn is_any_scope(scope: &FileScope) -> bool {
+    *scope == FileScope::Any
+}
+
+fn is_default_output(output: &AppOutput) -> bool {
+    *output == AppOutput::Name
 }
 
 fn default_accepts() -> Vec<Accepts> {
@@ -404,6 +511,12 @@ impl NodeKind {
             Self::Notification { .. } => "notification",
             Self::LargeType { .. } => "large_type",
             Self::TextView { .. } => "text_view",
+            Self::ListFilter { .. } => "list_filter",
+            Self::FileFilter { .. } => "file_filter",
+            Self::RunningApps { .. } => "running_apps",
+            Self::DialogConditional { .. } => "dialog_conditional",
+            Self::Speak { .. } => "speak",
+            Self::PlaySound { .. } => "play_sound",
         }
     }
 
@@ -413,7 +526,10 @@ impl NodeKind {
             | Self::Hotkey { .. }
             | Self::Selection { .. }
             | Self::External {} => Category::Trigger,
-            Self::ScriptFilter { .. } => Category::Input,
+            Self::ScriptFilter { .. }
+            | Self::ListFilter { .. }
+            | Self::FileFilter { .. }
+            | Self::RunningApps { .. } => Category::Input,
             Self::RunScript { .. }
             | Self::OpenUrl { .. }
             | Self::OpenFile { .. }
@@ -425,10 +541,13 @@ impl NodeKind {
             Self::SetVariable { .. }
             | Self::Transform { .. }
             | Self::Conditional { .. }
-            | Self::Delay { .. } => Category::Utility,
-            Self::Notification { .. } | Self::LargeType { .. } | Self::TextView { .. } => {
-                Category::Output
-            }
+            | Self::Delay { .. }
+            | Self::DialogConditional { .. } => Category::Utility,
+            Self::Notification { .. }
+            | Self::LargeType { .. }
+            | Self::TextView { .. }
+            | Self::Speak { .. }
+            | Self::PlaySound { .. } => Category::Output,
         }
     }
 
@@ -441,6 +560,7 @@ impl NodeKind {
     pub fn output_ports(&self) -> &'static [&'static str] {
         match self {
             Self::Conditional { .. } => &[THEN, ELSE],
+            Self::DialogConditional { .. } => &DIALOG_PORTS,
             _ => &[OUT],
         }
     }
@@ -496,9 +616,11 @@ impl Workflow {
     /// filters) with that keyword, trimmed.
     pub fn keyword_nodes(&self) -> impl Iterator<Item = (&Node, &str)> {
         self.nodes.iter().filter_map(|node| match &node.kind {
-            NodeKind::Keyword { keyword, .. } | NodeKind::ScriptFilter { keyword, .. } => {
-                Some((node, keyword.trim()))
-            }
+            NodeKind::Keyword { keyword, .. }
+            | NodeKind::ScriptFilter { keyword, .. }
+            | NodeKind::ListFilter { keyword, .. }
+            | NodeKind::FileFilter { keyword, .. }
+            | NodeKind::RunningApps { keyword, .. } => Some((node, keyword.trim())),
             _ => None,
         })
     }
@@ -875,5 +997,98 @@ mod tests {
         ] {
             assert!(!valid_folder_name(bad), "{bad}");
         }
+    }
+
+    const FILTERS: &str = r#"
+        name = "Filters"
+
+        [[node]]
+        id = "list"
+        type = "list_filter"
+        keyword = "pick"
+        [[node.items]]
+        title = "Apple"
+        arg = "a-1"
+
+        [[node]]
+        id = "files"
+        type = "file_filter"
+        keyword = "ff"
+        folders = ["~/Documents"]
+        extensions = ["pdf"]
+        scope = "files"
+
+        [[node]]
+        id = "apps"
+        type = "running_apps"
+        keyword = "apps"
+        output = "pid"
+
+        [[node]]
+        id = "ask"
+        type = "dialog_conditional"
+        message = "Sure?"
+        buttons = ["Yes", "No"]
+
+        [[node]]
+        id = "say"
+        type = "speak"
+
+        [[node]]
+        id = "ding"
+        type = "play_sound"
+        path = "ding.wav"
+    "#;
+
+    #[test]
+    fn filter_dialog_speech_and_sound_nodes_read_and_write_back_the_same() {
+        let w = Workflow::from_toml(FILTERS).unwrap();
+        let kinds: Vec<(&str, Category)> = w
+            .nodes
+            .iter()
+            .map(|n| (n.kind.type_name(), n.kind.category()))
+            .collect();
+        assert_eq!(
+            kinds,
+            [
+                ("list_filter", Category::Input),
+                ("file_filter", Category::Input),
+                ("running_apps", Category::Input),
+                ("dialog_conditional", Category::Utility),
+                ("speak", Category::Output),
+                ("play_sound", Category::Output),
+            ]
+        );
+        // Defaults fill in what a hand-written file leaves out.
+        assert!(matches!(
+            &w.nodes[4].kind,
+            NodeKind::Speak { text, voice: None } if text == "{query}"
+        ));
+        assert!(matches!(
+            &w.nodes[2].kind,
+            NodeKind::RunningApps {
+                output: AppOutput::Pid,
+                ..
+            }
+        ));
+        // None of them runs code, so none needs the user's Allow.
+        assert!(!w.needs_approval());
+        // The input nodes answer to a keyword.
+        let keywords: Vec<&str> = w.keywords().collect();
+        assert_eq!(keywords, ["pick", "ff", "apps"]);
+        assert!(w.nodes[..3].iter().all(|n| n.kind.is_start()));
+
+        let again = Workflow::from_toml(&w.to_toml().unwrap()).unwrap();
+        assert_eq!(again, w);
+    }
+
+    #[test]
+    fn a_dialog_has_a_port_per_button_and_cancel() {
+        let w = Workflow::from_toml(FILTERS).unwrap();
+        assert_eq!(
+            w.nodes[3].kind.output_ports(),
+            ["button1", "button2", "button3", CANCEL]
+        );
+        assert_eq!(w.nodes[4].kind.output_ports(), [OUT]);
     }
 }

@@ -395,7 +395,7 @@ On **Wayland**, app-to-app clipboard reading is not possible. Enable **Use the c
 
 | Selection | Actions |
 |---|---|
-| **Text** | Search with each web engine, show as Large Type, copy, paste as plain text, calculate (if it's a math expression or unit conversion), transform: Uppercase, Lowercase, Title Case, Trim, URL-encode, URL-decode, Base64 encode, Base64 decode, Pretty-print JSON, Minify JSON |
+| **Text** | Search with each web engine, show as Large Type, copy, paste as plain text, calculate (if it's a math expression or unit conversion), transform: Uppercase, Lowercase, Title Case, Trim, URL-encode, URL-decode, Base64 encode, Base64 decode, Pretty-print JSON, Minify JSON, Speak (read it aloud with the system voice) |
 | **URLs** (`http://`, `https://`, `mailto:`, `www.`) | Open, copy, Large Type |
 | **Files and folders** | Open, show in file manager, copy path(s), open in terminal (folders), run as admin (Windows programs), send to Sevak (fills search box with the path) |
 | **Path as text** | File actions above, then text actions |

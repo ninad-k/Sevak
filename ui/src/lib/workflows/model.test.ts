@@ -102,6 +102,59 @@ describe("the node catalog", () => {
   });
 });
 
+describe("filters, dialog, speech and sound nodes", () => {
+  it("offers the three new inputs as starts and none of them needs approval", () => {
+    for (const type of ["list_filter", "file_filter", "running_apps"] as NodeType[]) {
+      expect(kindOf(type).category).toBe("input");
+      expect(isStart({ id: "x", type, x: 0, y: 0 })).toBe(true);
+      expect(kindOf(type).needsApproval).toBeFalsy();
+    }
+    expect(kindOf("dialog_conditional").category).toBe("utility");
+    expect(kindOf("speak").category).toBe("output");
+    expect(kindOf("play_sound").category).toBe("output");
+  });
+
+  it("gives a dialog a port per button, then cancel", () => {
+    const dialog = (buttons: string[]) => ({ id: "d", type: "dialog_conditional" as const, x: 0, y: 0, buttons });
+    expect(outputPorts(dialog(["Yes", "No"]))).toEqual(["button1", "button2", "cancel"]);
+    expect(outputPorts(dialog(["Only"]))).toEqual(["button1", "cancel"]);
+    expect(outputPorts(dialog(["a", "b", "c", "d"]))).toEqual(["button1", "button2", "button3", "cancel"]);
+    // The defaults of a new node are two buttons.
+    const made = makeNode(newWorkflow(), "dialog_conditional", 0, 0);
+    expect(outputPorts(made)).toEqual(["button1", "button2", "cancel"]);
+  });
+
+  it("connects only the ports a dialog has", () => {
+    const w = newWorkflow();
+    const dialog = makeNode(w, "dialog_conditional", 0, 0);
+    const copy = makeNode(w, "copy", 0, 0);
+    w.node.push(dialog, copy);
+    expect(canConnect(w, dialog.id, "button2", copy.id).ok).toBe(true);
+    expect(canConnect(w, dialog.id, "button3", copy.id).ok).toBe(false);
+    expect(canConnect(w, dialog.id, "cancel", copy.id).ok).toBe(true);
+  });
+
+  it("packs the ports of a dialog into the box", () => {
+    const node = { id: "d", type: "dialog_conditional" as const, x: 0, y: 0, buttons: ["a", "b", "c"] };
+    const ys = ["button1", "button2", "button3", "cancel"].map((port) => outPoint(node, port).y);
+    expect(ys).toEqual([...ys].sort((a, b) => a - b));
+    expect(ys[ys.length - 1]).toBeLessThan(NODE_H);
+  });
+
+  it("keeps the list items and drops empty optional lists when saving", () => {
+    const w = newWorkflow();
+    const list = makeNode(w, "list_filter", 0, 0);
+    list.items = [{ title: "Apple", subtitle: "", arg: "a-1" }];
+    const files = makeNode(w, "file_filter", 0, 0);
+    w.node.push(list, files);
+    const saved = toSave(w);
+    expect(saved.node.find((n) => n.id === list.id)?.items).toEqual([{ title: "Apple", subtitle: "", arg: "a-1" }]);
+    const savedFiles = saved.node.find((n) => n.id === files.id)!;
+    expect(savedFiles.folders).toBeUndefined();
+    expect(savedFiles.extensions).toBeUndefined();
+  });
+});
+
 describe("building", () => {
   it("starts a new workflow with one keyword trigger", () => {
     const w = newWorkflow();

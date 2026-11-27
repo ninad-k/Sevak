@@ -63,6 +63,29 @@
     if (Number.isFinite(value)) onset(field.key, Math.trunc(value));
   }
 
+  // The rows of a list filter: each edit replaces the whole list, so the
+  // editor that owns the workflow sees one change.
+  type Row = { title: string; subtitle?: string; arg?: string };
+  const rows = $derived<Row[]>(Array.isArray(node.items) ? (node.items as Row[]) : []);
+
+  function setRow(index: number, key: keyof Row, value: string) {
+    onset(
+      "items",
+      rows.map((row, i) => (i === index ? { ...row, [key]: value } : row)),
+    );
+  }
+
+  function addRow() {
+    onset("items", [...rows, { title: "", subtitle: "", arg: "" }]);
+  }
+
+  function removeRow(index: number) {
+    onset(
+      "items",
+      rows.filter((_, i) => i !== index),
+    );
+  }
+
   const ACCEPTS = $derived([
     { value: "text", label: t("workflows.fields.acceptText") },
     { value: "url", label: t("workflows.fields.acceptUrl") },
@@ -93,6 +116,51 @@
         />
         {field.label}
       </label>
+    {:else if field.kind === "items"}
+      <span class="wf-label" id={id(field.key)}>{field.label}</span>
+      <div role="group" aria-labelledby={id(field.key)}>
+        {#each rows as row, index (index)}
+          <div class="wf-item">
+            <input
+              class="wf-input"
+              type="text"
+              spellcheck="false"
+              autocomplete="off"
+              aria-label={t("workflows.fields.itemTitle")}
+              placeholder={t("workflows.fields.itemTitle")}
+              value={row.title}
+              oninput={(e) => setRow(index, "title", e.currentTarget.value)}
+            />
+            <input
+              class="wf-input"
+              type="text"
+              spellcheck="false"
+              autocomplete="off"
+              aria-label={t("workflows.fields.itemSubtitle")}
+              placeholder={t("workflows.fields.itemSubtitle")}
+              value={row.subtitle ?? ""}
+              oninput={(e) => setRow(index, "subtitle", e.currentTarget.value)}
+            />
+            <input
+              class="wf-input mono"
+              type="text"
+              spellcheck="false"
+              autocomplete="off"
+              aria-label={t("workflows.fields.itemArg")}
+              placeholder={t("workflows.fields.itemArg")}
+              value={row.arg ?? ""}
+              oninput={(e) => setRow(index, "arg", e.currentTarget.value)}
+            />
+            <button
+              type="button"
+              class="wf-btn small danger"
+              aria-label={t("workflows.fields.removeItem", { n: index + 1 })}
+              onclick={() => removeRow(index)}>{t("common.remove")}</button
+            >
+          </div>
+        {/each}
+        <button type="button" class="wf-btn small" onclick={addRow}>{t("workflows.fields.addItem")}</button>
+      </div>
     {:else if field.kind === "accepts"}
       <span class="wf-label" id={id(field.key)}>{field.label}</span>
       <div role="group" aria-labelledby={id(field.key)}>

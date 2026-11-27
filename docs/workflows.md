@@ -170,6 +170,7 @@ matter what it contains.
 | **Transform** | changes the argument, or stores the result in a variable (*Store in variable*): set, UPPER, lower, Title Case, trim, URL-encode/decode, Base64 encode/decode, replace text, replace with a regular expression (`$1` is a group), first line, split at some text and keep part *n* |
 | **Conditional** | continues along *then* when the test holds, *else* otherwise: equals, does not equal, contains, does not contain, starts with, ends with, matches a regular expression, is empty, is not empty (optionally ignoring case) |
 | **Delay** | waits up to 60 seconds |
+| **Dialog** | shows a window with a heading, a message and one to three buttons (all may use placeholders); continues along the output of the button pressed (*button 1* to *button 3*), or along *cancel* when the window is closed |
 
 Regular expressions are Rust's [`regex` syntax](https://docs.rs/regex): linear
 time, no look-around, and limited in size, so a pattern cannot hang Sevak.
@@ -181,6 +182,8 @@ time, no look-around, and limited in size, so a pattern cannot hang Sevak.
 | **Notification** | a system notification (heading defaults to the workflow's name) |
 | **Large Type** | the text huge on screen (dismiss with any key or a click) |
 | **Text view** | the text in the launcher window, below the search bar |
+| **Speak** | reads the text aloud with the system voice (text defaults to `{query}`; *Voice* names an installed voice, empty is the system one). It does not wait for the speech to finish. macOS uses `say`, Windows the .NET speech synthesizer, Linux `spd-say` or `espeak-ng`/`espeak`; the text never goes through a shell |
+| **Play sound** | plays a sound file: `wav`, `mp3`, `aiff`, `aif`, `m4a`, `ogg` or `flac` (macOS `afplay`, Windows PowerShell, Linux `paplay`, `pw-play` or `aplay`). A relative path is inside the workflow's folder; it does not wait for the sound to finish |
 
 ### Script filter
 
@@ -209,6 +212,23 @@ The script filter uses the workflow's variables as environment variables (and
 default). A script filter that gives both a `script` and extra arguments looks
 for its interpreter when the workflow loads, so choose **Reload index** after
 installing Python or Node.
+
+### Filters without a script
+
+Three inputs list rows like a script filter does, with no program to run, so
+they need no approval. Each has its own keyword; picking a row starts the nodes
+after it with the row's argument.
+
+| Node | Rows | Argument |
+|---|---|---|
+| **List filter** | the items you write in the builder (*title*, *subtitle*, *argument*), narrowed by the typed text with Sevak's fuzzy matching (a subtitle match counts for less) | the item's argument, or its title when that is empty |
+| **File filter** | file and folder names from *Folders* (the `[files] directories` when empty; `[files]` depth, hidden-file and network-path settings apply), optionally only the listed *extensions* and only files or only folders | the full path |
+| **Running apps** | the apps that have a window, as the `quit` task lists them | *The name*, *the path* (known for apps Sevak also lists in its launcher; the name otherwise) or *the process id* (the first one) |
+
+The file list is scanned in the background (up to 20 000 entries, refreshed
+with the file index) and the list of running apps is cached for three seconds,
+so typing never waits for the disk or the system. Type the keyword and a space
+to list everything.
 
 ## Placeholders, the argument and variables
 
@@ -423,8 +443,13 @@ Node types and their fields: `keyword` (`keyword`, `argument`, `subtitle`),
 (`text`), `paste` (`text`, `restore_clipboard`), `set_variable` (`name`,
 `value`), `transform` (`op`, `input`, `find`, `replace`, `index`, `into`),
 `conditional` (`left`, `test`, `right`, `ignore_case`), `delay` (`ms`),
-`notification` (`heading`, `body`), `large_type` (`text`) and `text_view`
-(`heading`, `text`). Every node may also have `title`, `x` and `y`. Unknown
+`notification` (`heading`, `body`), `large_type` (`text`), `text_view`
+(`heading`, `text`), `list_filter` (`keyword`, `[[node.items]]` with `title`,
+`subtitle`, `arg`), `file_filter` (`keyword`, `folders`, `extensions`, `scope`
+= `any`, `files` or `folders`), `running_apps` (`keyword`, `output` = `name`,
+`path` or `pid`), `dialog_conditional` (`heading`, `message`, `buttons`; ports
+`button1` to `button3` and `cancel`), `speak` (`text`, `voice`) and
+`play_sound` (`path`). Every node may also have `title`, `x` and `y`. Unknown
 `type` values make the whole workflow fail to load ("Not loaded: ..." on its row)
 rather than half-work. The examples in
 [`examples/workflows/`](https://github.com/ninad-k/Sevak/tree/main/examples/workflows) show real files.

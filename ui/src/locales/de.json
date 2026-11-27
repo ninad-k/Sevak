@@ -1069,7 +1069,9 @@
       "saved": "Gespeichert.",
       "savedNeedsAllow": "Gespeichert. Sevak bittet dich um Erlaubnis, bevor etwas ausgeführt wird.",
       "badId": "Eine ID besteht aus 1 bis 40 Buchstaben, Ziffern, Bindestrichen oder Unterstrichen.",
-      "idTaken": "Ein anderer Knoten hat bereits diese ID."
+      "idTaken": "Ein anderer Knoten hat bereits diese ID.",
+      "portButton": "Wenn Schaltfläche {n} gedrückt wird, weiter zu",
+      "portCancel": "Wenn geschlossen, weiter zu"
     },
     "fields": {
       "acceptText": "Text",
@@ -1078,7 +1080,12 @@
       "pasteDefault": "Einstellung unter [paste] verwenden",
       "yes": "Ja",
       "no": "Nein",
-      "noSettings": "Dieser Auslöser hat keine Einstellungen. Starte ihn mit <code>sevak --trigger &lt;Ordner&gt;/{id}</code> (hänge Text an, um ihn als <code>{query}</code> zu übergeben)."
+      "noSettings": "Dieser Auslöser hat keine Einstellungen. Starte ihn mit <code>sevak --trigger &lt;Ordner&gt;/{id}</code> (hänge Text an, um ihn als <code>{query}</code> zu übergeben).",
+      "itemTitle": "Titel",
+      "itemSubtitle": "Untertitel",
+      "itemArg": "Argument (der Titel, wenn leer)",
+      "addItem": "Eintrag hinzufügen",
+      "removeItem": "Eintrag {n} entfernen"
     },
     "connect": {
       "missing": "Diesen Knoten gibt es nicht.",
@@ -1137,6 +1144,16 @@
         "shutdown": "Herunterfahren (fragt vorher)",
         "logout": "Abmelden (fragt vorher)",
         "empty_trash": "Papierkorb leeren (fragt vorher)"
+      },
+      "fileScope": {
+        "any": "Dateien und Ordner",
+        "files": "Nur Dateien",
+        "folders": "Nur Ordner"
+      },
+      "appOutput": {
+        "name": "Der Name",
+        "path": "Der Pfad",
+        "pid": "Die Prozess-ID"
       }
     },
     "program": {
@@ -1402,6 +1419,91 @@
           },
           "text": {
             "label": "Text"
+          }
+        }
+      },
+      "list_filter": {
+        "label": "Listenfilter",
+        "summary": "Ein Stichwort, das hier geschriebene Zeilen auflistet, eingegrenzt durch deine Eingabe.",
+        "fields": {
+          "keyword": {
+            "label": "Stichwort"
+          },
+          "items": {
+            "label": "Einträge",
+            "hint": "Die gewählte Zeile gibt ihr Argument weiter (ihren Titel, wenn das Argument leer ist)."
+          }
+        }
+      },
+      "file_filter": {
+        "label": "Dateifilter",
+        "summary": "Ein Stichwort, das Datei- und Ordnernamen aus den gewählten Ordnern auflistet.",
+        "fields": {
+          "keyword": {
+            "label": "Stichwort"
+          },
+          "folders": {
+            "label": "Ordner",
+            "hint": "Einer pro Zeile. Leer lassen, um die Ordner aus Einstellungen > Dateien zu nutzen."
+          },
+          "extensions": {
+            "label": "Nur diese Endungen",
+            "hint": "Eine pro Zeile, etwa pdf oder png. Leer lassen für alle Dateien."
+          },
+          "scope": {
+            "label": "Anzeigen"
+          }
+        }
+      },
+      "running_apps": {
+        "label": "Laufende Apps",
+        "summary": "Ein Stichwort, das die laufenden Apps auflistet.",
+        "fields": {
+          "keyword": {
+            "label": "Stichwort"
+          },
+          "output": {
+            "label": "Weitergeben",
+            "hint": "Der Pfad ist für Apps bekannt, die Sevak auch im Starter listet; sonst wird der Name weitergegeben."
+          }
+        }
+      },
+      "dialog_conditional": {
+        "label": "Dialog",
+        "summary": "Stellt eine Frage mit ein bis drei Schaltflächen und geht beim gedrückten Knopf weiter.",
+        "fields": {
+          "heading": {
+            "label": "Überschrift"
+          },
+          "message": {
+            "label": "Nachricht"
+          },
+          "buttons": {
+            "label": "Schaltflächen",
+            "hint": "Eine pro Zeile, höchstens drei. Jede Schaltfläche hat einen eigenen Ausgang; Schließen des Dialogs nimmt den Abbruch-Ausgang. Bei drei Schaltflächen kann das Schließen auf manchen Systemen als dritte gelten."
+          }
+        }
+      },
+      "speak": {
+        "label": "Vorlesen",
+        "summary": "Liest Text mit der Systemstimme vor.",
+        "fields": {
+          "text": {
+            "label": "Text"
+          },
+          "voice": {
+            "label": "Stimme",
+            "hint": "Der Name einer auf diesem Computer installierten Stimme. Leer lassen für die Systemstimme."
+          }
+        }
+      },
+      "play_sound": {
+        "label": "Ton abspielen",
+        "summary": "Spielt eine Audiodatei ab (wav, mp3, aiff, m4a, ogg oder flac).",
+        "fields": {
+          "path": {
+            "label": "Audiodatei",
+            "hint": "Ein vollständiger Pfad, ein Pfad mit ~ am Anfang oder eine Datei im Workflow-Ordner."
           }
         }
       }

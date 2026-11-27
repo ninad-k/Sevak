@@ -15,6 +15,7 @@
   import {
     CATEGORIES,
     categoryLabel,
+    CANCEL,
     ELSE,
     KINDS,
     NODE_H,
@@ -392,7 +393,11 @@
       ? t("workflows.editor.portThen")
       : port === ELSE
         ? t("workflows.editor.portElse")
-        : t("workflows.editor.portNext");
+        : port === CANCEL
+          ? t("workflows.editor.portCancel")
+          : port.startsWith("button")
+            ? t("workflows.editor.portButton", { n: port.slice("button".length) })
+            : t("workflows.editor.portNext");
 
   function targetsFor(node: WfNode, port: string): WfNode[] {
     return workflow.node.filter((other) => canConnect(workflow, node.id, port, other.id).ok);

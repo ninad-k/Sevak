@@ -16,8 +16,8 @@ use crate::keywords::KeywordOwners;
 #[cfg(test)]
 use super::model::OUT;
 use super::model::{
-    Accepts, Node, NodeKind, Test, TransformOp, Workflow, FORMAT, MAX_CONNECTIONS, MAX_DELAY_MS,
-    MAX_NODES,
+    Accepts, Node, NodeKind, Test, TransformOp, Workflow, DIALOG_PORTS, FORMAT, MAX_CONNECTIONS,
+    MAX_DELAY_MS, MAX_DIALOG_BUTTONS, MAX_LIST_ITEMS, MAX_NODES, SOUND_EXTENSIONS,
 };
 
 /// Largest compiled regular expression a node may use.
@@ -240,6 +240,19 @@ impl Workflow {
                     ),
                 ));
                 continue;
+            }
+            if let NodeKind::DialogConditional { buttons, .. } = &from.kind {
+                let wired = DIALOG_PORTS
+                    .iter()
+                    .position(|port| *port == conn.port)
+                    .filter(|index| *index < MAX_DIALOG_BUTTONS);
+                if wired.is_some_and(|index| index >= buttons.len()) {
+                    problems.push(Problem::error(
+                        Some(&conn.from),
+                        format!("the connection {label} leaves a button the dialog does not have"),
+                    ));
+                    continue;
+                }
             }
             if to.kind.is_start() {
                 problems.push(Problem::error(
@@ -502,6 +515,88 @@ fn check_node(node: &Node, problems: &mut Vec<Problem>) {
             }
         }
         NodeKind::LargeType { .. } | NodeKind::TextView { .. } => {}
+        NodeKind::ListFilter { keyword, items } => {
+            check_keyword(keyword, &mut error);
+            if items.is_empty() {
+                error("add at least one item to the list");
+            } else if items.len() > MAX_LIST_ITEMS {
+                error(&format!("a list may have at most {MAX_LIST_ITEMS} items"));
+            }
+            if items.iter().any(|item| item.title.trim().is_empty()) {
+                error("every item needs a title");
+            }
+        }
+        NodeKind::FileFilter {
+            keyword,
+            folders,
+            extensions,
+            ..
+        } => {
+            check_keyword(keyword, &mut error);
+            if folders.iter().any(|folder| folder.trim().is_empty()) {
+                error("a folder is empty");
+            }
+            for extension in extensions {
+                let ext = extension.trim().trim_start_matches('.');
+                if ext.is_empty() || ext.contains(['/', '\\', '*', '.']) {
+                    error(&format!(
+                        "\"{extension}\" is not a file extension (use pdf, png...)"
+                    ));
+                }
+            }
+        }
+        NodeKind::RunningApps { keyword, .. } => check_keyword(keyword, &mut error),
+        NodeKind::DialogConditional {
+            heading,
+            message,
+            buttons,
+        } => {
+            if buttons.is_empty() || buttons.len() > MAX_DIALOG_BUTTONS {
+                error(&format!(
+                    "a dialog needs between 1 and {MAX_DIALOG_BUTTONS} buttons"
+                ));
+            }
+            if buttons.iter().any(|label| label.trim().is_empty()) {
+                error("every button needs a label");
+            }
+            if heading.trim().is_empty() && message.trim().is_empty() {
+                error("a dialog needs a heading or a message");
+            }
+        }
+        NodeKind::Speak { voice, .. } => {
+            if let Some(voice) = voice.as_deref().map(str::trim) {
+                if voice.starts_with('-') || voice.chars().any(char::is_control) {
+                    error("the voice name is not valid");
+                }
+            }
+        }
+        NodeKind::PlaySound { path } => check_sound_path(path, &mut error),
+    }
+}
+
+/// A sound path must end in a known extension, unless a placeholder decides
+/// the end of it (then it is checked when the node runs).
+fn check_sound_path(path: &str, error: &mut impl FnMut(&str)) {
+    let path = path.trim();
+    if path.is_empty() {
+        error("enter the path of a sound file");
+        return;
+    }
+    let extension = path
+        .rsplit_once('.')
+        .map(|(_, ext)| ext)
+        .filter(|ext| !ext.contains(['/', '\\']));
+    match extension {
+        Some(ext) if ext.contains(['{', '}']) => {}
+        Some(ext)
+            if SOUND_EXTENSIONS
+                .iter()
+                .any(|ok| ext.eq_ignore_ascii_case(ok)) => {}
+        None if path.ends_with('}') => {}
+        _ => error(&format!(
+            "the sound file must be one of: {}",
+            SOUND_EXTENSIONS.join(", ")
+        )),
     }
 }
 
@@ -768,6 +863,173 @@ mod tests {
             found.iter().any(|m| m.contains("letters, digits")),
             "{found:?}"
         );
+    }
+
+    fn list_node(id: &str) -> Node {
+        node(
+            id,
+            NodeKind::ListFilter {
+                keyword: "pick".into(),
+                items: vec![crate::workflow::model::ListItem {
+                    title: "A".into(),
+                    ..Default::default()
+                }],
+            },
+        )
+    }
+
+    fn dialog(buttons: &[&str]) -> Node {
+        node(
+            "ask",
+            NodeKind::DialogConditional {
+                heading: String::new(),
+                message: "Sure?".into(),
+                buttons: buttons.iter().map(|b| (*b).into()).collect(),
+            },
+        )
+    }
+
+    fn wire_port(from: &str, port: &str, to: &str) -> Connection {
+        Connection {
+            from: from.into(),
+            port: port.into(),
+            to: to.into(),
+        }
+    }
+
+    #[test]
+    fn the_new_input_nodes_are_starts_and_are_checked() {
+        use crate::workflow::model::{AppOutput, FileScope};
+        let w = workflow(vec![list_node("l"), copy("c")], vec![wire("l", "c")]);
+        assert_eq!(w.validate(), []);
+
+        let cases: Vec<(NodeKind, &str)> = vec![
+            (
+                NodeKind::ListFilter {
+                    keyword: "k".into(),
+                    items: vec![],
+                },
+                "at least one item",
+            ),
+            (
+                NodeKind::ListFilter {
+                    keyword: "k".into(),
+                    items: vec![Default::default()],
+                },
+                "needs a title",
+            ),
+            (
+                NodeKind::FileFilter {
+                    keyword: "two words".into(),
+                    folders: vec![],
+                    extensions: vec![],
+                    scope: FileScope::Any,
+                },
+                "spaces",
+            ),
+            (
+                NodeKind::FileFilter {
+                    keyword: "f".into(),
+                    folders: vec![],
+                    extensions: vec!["*.pdf".into()],
+                    scope: FileScope::Any,
+                },
+                "not a file extension",
+            ),
+            (
+                NodeKind::RunningApps {
+                    keyword: String::new(),
+                    output: AppOutput::Pid,
+                },
+                "choose a keyword",
+            ),
+            (
+                NodeKind::DialogConditional {
+                    heading: String::new(),
+                    message: "m".into(),
+                    buttons: vec![],
+                },
+                "between 1 and 3",
+            ),
+            (
+                NodeKind::DialogConditional {
+                    heading: String::new(),
+                    message: "m".into(),
+                    buttons: vec!["a".into(), "b".into(), "c".into(), "d".into()],
+                },
+                "between 1 and 3",
+            ),
+            (
+                NodeKind::DialogConditional {
+                    heading: String::new(),
+                    message: " ".into(),
+                    buttons: vec!["a".into()],
+                },
+                "heading or a message",
+            ),
+            (
+                NodeKind::Speak {
+                    text: "x".into(),
+                    voice: Some("-o".into()),
+                },
+                "voice",
+            ),
+            (NodeKind::PlaySound { path: " ".into() }, "path of a sound"),
+            (
+                NodeKind::PlaySound {
+                    path: "a.txt".into(),
+                },
+                "must be one of",
+            ),
+            (NodeKind::PlaySound { path: "a".into() }, "must be one of"),
+        ];
+        for (kind, needle) in cases {
+            let start = if kind.is_start() {
+                vec![node("n", kind)]
+            } else {
+                vec![keyword("k", "go"), node("n", kind)]
+            };
+            let w = workflow(start, vec![]);
+            assert!(has_error(&w, needle), "{needle}: {:?}", errors(&w));
+        }
+    }
+
+    #[test]
+    fn sound_paths_with_placeholders_or_any_case_are_accepted() {
+        for path in [
+            "~/a/ding.WAV",
+            "{query}",
+            "{var:dir}/x.mp3",
+            "x.{var:ext}",
+            "a.flac",
+        ] {
+            let w = workflow(
+                vec![
+                    keyword("k", "go"),
+                    node("p", NodeKind::PlaySound { path: path.into() }),
+                ],
+                vec![wire("k", "p")],
+            );
+            assert_eq!(errors(&w), Vec::<String>::new(), "{path}");
+        }
+    }
+
+    #[test]
+    fn a_dialog_has_a_port_per_button_and_cancel() {
+        let flow = |port: &str, buttons: &[&str]| {
+            workflow(
+                vec![keyword("k", "go"), dialog(buttons), copy("c")],
+                vec![wire("k", "ask"), wire_port("ask", port, "c")],
+            )
+        };
+        assert_eq!(flow("button1", &["a", "b"]).validate(), []);
+        assert_eq!(flow("cancel", &["a"]).validate(), []);
+        assert!(has_error(
+            &flow("button2", &["a"]),
+            "button the dialog does not have"
+        ));
+        assert!(has_error(&flow("out", &["a"]), "no output"));
+        assert!(has_error(&flow("button4", &["a"]), "no output"));
     }
 
     #[test]

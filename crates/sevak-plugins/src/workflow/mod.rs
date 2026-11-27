@@ -10,6 +10,7 @@
 //! | `validate.rs` | cycles, dangling connections, bad fields: [`Problem`]s |
 //! | `template.rs` | `{query}` / `{var:name}` placeholders and their filters |
 //! | `exec.rs` | running a workflow: [`Runtime`], [`OutputSink`], timeouts |
+//! | `filters.rs` | the list, file and running-apps filters: rows without a script |
 //! | `plugins.rs` | the `Plugin`s a workflow becomes: keyword, script filter, Universal Actions, hotkey |
 //! | `host.rs` | discovery, approval, the settings page's operations: [`WorkflowHost`] |
 //! | `templates.rs` | the "New from template" starting points |
@@ -20,6 +21,7 @@
 //! else runs on the [`Runtime`]'s own thread per run.
 
 pub mod exec;
+mod filters;
 pub mod gallery;
 mod host;
 pub mod model;
@@ -32,6 +34,7 @@ pub mod validate;
 pub(crate) mod testing;
 
 pub use exec::{Ctx, NoSink, NodeFailure, OutputSink, RunReport, Runtime};
+pub use filters::{FileFilterPlugin, ListFilterPlugin, RunningAppsPlugin};
 pub use host::{approval_key, describe, Candidate, Loaded, Saved, Scanned, Summary, WorkflowHost};
 pub use model::{
     Accepts, Argument, Category, Connection, Node, NodeKind, Test, TransformOp, Workflow, FAMILY,

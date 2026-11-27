@@ -1096,7 +1096,9 @@
       "saved": "Enregistré.",
       "savedNeedsAllow": "Enregistré. Sevak vous demandera de l'autoriser avant d'exécuter quoi que ce soit.",
       "badId": "Un id comporte de 1 à 40 lettres, chiffres, tirets ou traits de soulignement.",
-      "idTaken": "Un autre nœud porte déjà cet id."
+      "idTaken": "Un autre nœud porte déjà cet id.",
+      "portButton": "Quand le bouton {n} est pressé, aller à",
+      "portCancel": "Quand fermé, aller à"
     },
     "fields": {
       "acceptText": "Texte",
@@ -1105,7 +1107,12 @@
       "pasteDefault": "Utiliser le réglage [paste]",
       "yes": "Oui",
       "no": "Non",
-      "noSettings": "Ce déclencheur n'a aucun réglage. Démarrez-le avec <code>sevak --trigger &lt;dossier&gt;/{id}</code> (ajoutez du texte après pour le transmettre en tant que <code>{query}</code>)."
+      "noSettings": "Ce déclencheur n'a aucun réglage. Démarrez-le avec <code>sevak --trigger &lt;dossier&gt;/{id}</code> (ajoutez du texte après pour le transmettre en tant que <code>{query}</code>).",
+      "itemTitle": "Titre",
+      "itemSubtitle": "Sous-titre",
+      "itemArg": "Argument (le titre si vide)",
+      "addItem": "Ajouter un élément",
+      "removeItem": "Retirer l'élément {n}"
     },
     "connect": {
       "missing": "Ce nœud n'existe pas.",
@@ -1164,6 +1171,16 @@
         "shutdown": "Éteindre (demande d'abord)",
         "logout": "Se déconnecter (demande d'abord)",
         "empty_trash": "Vider la corbeille (demande d'abord)"
+      },
+      "fileScope": {
+        "any": "Fichiers et dossiers",
+        "files": "Fichiers seulement",
+        "folders": "Dossiers seulement"
+      },
+      "appOutput": {
+        "name": "Le nom",
+        "path": "Le chemin",
+        "pid": "L'identifiant de processus"
       }
     },
     "program": {
@@ -1429,6 +1446,91 @@
           },
           "text": {
             "label": "Texte"
+          }
+        }
+      },
+      "list_filter": {
+        "label": "Filtre de liste",
+        "summary": "Un mot-clé qui liste les lignes écrites ici, filtrées par ce que vous tapez.",
+        "fields": {
+          "keyword": {
+            "label": "Mot-clé"
+          },
+          "items": {
+            "label": "Éléments",
+            "hint": "La ligne choisie transmet son argument (son titre si l'argument est vide)."
+          }
+        }
+      },
+      "file_filter": {
+        "label": "Filtre de fichiers",
+        "summary": "Un mot-clé qui liste les noms de fichiers et de dossiers des dossiers choisis.",
+        "fields": {
+          "keyword": {
+            "label": "Mot-clé"
+          },
+          "folders": {
+            "label": "Dossiers",
+            "hint": "Un par ligne. Laissez vide pour utiliser les dossiers de Réglages > Fichiers."
+          },
+          "extensions": {
+            "label": "Seulement ces extensions",
+            "hint": "Une par ligne, par exemple pdf ou png. Laissez vide pour tous les fichiers."
+          },
+          "scope": {
+            "label": "Afficher"
+          }
+        }
+      },
+      "running_apps": {
+        "label": "Apps en cours",
+        "summary": "Un mot-clé qui liste les apps en cours d'exécution.",
+        "fields": {
+          "keyword": {
+            "label": "Mot-clé"
+          },
+          "output": {
+            "label": "Transmettre",
+            "hint": "Le chemin est connu pour les apps que Sevak liste aussi dans son lanceur ; sinon le nom est transmis."
+          }
+        }
+      },
+      "dialog_conditional": {
+        "label": "Boîte de dialogue",
+        "summary": "Pose une question avec un à trois boutons et continue selon le bouton pressé.",
+        "fields": {
+          "heading": {
+            "label": "Titre"
+          },
+          "message": {
+            "label": "Message"
+          },
+          "buttons": {
+            "label": "Boutons",
+            "hint": "Un par ligne, trois au maximum. Chaque bouton a sa propre sortie ; fermer la boîte prend la sortie d'annulation. Avec trois boutons, la fermeture peut compter comme le troisième sur certains systèmes."
+          }
+        }
+      },
+      "speak": {
+        "label": "Lire à voix haute",
+        "summary": "Lit le texte à voix haute avec la voix du système.",
+        "fields": {
+          "text": {
+            "label": "Texte"
+          },
+          "voice": {
+            "label": "Voix",
+            "hint": "Le nom d'une voix installée sur cet ordinateur. Laissez vide pour la voix du système."
+          }
+        }
+      },
+      "play_sound": {
+        "label": "Jouer un son",
+        "summary": "Joue un fichier son (wav, mp3, aiff, m4a, ogg ou flac).",
+        "fields": {
+          "path": {
+            "label": "Fichier son",
+            "hint": "Un chemin complet, un chemin commençant par ~ ou un fichier du dossier du workflow."
           }
         }
       }

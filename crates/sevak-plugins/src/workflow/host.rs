@@ -21,6 +21,7 @@ use sevak_core::{Config, HotkeyBinding, Plugin};
 use sevak_platform::PlatformProvider;
 
 use super::exec::{Ctx, OutputSink, Runtime};
+use super::filters::{FileFilterPlugin, ListFilterPlugin, RunningAppsPlugin};
 use super::model::{slug, valid_folder_name, Accepts, Node, NodeKind, Workflow, FAMILY, FILE};
 use super::plugins::{run_id, FilterPlugin, KeywordPlugin, TriggersPlugin};
 use super::templates;
@@ -264,6 +265,16 @@ impl WorkflowHost {
                         .map(|plugin| Arc::new(plugin) as Arc<dyn Plugin>),
                     NodeKind::ScriptFilter { .. } => {
                         FilterPlugin::new(runtime.clone(), node, Arc::clone(platform))
+                            .map(|plugin| Arc::new(plugin) as Arc<dyn Plugin>)
+                    }
+                    NodeKind::ListFilter { .. } => ListFilterPlugin::new(runtime.clone(), node)
+                        .map(|plugin| Arc::new(plugin) as Arc<dyn Plugin>),
+                    NodeKind::FileFilter { .. } => {
+                        FileFilterPlugin::new(runtime.clone(), node, &config.files)
+                            .map(|plugin| Arc::new(plugin) as Arc<dyn Plugin>)
+                    }
+                    NodeKind::RunningApps { .. } => {
+                        RunningAppsPlugin::new(runtime.clone(), node, Arc::clone(platform))
                             .map(|plugin| Arc::new(plugin) as Arc<dyn Plugin>)
                     }
                     _ => None,
@@ -670,7 +681,10 @@ pub fn describe(workflow: &Workflow, dir: &Path) -> String {
             NodeKind::Keyword { keyword, .. } => {
                 starts.insert(format!("typing the keyword {}", show(keyword)));
             }
-            NodeKind::ScriptFilter { keyword, .. } => {
+            NodeKind::ScriptFilter { keyword, .. }
+            | NodeKind::ListFilter { keyword, .. }
+            | NodeKind::FileFilter { keyword, .. }
+            | NodeKind::RunningApps { keyword, .. } => {
                 starts.insert(format!("typing the keyword {}", show(keyword)));
             }
             NodeKind::Hotkey { key } => {

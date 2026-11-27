@@ -34,7 +34,13 @@ export type NodeType =
   | "delay"
   | "notification"
   | "large_type"
-  | "text_view";
+  | "text_view"
+  | "list_filter"
+  | "file_filter"
+  | "running_apps"
+  | "dialog_conditional"
+  | "speak"
+  | "play_sound";
 
 export type Category = "trigger" | "input" | "action" | "utility" | "output";
 
@@ -51,7 +57,7 @@ export interface WfNode {
 
 export interface WfConnection {
   from: string;
-  /** `out`, or `then` / `else` for a conditional. */
+  /** `out`, `then` / `else` for a conditional, `button1`..`button3` / `cancel` for a dialog. */
   port?: string;
   to: string;
 }
@@ -79,6 +85,9 @@ export interface Problem {
 export const OUT = "out";
 export const THEN = "then";
 export const ELSE = "else";
+export const CANCEL = "cancel";
+/** Most buttons a dialog node shows. */
+export const MAX_DIALOG_BUTTONS = 3;
 
 // ---- the catalog ----------------------------------------------------------
 
@@ -91,7 +100,8 @@ export type FieldKind =
   | "lines"
   | "env"
   | "accepts"
-  | "tristate";
+  | "tristate"
+  | "items";
 
 export interface FieldDef {
   key: string;
@@ -195,6 +205,10 @@ const SYSTEM_COMMANDS = [
   "logout",
   "empty_trash",
 ] as const;
+
+const FILE_SCOPES = ["any", "files", "folders"] as const;
+
+const APP_OUTPUTS = ["name", "path", "pid"] as const;
 
 const PROGRAM_FIELDS: RawField[] = [
   {
@@ -517,6 +531,93 @@ export const KINDS: KindDef[] = (
     ],
     defaults: () => ({ text: "{query}" }),
   },
+  {
+    type: "list_filter",
+    category: "input",
+    fields: [
+      { key: "keyword", kind: "text", mono: true, placeholder: "pick" },
+      { key: "items", kind: "items", hint: true },
+    ],
+    defaults: () => ({ keyword: "", items: [{ title: "", subtitle: "", arg: "" }] }),
+  },
+  {
+    type: "file_filter",
+    category: "input",
+    fields: [
+      { key: "keyword", kind: "text", mono: true, placeholder: "docs" },
+      {
+        key: "folders",
+        kind: "lines",
+        mono: true,
+        optional: true,
+        placeholder: "~/Documents",
+        hint: true,
+      },
+      {
+        key: "extensions",
+        kind: "lines",
+        mono: true,
+        optional: true,
+        placeholder: "pdf",
+        hint: true,
+      },
+      {
+        key: "scope",
+        kind: "select",
+        optional: true,
+        options: { set: "fileScope", values: FILE_SCOPES },
+      },
+    ],
+    defaults: () => ({ keyword: "", folders: [], extensions: [], scope: "any" }),
+  },
+  {
+    type: "running_apps",
+    category: "input",
+    fields: [
+      { key: "keyword", kind: "text", mono: true, placeholder: "apps" },
+      {
+        key: "output",
+        kind: "select",
+        optional: true,
+        options: { set: "appOutput", values: APP_OUTPUTS },
+        hint: true,
+      },
+    ],
+    defaults: () => ({ keyword: "", output: "name" }),
+  },
+  {
+    type: "dialog_conditional",
+    category: "utility",
+    fields: [
+      { key: "heading", kind: "text", optional: true },
+      { key: "message", kind: "textarea", hint: "placeholders" },
+      { key: "buttons", kind: "lines", hint: true },
+    ],
+    defaults: () => ({ heading: "", message: "{query}", buttons: ["OK", "Cancel"] }),
+  },
+  {
+    type: "speak",
+    category: "output",
+    fields: [
+      { key: "text", kind: "textarea", hint: "placeholders" },
+      { key: "voice", kind: "text", optional: true, hint: true },
+    ],
+    defaults: () => ({ text: "{query}" }),
+  },
+  {
+    type: "play_sound",
+    category: "output",
+    fields: [
+      {
+        key: "path",
+        kind: "text",
+        mono: true,
+        placeholder: "~/Sounds/ding.wav",
+        hint: true,
+      },
+    ],
+    defaults: () => ({ path: "" }),
+  },
   ] as RawKind[]
 ).map(localize);
 
@@ -535,8 +636,15 @@ export const isStart = (node: WfNode) => {
   return category === "trigger" || category === "input";
 };
 
-export const outputPorts = (node: WfNode): string[] =>
-  node.type === "conditional" ? [THEN, ELSE] : [OUT];
+/** A dialog has a port per button (as many as it has labels, at most three) and `cancel`. */
+export const outputPorts = (node: WfNode): string[] => {
+  if (node.type === "conditional") return [THEN, ELSE];
+  if (node.type === "dialog_conditional") {
+    const count = Array.isArray(node.buttons) ? Math.min(node.buttons.length, MAX_DIALOG_BUTTONS) : 0;
+    return [...Array.from({ length: Math.max(count, 1) }, (_, i) => `button${i + 1}`), CANCEL];
+  }
+  return [OUT];
+};
 
 export const portOf = (conn: WfConnection) => conn.port ?? OUT;
 
@@ -713,7 +821,9 @@ export function outPoint(node: WfNode, port: string): Point {
   const ports = outputPorts(node);
   if (ports.length === 1) return { x: node.x + NODE_W, y: node.y + NODE_H / 2 };
   const index = Math.max(0, ports.indexOf(port));
-  return { x: node.x + NODE_W, y: node.y + 22 + index * 24 };
+  // Three or four ports are packed closer to fit the box.
+  const [top, step] = ports.length > 2 ? [10, 15] : [22, 24];
+  return { x: node.x + NODE_W, y: node.y + top + index * step };
 }
 
 export function inPoint(node: WfNode): Point {

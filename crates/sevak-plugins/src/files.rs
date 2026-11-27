@@ -488,7 +488,7 @@ fn is_skipped(entry: &DirEntry, include_hidden: bool) -> bool {
 
 /// Walks `roots`, returning at most `cap` entries; the bool is true when the
 /// cap cut the walk short.
-fn scan(
+pub(crate) fn scan(
     roots: &[PathBuf],
     max_depth: usize,
     include_hidden: bool,

@@ -1069,7 +1069,9 @@
       "saved": "Saved.",
       "savedNeedsAllow": "Saved. Sevak will ask you to allow it before it runs anything.",
       "badId": "An id uses 1 to 40 letters, digits, dashes or underscores.",
-      "idTaken": "Another node already has that id."
+      "idTaken": "Another node already has that id.",
+      "portButton": "When button {n} is pressed, go to",
+      "portCancel": "When dismissed, go to"
     },
     "fields": {
       "acceptText": "Text",
@@ -1078,7 +1080,12 @@
       "pasteDefault": "Use the [paste] setting",
       "yes": "Yes",
       "no": "No",
-      "noSettings": "This trigger has no settings. Start it with <code>sevak --trigger &lt;folder&gt;/{id}</code> (add some text after it to pass it in as <code>{query}</code>)."
+      "noSettings": "This trigger has no settings. Start it with <code>sevak --trigger &lt;folder&gt;/{id}</code> (add some text after it to pass it in as <code>{query}</code>).",
+      "itemTitle": "Title",
+      "itemSubtitle": "Subtitle",
+      "itemArg": "Argument (the title when empty)",
+      "addItem": "Add an item",
+      "removeItem": "Remove item {n}"
     },
     "connect": {
       "missing": "That node does not exist.",
@@ -1137,6 +1144,16 @@
         "shutdown": "Shut down (asks first)",
         "logout": "Log out (asks first)",
         "empty_trash": "Empty the trash (asks first)"
+      },
+      "fileScope": {
+        "any": "Files and folders",
+        "files": "Files only",
+        "folders": "Folders only"
+      },
+      "appOutput": {
+        "name": "The name",
+        "path": "The path",
+        "pid": "The process id"
       }
     },
     "program": {
@@ -1402,6 +1419,91 @@
           },
           "text": {
             "label": "Text"
+          }
+        }
+      },
+      "list_filter": {
+        "label": "List filter",
+        "summary": "A keyword that lists rows you write here, narrowed by what you type.",
+        "fields": {
+          "keyword": {
+            "label": "Keyword"
+          },
+          "items": {
+            "label": "Items",
+            "hint": "The row you pick passes its argument on (its title when the argument is empty)."
+          }
+        }
+      },
+      "file_filter": {
+        "label": "File filter",
+        "summary": "A keyword that lists file and folder names from the folders you choose.",
+        "fields": {
+          "keyword": {
+            "label": "Keyword"
+          },
+          "folders": {
+            "label": "Folders",
+            "hint": "One per line. Leave empty to use the folders of Settings > Files."
+          },
+          "extensions": {
+            "label": "Only these extensions",
+            "hint": "One per line, such as pdf or png. Leave empty for every file."
+          },
+          "scope": {
+            "label": "Show"
+          }
+        }
+      },
+      "running_apps": {
+        "label": "Running apps",
+        "summary": "A keyword that lists the apps that are running.",
+        "fields": {
+          "keyword": {
+            "label": "Keyword"
+          },
+          "output": {
+            "label": "Pass on",
+            "hint": "The path is known for apps Sevak also lists in its launcher; for others the name is passed."
+          }
+        }
+      },
+      "dialog_conditional": {
+        "label": "Dialog",
+        "summary": "Asks a question with one to three buttons and continues along the button pressed.",
+        "fields": {
+          "heading": {
+            "label": "Heading"
+          },
+          "message": {
+            "label": "Message"
+          },
+          "buttons": {
+            "label": "Buttons",
+            "hint": "One per line, at most three. Each button has its own output; closing the dialog takes the cancel output. With three buttons, closing may count as the third on some systems."
+          }
+        }
+      },
+      "speak": {
+        "label": "Speak",
+        "summary": "Reads text aloud with the system voice.",
+        "fields": {
+          "text": {
+            "label": "Text"
+          },
+          "voice": {
+            "label": "Voice",
+            "hint": "The name of a voice installed on this computer. Leave empty for the system voice."
+          }
+        }
+      },
+      "play_sound": {
+        "label": "Play sound",
+        "summary": "Plays a sound file (wav, mp3, aiff, m4a, ogg or flac).",
+        "fields": {
+          "path": {
+            "label": "Sound file",
+            "hint": "A full path, a path starting with ~, or a file inside the workflow folder."
           }
         }
       }

@@ -33,8 +33,8 @@ use sevak_platform::process_tree::ProcessTree;
 use sevak_platform::{PasteOutcome, PlatformProvider, SystemCommand};
 
 use super::model::{
-    Node, NodeKind, Test, TransformOp, Workflow, DEFAULT_SCRIPT_TIMEOUT_MS, ELSE, MAX_DELAY_MS,
-    MAX_SCRIPT_TIMEOUT_MS, OUT, THEN,
+    Node, NodeKind, Test, TransformOp, Workflow, CANCEL, DEFAULT_SCRIPT_TIMEOUT_MS, DIALOG_PORTS,
+    ELSE, MAX_DELAY_MS, MAX_DIALOG_BUTTONS, MAX_SCRIPT_TIMEOUT_MS, OUT, SOUND_EXTENSIONS, THEN,
 };
 use super::template::{expand, expand_command, Scope, Target};
 use super::validate::{compile_regex, valid_variable_name};
@@ -52,6 +52,17 @@ pub const MAX_CONCURRENT_RUNS: usize = 8;
 /// Output kept from one script run.
 const MAX_OUTPUT_BYTES: u64 = 1024 * 1024;
 const MAX_STDERR_BYTES: u64 = 64 * 1024;
+/// Whether `path` ends in one of the [`SOUND_EXTENSIONS`].
+pub(super) fn has_sound_extension(path: &std::path::Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| {
+            SOUND_EXTENSIONS
+                .iter()
+                .any(|ok| ext.eq_ignore_ascii_case(ok))
+        })
+}
+
 /// Environment variables larger than this are not exported (Windows allows
 /// 32 767 characters per variable).
 const MAX_ENV_BYTES: usize = 16 * 1024;
@@ -71,6 +82,12 @@ pub trait OutputSink: Send + Sync {
     /// the default answers.
     fn confirm(&self, _question: &str) -> bool {
         false
+    }
+    /// Shows a dialog with one button per label and returns the index of the
+    /// button pressed, or `None` when it was dismissed (or cannot be shown,
+    /// which is what the default answers).
+    fn ask(&self, _heading: &str, _message: &str, _buttons: &[String]) -> Option<usize> {
+        None
     }
 }
 
@@ -329,7 +346,10 @@ impl Runtime {
             | NodeKind::Hotkey { .. }
             | NodeKind::Selection { .. }
             | NodeKind::External {}
-            | NodeKind::ScriptFilter { .. } => {
+            | NodeKind::ScriptFilter { .. }
+            | NodeKind::ListFilter { .. }
+            | NodeKind::FileFilter { .. }
+            | NodeKind::RunningApps { .. } => {
                 return Err("a trigger cannot be run as a step".to_owned());
             }
             NodeKind::RunScript {
@@ -500,6 +520,51 @@ impl Runtime {
                     heading
                 };
                 self.sink.text_view(&heading, &plain(text));
+            }
+            NodeKind::DialogConditional {
+                heading,
+                message,
+                buttons,
+            } => {
+                let heading = plain(heading);
+                let heading = if heading.trim().is_empty() {
+                    self.display_name()
+                } else {
+                    heading
+                };
+                let labels: Vec<String> = buttons
+                    .iter()
+                    .take(MAX_DIALOG_BUTTONS)
+                    .map(|label| plain(label))
+                    .collect();
+                // Dismissing the dialog, or a shell that cannot show one, takes
+                // the `cancel` branch.
+                port = match self.sink.ask(&heading, &plain(message), &labels) {
+                    Some(index) if index < labels.len() => DIALOG_PORTS[index],
+                    _ => CANCEL,
+                };
+            }
+            NodeKind::Speak { text, voice } => {
+                let text = plain(text);
+                let voice = voice.as_deref().map(plain);
+                let voice = voice.as_deref().map(str::trim).filter(|v| !v.is_empty());
+                if !text.trim().is_empty() {
+                    self.platform
+                        .speak(&text, voice)
+                        .map_err(|err| format!("could not speak: {err}"))?;
+                }
+            }
+            NodeKind::PlaySound { path } => {
+                let path = self.resolve_path(&plain(path))?;
+                if !has_sound_extension(&path) {
+                    return Err("that is not a sound file Sevak can play".to_owned());
+                }
+                if !path.is_file() {
+                    return Err("the sound file was not found".to_owned());
+                }
+                self.platform
+                    .play_sound(&path)
+                    .map_err(|err| format!("could not play the sound: {err}"))?;
             }
         }
         Ok(Step { ctx: next, port })
@@ -1645,6 +1710,154 @@ mod tests {
             assert!(!exportable(bad, "x"), "{bad}");
         }
         assert!(!exportable("big", &"x".repeat(MAX_ENV_BYTES + 1)));
+    }
+
+    fn dialog(buttons: &[&str]) -> Node {
+        node(
+            "ask",
+            NodeKind::DialogConditional {
+                heading: "Sure?".into(),
+                message: "Delete {query}?".into(),
+                buttons: buttons.iter().map(|b| (*b).into()).collect(),
+            },
+        )
+    }
+
+    fn dialog_flow(button: Option<usize>) -> crate::workflow::testing::Fixture {
+        fixture_with(
+            vec![
+                keyword("k"),
+                dialog(&["Yes", "No {query}"]),
+                copy("one", "one"),
+                copy("two", "two"),
+                copy("none", "none"),
+            ],
+            vec![
+                wire("k", "ask"),
+                wire_port("ask", "button1", "one"),
+                wire_port("ask", "button2", "two"),
+                wire_port("ask", CANCEL, "none"),
+            ],
+            RecordingSink {
+                button,
+                ..RecordingSink::default()
+            },
+        )
+    }
+
+    #[test]
+    fn a_dialog_continues_along_the_button_pressed() {
+        for (button, expected) in [(Some(0), "one"), (Some(1), "two")] {
+            let f = dialog_flow(button);
+            let report = f.runtime.run_blocking("k", Ctx::with_arg("x"));
+            assert_eq!(clipboard(&f), [expected], "{button:?}");
+            assert!(report.errors.is_empty(), "{:?}", report.errors);
+        }
+        let f = dialog_flow(Some(1));
+        f.runtime.run_blocking("k", Ctx::with_arg("x"));
+        // Heading, message and buttons are templates.
+        assert_eq!(
+            *f.sink.dialogs.lock().unwrap(),
+            [(
+                "Sure?".to_owned(),
+                "Delete x?".to_owned(),
+                vec!["Yes".to_owned(), "No x".to_owned()]
+            )]
+        );
+    }
+
+    #[test]
+    fn a_dismissed_or_impossible_dialog_takes_the_cancel_port() {
+        // Dismissed, a button that does not exist, and a sink without dialogs.
+        for button in [None, Some(5)] {
+            let f = dialog_flow(button);
+            f.runtime.run_blocking("k", Ctx::default());
+            assert_eq!(clipboard(&f), ["none"], "{button:?}");
+        }
+    }
+
+    #[test]
+    fn a_dialog_with_no_sink_cancels() {
+        struct Silent;
+        impl OutputSink for Silent {
+            fn notify(&self, _: &str, _: &str) {}
+            fn large_type(&self, _: &str) {}
+            fn text_view(&self, _: &str, _: &str) {}
+        }
+        assert_eq!(Silent.ask("h", "m", &["a".to_owned()]), None);
+        assert_eq!(NoSink.ask("h", "m", &["a".to_owned()]), None);
+    }
+
+    fn speak(text: &str, voice: Option<&str>) -> Node {
+        node(
+            "say",
+            NodeKind::Speak {
+                text: text.into(),
+                voice: voice.map(str::to_owned),
+            },
+        )
+    }
+
+    #[test]
+    fn speak_sends_the_expanded_text_and_voice_to_the_platform() {
+        let f = fixture(
+            vec![keyword("k"), speak("Hello {query}", Some(" {var:v} "))],
+            vec![wire("k", "say")],
+        );
+        let mut ctx = Ctx::with_arg("world");
+        ctx.vars.insert("v".into(), "Samantha".into());
+        f.runtime.run_blocking("k", ctx);
+        assert_eq!(
+            *f.platform.spoken.lock().unwrap(),
+            [("Hello world".to_owned(), Some("Samantha".to_owned()))]
+        );
+
+        // A blank voice means the default one, and nothing is spoken for
+        // empty text.
+        let f = fixture(
+            vec![keyword("k"), speak("{query}", Some("  "))],
+            vec![wire("k", "say")],
+        );
+        f.runtime.run_blocking("k", Ctx::with_arg("hi"));
+        f.runtime.run_blocking("k", Ctx::with_arg("  "));
+        assert_eq!(
+            *f.platform.spoken.lock().unwrap(),
+            [("hi".to_owned(), None)]
+        );
+    }
+
+    #[test]
+    fn play_sound_checks_the_extension_and_the_file() {
+        let f = fixture(
+            vec![
+                keyword("k"),
+                node(
+                    "snd",
+                    NodeKind::PlaySound {
+                        path: "{query}".into(),
+                    },
+                ),
+            ],
+            vec![wire("k", "snd")],
+        );
+        std::fs::create_dir_all(&f.runtime.dir).unwrap();
+        let wav = f.runtime.dir.join("ding.WAV");
+        std::fs::write(&wav, b"RIFF").unwrap();
+        std::fs::write(f.runtime.dir.join("notes.txt"), b"x").unwrap();
+
+        let report = f
+            .runtime
+            .run_blocking("k", Ctx::with_arg(wav.to_string_lossy()));
+        assert!(report.errors.is_empty(), "{:?}", report.errors);
+        // A relative path is inside the workflow folder.
+        f.runtime.run_blocking("k", Ctx::with_arg("ding.WAV"));
+        assert_eq!(*f.platform.sounds.lock().unwrap(), [wav.clone(), wav]);
+
+        let report = f.runtime.run_blocking("k", Ctx::with_arg("notes.txt"));
+        assert!(report.errors[0].message.contains("not a sound file"));
+        let report = f.runtime.run_blocking("k", Ctx::with_arg("missing.mp3"));
+        assert!(report.errors[0].message.contains("not found"));
+        assert_eq!(f.platform.sounds.lock().unwrap().len(), 2);
     }
 
     #[test]

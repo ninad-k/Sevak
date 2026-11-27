@@ -49,7 +49,11 @@ const LARGE_TYPE_CHARS: usize = 2_000;
 /// Longest text offered to the calculator.
 const CALCULATE_CHARS: usize = 200;
 
+/// Speak reads this much of a long selection aloud.
+const SPEAK_CHARS: usize = 5_000;
+
 const TERMINAL_PREFIX: &str = "terminal:";
+const SPEAK_PREFIX: &str = "speak:";
 const LARGE_TYPE_PREFIX: &str = "large_type:";
 const SEARCH_PREFIX: &str = "search:";
 
@@ -198,6 +202,21 @@ impl SelectionPlugin {
                 transform.result,
                 "file",
             ));
+        }
+
+        let spoken: String = text.trim().chars().take(SPEAK_CHARS).collect();
+        if !spoken.is_empty() {
+            items.push(
+                Self::item(
+                    "speak",
+                    "Speak",
+                    Action::Custom {
+                        payload: format!("{SPEAK_PREFIX}{spoken}"),
+                    },
+                    "web",
+                )
+                .with_subtitle("Read the text aloud"),
+            );
         }
         items
     }
@@ -470,6 +489,9 @@ impl Plugin for SelectionPlugin {
                     .open_terminal_in(Path::new(dir), &self.shell)
                     .map_err(PluginError::other);
             }
+            if let Some(text) = payload.strip_prefix(SPEAK_PREFIX) {
+                return self.platform.speak(text, None).map_err(PluginError::other);
+            }
             if ui_request(&item.action).is_some() {
                 return Err(PluginError::Message(
                     "that action is carried out by the launcher window".to_owned(),
@@ -567,6 +589,19 @@ mod tests {
             }
         );
         assert_eq!(google.secondary[0].modifier, Some(Modifier::Shift));
+    }
+
+    #[test]
+    fn text_offers_speak_last_and_it_speaks_through_the_platform() {
+        let (plugin, platform) = plugin();
+        let items = actions_for(&plugin, "hello there");
+        let speak = items.last().unwrap();
+        assert_eq!(speak.id, "selection:speak");
+        plugin.execute(speak).unwrap();
+        assert_eq!(
+            *platform.spoken.lock().unwrap(),
+            [("hello there".to_owned(), None)]
+        );
     }
 
     #[test]
