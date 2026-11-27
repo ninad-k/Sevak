@@ -89,6 +89,10 @@ export interface Config {
     content_keyword: string;
     /** Windows: use paths on other computers (off: they are never contacted). */
     allow_network_paths: boolean;
+    /** Order of file results: best match, "name" (A to Z) or "modified" (newest first). */
+    sort: "relevance" | "name" | "modified";
+    /** Most file results per search; 0 uses the search limit. */
+    max_results: number;
   };
   bookmarks: { browsers: string[]; keyword: string; global: boolean };
   /** The file buffer: files collected from the results to act on together. */

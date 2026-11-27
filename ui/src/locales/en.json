@@ -892,7 +892,14 @@
       "indexKeyword": "Whole-disk keyword",
       "indexKeywordHint": "Empty turns off name search.",
       "contentKeyword": "Contents keyword",
-      "contentKeywordHint": "Empty turns off content search."
+      "contentKeywordHint": "Empty turns off content search.",
+      "sort": "Order of results",
+      "sortHint": "Relevance ranks by name match, Name sorts A to Z, Newest first shows recent changes first.",
+      "sortRelevance": "Best match",
+      "sortName": "Name (A to Z)",
+      "sortModified": "Newest first",
+      "maxResults": "Results per search",
+      "maxResultsHint": "0 uses the search limit under Search. Up to 50 here."
     },
     "linux": {
       "xwayland": "Use XWayland on Wayland",

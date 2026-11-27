@@ -3,6 +3,7 @@ import { mockSettings } from "./mock";
 import type { Appearance, Config, WebSearchEngine } from "./settings-ipc";
 import {
   MAX_DEPTH,
+  MAX_FILE_RESULTS,
   appearanceErrors,
   engineErrors,
   hotkeyErrors,
@@ -192,6 +193,18 @@ describe("validate", () => {
       for (const bad of [-1, MAX_DEPTH + 1, 2.5, Number.NaN]) {
         c.files.max_depth = bad;
         expect(validate(c).filesDepth, String(bad)).toBeDefined();
+      }
+    });
+
+    it("checks the file result limit: 0 (the search limit) or up to 50", () => {
+      const c = config();
+      for (const ok of [0, 1, MAX_FILE_RESULTS]) {
+        c.files.max_results = ok;
+        expect(validate(c).filesResults, String(ok)).toBeUndefined();
+      }
+      for (const bad of [-1, MAX_FILE_RESULTS + 1, 2.5, Number.NaN]) {
+        c.files.max_results = bad;
+        expect(validate(c).filesResults, String(bad)).toBeDefined();
       }
     });
 

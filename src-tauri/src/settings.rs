@@ -244,6 +244,13 @@ fn validate_limits(config: &Config) -> Result<(), String> {
     if let Some(problem) = config.ai.problem() {
         return Err(problem);
     }
+    let file_results = config.files.max_results;
+    let max_file_results = sevak_core::config::MAX_FILES_RESULTS_LIMIT;
+    if file_results > max_file_results {
+        return Err(format!(
+            "Files: the number of results must be from 0 to {max_file_results}; 0 uses the search limit."
+        ));
+    }
     let days = config.calendar.days;
     let max_days = sevak_core::config::MAX_CALENDAR_DAYS;
     if !(1..=max_days).contains(&days) {
@@ -830,6 +837,21 @@ mod tests {
         let mut config = Config::default();
         config.web_search[0].keyword = "cb".into();
         assert!(check(&config).is_err());
+    }
+
+    #[test]
+    fn the_file_result_limit_is_zero_to_fifty() {
+        for good in [0, 1, 50] {
+            let mut config = Config::default();
+            config.files.max_results = good;
+            assert_eq!(check(&config), Ok(()), "files results = {good}");
+        }
+        for bad in [51, 500] {
+            let mut config = Config::default();
+            config.files.max_results = bad;
+            let err = check(&config).unwrap_err();
+            assert!(err.contains("Files"), "files results = {bad}: {err}");
+        }
     }
 
     #[test]

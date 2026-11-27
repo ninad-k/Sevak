@@ -892,7 +892,14 @@
       "indexKeyword": "Schlüsselwort für die ganze Festplatte",
       "indexKeywordHint": "Leer schaltet die Namenssuche aus.",
       "contentKeyword": "Schlüsselwort für Inhalte",
-      "contentKeywordHint": "Leer schaltet die Inhaltssuche aus."
+      "contentKeywordHint": "Leer schaltet die Inhaltssuche aus.",
+      "sort": "Reihenfolge der Ergebnisse",
+      "sortHint": "Relevanz sortiert nach Namenstreffer, Name von A bis Z, Neueste zuerst nach Änderungsdatum.",
+      "sortRelevance": "Beste Übereinstimmung",
+      "sortName": "Name (A bis Z)",
+      "sortModified": "Neueste zuerst",
+      "maxResults": "Ergebnisse pro Suche",
+      "maxResultsHint": "0 verwendet das Suchlimit unter Suche. Hier bis 50."
     },
     "linux": {
       "xwayland": "XWayland unter Wayland verwenden",

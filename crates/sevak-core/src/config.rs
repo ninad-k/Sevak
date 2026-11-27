@@ -144,6 +144,11 @@ include_hidden = false
 keyword = "f"
 # Also show (lower-ranked) file results for plain queries.
 global = true
+# Order of file results: "relevance" (best name match first), "name" (A to Z)
+# or "modified" (newest first).
+sort = "relevance"
+# Most file results per search. 0 uses [search] max_results; otherwise 1 to 50.
+max_results = 0
 # Whole-disk search through the operating system's own index (Windows Search,
 # Spotlight, locate / Tracker / Baloo). Nothing leaves your computer. Type
 # "<index_keyword> <name>" for file names and "<content_keyword> <words>" for
@@ -925,6 +930,22 @@ pub struct CalculatorConfig {
     pub currency: bool,
 }
 
+/// How the files plugin orders its results (`[files] sort`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FileSort {
+    /// Best name match first (the engine's usual order).
+    #[default]
+    Relevance,
+    /// Alphabetical by name, ignoring case.
+    Name,
+    /// Newest change first, from the index's recorded times.
+    Modified,
+}
+
+/// Most file results `[files] max_results` may ask for.
+pub const MAX_FILES_RESULTS_LIMIT: usize = 50;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct FilesConfig {
@@ -935,6 +956,10 @@ pub struct FilesConfig {
     pub include_hidden: bool,
     pub keyword: String,
     pub global: bool,
+    /// Order of file results: best name match, name, or newest first.
+    pub sort: FileSort,
+    /// Most file results per search; 0 uses `[search] max_results`.
+    pub max_results: usize,
     /// Search the whole disk through the OS index (`index_keyword`,
     /// `content_keyword`). The folder index above still answers `keyword` and
     /// plain queries, and stands in when the OS index cannot be reached.
@@ -960,6 +985,8 @@ impl Default for FilesConfig {
             include_hidden: false,
             keyword: "f".to_owned(),
             global: true,
+            sort: FileSort::default(),
+            max_results: 0,
             use_os_index: true,
             index_keyword: "ff".to_owned(),
             content_keyword: "in".to_owned(),
@@ -1686,6 +1713,9 @@ impl Config {
     pub fn normalized(mut self) -> Self {
         self.window.width = self.window.width.clamp(MIN_WINDOW_WIDTH, MAX_WINDOW_WIDTH);
         self.search.max_results = self.search.max_results.clamp(1, MAX_RESULTS_LIMIT);
+        if self.files.max_results != 0 {
+            self.files.max_results = self.files.max_results.clamp(1, MAX_FILES_RESULTS_LIMIT);
+        }
         // Engines without a keyword or a `{query}` placeholder cannot work.
         self.web_search
             .retain(|engine| !engine.keyword.trim().is_empty() && engine.url.contains("{query}"));
@@ -2130,6 +2160,38 @@ symbols = false
         let text = saved(Some(DEFAULT_CONFIG_TOML), &config);
         assert!(text.contains("allow_network_paths = true"), "{text}");
         assert!(text.contains("# Windows only. Use paths on other computers"));
+    }
+
+    #[test]
+    fn files_sort_and_result_limit() {
+        let defaults = Config::default();
+        assert_eq!(defaults.files.sort, FileSort::Relevance);
+        assert_eq!(defaults.files.max_results, 0);
+
+        let config =
+            Config::from_toml_str("[files]\nsort = \"modified\"\nmax_results = 12\n").unwrap();
+        assert_eq!(config.files.sort, FileSort::Modified);
+        assert_eq!(config.files.max_results, 12);
+        assert_eq!(
+            Config::from_toml_str("[files]\nsort = \"name\"\n")
+                .unwrap()
+                .files
+                .sort,
+            FileSort::Name
+        );
+        assert!(Config::from_toml_str("[files]\nsort = \"size\"\n").is_err());
+
+        // 0 means "the global limit"; anything else is kept within 1..=50.
+        let mut config = Config::default();
+        config.files.max_results = 0;
+        assert_eq!(config.clone().normalized().files.max_results, 0);
+        config.files.max_results = 500;
+        assert_eq!(
+            config.clone().normalized().files.max_results,
+            MAX_FILES_RESULTS_LIMIT
+        );
+        config.files.max_results = 7;
+        assert_eq!(config.normalized().files.max_results, 7);
     }
 
     #[test]

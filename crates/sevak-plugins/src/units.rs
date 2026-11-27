@@ -1860,6 +1860,8 @@ pub struct Conversion {
     pub input: String,
     /// The result with its unit (`6.213711922 mi`); also what Enter copies.
     pub text: String,
+    /// The bare number of the result (`6.213711922`), for Tab to complete to.
+    pub value: String,
 }
 
 /// Rounds to `digits` significant digits, which removes representation noise
@@ -1873,9 +1875,14 @@ pub(crate) fn round_significant(value: f64, digits: usize) -> f64 {
         .unwrap_or(value)
 }
 
+/// The bare result number: `37.77777778`, no unit and no separators.
+fn plain(value: f64) -> String {
+    format_number(round_significant(value, RESULT_DIGITS))
+}
+
 /// Formats `value` in `unit`: `37.77777778 °C`, `90°`.
 fn render(value: f64, unit: &Unit) -> String {
-    let number = format_number(round_significant(value, RESULT_DIGITS));
+    let number = plain(value);
     if unit.symbol == "°" {
         format!("{number}°")
     } else {
@@ -1899,6 +1906,7 @@ pub fn answer(input: &str) -> Option<Conversion> {
         return Some(Conversion {
             input: format!("{left} → {right}"),
             text: render(value, &to),
+            value: plain(value),
         });
     }
     None

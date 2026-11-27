@@ -47,6 +47,7 @@
   import { LANGUAGES, currentLanguage, formatList, formatNumber, resolveLanguage, setLanguage, t, tHtml } from "./lib/i18n.svelte";
   import {
     MAX_DEPTH,
+    MAX_FILE_RESULTS,
     MAX_WIDTH,
     MIN_WIDTH,
     totalProblems,
@@ -96,6 +97,8 @@
       index_keyword: "ff",
       content_keyword: "in",
       allow_network_paths: false,
+      sort: "relevance",
+      max_results: 0,
     },
     snippets: {
       auto_expand: false,
@@ -1276,6 +1279,40 @@
                 bind:value={draft.files.max_depth}
                 aria-invalid={!!problems.filesDepth}
                 aria-describedby={problems.filesDepth ? "depth-error" : undefined}
+              />
+            </div>
+
+            <div class="row">
+              <div class="label">
+                <label class="name" for="files-sort">{t("settings.files.sort")}</label>
+                <span class="hint">{t("settings.files.sortHint")}</span>
+              </div>
+              <select id="files-sort" class="input select" bind:value={draft.files.sort}>
+                <option value="relevance">{t("settings.files.sortRelevance")}</option>
+                <option value="name">{t("settings.files.sortName")}</option>
+                <option value="modified">{t("settings.files.sortModified")}</option>
+              </select>
+            </div>
+
+            <div class="row">
+              <div class="label">
+                <label class="name" for="files-max-results">{t("settings.files.maxResults")}</label>
+                <span class="hint">{t("settings.files.maxResultsHint")}</span>
+                {#if problems.filesResults}
+                  <span class="msg error" id="files-results-error" role="alert">{problems.filesResults}</span>
+                {/if}
+              </div>
+              <input
+                id="files-max-results"
+                class="input number"
+                class:invalid={!!problems.filesResults}
+                type="number"
+                min="0"
+                max={MAX_FILE_RESULTS}
+                step="1"
+                bind:value={draft.files.max_results}
+                aria-invalid={!!problems.filesResults}
+                aria-describedby={problems.filesResults ? "files-results-error" : undefined}
               />
             </div>
 

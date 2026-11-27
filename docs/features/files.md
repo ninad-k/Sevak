@@ -160,6 +160,8 @@ What to expect:
 | Allow network paths | `false` | Windows: use `\\server\share` paths and mapped network drives (see [Path browsing](#path-browsing)) | [`[files] allow_network_paths`](../configuration.md#files) |
 | Keyword | `f` | Keyword to search only files | [`[files] keyword`](../configuration.md#files) |
 | Global | `true` | Also show file results in ordinary searches without the keyword | [`[files] global`](../configuration.md#files) |
+| Sort | Best match | Order of file results: best match, name (A to Z), or newest first | [`[files] sort`](../configuration.md#files) |
+| Results per search | `0` | Most file results per search; `0` uses the general search limit (up to 50) | [`[files] max_results`](../configuration.md#files) |
 | Use the OS index | `true` | Turn whole-disk (`ff`) and content (`in`) search on or off | [`[files] use_os_index`](../configuration.md#files) |
 | Whole-disk keyword | `ff` | Keyword for names anywhere; `""` turns that search off | [`[files] index_keyword`](../configuration.md#files) |
 | Contents keyword | `in` | Keyword for words inside files; `""` turns that search off | [`[files] content_keyword`](../configuration.md#files) |

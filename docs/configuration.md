@@ -210,6 +210,8 @@ Indexed file search settings.
 | `include_hidden` | boolean | `false` | Index dot-files and dot-folders (starting with `.`). `false` ignores them. |
 | `keyword` | string | `"f"` | Prefix to search only files: type `f filename`. Leave empty `""` to disable keyword search. |
 | `global` | boolean | `true` | Show file results even in ordinary queries without the keyword. `false` requires `f <name>` to search files. |
+| `sort` | string | `"relevance"` | Order of file results: `"relevance"` (best name match first), `"name"` (A to Z, ignoring case) or `"modified"` (newest change first). Name and date orders are applied to the best 200 matches, and the date is the one recorded when the index was last refreshed, so no file is read on each keystroke. Path browsing (`~/Documents/rep`) keeps its own order. |
+| `max_results` | integer | `0` | Most file results per search. `0` uses `[search] max_results`; otherwise `1` to `50`. |
 | `use_os_index` | boolean | `true` | Whole-disk (`ff`) and content (`in`) search through the operating system's own file index (Windows Search, Spotlight, `locate`, Tracker or Baloo). Queries go only to that local index, never over the network. `false` turns both off. See [what each OS needs](features/files.md#whole-disk-and-content-search). |
 | `index_keyword` | string | `"ff"` | Keyword for file names anywhere on the disk: `ff report`. `""` turns off just this search. |
 | `content_keyword` | string | `"in"` | Keyword for words inside files: `in invoice 2026`. `""` turns off just this search. |
@@ -222,6 +224,8 @@ max_depth = 4
 include_hidden = false
 keyword = "f"
 global = true
+sort = "relevance"
+max_results = 0
 use_os_index = true
 index_keyword = "ff"
 content_keyword = "in"
