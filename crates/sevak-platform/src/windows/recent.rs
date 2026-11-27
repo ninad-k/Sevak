@@ -27,7 +27,7 @@ pub(crate) fn candidates(limit: usize) -> Vec<(PathBuf, Option<SystemTime>)> {
         }
     };
     let mut links = links_in(&folder);
-    links.sort_by(|a, b| b.1.cmp(&a.1));
+    links.sort_by_key(|a| std::cmp::Reverse(a.1));
     links.truncate(limit.saturating_mul(3).clamp(100, MAX_LINKS));
     links
         .into_iter()
