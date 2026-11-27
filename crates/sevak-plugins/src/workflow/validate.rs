@@ -304,7 +304,7 @@ impl Workflow {
                 ));
                 continue;
             };
-            if !from.kind.ports().iter().any(|port| *port == conn.port) {
+            if !from.kind.ports().contains(&conn.port) {
                 problems.push(Problem::error(
                     Some(&conn.from),
                     format!(
