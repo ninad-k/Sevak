@@ -449,6 +449,9 @@ mod tests {
         assert!(parse_xbel("<bookmarks href=\"file:///x\"/>").is_empty());
     }
 
+    // `mdfind` runs on macOS only, and `/Users/me/...` is not an absolute path
+    // on Windows.
+    #[cfg(unix)]
     #[test]
     fn mdfind_output_drops_library_apps_and_hidden_paths() {
         let home = Path::new("/Users/me");
