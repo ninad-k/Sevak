@@ -37,7 +37,14 @@ unused-ignored-advisory = "warn"
 # security workflow fails once that date has passed, so an exception cannot be
 # forgotten. Format:
 #   { id = "RUSTSEC-YYYY-NNNN", reason = "<why>; review-by: YYYY-MM-DD" }
-ignore = []
+ignore = [
+    # chrono and chrono-tz were declared unmaintained (chronotope/chrono#1768)
+    # with no safe upgrade. Neither advisory reports a vulnerability. Sevak uses
+    # them for local date formatting, snippets and the world clock; replacing
+    # them (for example with jiff) is a separate change.
+    { id = "RUSTSEC-2026-0543", reason = "chrono unmaintained, no vulnerability and no drop-in replacement yet; review-by: 2027-02-27" },
+    { id = "RUSTSEC-2026-0555", reason = "chrono-tz unmaintained, no vulnerability and no drop-in replacement yet; review-by: 2027-02-27" },
+]
 
 # ---------------------------------------------------------------------------
 # Licenses
