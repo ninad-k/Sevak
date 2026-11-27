@@ -889,6 +889,11 @@ impl Checker<'_> {
                         "images are loaded from files only, never from the network".to_owned()
                     );
                 }
+                if is_outside_path(path.trim()) {
+                    return Err(format!(
+                        "image \"{path}\" must be a path inside the workflow folder"
+                    ));
+                }
                 if !has_image_extension(path) {
                     return Err(format!("\"{path}\" is not a png, jpeg, gif or webp image"));
                 }
@@ -1073,20 +1078,30 @@ pub fn load_images(root: &Component, dir: &Path) -> (BTreeMap<String, String>, V
     (images, problems)
 }
 
+/// Absolute, UNC (`\\server`, `//server`) and drive paths, which a UI image may
+/// not use.
+fn is_outside_path(path: &str) -> bool {
+    Path::new(path).is_absolute()
+        || path.starts_with('/')
+        || path.starts_with('\\')
+        || path.as_bytes().get(1) == Some(&b':')
+}
+
 fn load_image(dir: &Path, path: &str) -> Result<String, String> {
     let mime = mime_for(path).ok_or("not a png, jpeg, gif or webp image")?;
     let trimmed = path.trim();
-    let file = if Path::new(trimmed).is_absolute() {
-        Path::new(trimmed).to_path_buf()
-    } else {
-        let inside = relative_inside(dir, trimmed).ok_or("must be inside the workflow folder")?;
-        let real = inside.canonicalize().map_err(|_| "not found".to_owned())?;
-        let root = dir.canonicalize().map_err(|err| err.to_string())?;
-        if !real.starts_with(root) {
-            return Err("points outside the workflow folder".to_owned());
-        }
-        real
-    };
+    // A UI without scripts runs without approval, so it must not reach outside
+    // its own folder: an absolute or `\\server\share` path would let it read
+    // any image, or make Windows authenticate to a remote server.
+    if is_outside_path(trimmed) {
+        return Err("must be inside the workflow folder".to_owned());
+    }
+    let inside = relative_inside(dir, trimmed).ok_or("must be inside the workflow folder")?;
+    let file = inside.canonicalize().map_err(|_| "not found".to_owned())?;
+    let root = dir.canonicalize().map_err(|err| err.to_string())?;
+    if !file.starts_with(root) {
+        return Err("points outside the workflow folder".to_owned());
+    }
     let meta = std::fs::metadata(&file).map_err(|_| "not found".to_owned())?;
     if !meta.is_file() {
         return Err("not a file".to_owned());
@@ -1622,6 +1637,21 @@ mod tests {
         assert_eq!(images.len(), 1);
         assert!(images["a.png"].starts_with("data:image/png;base64,"));
         assert_eq!(problems.len(), 4, "{problems:?}");
+    }
+
+    #[test]
+    fn images_outside_the_workflow_folder_are_refused_before_any_file_access() {
+        for path in [
+            "/etc/a.png",
+            "\\\\server\\share\\a.png",
+            "//server/a.png",
+            "C:\\a.png",
+        ] {
+            assert!(is_outside_path(path), "{path}");
+            let root = column(json!([{"type": "image", "path": path}]));
+            assert!(parse(json!({"root": root})).is_err(), "{path}");
+        }
+        assert!(!is_outside_path("img/a.png"));
     }
 
     #[test]

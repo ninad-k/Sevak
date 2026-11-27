@@ -72,7 +72,7 @@ Inputs keep their value in the UI's **state** under their `id`: text for fields
 and pickers, `true`/`false` for a checkbox, a number for a slider, the selected
 `arg` (or title) for a list, an array of them when `multi`.
 
-**Images** are files: a path relative to the workflow folder, or absolute. Sevak
+**Images** are files: a path relative to the workflow folder (absolute and network paths are refused). Sevak
 loads them (png, jpeg, gif, webp, at most 4 MB, and the bytes must really be
 that format) and gives the renderer `data:` URLs. Remote URLs and `data:` URLs
 in the definition are refused.
