@@ -145,7 +145,7 @@ pub(crate) fn finish(
 
 /// Paths from `mdfind -0` output: absolute, outside `~/Library`, not hidden
 /// and not inside an app bundle. At most `cap` of them.
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", all(test, unix)))]
 pub(crate) fn parse_mdfind(output: &str, home: &std::path::Path, cap: usize) -> Vec<PathBuf> {
     let library = home.join("Library");
     output
@@ -368,6 +368,7 @@ fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
     use std::path::Path;
 
     use super::*;
