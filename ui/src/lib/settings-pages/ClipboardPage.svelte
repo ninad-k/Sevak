@@ -98,6 +98,44 @@
     </Row>
 
     <Row
+      label={t("pages.clipboard.viewerRows")}
+      hint={t("pages.clipboard.viewerRowsHint")}
+      forId="cb-rows"
+      error={problems.clipboard.viewerRows}
+    >
+      <input
+        id="cb-rows"
+        class="sp-input number"
+        class:invalid={!!problems.clipboard.viewerRows}
+        type="number"
+        min="5"
+        max="100"
+        step="1"
+        bind:value={config.clipboard.viewer_rows}
+        aria-invalid={!!problems.clipboard.viewerRows}
+      />
+    </Row>
+
+    <Row
+      label={t("pages.clipboard.previewChars")}
+      hint={t("pages.clipboard.previewCharsHint")}
+      forId="cb-preview"
+      error={problems.clipboard.previewChars}
+    >
+      <input
+        id="cb-preview"
+        class="sp-input number"
+        class:invalid={!!problems.clipboard.previewChars}
+        type="number"
+        min="40"
+        max="500"
+        step="1"
+        bind:value={config.clipboard.preview_chars}
+        aria-invalid={!!problems.clipboard.previewChars}
+      />
+    </Row>
+
+    <Row
       label={t("pages.clipboard.longestText")}
       hint={t("pages.clipboard.longestTextHint", { max: MAX_CLIPBOARD_ITEM_BYTES / 1024 })}
       forId="cb-text-size"

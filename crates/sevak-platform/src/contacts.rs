@@ -30,6 +30,22 @@ pub struct Contact {
     /// The OS's own identifier, for opening the contact's card
     /// (`addressbook://<id>` on macOS). `None` for vCard files.
     pub card_id: Option<String>,
+    /// The card's photo (vCard `PHOTO`), kept in memory only.
+    pub photo: Option<ContactPhoto>,
+}
+
+/// The largest photo kept, as decoded bytes. It travels to the UI inside the
+/// result, once per row, so it is small on purpose; a larger one is ignored.
+pub const MAX_PHOTO_BYTES: usize = 64 * 1024;
+
+/// A JPEG or PNG photo, still base64 encoded as it is shown to the UI in a
+/// `data:` URL.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContactPhoto {
+    /// `image/jpeg` or `image/png`.
+    pub mime: &'static str,
+    /// Standard base64 without line breaks.
+    pub base64: String,
 }
 
 /// Whether Sevak may read the OS address book.
@@ -319,6 +335,7 @@ fn build_contact(props: &[Property]) -> Option<Contact> {
                     phones.push((prop.is_preferred(), number.to_owned()));
                 }
             }
+            "PHOTO" if contact.photo.is_none() => contact.photo = parse_photo(prop),
             "UID" if uid.is_none() => {
                 let value = unescape(&prop.value);
                 if !value.is_empty() {
@@ -351,6 +368,84 @@ fn build_contact(props: &[Property]) -> Option<Contact> {
     }
     contact.id = uid.unwrap_or_else(|| content_id(&contact));
     Some(contact)
+}
+
+/// The photo of a `PHOTO` property: inline base64 data only (vCard 2.1 and 3.0
+/// `ENCODING=BASE64` / `ENCODING=b`, and a vCard 4 `data:` URI). A photo that is
+/// a link is never fetched (Sevak makes no network requests for it), and
+/// anything that is not a JPEG or PNG of at most [`MAX_PHOTO_BYTES`] is ignored.
+fn parse_photo(prop: &Property) -> Option<ContactPhoto> {
+    let value = prop.value.trim();
+    let payload = match value.get(..5) {
+        Some(head) if head.eq_ignore_ascii_case("data:") => {
+            let (meta, data) = value[5..].split_once(',')?;
+            meta.to_ascii_lowercase()
+                .contains(";base64")
+                .then_some(data)?
+        }
+        _ => {
+            let inline = prop.params.iter().any(|p| {
+                matches!(
+                    p.as_str(),
+                    "ENCODING=B" | "ENCODING=BASE64" | "B" | "BASE64"
+                )
+            });
+            inline.then_some(value)?
+        }
+    };
+    let clean: String = payload.chars().filter(|c| !c.is_whitespace()).collect();
+    let digits = clean.trim_end_matches('=');
+    if digits.is_empty()
+        || digits.len() > MAX_PHOTO_BYTES * 4 / 3 + 4
+        || !digits
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'+' || b == b'/')
+    {
+        return None;
+    }
+    let mime = match decode_prefix(digits, 8)?.as_slice() {
+        [0xFF, 0xD8, 0xFF, ..] => "image/jpeg",
+        [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A] => "image/png",
+        _ => return None,
+    };
+    // Canonical form: padded, so the browser accepts it in a data URL.
+    let mut base64 = digits.to_owned();
+    while !base64.len().is_multiple_of(4) {
+        base64.push('=');
+    }
+    Some(ContactPhoto { mime, base64 })
+}
+
+/// The first `count` bytes of unpadded standard base64 `digits`.
+fn decode_prefix(digits: &str, count: usize) -> Option<Vec<u8>> {
+    let value = |b: u8| match b {
+        b'A'..=b'Z' => Some(b - b'A'),
+        b'a'..=b'z' => Some(b - b'a' + 26),
+        b'0'..=b'9' => Some(b - b'0' + 52),
+        b'+' => Some(62),
+        b'/' => Some(63),
+        _ => None,
+    };
+    let bytes = digits.as_bytes();
+    let mut out = Vec::with_capacity(count);
+    for chunk in bytes.chunks(4) {
+        let mut acc = 0u32;
+        for &b in chunk {
+            acc = acc << 6 | u32::from(value(b)?);
+        }
+        let n = chunk.len();
+        if n < 2 {
+            return None;
+        }
+        acc <<= 6 * (4 - n as u32);
+        let triple = [(acc >> 16) as u8, (acc >> 8) as u8, acc as u8];
+        out.extend_from_slice(&triple[..n - 1]);
+        if out.len() >= count {
+            out.truncate(count);
+            return (out.len() == count).then_some(out);
+        }
+    }
+    None
 }
 
 fn strip_scheme<'a>(value: &'a str, scheme: &str) -> &'a str {
@@ -408,6 +503,47 @@ mod tests {
         assert_eq!(ada.phones, ["+44 7700 900123", "+44 20 7946 0000"]);
         assert_eq!(ada.emails, ["ada.l@work.example", "ada@example.org"]);
         assert_eq!(ada.card_id, None);
+    }
+
+    const PNG_B64: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
+    fn card_with(photo_line: &str) -> Vec<Contact> {
+        parse_vcards(&format!(
+            "BEGIN:VCARD\nVERSION:3.0\nFN:Ada\n{photo_line}\nEND:VCARD\n"
+        ))
+    }
+
+    #[test]
+    fn photos_are_read_from_v3_base64_v21_and_v4_data_uris() {
+        for line in [
+            format!("PHOTO;ENCODING=b;TYPE=PNG:{PNG_B64}"),
+            format!("PHOTO;ENCODING=BASE64;PNG:{PNG_B64}"),
+            format!("PHOTO:data:image/png;base64,{PNG_B64}"),
+            // Folded across lines.
+            format!("PHOTO;ENCODING=b:{}\n {}", &PNG_B64[..20], &PNG_B64[20..]),
+        ] {
+            let photo = card_with(&line)[0].photo.clone().expect(&line);
+            assert_eq!(photo.mime, "image/png", "{line}");
+            assert_eq!(photo.base64, PNG_B64, "{line}");
+        }
+        let jpeg = card_with("PHOTO;ENCODING=b;TYPE=JPEG:/9j/4AAQSkZJRgABAQ==");
+        assert_eq!(jpeg[0].photo.as_ref().unwrap().mime, "image/jpeg");
+    }
+
+    #[test]
+    fn unusable_photos_are_ignored_without_dropping_the_contact() {
+        let big = format!("/9j/{}", "A".repeat(MAX_PHOTO_BYTES * 2));
+        for line in [
+            "PHOTO;VALUE=uri:https://example.com/a.jpg".to_owned(),
+            "PHOTO:data:image/gif;base64,R0lGODlhAQABAAAAACw=".to_owned(),
+            "PHOTO;ENCODING=b:R0lGODlhAQABAAAAACw=".to_owned(),
+            "PHOTO;ENCODING=b:not base64 at all!".to_owned(),
+            format!("PHOTO;ENCODING=b:{big}"),
+        ] {
+            let cards = card_with(&line);
+            assert_eq!(cards.len(), 1, "{line}");
+            assert_eq!(cards[0].photo, None, "{line}");
+        }
     }
 
     #[test]

@@ -94,8 +94,19 @@ export interface Config {
     max_image_bytes: number;
     /** Encrypt the history at rest for this Windows account (DPAPI); other systems keep owner-only files. */
     encrypt: boolean;
+    /** Rows shown in the history list (5 to 100). */
+    viewer_rows: number;
+    /** Characters of an entry shown as its title (40 to 500). */
+    preview_chars: number;
   };
-  contacts: { enabled: boolean; keyword: string; use_system: boolean; vcard_files: string[] };
+  contacts: {
+    enabled: boolean;
+    keyword: string;
+    use_system: boolean;
+    vcard_files: string[];
+    /** Show vCard photos as icons (decoded in memory only). */
+    show_photos: boolean;
+  };
   onepassword: {
     enabled: boolean;
     keyword: string;

@@ -232,6 +232,24 @@ fn validate_limits(config: &Config) -> Result<(), String> {
             return Err(format!("{what} must be from 1 to {max}."));
         }
     }
+    for (what, value, min, max) in [
+        (
+            "Clipboard history: the rows shown",
+            clipboard.viewer_rows,
+            5,
+            100,
+        ),
+        (
+            "Clipboard history: the preview length",
+            clipboard.preview_chars,
+            40,
+            500,
+        ),
+    ] {
+        if !(min..=max).contains(&value) {
+            return Err(format!("{what} must be from {min} to {max}."));
+        }
+    }
     let minutes = config.onepassword.cache_minutes;
     if !(1..=MAX_ONEPASSWORD_CACHE_MINUTES).contains(&minutes) {
         return Err(format!(
@@ -832,7 +850,14 @@ mod tests {
     #[test]
     fn the_plugin_numbers_have_the_ranges_the_form_shows() {
         type Set = fn(&mut Config, usize);
-        let setters: [(&str, Set, usize, usize); 4] = [
+        let setters: [(&str, Set, usize, usize); 6] = [
+            ("rows shown", |c, n| c.clipboard.viewer_rows = n, 5, 100),
+            (
+                "preview length",
+                |c, n| c.clipboard.preview_chars = n,
+                40,
+                500,
+            ),
             (
                 "number of items",
                 |c, n| c.clipboard.max_items = n,
@@ -864,7 +889,7 @@ mod tests {
                 set(&mut config, good);
                 assert_eq!(check(&config), Ok(()), "{what} = {good}");
             }
-            for bad in [0, max + 1] {
+            for bad in [min - 1, max + 1] {
                 let mut config = Config::default();
                 set(&mut config, bad);
                 let err = check(&config).unwrap_err();

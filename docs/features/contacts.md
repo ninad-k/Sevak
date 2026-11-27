@@ -47,11 +47,12 @@ Set `use_system = false` to read vCard files only.
 | Enabled | `false` | Turn the plugin on | [`[contacts] enabled`](../configuration.md#contacts) |
 | Keyword | `c` | Keyword to search contacts; the `@` keyword always works too | [`[contacts] keyword`](../configuration.md#contacts) |
 | Use system | `true` | Also read the system address book (macOS Contacts, Windows People, Evolution) | [`[contacts] use_system`](../configuration.md#contacts) |
+| Show photos | `true` | Use the photo of a vCard (`PHOTO`, inline JPEG or PNG up to 64 KB) as the result icon | [`[contacts] show_photos`](../configuration.md#contacts) |
 | vCard files | *(empty)* | `.vcf` files or folders of them, e.g. `["~/contacts.vcf"]` | [`[contacts] vcard_files`](../configuration.md#contacts) |
 
 ## Privacy
 
-Contacts are loaded into memory when Sevak starts and every ten minutes, never written to disk, never logged and never sent anywhere. Searches and picks in this plugin are kept out of the search history and usage statistics, so no names end up in `usage.json`.
+Contacts are loaded into memory when Sevak starts and every ten minutes, never written to disk, never logged and never sent anywhere. Searches and picks in this plugin are kept out of the search history and usage statistics, so no names end up in `usage.json`. Photos stay in memory too (they are shown as inline images, no file is created); a photo that is a link is never downloaded, and photos from the system address books are not read.
 
 ## Troubleshooting
 

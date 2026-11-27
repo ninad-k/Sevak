@@ -115,8 +115,10 @@
       files: true,
       max_image_bytes: 10 * 1024 * 1024,
       encrypt: true,
+      viewer_rows: 20,
+      preview_chars: 100,
     },
-    contacts: { enabled: false, keyword: "c", use_system: true, vcard_files: [] },
+    contacts: { enabled: false, keyword: "c", use_system: true, vcard_files: [], show_photos: true },
     onepassword: { enabled: false, keyword: "1p", op_path: "", account: "", cache_minutes: 10 },
     dictionary: { define_keyword: "define", spell_keyword: "spell", use_system: true },
     ai: {
