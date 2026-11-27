@@ -789,8 +789,13 @@ impl Runtime {
                 }
                 let called = Ctx {
                     arg: plain(arg),
+                    // The target's own (approved) variables win over passed ones.
                     vars: if *pass_variables {
-                        ctx.vars.clone()
+                        ctx.vars
+                            .iter()
+                            .filter(|(name, _)| !target.workflow.variables.contains_key(*name))
+                            .map(|(name, value)| (name.clone(), value.clone()))
+                            .collect()
                     } else {
                         BTreeMap::new()
                     },
@@ -2984,6 +2989,42 @@ mod utility_node_tests {
             },
         );
         assert_eq!(*platform.clipboard.lock().unwrap(), ["S"]);
+    }
+
+    #[test]
+    fn passed_variables_do_not_override_the_targets_own() {
+        let dir = tempfile::tempdir().unwrap();
+        let platform = MockPlatform::empty();
+        let mut callee = flow(
+            vec![external("go"), copy("c", "{var:safe}/{var:extra}")],
+            vec![wire("go", "c")],
+        );
+        callee.variables.insert("safe".to_owned(), "own".to_owned());
+        let map = registry(
+            &dir,
+            &platform,
+            vec![
+                (
+                    "a",
+                    flow(
+                        vec![keyword("k"), node("call", call("b", "go", "", true))],
+                        vec![wire("k", "call")],
+                    ),
+                ),
+                ("b", callee),
+            ],
+        );
+        let mut vars = BTreeMap::new();
+        vars.insert("safe".to_owned(), "evil".to_owned());
+        vars.insert("extra".to_owned(), "E".to_owned());
+        runtime_of(&map, "a").run_blocking(
+            "k",
+            Ctx {
+                arg: String::new(),
+                vars,
+            },
+        );
+        assert_eq!(*platform.clipboard.lock().unwrap(), ["own/E"]);
     }
 
     #[test]

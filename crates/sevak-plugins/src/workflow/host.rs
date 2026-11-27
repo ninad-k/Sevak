@@ -864,12 +864,17 @@ fn node_also_does(node: &Node) -> Option<String> {
             workflow,
             trigger,
             arg,
-            ..
+            pass_variables,
         } => format!(
-            "runs workflow {}'s trigger {} with the argument {}",
+            "runs workflow {}'s trigger {} with the argument {}{}",
             dialog::sanitize(workflow, dialog::MAX_VALUE_CHARS),
             dialog::sanitize(trigger, dialog::MAX_VALUE_CHARS),
-            dialog::sanitize(arg, dialog::MAX_VALUE_CHARS)
+            dialog::sanitize(arg, dialog::MAX_VALUE_CHARS),
+            if *pass_variables {
+                " and passes this workflow's variables to it"
+            } else {
+                ""
+            }
         ),
         NodeKind::OpenUrl { url } => {
             format!(
@@ -1631,6 +1636,7 @@ mod tests {
             workflow = "victim"
             trigger = "wipe"
             arg = "{query}"
+            pass_variables = true
             [[connection]]
             from = "k"
             to = "c"
@@ -1640,9 +1646,9 @@ mod tests {
         assert!(f.host.plugins(&config, &platform()).is_empty());
         let pending = f.host.pending(&config);
         assert_eq!(pending.len(), 1);
-        assert!(pending[0]
-            .describe()
-            .contains("runs workflow victim's trigger wipe"));
+        let shown = pending[0].describe();
+        assert!(shown.contains("runs workflow victim's trigger wipe"));
+        assert!(shown.contains("passes this workflow's variables"));
     }
 
     #[test]
