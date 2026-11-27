@@ -1,6 +1,7 @@
 <script lang="ts">
   import "./pages.css";
   import type { KeyOption } from "./types";
+  import { t } from "../i18n.svelte";
 
   /**
    * A checklist over a list of keys in the config file. In `hide` mode the list
@@ -58,15 +59,15 @@
 </fieldset>
 {#if extras.length > 0}
   <div class="sp-extra">
-    <span class="sp-hint">Other entries in the config file (not known to this list):</span>
+    <span class="sp-hint">{t("pages.common.otherEntries")}</span>
     <div>
       {#each extras as entry (entry)}
         <span class="sp-chip">
           {entry}
           <button
             type="button"
-            aria-label="Remove {entry}"
-            title="Remove"
+            aria-label={t("pages.common.removeItem", { item: entry })}
+            title={t("common.remove")}
             onclick={() => (list = list.filter((e) => e !== entry))}>✕</button
           >
         </span>

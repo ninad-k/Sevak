@@ -365,6 +365,12 @@ More: [Contacts](features/contacts.md) and [1Password](features/1password.md).
 
 More: [Dictionary and spelling](features/dictionary.md).
 
+### World clock and passwords
+
+`time` shows the time here and in your cities, `time tokyo` one place, and `time 3pm pst in ist` converts a time between zones. `pass` makes a random password (`pass 24`, `pass 6 words`, `pass pin`); **++enter++** copies it, marked so clipboard histories leave it out. Both are offline.
+
+More: [World clock](features/clock.md), [Password generator](features/passwords.md).
+
 ## Universal Actions {#universal-actions}
 
 Select something in any app—text, a link, files—press ++ctrl+alt+space++ (or your configured hotkey) and Sevak shows what you can do with it.

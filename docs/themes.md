@@ -1,6 +1,6 @@
 # Themes and appearance
 
-Sevak follows your system's light or dark mode by default. Everything else is optional and lives in the `[appearance]` table of `config.toml` (the Settings window, Appearance page, edits the same values). **Settings → Appearance → Theme editor** builds complete themes visually, with eight built-in themes and an optional online gallery.
+Sevak follows your system's light or dark mode by default. Everything else is optional and lives in the `[appearance]` table of `config.toml` (the Settings window, Appearance page, edits the same values). **Settings → Appearance → Theme editor** builds complete themes visually, with eleven built-in themes and an optional online gallery.
 
 ## Settings
 
@@ -14,6 +14,9 @@ opacity = 100          # 30–100, percent opacity of the search bar's backgroun
 radius = 14            # 0–32, corner radius in pixels
 theme_file = ""        # "themes/Nord.toml", a theme file in the config folder; "" uses none
 custom_css = ""        # a stylesheet in the config folder; "" loads none
+settings_theme = "follow"  # the Settings window only: "follow", "light", "dark" or "system"
+open_animation = "fade"    # how the launcher appears: "fade", "fade_scale" or "none"
+animation_ms = 150         # 0-400, length of the open animation in milliseconds
 ```
 
 Changes apply when you save in **Settings**, or after "Reload index" in the tray menu when you edit the file by hand.
@@ -38,6 +41,15 @@ Every value is checked when it is applied. A value that is not valid is ignored 
 | `radius` | whole number 0–32 | 14 |
 | `theme_file` | relative path inside the config folder to a valid theme file | empty |
 | `custom_css` | relative path inside the config folder | empty |
+| `settings_theme` | `"follow"`, `"light"`, `"dark"` or `"system"` | `"follow"` |
+| `open_animation` | `"fade"`, `"fade_scale"` or `"none"` | `"fade"` |
+| `animation_ms` | whole number 0-400 | 150 |
+
+## Settings window mode and open animation
+
+`settings_theme` sets light or dark for the Settings window only. `"follow"` (the default) uses the launcher's `theme`; `"system"` follows the operating system even when the launcher is pinned to light or dark.
+
+`open_animation` picks how the search bar appears: `"fade"` (the default, a short fade and settle), `"fade_scale"` (a stronger zoom) or `"none"`. `animation_ms` is its length (0-400, default 150). The system's reduced-motion setting always turns the animation off, whatever these say.
 
 ## Accent color
 
@@ -59,11 +71,11 @@ Setting `accent` derives related CSS variables:
 
 ## Theme files and the editor
 
-![Settings, Appearance, Theme editor: eight built-in themes to pick from and a live preview of the search bar with contrast checks.](media/settings-theme-editor.png)
+![Settings, Appearance, Theme editor: eleven built-in themes to pick from and a live preview of the search bar with contrast checks.](media/settings-theme-editor.png)
 
 A theme is a small TOML file in the `themes` folder of your config folder (**Settings → Appearance → Open themes folder**). **Settings → Appearance → Theme editor** creates and edits them without touching the file:
 
-- Eight themes ship with Sevak: Sevak Light, Sevak Dark, Nord, Dracula, Solarized Light, Solarized Dark, Gruvbox and High Contrast. Click one to preview it. Changing anything in a built-in makes a copy, because the built-in names stay as shipped.
+- Eleven themes ship with Sevak: Sevak Light, Sevak Dark, Nord, Dracula, Solarized Light, Solarized Dark, Gruvbox, High Contrast, Sevak Glass Light, Sevak Glass Dark and Sevak Violet. The two Glass themes are roomy (larger radius, taller rows, wider bar), slightly see-through (85% and 82% opacity) and have a bright selection highlight; they are made for the frosted-glass blur. Sevak Violet is a purple-accent dark theme with a violet-tinted selection. All three are original. Click one to preview it. Changing anything in a built-in makes a copy, because the built-in names stay as shipped.
 - The preview is the launcher's own result row with sample rows, and updates as you edit. **Light / Dark** switches between a theme's two variants.
 - Each color has a picker, a text field (`#rrggbb`, `#rrggbbaa`, `rgb()` or `rgba()`) and an opacity slider. Sliders set the font size, corner radius, background opacity, row height, search field size, icon size and window width; **Default** takes a size back out of the theme. The font is a free-text list; the **Installed fonts** button fills the suggestions from the system when the window allows it.
 - **Contrast** shows the WCAG contrast ratio of the text on the background, of the selected row's text on the selection, of the subtext on the background and of the text on accent buttons. A pair under 4.5:1 (level AA) is flagged. It is a warning, not a block; every built-in theme passes all four.
@@ -108,7 +120,7 @@ input_background = "rgba(236, 239, 244, 0.06)"
 input_border = "rgba(236, 239, 244, 0.24)"
 switch_off = "rgba(236, 239, 244, 0.28)"
 warn = "#ebcb8b"
-error = "#e5848d"
+error = "#ea8e96"
 ok = "#a3be8c"
 ```
 
@@ -143,7 +155,7 @@ The gallery is a list of community themes kept in Sevak's repository (`gallery/t
 - **A theme of the same name is never replaced silently.** If one is already in your themes folder, the install is refused and says so; **Reinstall** on an installed theme replaces exactly that theme.
 - Nothing is sent about you, and nothing is downloaded or updated in the background. Without a network you can still use the built-in themes and **Import…**.
 
-The gallery has the eight built-in themes and eleven more, each reaching WCAG AA for body text:
+The gallery has the eleven built-in themes and eleven more, each reaching WCAG AA for body text:
 
 | Theme | Mode | Palette |
 |---|---|---|
@@ -158,6 +170,8 @@ The gallery has the eight built-in themes and eleven more, each reaching WCAG AA
 | GitHub Light | light | GitHub Primer (MIT) |
 | GitHub Dark | dark | GitHub Primer (MIT) |
 | Sevak Amber Glass | dark | original; slightly see-through (88% opacity), made for the frosted-glass blur setting |
+
+Sevak Glass Light, Sevak Glass Dark and Sevak Violet are built in, not extra downloads, and are listed here too so they can be reinstalled.
 
 Colors taken from a third-party palette are credited, with their licences, in [gallery/README.md](https://github.com/ninad-k/Sevak/blob/main/gallery/README.md#theme-palettes-and-licences) and in the first comment of each theme file; a few notice or subtext colors are adjusted so text stays readable.
 
@@ -222,8 +236,9 @@ Set by the light and dark themes (`ui/src/app.css`):
 | `--fg` | Main text color |
 | `--muted` | Secondary text: subtitles, hints, placeholder |
 | `--border` | Hairlines between sections and form fields |
-| `--accent` | Caret, buttons, switches, slider thumbs, focus rings |
+| `--accent` | Caret, buttons, switches, slider thumbs |
 | `--accent-strong` | Hover and focus states of accented elements |
+| `--focus-ring` | Keyboard focus outline; follows `--accent-strong` (keep it at 3:1 or more against `--bg`) |
 | `--on-accent` | Text and icons on an accent background |
 | `--selected` | Background of the selected result row |
 | `--tile` | Background behind result icons |

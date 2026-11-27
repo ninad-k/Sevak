@@ -10,6 +10,7 @@
     useBuiltinTheme,
     type Result,
   } from "./theme-ipc";
+  import { formatList, formatNumber, t, tHtml } from "./i18n.svelte";
   import ThemeColorRow from "./ThemeColorRow.svelte";
   import ThemeGallery from "./ThemeGallery.svelte";
   import ThemePreview from "./ThemePreview.svelte";
@@ -88,7 +89,7 @@
   // A built-in that was only looked at is not a problem; once it is changed it needs its own name.
   const nameError = $derived(
     builtinName && (dirty || source.kind !== "builtin")
-      ? "That is the name of a built-in theme; choose another one."
+      ? t("appearance.editor.builtinName")
       : null,
   );
   const customThemes = $derived(installed.filter((t) => !builtin.some((b) => b.spec.name.toLowerCase() === t.spec.name.toLowerCase())));
@@ -108,15 +109,20 @@
     set: (s: ThemeSpec, value: number | null) => void;
   }
 
-  const sizes: SizeControl[] = [
-    { id: "font_size", label: "Font size", hint: "Result titles; the bar scales with it", unit: "px", limits: LIMITS.font_size, fallback: SIZE_DEFAULTS.font_size, get: (s) => s.font.size, set: (s, v) => (s.font.size = v) },
-    { id: "radius", label: "Corner radius", hint: "Roundness of the search bar", unit: "px", limits: LIMITS.radius, fallback: SIZE_DEFAULTS.radius, get: (s) => s.layout.radius, set: (s, v) => (s.layout.radius = v) },
-    { id: "opacity", label: "Background opacity", hint: "Lower lets the desktop show through", unit: "%", limits: LIMITS.opacity, fallback: SIZE_DEFAULTS.opacity, get: (s) => s.layout.opacity, set: (s, v) => (s.layout.opacity = v) },
-    { id: "row_height", label: "Row height", hint: "Height of a result row", unit: "px", limits: LIMITS.row_height, fallback: SIZE_DEFAULTS.row_height, get: (s) => s.layout.row_height, set: (s, v) => (s.layout.row_height = v) },
-    { id: "search_size", label: "Search field size", hint: "Size of the text you type", unit: "px", limits: LIMITS.search_size, fallback: SIZE_DEFAULTS.search_size, get: (s) => s.layout.search_size, set: (s, v) => (s.layout.search_size = v) },
-    { id: "icon_size", label: "Icon size", hint: "Size of the result icons", unit: "px", limits: LIMITS.icon_size, fallback: SIZE_DEFAULTS.icon_size, get: (s) => s.layout.icon_size, set: (s, v) => (s.layout.icon_size = v) },
-    { id: "window_width", label: "Window width", hint: "Used while Settings keeps the default width; the preview is capped to the space here", unit: "px", limits: LIMITS.window_width, fallback: SIZE_DEFAULTS.window_width, get: (s) => s.layout.window_width, set: (s, v) => (s.layout.window_width = v) },
-  ];
+  // Derived, so the labels follow a language switch.
+  const sizes: SizeControl[] = $derived([
+    { id: "font_size", label: t("appearance.sizes.fontSize"), hint: t("appearance.sizes.fontSizeHint"), unit: "px", limits: LIMITS.font_size, fallback: SIZE_DEFAULTS.font_size, get: (s) => s.font.size, set: (s, v) => (s.font.size = v) },
+    { id: "radius", label: t("appearance.sizes.radius"), hint: t("appearance.sizes.radiusHint"), unit: "px", limits: LIMITS.radius, fallback: SIZE_DEFAULTS.radius, get: (s) => s.layout.radius, set: (s, v) => (s.layout.radius = v) },
+    { id: "opacity", label: t("appearance.sizes.opacity"), hint: t("appearance.sizes.opacityHint"), unit: "%", limits: LIMITS.opacity, fallback: SIZE_DEFAULTS.opacity, get: (s) => s.layout.opacity, set: (s, v) => (s.layout.opacity = v) },
+    { id: "row_height", label: t("appearance.sizes.rowHeight"), hint: t("appearance.sizes.rowHeightHint"), unit: "px", limits: LIMITS.row_height, fallback: SIZE_DEFAULTS.row_height, get: (s) => s.layout.row_height, set: (s, v) => (s.layout.row_height = v) },
+    { id: "search_size", label: t("appearance.sizes.searchSize"), hint: t("appearance.sizes.searchSizeHint"), unit: "px", limits: LIMITS.search_size, fallback: SIZE_DEFAULTS.search_size, get: (s) => s.layout.search_size, set: (s, v) => (s.layout.search_size = v) },
+    { id: "icon_size", label: t("appearance.sizes.iconSize"), hint: t("appearance.sizes.iconSizeHint"), unit: "px", limits: LIMITS.icon_size, fallback: SIZE_DEFAULTS.icon_size, get: (s) => s.layout.icon_size, set: (s, v) => (s.layout.icon_size = v) },
+    { id: "window_width", label: t("appearance.sizes.windowWidth"), hint: t("appearance.sizes.windowWidthHint"), unit: "px", limits: LIMITS.window_width, fallback: SIZE_DEFAULTS.window_width, get: (s) => s.layout.window_width, set: (s, v) => (s.layout.window_width = v) },
+  ]);
+
+  /** A slider's value with its unit, in the UI language's number format. */
+  const sizeValue = (value: number, unit: string) =>
+    unit === "%" ? formatNumber(value / 100, { style: "percent" }) : t("appearance.units.px", { value });
 
   const sameFile = (a: string, b: string) => {
     const normal = (path: string) => path.trim().replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
@@ -133,7 +139,7 @@
     historyVersion++;
     overwritePending = false;
     message = theme.warnings.length
-      ? { kind: "warn", text: `Some values in this theme were ignored: ${theme.warnings.join(" ")}` }
+      ? { kind: "warn", text: t("appearance.editor.ignoredValues", { warnings: theme.warnings.join(" ") }) }
       : null;
     // Show the variant the theme has, else the one the system uses.
     if (!spec[variant] && spec[other]) variant = other;
@@ -162,7 +168,7 @@
     if (current) {
       message = {
         kind: "warn",
-        text: `The theme file "${current}" was not found in the themes folder, so no theme is applied.`,
+        text: t("appearance.editor.fileNotFound", { file: current }),
       };
     }
   });
@@ -184,7 +190,7 @@
     overwritePending = false;
     message = null;
     // Editing a built-in makes a copy: the built-ins themselves stay as shipped.
-    if (key !== "name" && builtinName) spec.name = `${spec.name.trim()} (copy)`;
+    if (key !== "name" && builtinName) spec.name = t("appearance.editor.copyName", { name: spec.name.trim() });
   }
 
   function undo() {
@@ -241,15 +247,15 @@
   async function loadInstalledFonts() {
     const query = (window as unknown as { queryLocalFonts?: () => Promise<{ family: string }[]> }).queryLocalFonts;
     if (!query) {
-      fontNote = "This system's font list is not available here; type a font name instead.";
+      fontNote = t("appearance.editor.fontsUnavailable");
       return;
     }
     try {
       const fonts = await query.call(window);
       installedFonts = [...new Set(fonts.map((f) => f.family))].sort((a, b) => a.localeCompare(b));
-      fontNote = `${installedFonts.length} installed fonts are suggested.`;
+      fontNote = t("appearance.editor.fontsSuggested", { count: installedFonts.length });
     } catch {
-      fontNote = "Access to the font list was declined; type a font name instead.";
+      fontNote = t("appearance.editor.fontsDeclined");
     }
   }
 
@@ -259,7 +265,7 @@
   async function persist(): Promise<StoredTheme | null> {
     const name = spec.name.trim();
     if (name === "") {
-      message = { kind: "error", text: "Give the theme a name first." };
+      message = { kind: "error", text: t("appearance.editor.nameFirst") };
       return null;
     }
     if (nameError || fontError) {
@@ -271,7 +277,7 @@
     );
     if (clash && !overwritePending) {
       overwritePending = true;
-      message = { kind: "warn", text: `A theme called "${clash.spec.name}" already exists. Click again to replace it.` };
+      message = { kind: "warn", text: t("appearance.editor.exists", { name: clash.spec.name }) };
       return null;
     }
     overwritePending = false;
@@ -296,8 +302,8 @@
       message = {
         kind: stored.warnings.length ? "warn" : "ok",
         text: stored.warnings.length
-          ? `Saved ${stored.file}, but some values were ignored: ${stored.warnings.join(" ")}`
-          : `Saved ${stored.file}.`,
+          ? t("appearance.editor.savedIgnored", { file: stored.file, warnings: stored.warnings.join(" ") })
+          : t("appearance.editor.savedFile", { file: stored.file }),
       };
     }
   }
@@ -319,12 +325,12 @@
     if (!stored) return;
     appearance.theme_file = stored.file;
     source = { kind: "file", file: stored.file };
-    message = { kind: "ok", text: `${stored.spec.name || stored.file} will be used. Press Save below to keep it.` };
+    message = { kind: "ok", text: t("appearance.editor.willBeUsed", { name: stored.spec.name || stored.file }) };
   }
 
   function removeTheme() {
     appearance.theme_file = "";
-    message = { kind: "ok", text: "No theme file will be used. Press Save below to keep it." };
+    message = { kind: "ok", text: t("appearance.editor.noneWillBeUsed") };
   }
 
   async function doImport() {
@@ -338,7 +344,7 @@
     if (!result.value) return;
     await refreshList();
     load(result.value, { kind: "file", file: result.value.file });
-    message = { kind: "ok", text: `Imported ${result.value.spec.name}.` };
+    message = { kind: "ok", text: t("appearance.editor.imported", { name: result.value.spec.name }) };
   }
 
   async function doExport() {
@@ -350,11 +356,11 @@
       const written = await useBuiltinTheme(source.name);
       outcome = written.ok ? await exportTheme(written.value.file) : written;
     } else {
-      outcome = { ok: false, error: "Save the theme first (Save as…), then export it." };
+      outcome = { ok: false, error: t("appearance.editor.saveBeforeExport") };
     }
     busy = false;
     if (!outcome.ok) message = { kind: "error", text: outcome.error };
-    else if (outcome.value) message = { kind: "ok", text: "Exported the theme." };
+    else if (outcome.value) message = { kind: "ok", text: t("appearance.editor.exported") };
   }
 
   async function openFolder() {
@@ -373,35 +379,32 @@
     return defaults[editMode][key] ?? "";
   }
 
-  const ratio = (value: number) => `${value.toFixed(1)}:1`;
+  const ratio = (value: number) => `${formatNumber(value, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}:1`;
 </script>
 
 <section class="editor" aria-labelledby="theme-editor-title">
   <div class="top">
     <div class="label">
-      <h2 id="theme-editor-title">Theme editor</h2>
-      <p class="hint">
-        Pick a theme to preview it, change what you like, then apply it. Themes are small files in
-        your themes folder.
-      </p>
+      <h2 id="theme-editor-title">{t("appearance.editor.title")}</h2>
+      <p class="hint">{t("appearance.editor.intro")}</p>
     </div>
     <div class="in-use">
       {#if inUse}
-        <span class="chip" title={inUse}>In use: <strong>{inUse}</strong></span>
-        <button type="button" class="btn small" onclick={removeTheme}>Use none</button>
+        <span class="chip" title={inUse}>{@html tHtml("appearance.editor.inUseFile", { file: inUse })}</span>
+        <button type="button" class="btn small" onclick={removeTheme}>{t("appearance.editor.useNone")}</button>
       {:else}
-        <span class="chip">No theme file in use</span>
+        <span class="chip">{t("appearance.editor.noFileInUse")}</span>
       {/if}
     </div>
   </div>
 
   {#if loadFailed}
-    <p class="msg error" role="alert">The themes could not be listed.</p>
+    <p class="msg error" role="alert">{t("appearance.editor.listFailed")}</p>
   {:else if !themes}
-    <p class="hint pad">Loading themes…</p>
+    <p class="hint pad">{t("appearance.editor.loadingThemes")}</p>
   {:else}
     <div class="block">
-      <h3>Built-in themes</h3>
+      <h3>{t("appearance.editor.builtin")}</h3>
       <div class="grid">
         {#each builtin as theme (theme.file)}
           {@const isEdited = source.kind === "builtin" && source.name === theme.spec.name}
@@ -418,13 +421,13 @@
               <span class="mini-row"><i class="tile"></i><i class="l1 short"></i></span>
             </span>
             <span class="theme-name">{theme.spec.name}</span>
-            {#if sameFile(inUse, theme.file)}<span class="badge">In use</span>{/if}
+            {#if sameFile(inUse, theme.file)}<span class="badge">{t("appearance.editor.inUse")}</span>{/if}
           </button>
         {/each}
       </div>
 
       {#if customThemes.length > 0}
-        <h3>Your themes</h3>
+        <h3>{t("appearance.editor.yours")}</h3>
         <div class="grid">
           {#each customThemes as theme (theme.file)}
             {@const isEdited = source.kind === "file" && sameFile(source.file, theme.file)}
@@ -441,7 +444,7 @@
                 <span class="mini-row"><i class="tile"></i><i class="l1 short"></i></span>
               </span>
               <span class="theme-name">{theme.spec.name}</span>
-              {#if sameFile(inUse, theme.file)}<span class="badge">In use</span>{/if}
+              {#if sameFile(inUse, theme.file)}<span class="badge">{t("appearance.editor.inUse")}</span>{/if}
             </button>
           {/each}
         </div>
@@ -450,12 +453,12 @@
 
     <div class="block">
       <div class="preview-head">
-        <h3>Preview</h3>
-        <div class="segmented" role="radiogroup" aria-label="Variant to preview">
+        <h3>{t("appearance.editor.preview")}</h3>
+        <div class="segmented" role="radiogroup" aria-label={t("appearance.editor.variantToPreview")}>
           {#each modes as mode (mode)}
             <label class:checked={variant === mode}>
               <input type="radio" name="variant" value={mode} bind:group={variant} />
-              <span>{mode === "light" ? "Light" : "Dark"}{spec[mode] ? "" : " (none)"}</span>
+              <span>{spec[mode] ? t(`appearance.mode.${mode}`) : t(`appearance.mode.${mode}None`)}</span>
             </label>
           {/each}
         </div>
@@ -463,40 +466,37 @@
       {#if palette}
         <ThemePreview {spec} {palette} defaults={defaults[editMode]} mode={editMode} />
       {:else}
-        <p class="hint pad">This theme has no colors yet. Add a variant to start editing.</p>
+        <p class="hint pad">{t("appearance.editor.noColorsAddVariant")}</p>
       {/if}
       <div class="variant-actions">
         {#if !spec[variant]}
           <span class="hint">
-            {spec[other]
-              ? `This theme has no ${variant} variant, so its ${other} colors are used in ${variant} mode too.`
-              : "No colors yet."}
+            {spec[other] ? t(`appearance.variant.missing.${variant}`) : t("appearance.variant.noColors")}
           </span>
-          <button type="button" class="btn small" onclick={() => addVariant(variant)}>Add {variant} variant</button>
+          <button type="button" class="btn small" onclick={() => addVariant(variant)}>{t(`appearance.variant.add.${variant}`)}</button>
         {:else if spec[other]}
-          <button type="button" class="btn small" onclick={() => removeVariant(variant)}>Remove {variant} variant</button>
+          <button type="button" class="btn small" onclick={() => removeVariant(variant)}>{t(`appearance.variant.remove.${variant}`)}</button>
         {:else}
-          <span class="hint">One palette is used in light and dark mode.</span>
-          <button type="button" class="btn small" onclick={() => addVariant(other)}>Add {other} variant</button>
+          <span class="hint">{t("appearance.variant.onePalette")}</span>
+          <button type="button" class="btn small" onclick={() => addVariant(other)}>{t(`appearance.variant.add.${other}`)}</button>
         {/if}
       </div>
 
       {#if palette}
-        <div class="checks" aria-label="Contrast">
+        <div class="checks" role="group" aria-label={t("appearance.contrast.label")}>
           <ul>
             {#each checks as check (check.id)}
               <li class:fail={!check.aa}>
                 <span class="mark" aria-hidden="true">{check.aa ? "✓" : "!"}</span>
                 <span>{check.label}</span>
                 <span class="ratio">{ratio(check.ratio)}</span>
-                <span class="verdict">{check.aa ? "AA" : "Below AA"}</span>
+                <span class="verdict">{check.aa ? "AA" : t("appearance.contrast.belowAa")}</span>
               </li>
             {/each}
           </ul>
           {#if failing.length > 0}
             <p class="msg warn" role="status">
-              {failing.map((c) => c.label.toLowerCase()).join(", ")}:
-              contrast is below 4.5:1 (WCAG AA), so some people will find this hard to read.
+              {t("appearance.contrast.failing", { pairs: formatList(failing.map((c) => c.label)) })}
             </p>
           {/if}
         </div>
@@ -506,8 +506,8 @@
     <div class="block">
       <div class="row">
         <div class="label">
-          <label class="name" for="theme-name">Name</label>
-          {#if nameError}<span class="msg error" role="alert">{nameError}</span>{/if}
+          <label class="name" for="theme-name">{t("appearance.editor.name")}</label>
+          {#if nameError}<span class="msg error" id="theme-name-error" role="alert">{nameError}</span>{/if}
         </div>
         <input
           id="theme-name"
@@ -516,8 +516,9 @@
           type="text"
           maxlength="60"
           value={spec.name}
-          placeholder="My theme"
+          placeholder={t("appearance.editor.namePlaceholder")}
           aria-invalid={!!nameError}
+          aria-describedby={nameError ? "theme-name-error" : undefined}
           oninput={(e) => {
             const value = e.currentTarget.value;
             edit("name", (s) => (s.name = value));
@@ -525,7 +526,7 @@
         />
       </div>
       <div class="row">
-        <div class="label"><label class="name" for="theme-author">Author</label></div>
+        <div class="label"><label class="name" for="theme-author">{t("appearance.editor.author")}</label></div>
         <input
           id="theme-author"
           class="input"
@@ -541,16 +542,16 @@
 
       <div class="actions">
         <div class="history">
-          <button type="button" class="btn" disabled={!canUndo} onclick={undo}>Undo</button>
-          <button type="button" class="btn" disabled={!canRedo} onclick={redo}>Redo</button>
-          <button type="button" class="btn" disabled={!dirty} onclick={reset}>Reset</button>
+          <button type="button" class="btn" disabled={!canUndo} onclick={undo}>{t("appearance.editor.undo")}</button>
+          <button type="button" class="btn" disabled={!canRedo} onclick={redo}>{t("appearance.editor.redo")}</button>
+          <button type="button" class="btn" disabled={!dirty} onclick={reset}>{t("appearance.editor.reset")}</button>
         </div>
         <div class="primary">
           <button type="button" class="btn" disabled={!canSave} onclick={saveAs}>
-            {overwritePending ? "Replace" : "Save as…"}
+            {overwritePending ? t("appearance.editor.replace") : t("appearance.editor.saveAs")}
           </button>
           <button type="button" class="btn accent" disabled={!canSave} onclick={apply}>
-            {overwritePending ? "Replace and apply" : "Apply"}
+            {overwritePending ? t("appearance.editor.replaceApply") : t("appearance.editor.apply")}
           </button>
         </div>
       </div>
@@ -560,22 +561,22 @@
         </p>
       {/if}
       <div class="files">
-        <button type="button" class="btn small" disabled={busy} onclick={doImport}>Import…</button>
-        <button type="button" class="btn small" disabled={busy} onclick={doExport}>Export…</button>
-        <button type="button" class="btn small" onclick={openFolder}>Open themes folder</button>
+        <button type="button" class="btn small" disabled={busy} onclick={doImport}>{t("appearance.editor.import")}</button>
+        <button type="button" class="btn small" disabled={busy} onclick={doExport}>{t("appearance.editor.export")}</button>
+        <button type="button" class="btn small" onclick={openFolder}>{t("appearance.editor.openFolder")}</button>
       </div>
     </div>
 
     {#if palette}
       <div class="block">
-        <h3>Colors ({editMode})</h3>
+        <h3>{t(`appearance.editor.colors.${editMode}`)}</h3>
         <div class="colors">
           {#each mainFields as field (field.key)}
             <ThemeColorRow {field} value={palette[field.key]} fallback={fallbackFor(field.key)} onchange={setColor} />
           {/each}
         </div>
         <button type="button" class="more" aria-expanded={showMore} onclick={() => (showMore = !showMore)}>
-          {showMore ? "Fewer colors" : "More colors"}
+          {showMore ? t("appearance.editor.fewerColors") : t("appearance.editor.moreColors")}
         </button>
         {#if showMore}
           <div class="colors">
@@ -584,15 +585,15 @@
             {/each}
           </div>
           <div class="derive">
-            <button type="button" class="btn small" onclick={derive}>Derive from text, background and accent</button>
-            <span class="hint">Recomputes borders, tiles, key caps, panels, fields, the accent's hover shade and the selection.</span>
+            <button type="button" class="btn small" onclick={derive}>{t("appearance.editor.derive")}</button>
+            <span class="hint">{t("appearance.editor.deriveHint")}</span>
           </div>
         {/if}
       </div>
     {/if}
 
     <div class="block">
-      <h3>Sizes and font</h3>
+      <h3>{t("appearance.editor.sizesFont")}</h3>
       <div class="colors">
         {#each sizes as control (control.id)}
           {@const value = control.get(spec)}
@@ -611,23 +612,23 @@
                 value={value ?? control.fallback}
                 oninput={(e) => setSize(control, Number(e.currentTarget.value))}
               />
-              <output for="size-{control.id}">{value ?? control.fallback}{control.unit}</output>
+              <output for="size-{control.id}">{sizeValue(value ?? control.fallback, control.unit)}</output>
               <button
                 type="button"
                 class="btn small"
                 disabled={value === null}
-                title="Use the default"
-                aria-label="Use the default {control.label.toLowerCase()}"
-                onclick={() => setSize(control, null)}>Default</button
+                title={t("appearance.editor.useDefault")}
+                aria-label={t("appearance.editor.useDefaultFor", { name: control.label })}
+                onclick={() => setSize(control, null)}>{t("appearance.editor.default")}</button
               >
             </div>
           </div>
         {/each}
         <div class="row">
           <div class="label">
-            <label class="name" for="theme-font">Font</label>
-            <span class="hint">A comma-separated list, such as Fira Sans, sans-serif. Empty uses the system font.</span>
-            {#if fontError}<span class="msg error" role="alert">{fontError}</span>{/if}
+            <label class="name" for="theme-font">{t("appearance.extras.font")}</label>
+            <span class="hint">{t("appearance.extras.fontHint")}</span>
+            {#if fontError}<span class="msg error" id="theme-font-error" role="alert">{fontError}</span>{/if}
             {#if fontNote}<span class="hint">{fontNote}</span>{/if}
           </div>
           <div class="font-controls">
@@ -641,6 +642,7 @@
               spellcheck="false"
               autocomplete="off"
               aria-invalid={!!fontError}
+              aria-describedby={fontError ? "theme-font-error" : undefined}
               oninput={(e) => {
                 const value = e.currentTarget.value;
                 edit("font", (s) => (s.font.family = value));
@@ -651,7 +653,7 @@
                 <option value={font}></option>
               {/each}
             </datalist>
-            <button type="button" class="btn small" onclick={loadInstalledFonts}>Installed fonts</button>
+            <button type="button" class="btn small" onclick={loadInstalledFonts}>{t("appearance.editor.installedFonts")}</button>
           </div>
         </div>
       </div>
@@ -771,7 +773,7 @@
   }
 
   .theme:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 
@@ -1025,7 +1027,7 @@
   }
 
   .input:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: -1px;
   }
 
@@ -1073,7 +1075,7 @@
   }
 
   .btn:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 
@@ -1157,7 +1159,7 @@
   }
 
   .slider input[type="range"]:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 4px;
     border-radius: 4px;
   }

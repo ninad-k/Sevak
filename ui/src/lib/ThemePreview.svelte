@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { ResultDto } from "./ipc";
   import ResultRow from "./ResultRow.svelte";
+  import { t } from "./i18n.svelte";
   import { applyVariables, previewVariables, SIZE_DEFAULTS, type Mode, type Palette, type ThemeSpec } from "./themes";
 
   // A live preview of the launcher: the real result row component with mock
@@ -23,13 +24,18 @@
   } = $props();
 
   const none = { secondary: [], copy_text: null, autocomplete: null };
-  const rows: ResultDto[] = [
-    { id: "preview:chrome", title: "Google Chrome", subtitle: "Application", icon: { kind: "builtin", name: "app" }, plugin_id: "apps", action: "launch", ...none },
-    { id: "preview:calc", title: "Calculator", subtitle: "Application", icon: { kind: "builtin", name: "calculator" }, plugin_id: "apps", action: "launch", ...none },
+  const rows: ResultDto[] = $derived([
+    { id: "preview:chrome", title: "Google Chrome", subtitle: t("appearance.preview.application"), icon: { kind: "builtin", name: "app" }, plugin_id: "apps", action: "launch", ...none },
+    { id: "preview:calc", title: t("appearance.preview.calculator"), subtitle: t("appearance.preview.application"), icon: { kind: "builtin", name: "calculator" }, plugin_id: "apps", action: "launch", ...none },
     { id: "preview:file", title: "quarterly-report-final.xlsx", subtitle: "C:/Users/you/Documents/Reports/2026/Q3", icon: { kind: "builtin", name: "file" }, plugin_id: "files", action: "open_path", ...none },
-    { id: "preview:web", title: "Search Google for “chrome themes”", subtitle: "Web search", icon: { kind: "builtin", name: "web" }, plugin_id: "web:g", action: "open_url", ...none },
-  ];
-  const verbs = ["Launch", "Launch", "Open", "Search"];
+    { id: "preview:web", title: t("appearance.preview.searchGoogle"), subtitle: t("appearance.preview.webSearch"), icon: { kind: "builtin", name: "web" }, plugin_id: "web:g", action: "open_url", ...none },
+  ]);
+  const verbs = $derived([
+    t("appearance.preview.launch"),
+    t("appearance.preview.launch"),
+    t("appearance.preview.open"),
+    t("appearance.preview.search"),
+  ]);
   const glyphs = ["app", "calculator", "file", "web"];
 
   let host: HTMLElement | undefined = $state();
@@ -46,7 +52,7 @@
   <div class="card" style:max-width="{width}px">
     <div class="bar">
       <img class="brand-icon" src="/sevak-icon.png" width="28" height="28" alt="" draggable="false" />
-      <input type="text" readonly tabindex="-1" value={query} placeholder="Type to search…" />
+      <input type="text" readonly tabindex="-1" value={query} placeholder={t("appearance.preview.placeholder")} />
     </div>
     <div class="results">
       {#each rows as item, i (item.id)}
@@ -54,8 +60,8 @@
       {/each}
     </div>
     <div class="hints">
-      <span class="chips"><span class="chip"><kbd>Ctrl</kbd>Show in folder</span></span>
-      <span class="chip more"><kbd>→</kbd>Actions</span>
+      <span class="chips"><span class="chip"><kbd>Ctrl</kbd>{t("appearance.preview.showInFolder")}</span></span>
+      <span class="chip more"><kbd>→</kbd>{t("appearance.preview.actions")}</span>
     </div>
   </div>
 </div>

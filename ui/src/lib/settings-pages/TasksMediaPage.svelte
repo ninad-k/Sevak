@@ -6,6 +6,7 @@
   import KeywordRow from "./KeywordRow.svelte";
   import Row from "./Row.svelte";
   import { TASK_KEYS } from "./keys";
+  import { t, tHtml } from "../i18n.svelte";
   import "./pages.css";
 
   let {
@@ -22,43 +23,30 @@
 </script>
 
 <div class="sp-page">
-  <h1>Tasks &amp; media</h1>
-  <p class="sp-lead">
-    Ready-made actions for the operating system, and the buttons of whatever is playing.
-  </p>
+  <h1>{t("pages.tasks.title")}</h1>
+  <p class="sp-lead">{t("pages.tasks.lead")}</p>
 
-  <h2 class="sp-h2">Automation tasks</h2>
-  <p class="sp-sub">
-    Dark mode, volume, screenshots, quit or kill an app, eject a drive, keep the computer awake and
-    more. Type a task’s name, or <code>{config.tasks.keyword.trim() || "t"} </code> to list them all.
-  </p>
+  <h2 class="sp-h2">{t("pages.tasks.tasksTitle")}</h2>
+  <p class="sp-sub">{@html tHtml("pages.tasks.tasksSub", { keyword: config.tasks.keyword.trim() || "t" })}</p>
   <div class="sp-group">
-    <Row
-      label="Ask before risky tasks"
-      hint="Confirm before force quitting an app, ending a process and restarting Explorer or Finder."
-    >
-      <Toggle bind:checked={config.tasks.confirm} label="Ask before risky tasks" />
+    <Row label={t("pages.tasks.confirm")} hint={t("pages.tasks.confirmHint")}>
+      <Toggle bind:checked={config.tasks.confirm} label={t("pages.tasks.confirm")} />
     </Row>
     <KeywordRow
       id="tasks-keyword"
       bind:value={config.tasks.keyword}
       error={problems.keywords["tasks.keyword"]}
-      hint="Type the keyword and a space to list the tasks. Empty removes the keyword."
+      hint={t("pages.tasks.keywordHint")}
     />
-    <Row
-      label="Show in ordinary searches"
-      hint="Also match task names in plain searches such as “dark mode” or “kill chrome”."
-    >
-      <Toggle bind:checked={config.tasks.global} label="Show tasks in ordinary searches" />
+    <Row label={t("pages.common.showInOrdinary")} hint={t("pages.tasks.globalHint")}>
+      <Toggle bind:checked={config.tasks.global} label={t("pages.tasks.globalToggle")} />
     </Row>
     <div class="sp-field">
-      <span class="sp-name">Tasks to offer</span>
-      <span class="sp-hint">
-        Untick a task to hide it. Only the tasks that work on this computer are offered at all.
-      </span>
+      <span class="sp-name">{t("pages.tasks.offer")}</span>
+      <span class="sp-hint">{t("pages.tasks.offerHint")}</span>
       <KeySet
         id="tasks-keys"
-        label="Tasks to offer"
+        label={t("pages.tasks.offer")}
         mode="hide"
         options={TASK_KEYS}
         bind:list={config.tasks.disabled}
@@ -66,69 +54,44 @@
     </div>
   </div>
   {#if platform === "windows"}
-    <p class="sp-note">
-      Toggling Wi-Fi or Bluetooth needs <em>Settings, Privacy &amp; security, Radios</em> to allow
-      desktop apps.
-    </p>
+    <p class="sp-note">{@html tHtml("pages.tasks.noteWindows")}</p>
   {:else if platform === "macos"}
-    <p class="sp-note">
-      The first use of dark mode, volume, quit or hide-others asks for permission to control System
-      Events; hide-others and show-desktop also need <strong>Accessibility</strong>.
-    </p>
+    <p class="sp-note">{@html tHtml("pages.tasks.noteMac")}</p>
   {:else}
-    <p class="sp-note">
-      Tasks that need a helper program (<code>wmctrl</code>, <code>nmcli</code>,
-      <code>udisksctl</code>…) are not listed when it is not installed.
-    </p>
+    <p class="sp-note">{@html tHtml("pages.tasks.noteLinux")}</p>
   {/if}
   {#if pluginOff("tasks")}
     <p class="sp-note warn" role="status">
-      “Automation tasks” is switched off under <strong>Plugins</strong>. Switch it on there as well.
+      {@html tHtml("pages.common.pluginOff", { name: t("pages.tasks.tasksPlugin") })}
     </p>
   {/if}
 
-  <h2 class="sp-h2">Media controls</h2>
-  <p class="sp-sub">
-    Play, pause, next and previous for whatever is playing, without switching to the player: type
-    <code>pause</code> or <code>{config.media.keyword.trim() || "play"} </code>.
-  </p>
+  <h2 class="sp-h2">{t("pages.tasks.mediaTitle")}</h2>
+  <p class="sp-sub">{@html tHtml("pages.tasks.mediaSub", { keyword: config.media.keyword.trim() || "play" })}</p>
   <div class="sp-group">
     <KeywordRow
       id="media-keyword"
       bind:value={config.media.keyword}
       error={problems.keywords["media.keyword"]}
-      hint="Type the keyword and a space to list the buttons and the track. Empty removes the keyword."
+      hint={t("pages.tasks.mediaKeywordHint")}
     />
-    <Row
-      label="Show in ordinary searches"
-      hint="Also match “pause”, “next track” and so on in plain searches."
-    >
-      <Toggle bind:checked={config.media.global} label="Show media controls in ordinary searches" />
+    <Row label={t("pages.common.showInOrdinary")} hint={t("pages.tasks.mediaGlobalHint")}>
+      <Toggle bind:checked={config.media.global} label={t("pages.tasks.mediaGlobalToggle")} />
     </Row>
-    <Row
-      label="Show what is playing"
-      hint="A row with the title, artist and app. It is read from your media player when you search, and never stored or sent anywhere."
-    >
-      <Toggle bind:checked={config.media.now_playing} label="Show what is playing" />
+    <Row label={t("pages.tasks.nowPlaying")} hint={t("pages.tasks.nowPlayingHint")}>
+      <Toggle bind:checked={config.media.now_playing} label={t("pages.tasks.nowPlaying")} />
     </Row>
   </div>
   {#if platform === "linux"}
-    <p class="sp-note">
-      Needs <strong><code>playerctl</code></strong>: the buttons and the track are not offered until
-      it is installed.
-    </p>
+    <p class="sp-note">{@html tHtml("pages.tasks.mediaNoteLinux")}</p>
   {:else if platform === "macos"}
-    <p class="sp-note">
-      Buttons use the media keys. The playing track can only be read from Music and Spotify.
-    </p>
+    <p class="sp-note">{t("pages.tasks.mediaNoteMac")}</p>
   {:else}
-    <p class="sp-note">
-      Uses the system media session (the one in the volume flyout), else the media keys.
-    </p>
+    <p class="sp-note">{t("pages.tasks.mediaNoteWindows")}</p>
   {/if}
   {#if pluginOff("media")}
     <p class="sp-note warn" role="status">
-      “Media controls” is switched off under <strong>Plugins</strong>. Switch it on there as well.
+      {@html tHtml("pages.common.pluginOff", { name: t("pages.tasks.mediaPlugin") })}
     </p>
   {/if}
 </div>

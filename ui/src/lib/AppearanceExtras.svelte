@@ -1,7 +1,9 @@
 <script lang="ts">
   import Toggle from "./Toggle.svelte";
+  import { formatNumber, t, tHtml } from "./i18n.svelte";
   import type { Appearance } from "./settings-ipc";
   import {
+    MAX_ANIMATION_MS,
     MAX_FONT_SIZE,
     MAX_OPACITY,
     MAX_RADIUS,
@@ -42,15 +44,15 @@
 <section class="group">
   <div class="row">
     <div class="label">
-      <label class="name" for="accent">Accent color</label>
-      <span class="hint">Highlights and the selected row. Empty keeps the theme's own.</span>
-      {#if errors.accent}<span class="msg error" role="alert">{errors.accent}</span>{/if}
+      <label class="name" for="accent">{t("appearance.extras.accent")}</label>
+      <span class="hint">{t("appearance.extras.accentHint")}</span>
+      {#if errors.accent}<span class="msg error" id="accent-error" role="alert">{errors.accent}</span>{/if}
     </div>
     <div class="control">
       <input
         type="color"
         class="swatch"
-        aria-label="Pick the accent color"
+        aria-label={t("appearance.extras.pickAccent")}
         value={toHex(appearance.accent)}
         oninput={(e) => (appearance.accent = e.currentTarget.value)}
       />
@@ -64,20 +66,21 @@
         spellcheck="false"
         autocomplete="off"
         aria-invalid={!!errors.accent}
+        aria-describedby={errors.accent ? "accent-error" : undefined}
       />
       <button
         type="button"
         class="btn"
         disabled={appearance.accent === ""}
-        onclick={() => (appearance.accent = "")}>Reset</button
+        onclick={() => (appearance.accent = "")}>{t("appearance.extras.reset")}</button
       >
     </div>
   </div>
 
   <div class="row">
     <div class="label">
-      <label class="name" for="font-size">Font size</label>
-      <span class="hint">Size of the result titles; the search bar scales with it.</span>
+      <label class="name" for="font-size">{t("appearance.extras.fontSize")}</label>
+      <span class="hint">{t("appearance.extras.fontSizeHint")}</span>
     </div>
     <div class="slider">
       <input
@@ -88,15 +91,15 @@
         step="1"
         bind:value={appearance.font_size}
       />
-      <output for="font-size">{appearance.font_size} px</output>
+      <output for="font-size">{t("appearance.units.px", { value: appearance.font_size })}</output>
     </div>
   </div>
 
   <div class="row">
     <div class="label">
-      <label class="name" for="font-family">Font</label>
-      <span class="hint">A comma-separated list, such as Fira Sans, sans-serif. Empty uses the system font.</span>
-      {#if errors.fontFamily}<span class="msg error" role="alert">{errors.fontFamily}</span>{/if}
+      <label class="name" for="font-family">{t("appearance.extras.font")}</label>
+      <span class="hint">{t("appearance.extras.fontHint")}</span>
+      {#if errors.fontFamily}<span class="msg error" id="font-family-error" role="alert">{errors.fontFamily}</span>{/if}
     </div>
     <input
       id="font-family"
@@ -107,13 +110,14 @@
       spellcheck="false"
       autocomplete="off"
       aria-invalid={!!errors.fontFamily}
+      aria-describedby={errors.fontFamily ? "font-family-error" : undefined}
     />
   </div>
 
   <div class="row">
     <div class="label">
-      <label class="name" for="opacity">Background opacity</label>
-      <span class="hint">Lower values let the desktop show through the search bar.</span>
+      <label class="name" for="opacity">{t("appearance.extras.opacity")}</label>
+      <span class="hint">{t("appearance.extras.opacityHint")}</span>
     </div>
     <div class="slider">
       <input
@@ -124,26 +128,24 @@
         step="1"
         bind:value={appearance.opacity}
       />
-      <output for="opacity">{appearance.opacity}%</output>
+      <output for="opacity">{formatNumber(appearance.opacity / 100, { style: "percent" })}</output>
     </div>
   </div>
 
   {#if blurSupported}
     <div class="row">
       <div class="label">
-        <span class="name">Frosted-glass blur</span>
-        <span class="hint">
-          Blurs the desktop behind the search bar. Lower the opacity above to see it.
-        </span>
+        <span class="name">{t("appearance.extras.blur")}</span>
+        <span class="hint">{t("appearance.extras.blurHint")}</span>
       </div>
-      <Toggle bind:checked={appearance.blur} label="Frosted-glass blur" />
+      <Toggle bind:checked={appearance.blur} label={t("appearance.extras.blur")} />
     </div>
   {/if}
 
   <div class="row">
     <div class="label">
-      <label class="name" for="radius">Corner radius</label>
-      <span class="hint">Roundness of the search bar.</span>
+      <label class="name" for="radius">{t("appearance.extras.radius")}</label>
+      <span class="hint">{t("appearance.extras.radiusHint")}</span>
     </div>
     <div class="slider">
       <input
@@ -154,18 +156,60 @@
         step="1"
         bind:value={appearance.radius}
       />
-      <output for="radius">{appearance.radius} px</output>
+      <output for="radius">{t("appearance.units.px", { value: appearance.radius })}</output>
     </div>
   </div>
 
   <div class="row">
     <div class="label">
-      <label class="name" for="custom-css">Custom stylesheet</label>
-      <span class="hint">
-        A CSS file inside the config folder that overrides the theme variables, such as
-        <code>theme.css</code>. See docs/themes.md.
-      </span>
-      {#if errors.customCss}<span class="msg error" role="alert">{errors.customCss}</span>{/if}
+      <label class="name" for="settings-theme">{t("appearance.extras.settingsTheme")}</label>
+      <span class="hint">{t("appearance.extras.settingsThemeHint")}</span>
+    </div>
+    <select id="settings-theme" class="input select" bind:value={appearance.settings_theme}>
+      <option value="follow">{t("appearance.extras.settingsThemeFollow")}</option>
+      <option value="light">{t("appearance.extras.settingsThemeLight")}</option>
+      <option value="dark">{t("appearance.extras.settingsThemeDark")}</option>
+      <option value="system">{t("appearance.extras.settingsThemeSystem")}</option>
+    </select>
+  </div>
+
+  <div class="row">
+    <div class="label">
+      <label class="name" for="open-animation">{t("appearance.extras.openAnimation")}</label>
+      <span class="hint">{t("appearance.extras.openAnimationHint")}</span>
+    </div>
+    <select id="open-animation" class="input select" bind:value={appearance.open_animation}>
+      <option value="fade">{t("appearance.extras.openFade")}</option>
+      <option value="fade_scale">{t("appearance.extras.openFadeScale")}</option>
+      <option value="none">{t("appearance.extras.openNone")}</option>
+    </select>
+  </div>
+
+  {#if appearance.open_animation !== "none"}
+    <div class="row">
+      <div class="label">
+        <label class="name" for="animation-ms">{t("appearance.extras.animationMs")}</label>
+        <span class="hint">{t("appearance.extras.animationMsHint")}</span>
+      </div>
+      <div class="slider">
+        <input
+          id="animation-ms"
+          type="range"
+          min="0"
+          max={MAX_ANIMATION_MS}
+          step="10"
+          bind:value={appearance.animation_ms}
+        />
+        <output for="animation-ms">{t("appearance.units.ms", { value: appearance.animation_ms })}</output>
+      </div>
+    </div>
+  {/if}
+
+  <div class="row">
+    <div class="label">
+      <label class="name" for="custom-css">{t("appearance.extras.customCss")}</label>
+      <span class="hint">{@html tHtml("appearance.extras.customCssHint")}</span>
+      {#if errors.customCss}<span class="msg error" id="custom-css-error" role="alert">{errors.customCss}</span>{/if}
     </div>
     <input
       id="custom-css"
@@ -177,6 +221,7 @@
       spellcheck="false"
       autocomplete="off"
       aria-invalid={!!errors.customCss}
+      aria-describedby={errors.customCss ? "custom-css-error" : undefined}
     />
   </div>
 </section>
@@ -221,7 +266,7 @@
     color: var(--muted);
   }
 
-  code {
+  .hint :global(code) {
     padding: 0 4px;
     border-radius: 4px;
     background: var(--kbd-bg);
@@ -282,7 +327,7 @@
   }
 
   .input:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: -1px;
   }
 
@@ -307,7 +352,7 @@
   }
 
   .btn:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 
@@ -351,7 +396,7 @@
   }
 
   .slider input[type="range"]:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 4px;
     border-radius: 4px;
   }

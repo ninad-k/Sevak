@@ -93,6 +93,8 @@ plugins:
         - writing-extensions-in-rust.md
         - development.md
         - releasing.md
+        - publisher-signing.md
+        - installer-validation.md
         - testing.md
         - brand.md
         - security/*
@@ -107,6 +109,8 @@ nav:
   - User guide:
       - Searching and launching: usage.md
       - Keyboard shortcuts: keyboard.md
+      - Accessibility: accessibility.md
+      - Languages: localisation.md
       - Settings window: settings.md
       - Themes: themes.md
       - Backup and restore: backup-and-restore.md
@@ -135,6 +139,11 @@ nav:
       - Script plugins: features/script-plugins.md
       - Workflows: workflows.md
       - "Extensions: browse and install": features/extensions.md
+      - SSH hosts: features/ssh.md
+      - Recent projects: features/projects.md
+      - Calendar: features/calendar.md
+      - World clock and time zones: features/clock.md
+      - Password generator: features/passwords.md
   - Reference:
       - Configuration file: configuration.md
       - Command line: cli.md
@@ -161,6 +170,8 @@ nav:
           - For maintainers: marketplace/maintainers.md
       - Development: development.md
       - Releasing: releasing.md
+      - Publisher signing: publisher-signing.md
+      - Installer validation: installer-validation.md
       - Testing: testing.md
       - Name and brand: brand.md
   - Design decisions:

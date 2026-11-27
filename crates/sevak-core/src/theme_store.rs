@@ -448,7 +448,7 @@ mod tests {
         let second = install_builtin(dir.path(), "Dracula").unwrap();
         assert_eq!(second.spec.dark.as_ref().unwrap()["background"], "#000000");
         assert!(install_builtin(dir.path(), "No such theme").is_err());
-        assert_eq!(builtin().len(), 8);
+        assert_eq!(builtin().len(), 11);
     }
 
     #[test]

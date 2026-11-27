@@ -1,4 +1,5 @@
-; Sevak's installer text (English only).
+; Sevak's installer text in English, the source for German.nsh, French.nsh and
+; Spanish.nsh (docs/localisation.md; Hindi is not offered by Tauri's NSIS bundler).
 ;
 ; This replaces Tauri's languages/English.nsh through
 ; bundle.windows.nsis.customLanguageFiles. Every string of the upstream file is

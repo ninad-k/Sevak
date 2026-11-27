@@ -472,4 +472,13 @@ pub trait PlatformProvider: Send + Sync {
     fn list_monitors(&self) -> Result<Vec<Monitor>> {
         Err(crate::error::PlatformError::Unsupported("listing displays"))
     }
+
+    /// Like [`PlatformProvider::set_clipboard_text`], for a secret (a generated
+    /// password): the text is marked so that the OS clipboard history and cloud
+    /// sync (Windows Win+V, macOS clipboard managers honouring
+    /// `org.nspasteboard.ConcealedType`, the KDE password-manager hint) and
+    /// Sevak's own clipboard history leave it out.
+    fn set_clipboard_text_private(&self, text: &str) -> Result<()> {
+        crate::clipboard::set_text_private(text)
+    }
 }

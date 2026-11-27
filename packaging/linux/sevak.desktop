@@ -7,7 +7,7 @@ Exec={{exec}}
 Icon={{icon}}
 Terminal=false
 Categories={{categories}}
-Keywords=launcher;search;run;apps;calculator;files;
+Keywords=launcher;search;run;apps;calculator;files;clock;password;ssh;calendar;
 Actions=Toggle;
 
 [Desktop Action Toggle]

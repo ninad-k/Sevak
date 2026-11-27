@@ -164,6 +164,14 @@ describe("before a list is loaded", () => {
     expect((await screen.findByRole("alert")).textContent).toContain("Showing the list saved 3 days ago");
     expect(screen.getByText("Docs search")).toBeTruthy();
   });
+
+  it("notes a signed index only when the release signature was verified", async () => {
+    await show(overview({ catalog: catalog([DOCS], { index_signature: "verified" }) }));
+    expect(screen.getByText("Signed index")).toBeTruthy();
+    cleanup();
+    await show(overview({ catalog: catalog([DOCS], { index_signature: "legacy_unsigned" }) }));
+    expect(screen.queryByText("Signed index")).toBeNull();
+  });
 });
 
 describe("browsing", () => {
@@ -202,9 +210,7 @@ describe("browsing", () => {
     );
     await fireEvent.click(screen.getByRole("button", { name: "Install Docs search" }));
     await waitFor(() => expect(ipc.installItem).toHaveBeenCalledWith("docs"));
-    expect((await screen.findByRole("status", {}, { timeout: 2000 })).textContent).toContain(
-      "Installed Docs search",
-    );
+    expect(await screen.findByText(/Installed Docs search/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Docs search: Installed" }).hasAttribute("disabled")).toBe(true);
   });
 
@@ -371,5 +377,87 @@ describe("what is installed", () => {
     await waitFor(() => expect(ipc.getOverview).toHaveBeenCalledTimes(2));
     await fireEvent.click(screen.getByRole("tab", { name: /Installed/ }));
     expect(await screen.findByText("Zed")).toBeTruthy();
+  });
+});
+
+describe("extension lifecycle notices", () => {
+  const revoked = { id: "docs", versions: ["1.0"], reason: "This version exposes private data.", advisory_url: null };
+
+  it("shows unknown status before an explicit advisory check", async () => {
+    await show(overview());
+    expect(screen.getByText(/Current revocation status is unknown/)).toBeTruthy();
+    expect(ipc.refreshCatalog).not.toHaveBeenCalled();
+    await fireEvent.click(screen.getByRole("tab", { name: /Installed/ }));
+    vi.mocked(ipc.refreshCatalog).mockResolvedValue(ok(overview({ advisories: { state: "unavailable", message: "Signed advisories are unavailable; current status is unknown.", issued_at: null, expires_at: null } })));
+    await fireEvent.click(screen.getByRole("button", { name: "Check extension advisories" }));
+    await waitFor(() => expect(ipc.refreshCatalog).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText(/Signed advisories are unavailable/)).toBeTruthy();
+  });
+
+  it("surfaces a failed refresh without retaining a misleading verified status", async () => {
+    const old = overview({ catalog: catalog([DOCS]), advisories: { state: "verified", message: "Signed extension advisories verified.", issued_at: 1, expires_at: 2 } });
+    await show(old);
+    vi.mocked(ipc.refreshCatalog).mockResolvedValue({ ok: false, error: "Network is offline" });
+    vi.mocked(ipc.getOverview).mockResolvedValue(ok({ ...old, advisories: { state: "unavailable", message: "Current revocation status is unknown: offline.", issued_at: 1, expires_at: 2 } }));
+    await fireEvent.click(screen.getByRole("button", { name: "Refresh the list" }));
+    expect(await screen.findByText(/Network is offline/)).toBeTruthy();
+    expect(await screen.findByText(/Current revocation status is unknown: offline/)).toBeTruthy();
+    expect(screen.queryByText("Signed extension advisories verified.")).toBeNull();
+  });
+
+  it("displays deprecation and replacement and offers no new install", async () => {
+    await show(overview({ catalog: catalog([{ ...DOCS, state: "unavailable", deprecated: "Use the maintained replacement.", replaced_by: "new-docs" }]) }));
+    expect(screen.getByText(/Deprecated: Use the maintained replacement.*Replacement: new-docs/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Install Docs search" })).toBeNull();
+  });
+
+  it("blocks both catalog and detail install controls for a revoked version", async () => {
+    // "available": only the revocation guards, not the state, hide the buttons.
+    await show(overview({ catalog: catalog([{ ...DOCS, revocation: revoked, state: "available" }]) }));
+    expect(screen.getByText(/Revoked: This version exposes private data/)).toBeTruthy();
+    const installs = () => screen.queryAllByRole("button", { name: "Install Docs search" });
+    expect(installs()).toHaveLength(0);
+    await fireEvent.click(document.getElementById("ext-head-docs") as HTMLElement);
+    expect(document.getElementById("ext-detail-docs")).toBeTruthy();
+    expect(installs()).toHaveLength(0);
+    expect(ipc.installItem).not.toHaveBeenCalled();
+  });
+
+  it("names a listed replacement instead of showing its id", async () => {
+    await show(overview({ catalog: catalog([{ ...DOCS, deprecated: "Unmaintained.", replaced_by: "nord" }, NORD]) }));
+    expect(screen.getByText(/Deprecated: Unmaintained\. Replacement: Nord\./)).toBeTruthy();
+  });
+
+  it("says where a revoked copy without an install record is", async () => {
+    await show(
+      overview({
+        unrecorded: [
+          {
+            id: "docs",
+            kind: "workflow",
+            name: "Docs search",
+            path: "/home/u/.config/sevak/workflows/docs",
+            revocation: { ...revoked, versions: ["*"] },
+          },
+        ],
+      }),
+    );
+    await fireEvent.click(screen.getByRole("tab", { name: /Installed/ }));
+    const alert = screen.getByRole("alert").textContent ?? "";
+    expect(alert).toContain("Revoked in every version: This version exposes private data.");
+    expect(alert).toContain("/home/u/.config/sevak/workflows/docs");
+    expect(ipc.uninstallItem).not.toHaveBeenCalled();
+  });
+
+  it("warns about a revoked installed copy and uninstalls only on the user's action", async () => {
+    await show(overview({ installed: [mine({ id: "docs", name: "Docs search", revocation: revoked, can_review: true })] }));
+    await fireEvent.click(screen.getByRole("tab", { name: /Installed/ }));
+    expect(screen.getByRole("alert").textContent).toContain("not removed or disabled automatically");
+    expect(screen.queryByRole("button", { name: "Review Docs search" })).toBeNull();
+    expect(ipc.uninstallItem).not.toHaveBeenCalled();
+    expect(ipc.setItemEnabled).not.toHaveBeenCalled();
+    vi.mocked(ipc.uninstallItem).mockResolvedValue(ok(overview()));
+    await fireEvent.click(screen.getByRole("button", { name: "Uninstall Docs search" }));
+    await waitFor(() => expect(ipc.uninstallItem).toHaveBeenCalledWith("docs"));
   });
 });

@@ -13,6 +13,7 @@ pub mod diagnostics;
 pub mod engine;
 pub mod fuzzy;
 pub mod gallery_source;
+pub mod language;
 pub mod model;
 pub mod netpath;
 pub mod plugin;

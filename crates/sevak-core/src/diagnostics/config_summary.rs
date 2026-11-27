@@ -40,6 +40,7 @@ const GROUPS: &[(&str, &[Field])] = &[
             ("general.check_for_updates", Show::Value),
             // The beta update channel (stable or beta).
             ("general.update_channel", Show::Value),
+            ("general.language", Show::Value),
             ("window.width", Show::Value),
             ("linux.wayland_use_xwayland", Show::Value),
         ],
@@ -148,6 +149,26 @@ const GROUPS: &[(&str, &[Field])] = &[
             ("ai.timeout_secs", Show::Value),
         ],
     ),
+    // How many calendar files, never their names or the events in them.
+    (
+        "SSH, projects and calendar",
+        &[
+            ("ssh.known_hosts", Show::Value),
+            ("projects.editors", Show::Value),
+            ("calendar.files", Show::Count),
+            ("calendar.days", Show::Value),
+        ],
+    ),
+    // How many cities, not which (they can say where the user's people are).
+    (
+        "World clock and password generator",
+        &[
+            ("clock.cities", Show::Count),
+            ("passwords.length", Show::Value),
+            ("passwords.words", Show::Value),
+            ("passwords.symbols", Show::Value),
+        ],
+    ),
 ];
 
 /// Top-level sections reported by custom code or deliberately left out; every
@@ -233,6 +254,11 @@ const KEYWORD_PATHS: &[&str] = &[
     "dictionary.define_keyword",
     "dictionary.spell_keyword",
     "ai.keyword",
+    "ssh.keyword",
+    "projects.keyword",
+    "calendar.keyword",
+    "clock.keyword",
+    "passwords.keyword",
 ];
 
 /// The configurable keywords of `config`, as `(setting, keyword)`; a search

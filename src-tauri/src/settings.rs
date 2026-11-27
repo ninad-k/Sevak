@@ -47,9 +47,12 @@ pub fn open(app: &AppHandle) {
     tracing::info!("opening the settings window");
     let theme = app
         .try_state::<AppState>()
-        .map(|state| state.config().appearance.theme)
+        .map(|state| {
+            let appearance = state.config().appearance;
+            appearance.settings_theme.resolve(appearance.theme)
+        })
         .and_then(window_theme);
-    let result = WebviewWindowBuilder::new(
+    let mut builder = WebviewWindowBuilder::new(
         app,
         window::SETTINGS_LABEL,
         WebviewUrl::App(WINDOW_URL.into()),
@@ -62,8 +65,13 @@ pub fn open(app: &AppHandle) {
     .decorations(true)
     .always_on_top(false)
     .skip_taskbar(false)
-    .theme(theme)
-    .build();
+    .theme(theme);
+    // Must match the launcher's: WebView2 refuses a second webview on the
+    // same data folder with different arguments.
+    if let Some(args) = crate::webview_args::from_env() {
+        builder = builder.additional_browser_args(&args);
+    }
+    let result = builder.build();
     if let Err(err) = result {
         tracing::error!("could not open the settings window: {err}");
     }
@@ -86,6 +94,8 @@ pub struct SettingsDto {
 
 #[tauri::command]
 pub async fn get_settings(app: AppHandle) -> SettingsDto {
+    let startup =
+        autostart::status_off_thread(app.state::<AppState>().paths.config_file.clone()).await;
     let state = app.state::<AppState>();
     let config = state.config();
     let mut catalog = PluginRegistry::builtin().catalog(&config, state.search.platform.clone());
@@ -99,7 +109,7 @@ pub async fn get_settings(app: AppHandle) -> SettingsDto {
         is_gnome: session::is_gnome(),
         config_path: state.paths.config_file.display().to_string(),
         log_dir: state.paths.log_dir.display().to_string(),
-        startup: autostart::status(&state.paths.config_file),
+        startup,
         platform: if cfg!(windows) {
             "windows"
         } else if cfg!(target_os = "macos") {
@@ -233,6 +243,13 @@ fn validate_limits(config: &Config) -> Result<(), String> {
     }
     if let Some(problem) = config.ai.problem() {
         return Err(problem);
+    }
+    let days = config.calendar.days;
+    let max_days = sevak_core::config::MAX_CALENDAR_DAYS;
+    if !(1..=max_days).contains(&days) {
+        return Err(format!(
+            "Calendar: the days ahead must be from 1 to {max_days}."
+        ));
     }
     let gap = config.window_management.gap;
     if !(0..=sevak_core::window_layout::MAX_GAP).contains(&gap) {
@@ -412,10 +429,16 @@ fn save(app: &AppHandle, mut config: Config) -> Result<(), String> {
     let state = app.state::<AppState>();
     normalize_hotkeys(&mut config);
     validate(&config, state.display.hotkey_strategy())?;
-    let config = config.normalized();
-    sevak_platform::startup::save_settings(
+    let mut config = config.normalized();
+    let (previous, wanted) = sevak_platform::startup::settings_preference(
         state.config().general.launch_at_login,
         config.general.launch_at_login,
+        sevak_platform::startup::saved_preference(&state.paths.config_file).ok(),
+    );
+    config.general.launch_at_login = wanted;
+    sevak_platform::startup::save_settings(
+        previous,
+        wanted,
         || autostart::backend(&state.paths.config_file),
         || {
             config
@@ -426,7 +449,7 @@ fn save(app: &AppHandle, mut config: Config) -> Result<(), String> {
     .map_err(|error| format!("Settings were not saved: {error}"))?;
     tracing::info!(path = %state.paths.config_file.display(), "settings saved");
     // Re-reads the file just written, so what runs is exactly what is on disk.
-    app::reload(app);
+    app::reload_after_settings(app);
     Ok(())
 }
 
@@ -760,7 +783,7 @@ mod tests {
     fn built_in_keywords_cannot_collide() {
         assert!(check(&Config::default()).is_ok());
         type Set = fn(&mut Config, &str);
-        let setters: [(&str, Set); 7] = [
+        let setters: [(&str, Set); 9] = [
             ("tasks", |c, k| c.tasks.keyword = k.into()),
             ("media", |c, k| c.media.keyword = k.into()),
             ("contacts", |c, k| c.contacts.keyword = k.into()),
@@ -768,6 +791,8 @@ mod tests {
             ("define", |c, k| c.dictionary.define_keyword = k.into()),
             ("spell", |c, k| c.dictionary.spell_keyword = k.into()),
             ("bookmarks", |c, k| c.bookmarks.keyword = k.into()),
+            ("clock", |c, k| c.clock.keyword = k.into()),
+            ("passwords", |c, k| c.passwords.keyword = k.into()),
         ];
         for (name, set) in setters {
             // A fixed keyword, another built-in one, a web engine's (any
@@ -877,7 +902,20 @@ mod tests {
         config.bookmarks.browsers = vec!["zen".into()];
         config.bookmarks.keyword = "bm".into();
         config.snippets.ignore_apps = vec!["Terminal".into()];
+        config.ssh.keyword = "host".into();
+        config.ssh.known_hosts = true;
+        config.projects.keyword = "proj".into();
+        config.projects.editors = vec!["cursor".into()];
+        config.calendar.keyword = "agenda".into();
+        config.calendar.files = vec!["~/work.ics".into()];
+        config.calendar.days = 14;
         assert_eq!(check(&config), Ok(()));
+        config.calendar.days = 0;
+        assert!(check(&config).unwrap_err().contains("Calendar"));
+        config.calendar.days = 14;
+        config.calendar.keyword = "ssh".into();
+        config.ssh.keyword = "ssh".into();
+        assert!(check(&config).is_err());
     }
 
     #[test]
@@ -1008,6 +1046,11 @@ mod tests {
         config.appearance.accent = String::new();
         config.appearance.opacity = 10;
         assert!(check(&config).is_err());
+        config.appearance.opacity = 100;
+        config.appearance.animation_ms = 400;
+        assert_eq!(check(&config), Ok(()));
+        config.appearance.animation_ms = 401;
+        assert!(check(&config).unwrap_err().starts_with("Appearance:"));
     }
 
     #[test]

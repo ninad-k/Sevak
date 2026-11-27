@@ -39,6 +39,8 @@ use sevak_core::gallery_source::Pin;
 use sevak_core::theme_store::{self, Existing, GalleryEntry as ThemeEntry};
 
 use super::package::{self, ExtensionPackage};
+use super::revocations::{self, Advisories, Notice, Subject};
+use crate::index_signature::{self, IndexSignature};
 use crate::net::{fetch_pinned, sha256_hex, verify_sha256, Https, Transport};
 use crate::script::{current_platform, ApprovalStore};
 use crate::workflow::gallery::{
@@ -166,10 +168,12 @@ pub struct Catalog {
     pub fetched_at: u64,
     /// Read from the local cache, not just now from the network.
     pub from_cache: bool,
+    /// What the package list's release signature check found.
+    pub index_signature: IndexSignature,
 }
 
-/// The cache file: the raw lists as fetched, parsed again on load so the same
-/// rules apply.
+/// The cache file: the raw lists as fetched, with their release signatures,
+/// checked and parsed again on load so the same rules apply.
 #[derive(Debug, Serialize, Deserialize)]
 struct CacheFile {
     version: u32,
@@ -179,6 +183,12 @@ struct CacheFile {
     packages: String,
     themes: Option<String>,
     themes_error: Option<String>,
+    /// The `.sig` text of `packages` (absent in caches of older builds, and
+    /// for releases published before lists were signed).
+    #[serde(default)]
+    packages_signature: Option<String>,
+    #[serde(default)]
+    themes_signature: Option<String>,
 }
 
 /// Whether an item can be installed, is installed, or has a newer version.
@@ -195,6 +205,9 @@ pub enum State {
 /// One row of the catalog as the page and the launcher show it.
 #[derive(Debug, Clone, Serialize)]
 pub struct CatalogItem {
+    pub deprecated: Option<String>,
+    pub replaced_by: Option<String>,
+    pub revocation: Option<Notice>,
     pub id: String,
     pub kind: ItemKind,
     pub name: String,
@@ -235,12 +248,17 @@ pub struct CatalogView {
     pub skipped: usize,
     pub fetched_at: u64,
     pub from_cache: bool,
+    /// `verified`, or `legacy_unsigned` for a release from before lists were signed.
+    pub index_signature: IndexSignature,
     pub items: Vec<CatalogItem>,
 }
 
 /// An installed item.
 #[derive(Debug, Clone, Serialize)]
 pub struct InstalledItem {
+    pub deprecated: Option<String>,
+    pub replaced_by: Option<String>,
+    pub revocation: Option<Notice>,
     pub id: String,
     pub kind: ItemKind,
     pub name: String,
@@ -251,6 +269,19 @@ pub struct InstalledItem {
     /// A newer version in the catalog, if one is loaded.
     pub update_to: Option<String>,
     pub program_sha256: Option<String>,
+}
+
+/// A copy on disk without a receipt that a `"*"` notice revokes
+/// ([`ExtensionStore::unrecorded_revoked`]). The store cannot remove it; the
+/// page shows where it is so the user can.
+#[derive(Debug, Clone, Serialize)]
+pub struct UnrecordedCopy {
+    pub id: String,
+    pub kind: ItemKind,
+    pub name: String,
+    /// The folder (or theme file) on disk.
+    pub path: String,
+    pub revocation: Notice,
 }
 
 /// What an install, update or removal did.
@@ -280,9 +311,17 @@ pub struct ExtensionStore {
     platform: String,
     sevak_version: String,
     catalog: Mutex<Option<Arc<Catalog>>>,
+    advisories: Mutex<Advisories>,
     /// Held while an install, update or removal runs.
     busy: Mutex<()>,
     quiesce: Mutex<Option<Quiesce>>,
+}
+
+/// A downloaded `.sig` as the text saved in the cache.
+fn signature_text(
+    signature: Option<Vec<u8>>,
+) -> Result<Option<String>, std::string::FromUtf8Error> {
+    signature.map(String::from_utf8).transpose()
 }
 
 fn now() -> u64 {
@@ -319,6 +358,7 @@ impl ExtensionStore {
             platform,
             sevak_version,
             catalog: Mutex::new(None),
+            advisories: Mutex::new(Advisories::default()),
             busy: Mutex::new(()),
             quiesce: Mutex::new(None),
         }
@@ -344,11 +384,76 @@ impl ExtensionStore {
         &self.dirs
     }
 
+    pub fn advisory_status(&self) -> revocations::Status {
+        let mut state = self.advisories.lock().unwrap_or_else(|p| p.into_inner());
+        state.load_cached(&self.dirs.state);
+        state.status(now())
+    }
+
+    /// Themes pass [`Subject::Theme`] and an empty version.
+    pub fn revocation(&self, kind: Subject, id: &str, version: &str) -> Option<Notice> {
+        let mut state = self.advisories.lock().unwrap_or_else(|p| p.into_inner());
+        state.load_cached(&self.dirs.state);
+        state.notice(kind, id, version)
+    }
+
+    /// A notice for `id` naming any version, for a copy of unknown version.
+    pub fn any_revocation(&self, kind: Subject, id: &str) -> Option<Notice> {
+        let mut state = self.advisories.lock().unwrap_or_else(|p| p.into_inner());
+        state.load_cached(&self.dirs.state);
+        state.any_notice(kind, id)
+    }
+
+    /// Only call when the user explicitly loads or refreshes a gallery page.
+    ///
+    /// The two downloads run without the advisory lock, so lookups (the pages'
+    /// lists) never wait on the network. Verification, the rollback check
+    /// against the saved copy and the swap then happen under the lock, which
+    /// also serializes them with [`Self::commit_if_not_revoked`].
+    pub fn refresh_advisories(&self) {
+        let fetched = Advisories::fetch(&*self.transport);
+        self.advisories
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .apply(fetched, &self.dirs.state);
+    }
+
+    pub fn check_revocation(&self, kind: Subject, id: &str, version: &str) -> Result<(), String> {
+        if let Some(notice) = self.revocation(kind, id, version) {
+            Err(format!(
+                "This version has been revoked: {}. Remove any installed copy from Extensions.",
+                notice.reason
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Recheck after download, then serialize the local commit with advisory
+    /// replacement. The callback must do no network work or advisory lookups.
+    pub fn commit_if_not_revoked<T>(
+        &self,
+        kind: Subject,
+        id: &str,
+        version: &str,
+        commit: impl FnOnce() -> Result<T, String>,
+    ) -> Result<T, String> {
+        let mut state = self.advisories.lock().unwrap_or_else(|p| p.into_inner());
+        state.load_cached(&self.dirs.state);
+        if let Some(notice) = state.notice(kind, id, version) {
+            return Err(format!("This version has been revoked: {}", notice.reason));
+        }
+        let result = commit();
+        drop(state);
+        result
+    }
+
     // ---- the catalog ----------------------------------------------------
 
     /// Loads the catalog from the network (the user asked) and keeps it, in
     /// memory and in the cache file. Blocking.
     pub fn refresh(&self) -> Result<CatalogView, String> {
+        self.refresh_advisories();
         let pinned = fetch_pinned(
             &*self.transport,
             self.build.as_ref(),
@@ -357,17 +462,24 @@ impl ExtensionStore {
         )?;
         let packages = String::from_utf8(pinned.body)
             .map_err(|_| "Could not load the gallery: the list is not text.".to_owned())?;
-        // The theme list is read from the same release; failing to read it does
-        // not take the packages away.
-        let (themes, themes_error) = match self.transport.get(
-            &pinned.pin.index_url(theme_store::GALLERY_INDEX_FILE),
+        let packages_signature = signature_text(pinned.signature)
+            .map_err(|_| "Could not load the gallery: its signature is not text.".to_owned())?;
+        // The theme list is read from the same release and checked against its
+        // own signature; failing either does not take the packages away.
+        let (themes, themes_signature, themes_error) = match index_signature::fetch_checked(
+            &*self.transport,
+            &pinned.pin,
+            theme_store::GALLERY_INDEX_FILE,
             theme_store::MAX_INDEX_BYTES as usize,
         ) {
-            Ok(body) => match String::from_utf8(body) {
-                Ok(text) => (Some(text), None),
-                Err(_) => (None, Some("the theme list is not text".to_owned())),
+            Ok(checked) => match (
+                String::from_utf8(checked.body),
+                signature_text(checked.signature),
+            ) {
+                (Ok(text), Ok(signature)) => (Some(text), signature, None),
+                _ => (None, None, Some("the theme list is not text".to_owned())),
             },
-            Err(err) => (None, Some(err.to_string())),
+            Err(err) => (None, None, Some(err)),
         };
         let cache = CacheFile {
             version: 1,
@@ -377,6 +489,8 @@ impl ExtensionStore {
             packages,
             themes,
             themes_error,
+            packages_signature,
+            themes_signature,
         };
         let catalog = Self::parse_cache(&cache, false)?;
         // A cache that cannot be written only means the next start begins empty.
@@ -420,9 +534,25 @@ impl ExtensionStore {
     fn parse_cache(cache: &CacheFile, from_cache: bool) -> Result<Catalog, String> {
         let pin = Pin::new(&cache.tag)
             .ok_or_else(|| "the saved gallery list names no valid release".to_owned())?;
+        // The same signature check as a download, before parsing: a saved list
+        // is only as trusted as the release signature saved with it.
+        let index_signature = index_signature::verify(
+            pin.tag(),
+            gallery::INDEX_FILE,
+            cache.packages.as_bytes(),
+            cache.packages_signature.as_deref().map(str::as_bytes),
+        )
+        .map_err(|err| format!("Could not load the gallery: {err}."))?;
         let index = gallery::parse_index(&cache.packages, &pin)?;
         let (themes, themes_error) = match &cache.themes {
-            Some(text) => match theme_store::parse_index(text, &pin) {
+            Some(text) => match index_signature::verify(
+                pin.tag(),
+                theme_store::GALLERY_INDEX_FILE,
+                text.as_bytes(),
+                cache.themes_signature.as_deref().map(str::as_bytes),
+            )
+            .and_then(|_| theme_store::parse_index(text, &pin))
+            {
                 Ok(themes) => (themes, None),
                 Err(err) => (Vec::new(), Some(err)),
             },
@@ -441,6 +571,7 @@ impl ExtensionStore {
             themes_error,
             fetched_at: cache.fetched_at,
             from_cache,
+            index_signature,
         })
     }
 
@@ -459,6 +590,8 @@ impl ExtensionStore {
     }
 
     fn read_receipts(&self) -> Receipts {
+        #[cfg(test)]
+        tests::RECEIPT_READS.with(|reads| reads.set(reads.get() + 1));
         let path = self.receipts_path();
         match read_to_string_capped(&path, MAX_STATE_BYTES) {
             Ok(text) => serde_json::from_str(&text).unwrap_or_else(|err| {
@@ -491,9 +624,9 @@ impl ExtensionStore {
     /// change).
     pub fn installed(&self) -> Vec<InstalledItem> {
         let catalog = self.current();
-        let mut items: Vec<InstalledItem> = self
-            .read_receipts()
-            .items
+        let receipts = self.read_receipts().items;
+        let mut items: Vec<InstalledItem> = receipts
+            .clone()
             .into_iter()
             .filter(|receipt| self.target_of(receipt).is_some_and(|path| path.exists()))
             .map(|receipt| {
@@ -505,11 +638,28 @@ impl ExtensionStore {
                         .filter(|entry| {
                             ItemKind::from_kind(entry.kind) == receipt.kind
                                 && is_newer(&entry.version, &receipt.version)
-                                && self.available(entry).is_ok()
+                                && self.available(entry, &receipts).is_ok()
                         })
                         .map(|entry| entry.version.clone())
                 });
                 InstalledItem {
+                    deprecated: catalog
+                        .as_ref()
+                        .and_then(|c| c.entries.iter().find(|e| e.id == receipt.id))
+                        .and_then(|e| e.deprecated.clone()),
+                    replaced_by: catalog
+                        .as_ref()
+                        .and_then(|c| c.entries.iter().find(|e| e.id == receipt.id))
+                        .and_then(|e| e.replaced_by.clone()),
+                    revocation: self.revocation(
+                        if receipt.kind == ItemKind::Theme {
+                            Subject::Theme
+                        } else {
+                            Subject::Package
+                        },
+                        &receipt.id,
+                        &receipt.version,
+                    ),
                     id: receipt.id,
                     kind: receipt.kind,
                     name: receipt.name,
@@ -531,6 +681,97 @@ impl ExtensionStore {
             .items
             .into_iter()
             .find(|receipt| receipt.id == id)
+    }
+
+    /// Copies on disk that Sevak has no receipt for (a legacy Gallery install,
+    /// a theme installed before Appearance kept receipts, a folder copied by
+    /// hand) and that a signed notice revokes in every version (`"*"`). Their
+    /// version is unknown, so only `"*"` notices are certain to cover them.
+    /// Packages are found by the catalog's folder name, or a folder named as
+    /// the id; themes only through the loaded catalog (it maps id to file).
+    pub fn unrecorded_revoked(&self) -> Vec<UnrecordedCopy> {
+        let notices = {
+            let mut state = self.advisories.lock().unwrap_or_else(|p| p.into_inner());
+            state.load_cached(&self.dirs.state);
+            state.all_version_notices()
+        };
+        if notices.is_empty() {
+            return Vec::new();
+        }
+        let receipts = self.read_receipts().items;
+        let recorded = |id: &str, kind: Subject| {
+            receipts.iter().any(|r| {
+                r.id == id
+                    && (r.kind == ItemKind::Theme) == (kind == Subject::Theme)
+                    && self.target_of(r).is_some_and(|p| p.exists())
+            })
+        };
+        let catalog = self.current();
+        let mut found = Vec::new();
+        for notice in notices {
+            if recorded(&notice.id, notice.kind) {
+                continue;
+            }
+            match notice.kind {
+                Subject::Package => {
+                    let listed = catalog
+                        .as_ref()
+                        .and_then(|c| c.entries.iter().find(|e| e.id == notice.id));
+                    let candidates: Vec<(ItemKind, String, String)> = match listed {
+                        Some(entry) => vec![(
+                            ItemKind::from_kind(entry.kind),
+                            entry.folder_name().to_owned(),
+                            entry.name.clone(),
+                        )],
+                        None => [ItemKind::Workflow, ItemKind::Plugin]
+                            .into_iter()
+                            .map(|kind| (kind, notice.id.clone(), notice.id.clone()))
+                            .collect(),
+                    };
+                    for (kind, folder, name) in candidates {
+                        if !valid_folder_name(&folder) {
+                            continue;
+                        }
+                        let (root, manifest) = match kind {
+                            ItemKind::Workflow => (&self.dirs.workflows, Kind::Workflow),
+                            _ => (&self.dirs.plugins, Kind::Plugin),
+                        };
+                        let path = root.join(&folder);
+                        if path.join(manifest.manifest_file()).is_file() {
+                            found.push(UnrecordedCopy {
+                                id: notice.id.clone(),
+                                kind,
+                                name,
+                                path: path.display().to_string(),
+                                revocation: notice.clone(),
+                            });
+                        }
+                    }
+                }
+                Subject::Theme => {
+                    let Some(theme) = catalog
+                        .as_ref()
+                        .and_then(|c| c.themes.iter().find(|t| t.id == notice.id))
+                    else {
+                        continue;
+                    };
+                    let path = self
+                        .dirs
+                        .config_dir
+                        .join(theme_store::file_for(&theme.name));
+                    if path.is_file() {
+                        found.push(UnrecordedCopy {
+                            id: notice.id.clone(),
+                            kind: ItemKind::Theme,
+                            name: theme.name.clone(),
+                            path: path.display().to_string(),
+                            revocation: notice,
+                        });
+                    }
+                }
+            }
+        }
+        found
     }
 
     // ---- the page's view ----------------------------------------------------
@@ -557,13 +798,28 @@ impl ExtensionStore {
             skipped: catalog.skipped,
             fetched_at: catalog.fetched_at,
             from_cache: catalog.from_cache,
+            index_signature: catalog.index_signature,
             items,
         }
     }
 
     /// Whether this computer can install `entry`: the Sevak version it needs
     /// and, for a native extension, a build for this platform.
-    fn available(&self, entry: &Entry) -> Result<(), String> {
+    /// `receipts` is what [`Self::read_receipts`] returned, read once by the
+    /// caller rather than once per entry.
+    fn available(&self, entry: &Entry, receipts: &[Receipt]) -> Result<(), String> {
+        self.check_revocation(Subject::Package, &entry.id, &entry.version)?;
+        if let Some(reason) = &entry.deprecated {
+            if !receipts
+                .iter()
+                .find(|r| r.id == entry.id)
+                .is_some_and(|r| self.target_of(r).is_some_and(|p| p.exists()))
+            {
+                return Err(format!(
+                    "Deprecated; new installs are unavailable: {reason}"
+                ));
+            }
+        }
         if let Some(min) = &entry.min_sevak {
             if let (Ok(min), Ok(running)) = (
                 semver::Version::parse(min),
@@ -593,7 +849,7 @@ impl ExtensionStore {
         let kind = ItemKind::from_kind(entry.kind);
         let receipt = receipts.iter().find(|r| r.id == entry.id && r.kind == kind);
         let on_disk = receipt.filter(|r| self.target_of(r).is_some_and(|path| path.exists()));
-        let unavailable = self.available(entry).err();
+        let unavailable = self.available(entry, receipts).err();
         let (state, installed_version) = match (on_disk, &unavailable) {
             (Some(r), _) if is_newer(&entry.version, &r.version) && unavailable.is_none() => {
                 (State::UpdateAvailable, Some(r.version.clone()))
@@ -611,6 +867,9 @@ impl ExtensionStore {
             .then(|| entry.platforms.get(&self.platform))
             .flatten();
         CatalogItem {
+            deprecated: entry.deprecated.clone(),
+            replaced_by: entry.replaced_by.clone(),
+            revocation: self.revocation(Subject::Package, &entry.id, &entry.version),
             id: entry.id.clone(),
             kind,
             name: entry.name.clone(),
@@ -654,7 +913,11 @@ impl ExtensionStore {
             .config_dir
             .join(theme_store::file_for(&theme.name))
             .is_file();
+        let revocation = self.revocation(Subject::Theme, &theme.id, "");
         CatalogItem {
+            deprecated: None,
+            replaced_by: None,
+            revocation: revocation.clone(),
             id: theme.id.clone(),
             kind: ItemKind::Theme,
             name: theme.name.clone(),
@@ -673,11 +936,13 @@ impl ExtensionStore {
             theme_mode: Some(theme.mode.clone()),
             state: if receipt.is_some() || present {
                 State::Installed
+            } else if revocation.is_some() {
+                State::Unavailable
             } else {
                 State::Available
             },
             installed_version: None,
-            unavailable: None,
+            unavailable: revocation.map(|notice| format!("Revoked: {}", notice.reason)),
             removable: receipt.is_some(),
         }
     }
@@ -696,6 +961,21 @@ impl ExtensionStore {
         self.apply(id, true)
     }
 
+    /// Legacy Gallery's already-validated, pinned entry. Use the same checked
+    /// install and receipt path so new Gallery installs can be uninstalled.
+    pub fn install_gallery_entry(&self, entry: &Entry) -> Result<Outcome, String> {
+        let _busy = self.busy.try_lock().map_err(|_| {
+            "Another extension change is still running. Try again in a moment.".to_owned()
+        })?;
+        if entry.kind == Kind::Native {
+            return Err(
+                "Native extensions must be reviewed in Extensions before installing.".into(),
+            );
+        }
+        self.available(entry, &self.read_receipts().items)?;
+        self.install_package(entry, false)
+    }
+
     fn apply(&self, id: &str, update: bool) -> Result<Outcome, String> {
         let _busy = self.busy.try_lock().map_err(|_| {
             "Another extension change is still running. Try again in a moment.".to_owned()
@@ -704,7 +984,8 @@ impl ExtensionStore {
             .current()
             .ok_or_else(|| "Load the extension list first.".to_owned())?;
         self.cleanup_leftovers();
-        let existing = self.receipt(id);
+        let receipts = self.read_receipts().items;
+        let existing = receipts.iter().find(|receipt| receipt.id == id).cloned();
         let on_disk = existing
             .as_ref()
             .is_some_and(|r| self.target_of(r).is_some_and(|path| path.exists()));
@@ -730,7 +1011,7 @@ impl ExtensionStore {
                 }
                 (false, false) => {}
             }
-            self.available(entry)?;
+            self.available(entry, &receipts)?;
             let outcome = match entry.kind {
                 Kind::Native => self.install_native(entry, update)?,
                 Kind::Workflow | Kind::Plugin => self.install_package(entry, update)?,
@@ -738,6 +1019,7 @@ impl ExtensionStore {
             return Ok(outcome);
         }
         if let Some(theme) = catalog.themes.iter().find(|theme| theme.id == id) {
+            self.check_revocation(Subject::Theme, &theme.id, "")?;
             if update {
                 return Err(
                     "Themes have no updates; install it again after removing it.".to_owned(),
@@ -779,29 +1061,31 @@ impl ExtensionStore {
             Kind::Workflow => format!("workflow:{}", entry.folder_name()),
             _ => format!("{}{}", crate::script::ID_PREFIX, entry.folder_name()),
         };
-        let installed = install_bytes_as(entry, &bytes, &self.dirs.dirs(), mode, &|| {
-            self.quiesce(&running_id);
-        })?;
-        let receipt = Receipt {
-            id: entry.id.clone(),
-            kind: ItemKind::from_kind(entry.kind),
-            folder: installed.folder.clone(),
-            name: entry.name.clone(),
-            version: entry.version.clone(),
-            author: entry.author.clone(),
-            installed_at: now(),
-            source: entry.source.clone(),
-            sha256: entry.sha256.clone(),
-            program_sha256: None,
-        };
-        self.record(receipt)?;
-        Ok(Outcome {
-            id: entry.id.clone(),
-            kind: ItemKind::from_kind(entry.kind),
-            name: entry.name.clone(),
-            version: entry.version.clone(),
-            folder: installed.folder,
-            replaced: update,
+        self.commit_if_not_revoked(Subject::Package, &entry.id, &entry.version, || {
+            let installed = install_bytes_as(entry, &bytes, &self.dirs.dirs(), mode, &|| {
+                self.quiesce(&running_id);
+            })?;
+            let receipt = Receipt {
+                id: entry.id.clone(),
+                kind: ItemKind::from_kind(entry.kind),
+                folder: installed.folder.clone(),
+                name: entry.name.clone(),
+                version: entry.version.clone(),
+                author: entry.author.clone(),
+                installed_at: now(),
+                source: entry.source.clone(),
+                sha256: entry.sha256.clone(),
+                program_sha256: None,
+            };
+            self.record(receipt)?;
+            Ok(Outcome {
+                id: entry.id.clone(),
+                kind: ItemKind::from_kind(entry.kind),
+                name: entry.name.clone(),
+                version: entry.version.clone(),
+                folder: installed.folder,
+                replaced: update,
+            })
         })
     }
 
@@ -823,71 +1107,57 @@ impl ExtensionStore {
             .binary(&self.platform)
             .map(|file| sha256_hex(&file.data));
 
-        let root = &self.dirs.plugins;
-        let target = root.join(folder);
-        if target.exists() && !update {
-            return Err(format!(
-                "\"{folder}\" is already in your plugins folder, so it was not replaced. \
+        self.commit_if_not_revoked(Subject::Package, &entry.id, &entry.version, || {
+            let root = &self.dirs.plugins;
+            let target = root.join(folder);
+            if target.exists() && !update {
+                return Err(format!(
+                    "\"{folder}\" is already in your plugins folder, so it was not replaced. \
                  Remove that folder first: {}",
-                target.display()
-            ));
-        }
-        fs::create_dir_all(root).map_err(|err| format!("Could not create the folder: {err}"))?;
-        let staging = root.join(format!(".installing-{folder}-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&staging);
-        let plugin_id = format!("{}{folder}", crate::script::ID_PREFIX);
-        let result = write_files(&files, &staging).and_then(|()| {
-            place(&staging, &target, update && target.exists(), &|| {
-                self.quiesce(&plugin_id);
-            })
-        });
-        if let Err(err) = result {
+                    target.display()
+                ));
+            }
+            fs::create_dir_all(root)
+                .map_err(|err| format!("Could not create the folder: {err}"))?;
+            let staging = root.join(format!(".installing-{folder}-{}", std::process::id()));
             let _ = fs::remove_dir_all(&staging);
-            return Err(err);
-        }
-        self.record(Receipt {
-            id: entry.id.clone(),
-            kind: ItemKind::Native,
-            folder: folder.to_owned(),
-            name: entry.name.clone(),
-            version: entry.version.clone(),
-            author: entry.author.clone(),
-            installed_at: now(),
-            source: artifact.source.clone(),
-            sha256: artifact.sha256.clone(),
-            program_sha256,
-        })?;
-        Ok(Outcome {
-            id: entry.id.clone(),
-            kind: ItemKind::Native,
-            name: entry.name.clone(),
-            version: entry.version.clone(),
-            folder: folder.to_owned(),
-            replaced: update,
+            let plugin_id = format!("{}{folder}", crate::script::ID_PREFIX);
+            let result = write_files(&files, &staging).and_then(|()| {
+                place(&staging, &target, update && target.exists(), &|| {
+                    self.quiesce(&plugin_id);
+                })
+            });
+            if let Err(err) = result {
+                let _ = fs::remove_dir_all(&staging);
+                return Err(err);
+            }
+            self.record(Receipt {
+                id: entry.id.clone(),
+                kind: ItemKind::Native,
+                folder: folder.to_owned(),
+                name: entry.name.clone(),
+                version: entry.version.clone(),
+                author: entry.author.clone(),
+                installed_at: now(),
+                source: artifact.source.clone(),
+                sha256: artifact.sha256.clone(),
+                program_sha256,
+            })?;
+            Ok(Outcome {
+                id: entry.id.clone(),
+                kind: ItemKind::Native,
+                name: entry.name.clone(),
+                version: entry.version.clone(),
+                folder: folder.to_owned(),
+                replaced: update,
+            })
         })
     }
 
     fn install_theme(&self, theme: &ThemeEntry) -> Result<Outcome, String> {
         let bytes = self.download(&theme.url, theme_store::MAX_THEME_BYTES as usize)?;
         let text = theme_store::verify_download(&bytes, &theme.sha256)?;
-        let stored = theme_store::install_text(
-            &self.dirs.config_dir,
-            &text,
-            &theme.name,
-            &Existing::Refuse,
-        )?;
-        self.record(Receipt {
-            id: theme.id.clone(),
-            kind: ItemKind::Theme,
-            folder: stored.file.clone(),
-            name: theme.name.clone(),
-            version: String::new(),
-            author: theme.author.clone(),
-            installed_at: now(),
-            source: theme.url.clone(),
-            sha256: theme.sha256.clone(),
-            program_sha256: None,
-        })?;
+        let stored = self.commit_theme(theme, &text, &Existing::Refuse)?;
         Ok(Outcome {
             id: theme.id.clone(),
             kind: ItemKind::Theme,
@@ -895,6 +1165,47 @@ impl ExtensionStore {
             version: String::new(),
             folder: stored.file,
             replaced: false,
+        })
+    }
+
+    /// Appearance's gallery install: the already verified `text` of `theme`
+    /// is written under the same final revocation check as an install from
+    /// Extensions, and gets the same receipt, so a later notice reaches it and
+    /// Extensions can remove it.
+    pub fn install_gallery_theme_text(
+        &self,
+        theme: &ThemeEntry,
+        text: &str,
+        existing: &Existing,
+    ) -> Result<theme_store::StoredTheme, String> {
+        let _busy = self.busy.try_lock().map_err(|_| {
+            "Another extension change is still running. Try again in a moment.".to_owned()
+        })?;
+        self.commit_theme(theme, text, existing)
+    }
+
+    fn commit_theme(
+        &self,
+        theme: &ThemeEntry,
+        text: &str,
+        existing: &Existing,
+    ) -> Result<theme_store::StoredTheme, String> {
+        self.commit_if_not_revoked(Subject::Theme, &theme.id, "", || {
+            let stored =
+                theme_store::install_text(&self.dirs.config_dir, text, &theme.name, existing)?;
+            self.record(Receipt {
+                id: theme.id.clone(),
+                kind: ItemKind::Theme,
+                folder: stored.file.clone(),
+                name: theme.name.clone(),
+                version: String::new(),
+                author: theme.author.clone(),
+                installed_at: now(),
+                source: theme.url.clone(),
+                sha256: theme.sha256.clone(),
+                program_sha256: None,
+            })?;
+            Ok(stored)
         })
     }
 

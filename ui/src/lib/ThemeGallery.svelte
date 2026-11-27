@@ -1,5 +1,6 @@
 <script lang="ts">
   import MarketplaceLinks from "./MarketplaceLinks.svelte";
+  import { t, tHtml } from "./i18n.svelte";
   import { fetchThemeGallery, installGalleryTheme } from "./theme-ipc";
   import { GALLERY_INDEX_URL, type GalleryItem, type StoredTheme } from "./themes";
 
@@ -38,7 +39,7 @@
       return;
     }
     items = items?.map((other) => (other.id === item.id ? { ...other, installed: true } : other)) ?? null;
-    notice = `Installed ${result.value.spec.name}. It is in your themes now.`;
+    notice = t("appearance.gallery.installed", { name: result.value.spec.name });
     oninstalled(result.value);
   }
 </script>
@@ -46,17 +47,14 @@
 <section class="gallery" aria-labelledby="gallery-title">
   <div class="head">
     <div class="label">
-      <h3 id="gallery-title">Online themes</h3>
+      <h3 id="gallery-title">{t("appearance.gallery.title")}</h3>
       <p class="hint">
-        Community themes listed in Sevak's repository. Clicking <strong>Browse online themes</strong>
-        makes one request to <code>{GALLERY_INDEX_URL}</code> (no account, cookies or identifying
-        data). Installing downloads one theme file and checks its SHA-256 against the list before
-        saving it to your themes folder. Nothing is requested until you click.
+        {@html tHtml("appearance.gallery.hint", { button: t("appearance.gallery.browse"), url: GALLERY_INDEX_URL })}
       </p>
       <MarketplaceLinks />
     </div>
     <button type="button" class="btn" disabled={loading} onclick={browse}>
-      {loading ? "Loading…" : items ? "Refresh list" : "Browse online themes"}
+      {loading ? t("common.loading") : items ? t("appearance.gallery.refresh") : t("appearance.gallery.browse")}
     </button>
   </div>
 
@@ -66,7 +64,7 @@
 
   {#if items}
     {#if items.length === 0}
-      <p class="hint pad">The gallery has no themes yet.</p>
+      <p class="hint pad">{t("appearance.gallery.empty")}</p>
     {:else}
       <ul class="list">
         {#each items as item (item.id)}
@@ -74,8 +72,8 @@
             <div class="info">
               <span class="name">{item.name}</span>
               <span class="hint">
-                {item.author ? `by ${item.author}` : "unknown author"} · {item.mode || "theme"} ·
-                SHA-256 {item.sha256.slice(0, 8)}…
+                {item.author ? t("appearance.gallery.by", { author: item.author }) : t("appearance.gallery.unknownAuthor")} ·
+                {item.mode || t("appearance.gallery.theme")} · SHA-256 {item.sha256.slice(0, 8)}…
               </span>
               {#if item.description}<span class="hint">{item.description}</span>{/if}
             </div>
@@ -83,10 +81,18 @@
               type="button"
               class="btn"
               disabled={installing !== null}
-              aria-label="{item.installed ? 'Reinstall' : 'Install'} {item.name}"
+              aria-label={installing === item.id
+                ? t("appearance.gallery.installingNamed", { name: item.name })
+                : item.installed
+                  ? t("appearance.gallery.reinstallNamed", { name: item.name })
+                  : t("appearance.gallery.installNamed", { name: item.name })}
               onclick={() => install(item)}
             >
-              {installing === item.id ? "Installing…" : item.installed ? "Reinstall" : "Install"}
+              {installing === item.id
+                ? t("appearance.gallery.installing")
+                : item.installed
+                  ? t("appearance.gallery.reinstall")
+                  : t("appearance.gallery.install")}
             </button>
           </li>
         {/each}
@@ -132,7 +138,7 @@
     padding: 0 16px 12px;
   }
 
-  code {
+  .hint :global(code) {
     padding: 0 4px;
     border-radius: 4px;
     background: var(--kbd-bg);
@@ -204,7 +210,7 @@
   }
 
   .btn:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 

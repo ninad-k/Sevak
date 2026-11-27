@@ -35,6 +35,7 @@ use crate::{
     ShellPlugin, SnippetsPlugin, SystemPlugin, TasksPlugin, UuidPlugin, WebSearchPlugin,
     WindowManagerPlugin,
 };
+use crate::{CalendarPlugin, ClockPlugin, PasswordPlugin, ProjectsPlugin, SshPlugin};
 
 /// Builds the instances of one plugin family.
 ///
@@ -113,7 +114,8 @@ impl PluginRegistry {
     /// Apps, calculator, web search, files, bookmarks, system commands,
     /// automation tasks, media controls, window management, shell, clipboard history,
     /// snippets, emoji, Universal Actions, contacts, 1Password, the dictionary, the
-    /// example UUID plugin and the AI assistant, in that order.
+    /// example UUID plugin, the AI assistant, SSH hosts, recent projects, the
+    /// calendar, the world clock and the password generator, in that order.
     /// Order matters only for tie-breaking and logging.
     pub fn builtin() -> Self {
         let mut registry = Self::new();
@@ -306,6 +308,47 @@ impl PluginRegistry {
                 ))]
             },
         ));
+        registry.register(PluginDescriptor::new(
+            "ssh",
+            "SSH hosts",
+            "Type `ssh` to list the hosts in ~/.ssh/config; Enter connects in a terminal. Private keys are never read.",
+            |config, platform| {
+                vec![Arc::new(SshPlugin::new(
+                    &config.ssh,
+                    &config.shell,
+                    platform.clone(),
+                ))]
+            },
+        ));
+        registry.register(PluginDescriptor::new(
+            "projects",
+            "Recent projects",
+            "Type `code` to reopen a folder or workspace from VS Code, VS Code Insiders, VSCodium, Cursor or a JetBrains IDE in that editor.",
+            |config, platform| vec![Arc::new(ProjectsPlugin::new(&config.projects, platform.clone()))],
+        ));
+        registry.register(PluginDescriptor::new(
+            "calendar",
+            "Calendar",
+            "Type `cal` for today's and upcoming events from local .ics files (`cal tomorrow`, `cal fri`). No accounts, no network.",
+            |config, platform| vec![Arc::new(CalendarPlugin::new(&config.calendar, platform.clone()))],
+        ));
+        registry.register(PluginDescriptor::new(
+            "clock",
+            "World clock",
+            "Type `time` for the time in your cities, `time tokyo` for one place, or `time 3pm pst in ist` to convert; offline.",
+            |config, platform| vec![Arc::new(ClockPlugin::new(&config.clock, platform.clone()))],
+        ));
+        registry.register(PluginDescriptor::new(
+            "pwgen",
+            "Password generator",
+            "Type `pass` for a random password, `pass 24` for a longer one or `pass 6 words` for a passphrase; Enter copies it, kept out of clipboard history.",
+            |config, platform| {
+                vec![Arc::new(PasswordPlugin::new(
+                    &config.passwords,
+                    platform.clone(),
+                ))]
+            },
+        ));
         registry
     }
 
@@ -426,7 +469,12 @@ mod tests {
                 "1password",
                 "dict",
                 "uuid",
-                "ai"
+                "ai",
+                "ssh",
+                "projects",
+                "calendar",
+                "clock",
+                "pwgen"
             ]
         );
     }
@@ -462,7 +510,12 @@ mod tests {
                 "dict",
                 "dict:spell",
                 "uuid",
-                "ai"
+                "ai",
+                "ssh",
+                "projects",
+                "calendar",
+                "clock",
+                "pwgen"
             ]
         );
     }
@@ -496,7 +549,12 @@ mod tests {
                 "dict",
                 "dict:spell",
                 "uuid",
-                "ai"
+                "ai",
+                "ssh",
+                "projects",
+                "calendar",
+                "clock",
+                "pwgen"
             ]
         );
     }
@@ -530,7 +588,12 @@ mod tests {
                 "1password",
                 "dict",
                 "dict:spell",
-                "ai"
+                "ai",
+                "ssh",
+                "projects",
+                "calendar",
+                "clock",
+                "pwgen"
             ]
         );
     }
@@ -580,6 +643,11 @@ mod tests {
                 ("dict:spell", true),
                 ("uuid", true),
                 ("ai", true),
+                ("ssh", true),
+                ("projects", true),
+                ("calendar", true),
+                ("clock", true),
+                ("pwgen", true),
             ]
         );
     }

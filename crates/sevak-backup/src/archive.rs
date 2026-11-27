@@ -180,8 +180,14 @@ pub fn read(bytes: &[u8]) -> Result<Backup> {
                 "the backup is encrypted, which Sevak does not support",
             ));
         }
-        let name = entry.name().to_owned();
+        let name = entry.name().map_err(damaged)?.into_owned();
         let kind = entry.unix_mode().map(|mode| mode & 0o170_000);
+        // zip's own notion of a link counts too, whatever the mode says.
+        let kind = if entry.is_symlink() {
+            Some(0o120_000)
+        } else {
+            kind
+        };
         match kind {
             // Regular file or no Unix mode at all (made on Windows).
             None | Some(0o100_000) | Some(0) => {}

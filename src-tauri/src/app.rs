@@ -12,8 +12,20 @@ use crate::state::AppState;
 use crate::{
     ai, autostart, backdrop, backup, commands, diagnostics, direct, expansion, extensions,
     file_buffer, hotkey, icons, search, selection, settings, takeover, themes, tray, updater,
-    window, workflows,
+    webview_args, window, workflows,
 };
+
+/// The generated context, with the windows from `tauri.conf.json` given the
+/// same WebView2 arguments as the windows Sevak opens itself.
+fn context() -> tauri::Context<tauri::Wry> {
+    let mut context = tauri::generate_context!();
+    if let Some(args) = webview_args::from_env() {
+        for window in &mut context.config_mut().app.windows {
+            window.additional_browser_args = Some(args.clone());
+        }
+    }
+    context
+}
 
 pub fn run(
     paths: AppPaths,
@@ -81,6 +93,8 @@ pub fn run(
             diagnostics::save_diagnostics,
             settings::get_settings,
             settings::save_settings,
+            autostart::get_startup_status,
+            autostart::repair_startup,
             settings::validate_hotkey,
             settings::suspend_hotkey,
             settings::resume_hotkey,
@@ -171,7 +185,7 @@ pub fn run(
             }
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(context())
         .context("failed to build the application")?
         .run(|_app, event| {
             // Sevak stays resident: only an explicit `exit(code)` quits.
@@ -187,8 +201,26 @@ pub fn run(
 
 /// Re-reads the config file and re-applies everything derived from it.
 /// A config that fails to load is ignored so the current one keeps working.
+/// Startup is synchronized only when the saved preference itself changed
+/// (a restored backup, an edited file): installing from the Gallery or
+/// reloading the index must not recreate an entry removed outside Sevak.
 pub fn reload(app: &AppHandle) {
+    reload_config(app, true);
+}
+
+/// Settings already applied an explicit startup change transactionally.
+pub fn reload_after_settings(app: &AppHandle) {
+    reload_config(app, false);
+}
+
+/// Whether a reload should re-apply launch at sign-in.
+fn startup_needs_sync(may_sync: bool, before: bool, after: bool) -> bool {
+    may_sync && before != after
+}
+
+fn reload_config(app: &AppHandle, may_sync_startup: bool) {
     let state = app.state::<AppState>();
+    let startup_before = state.config().general.launch_at_login;
     match Config::load_or_create(&state.paths.config_file) {
         Ok((config, origin)) => {
             tracing::info!(?origin, "configuration reloaded");
@@ -205,10 +237,17 @@ pub fn reload(app: &AppHandle) {
     window::apply_configured_width(app);
     backdrop::apply(app);
     apply_theme(app);
-    autostart::sync(app);
+    if startup_needs_sync(
+        may_sync_startup,
+        startup_before,
+        state.config().general.launch_at_login,
+    ) {
+        autostart::sync(app);
+    }
     // The index is rebuilt in the background and swapped in when ready.
     search::reload(app, &state.config());
     expansion::apply(app);
+    tray::relabel(app);
 
     // Both the launcher and the settings window follow the status.
     if let Err(err) = app.emit(window::EVENT_STATUS, state.status()) {
@@ -246,4 +285,22 @@ pub fn quit(app: &AppHandle) {
     search::save_usage(app);
     search::shutdown(app);
     app.exit(0);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::startup_needs_sync;
+
+    #[test]
+    fn reloads_resync_startup_only_when_the_saved_preference_changed() {
+        // Gallery installs, extension changes and Reload index keep a
+        // missing or disabled entry as the user left it.
+        assert!(!startup_needs_sync(true, true, true));
+        assert!(!startup_needs_sync(true, false, false));
+        // A restored backup or edited file that flips the preference applies it.
+        assert!(startup_needs_sync(true, false, true));
+        assert!(startup_needs_sync(true, true, false));
+        // Settings already applied its change transactionally.
+        assert!(!startup_needs_sync(false, false, true));
+    }
 }

@@ -384,6 +384,25 @@ describe("theme JSON as the backend sends it (builtin-themes.json)", () => {
     }
   });
 
+  it("ships the three Sevak Glass and Violet themes with the see-through, rounded layout", () => {
+    const byName = (name: string) => themes.find((t) => t.spec.name === name);
+    expect(themes.length).toBe(11);
+    for (const name of ["Sevak Glass Light", "Sevak Glass Dark"]) {
+      const layout = byName(name)!.spec.layout;
+      expect(layout.radius, name).toBeGreaterThanOrEqual(20);
+      expect(layout.opacity, name).toBeLessThan(100);
+      expect(layout.row_height, name).toBeGreaterThan(48);
+    }
+    expect(byName("Sevak Glass Light")!.spec.light).toBeTruthy();
+    expect(byName("Sevak Glass Dark")!.spec.dark).toBeTruthy();
+    expect(byName("Sevak Violet")!.spec.dark!.accent).toMatch(/^#/);
+  });
+
+  it("measures contrast like WCAG on known pairs", () => {
+    expect(contrastRatio(BLACK, WHITE)).toBeCloseTo(21, 5);
+    expect(contrastRatio(WHITE, WHITE)).toBeCloseTo(1, 5);
+  });
+
   it("gives every palette every color key, in a form the editor and Rust both accept", () => {
     for (const theme of themes) {
       for (const mode of ["light", "dark"] as const) {
@@ -420,6 +439,36 @@ describe("theme JSON as the backend sends it (builtin-themes.json)", () => {
         if (!palette) continue;
         for (const check of contrastChecks(palette, {})) {
           expect(check.aa, `${theme.spec.name}/${mode}: ${check.label} is ${check.ratio.toFixed(2)}`).toBe(true);
+        }
+      }
+    }
+  });
+
+  // The four pairs above are what the editor shows. These are the other text and
+  // focus colors the windows draw: status messages sit on the page and on the
+  // grouped panels (`surface`), a selected row's subtitle on the selection, and
+  // the keyboard focus outline (`--focus-ring`, the accent_strong) is a non-text
+  // indicator, which needs 3:1 (WCAG 1.4.11).
+  it("keeps status text, selected subtitles and the focus outline readable (AA)", () => {
+    const FOCUS_RING = 3;
+    for (const theme of themes) {
+      for (const mode of ["light", "dark"] as const) {
+        const palette = theme.spec[mode];
+        if (!palette) continue;
+        const color = (key: string) => parseColor(palette[key] ?? "")!;
+        const background = color("background");
+        const surface = blend(color("surface"), background);
+        const selection = blend(color("selection"), background);
+        const pairs: [string, string, ReturnType<typeof parseColor>, number][] = [];
+        for (const key of ["error", "warn", "ok", "subtext"]) {
+          pairs.push([key, "background", background, AA_NORMAL_TEXT]);
+          pairs.push([key, "surface", surface, AA_NORMAL_TEXT]);
+        }
+        pairs.push(["subtext", "selection", selection, AA_NORMAL_TEXT]);
+        pairs.push(["accent_strong", "background", background, FOCUS_RING]);
+        for (const [key, on, behind, need] of pairs) {
+          const ratio = contrastRatio(blend(color(key), behind!), behind!);
+          expect(ratio, `${theme.spec.name}/${mode}: ${key} on ${on} is ${ratio.toFixed(2)}`).toBeGreaterThanOrEqual(need);
         }
       }
     }

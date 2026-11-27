@@ -89,7 +89,9 @@ impl Native {
         }
     }
 
-    fn inspect(&self, contents: &[u8]) -> Result<(bool, bool), String> {
+    /// `(owned, enabled)`. `owned` is `None` when the entry names no
+    /// executable, such as an XDG Hidden-only override.
+    fn inspect(&self, contents: &[u8]) -> Result<(Option<bool>, bool), String> {
         match self.kind {
             #[cfg(any(target_os = "linux", test))]
             Kind::Linux => {
@@ -112,9 +114,9 @@ impl Native {
                 let owned = match args {
                     Ok(args) => args
                         .first()
-                        .is_some_and(|path| std::path::Path::new(path) == self.command.executable),
+                        .map(|path| std::path::Path::new(path) == self.command.executable),
                     Err(error) if enabled => return Err(error),
-                    Err(_) => false,
+                    Err(_) => None,
                 };
                 Ok((owned, enabled))
             }
@@ -135,8 +137,8 @@ impl Native {
                             .and_then(|args| args.first())
                             .and_then(plist::Value::as_string)
                     });
-                let owned = executable
-                    .is_some_and(|path| std::path::Path::new(path) == self.command.executable);
+                let owned =
+                    executable.map(|path| std::path::Path::new(path) == self.command.executable);
                 let enabled = dictionary
                     .get("Disabled")
                     .and_then(plist::Value::as_boolean)
@@ -156,11 +158,10 @@ impl Native {
             if !output.status.success() {
                 return Err("macOS could not report the login item's status".to_owned());
             }
-            let text = String::from_utf8_lossy(&output.stdout);
-            return Ok(text.lines().any(|line| {
-                line.trim()
-                    .starts_with(&format!("\"{ENTRY_NAME}\" => true"))
-            }));
+            return Ok(listed_as_disabled(
+                &String::from_utf8_lossy(&output.stdout),
+                ENTRY_NAME,
+            ));
         }
         Ok(false)
     }
@@ -204,10 +205,14 @@ impl Backend for Native {
     fn status(&self, snapshot: &Snapshot) -> Result<Status, String> {
         match &snapshot.contents {
             None => Ok(Status::default()),
-            Some(contents) => Ok(Status {
-                registered: true,
-                enabled: self.inspect(contents)?.1 && !snapshot.disabled,
-            }),
+            Some(contents) => {
+                let (owned, enabled) = self.inspect(contents)?;
+                Ok(Status {
+                    registered: true,
+                    enabled: enabled && !snapshot.disabled,
+                    other_copy: owned == Some(false),
+                })
+            }
         }
     }
 
@@ -235,7 +240,7 @@ impl Backend for Native {
 
     fn remove_owned(&self) -> Result<(), String> {
         if let Some(contents) = self.snapshot()?.contents {
-            if self.inspect(&contents)?.0 {
+            if self.inspect(&contents)?.0 == Some(true) {
                 remove_file(&self.file)?;
             }
         }
@@ -376,6 +381,21 @@ fn desktop_quote(value: &str) -> String {
     quoted.replace('\\', "\\\\")
 }
 
+/// `launchctl print-disabled` prints `"label" => disabled` on macOS 11 and
+/// later, and `"label" => true` on older releases.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn listed_as_disabled(output: &str, label: &str) -> bool {
+    let quoted = format!("\"{label}\"");
+    output.lines().any(|line| {
+        let mut parts = line.trim().splitn(2, "=>");
+        parts.next().map(str::trim) == Some(quoted.as_str())
+            && matches!(
+                parts.next().map(|value| value.trim().trim_end_matches(',')),
+                Some("disabled" | "true")
+            )
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -401,12 +421,30 @@ mod tests {
             let backend = backend(&temp, kind);
             backend.set_enabled(true, true).unwrap();
             let saved = fs::read(&backend.file).unwrap();
-            assert_eq!(backend.inspect(&saved).unwrap(), (true, true));
+            assert_eq!(backend.inspect(&saved).unwrap(), (Some(true), true));
             assert!(String::from_utf8_lossy(&saved).contains("--background"));
             assert!(String::from_utf8_lossy(&saved).contains("--config"));
             assert!(super::super::status(&backend).unwrap().enabled);
             backend.remove_owned().unwrap();
             assert!(!backend.file.exists());
+        }
+    }
+
+    #[test]
+    fn launchctl_disabled_list_is_read_in_old_and_new_formats() {
+        let new =
+            "disabled services = {\n\t\"com.apple.x\" => enabled\n\t\"Sevak\" => disabled\n}\n";
+        let old = "disabled services = {\n\t\"Sevak\" => true\n}\n";
+        assert!(listed_as_disabled(new, "Sevak"));
+        assert!(listed_as_disabled(old, "Sevak"));
+        for enabled in [
+            "\t\"Sevak\" => enabled\n",
+            "\t\"Sevak\" => false\n",
+            "\t\"Sevak.helper\" => disabled\n",
+            "\t\"com.example.Sevak\" => disabled\n",
+            "",
+        ] {
+            assert!(!listed_as_disabled(enabled, "Sevak"), "{enabled:?}");
         }
     }
 
@@ -446,7 +484,8 @@ mod tests {
                 super::super::status(&backend).unwrap(),
                 Status {
                     registered: true,
-                    enabled: false
+                    enabled: false,
+                    other_copy: false
                 }
             );
             super::super::update(&backend, true, false, || Ok(())).unwrap();
@@ -454,6 +493,43 @@ mod tests {
             super::super::update(&backend, true, true, || Ok(())).unwrap();
             assert!(super::super::status(&backend).unwrap().enabled);
         }
+    }
+
+    #[test]
+    fn status_reports_an_entry_that_starts_another_copy() {
+        let temp = tempfile::tempdir().unwrap();
+        for kind in [Kind::Linux, Kind::Macos] {
+            let mut backend = backend(&temp, kind);
+            backend.set_enabled(true, true).unwrap();
+            assert!(!super::super::status(&backend).unwrap().other_copy);
+            backend.command.executable = temp.path().join("portable/sevak");
+            assert_eq!(
+                super::super::status(&backend).unwrap(),
+                Status {
+                    registered: true,
+                    enabled: true,
+                    other_copy: true
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn routine_sync_retargets_a_disabled_entry_and_keeps_it_disabled() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut backend = backend(&temp, Kind::Linux);
+        backend.command.executable = temp.path().join("old/sevak");
+        backend.set_enabled(true, true).unwrap();
+        let hidden = format!(
+            "{}Hidden=true
+",
+            fs::read_to_string(&backend.file).unwrap()
+        );
+        fs::write(&backend.file, &hidden).unwrap();
+        backend.command.executable = temp.path().join("new/sevak");
+        super::super::update(&backend, true, false, || Ok(())).unwrap();
+        let saved = fs::read(&backend.file).unwrap();
+        assert_eq!(backend.inspect(&saved).unwrap(), (Some(true), false));
     }
 
     #[test]
@@ -494,7 +570,7 @@ mod tests {
             backend.command.executable = temp.path().join("new/sevak");
             super::super::refresh(&backend).unwrap();
             let saved = fs::read(&backend.file).unwrap();
-            assert_eq!(backend.inspect(&saved).unwrap(), (true, false));
+            assert_eq!(backend.inspect(&saved).unwrap(), (Some(true), false));
             // Restore the known original profile and compare parsed argument
             // values so both XML and desktop escaping are exercised.
             let args = match kind {

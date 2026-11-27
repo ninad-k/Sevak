@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import "./pages.css";
   import type { Picker } from "./types";
+  import { t } from "../i18n.svelte";
 
   /** A list of text entries (apps, files, ...): remove with the cross, add by typing or browsing. */
   let {
@@ -8,7 +10,7 @@
     label,
     hint = "",
     placeholder = "",
-    emptyText = "Nothing added.",
+    emptyText,
     pickers = [],
     mono = false,
     divider = false,
@@ -48,8 +50,14 @@
     if (picked) add(picked);
   }
 
-  function remove(index: number) {
+  let list: HTMLElement | undefined = $state();
+
+  /** Removes entry `index`; focus moves to the next entry's cross (or the field), not to the page. */
+  async function remove(index: number) {
     items = items.filter((_, i) => i !== index);
+    await tick();
+    const crosses = list?.querySelectorAll<HTMLElement>("button") ?? [];
+    (crosses[Math.min(index, crosses.length - 1)] ?? document.getElementById(id))?.focus();
   }
 
   function onKeydown(e: KeyboardEvent) {
@@ -64,18 +72,18 @@
   <span class="sp-name" id="{id}-label">{label}</span>
   {#if hint}<span class="sp-hint">{hint}</span>{/if}
   {#if items.length === 0}
-    <p class="sp-empty">{emptyText}</p>
+    <p class="sp-empty">{emptyText ?? t("pages.common.nothingAdded")}</p>
   {:else}
-    <ul class="sp-items" aria-labelledby="{id}-label">
+    <ul class="sp-items" aria-labelledby="{id}-label" bind:this={list}>
       {#each items as item, i (item)}
         <li>
           <span class="sp-item-text" class:mono title={item}>{item}</span>
           <button
             type="button"
             class="sp-btn icon"
-            aria-label="Remove {item}"
-            title="Remove"
-            onclick={() => remove(i)}>✕</button
+            aria-label={t("pages.common.removeItem", { item })}
+            title={t("common.remove")}
+            onclick={() => void remove(i)}>✕</button
           >
         </li>
       {/each}
@@ -91,11 +99,13 @@
       {placeholder}
       spellcheck="false"
       autocomplete="off"
-      aria-label="Add to {label}"
+      aria-label={t("pages.common.addTo", { label })}
       onkeydown={onKeydown}
       onblur={commit}
     />
-    <button type="button" class="sp-btn" disabled={draft.trim() === ""} onclick={commit}>Add</button>
+    <!-- aria-disabled, not disabled: Tab from the field commits the entry (blur), and a
+         button that disables itself while focused would drop focus to the page. -->
+    <button type="button" class="sp-btn" aria-disabled={draft.trim() === ""} onclick={commit}>{t("pages.common.add")}</button>
     {#each pickers as picker (picker.label)}
       <button type="button" class="sp-btn" onclick={() => pick(picker)}>{picker.label}</button>
     {/each}

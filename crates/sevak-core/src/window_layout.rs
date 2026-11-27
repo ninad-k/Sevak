@@ -826,7 +826,8 @@ mod tests {
         let mut listed: Vec<String> = source
             .lines()
             .filter_map(|line| {
-                let rest = line.trim().strip_prefix("{ key: \"")?;
+                // Entries read `command("left", ["left"], "Halves"),`.
+                let rest = line.trim().strip_prefix("command(\"")?;
                 Some(rest[..rest.find('"')?].to_owned())
             })
             .collect();

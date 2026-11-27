@@ -31,6 +31,10 @@ export interface HotkeyStatus {
 }
 
 export type ThemeSetting = "system" | "light" | "dark";
+/** `[appearance] settings_theme`: the Settings window's mode. */
+export type SettingsThemeSetting = "follow" | ThemeSetting;
+/** `[appearance] open_animation`: how the launcher appears. */
+export type OpenAnimationSetting = "fade" | "fade_scale" | "none";
 
 /** How one `[[hotkey]]` entry of the config fared, in config order. */
 export interface CustomHotkeyStatus {
@@ -47,6 +51,10 @@ export interface AppearanceCss {
   custom_css: string;
   /** The window has a blurred backdrop. */
   blur?: boolean;
+  /** How the launcher appears when it opens. */
+  open_animation?: OpenAnimationSetting;
+  /** Length of that animation in milliseconds. */
+  animation_ms?: number;
   /** Why a setting was ignored. */
   warnings: string[];
 }
@@ -65,6 +73,8 @@ export interface Status {
   indexing: boolean;
   /** Snippet expansion as you type: running, or why not. */
   snippet_expansion: { active: boolean; problem: string | null };
+  /** `[general] language`: `auto` or a language code (see `i18n.svelte.ts`). */
+  language?: string;
 }
 
 export type ActionKind =

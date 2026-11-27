@@ -26,7 +26,7 @@
       "description": "Arctic, north-bluish dark colors after the Nord palette.",
       "mode": "dark",
       "url": "gallery/themes/Nord.toml",
-      "sha256": "12283cb8a1499fa44202b0884b04f62a9ad2eed107ae84f52fb89309f4b0345a"
+      "sha256": "e55a2dd8e048df101903b3c95d5aae49970c5fcc6491250e67364511c7f68cf9"
     },
     {
       "id": "dracula",
@@ -171,6 +171,33 @@
       "mode": "dark",
       "url": "gallery/themes/Sevak-Amber-Glass.toml",
       "sha256": "58136a09445d02262d68091b0bc885de7c56d26fba548c44a7e373e7fe49f32a"
+    },
+    {
+      "id": "sevak-glass-light",
+      "name": "Sevak Glass Light",
+      "author": "Sevak",
+      "description": "A roomy, rounded, slightly see-through light theme with a bright indigo selection, made for the frosted-glass blur.",
+      "mode": "light",
+      "url": "gallery/themes/Sevak-Glass-Light.toml",
+      "sha256": "f594811ddbbe676f494978994abf19f703db3ea496019c01e8b918fb4d3771ae"
+    },
+    {
+      "id": "sevak-glass-dark",
+      "name": "Sevak Glass Dark",
+      "author": "Sevak",
+      "description": "A roomy, rounded, slightly see-through dark theme with a bright periwinkle selection, made for the frosted-glass blur.",
+      "mode": "dark",
+      "url": "gallery/themes/Sevak-Glass-Dark.toml",
+      "sha256": "e54e53007b72b4a56de2be097c6a8592c5f175d5c6acb5314767b4fc24b91cb1"
+    },
+    {
+      "id": "sevak-violet",
+      "name": "Sevak Violet",
+      "author": "Sevak",
+      "description": "A purple-accent dark theme with a violet-tinted selection.",
+      "mode": "dark",
+      "url": "gallery/themes/Sevak-Violet.toml",
+      "sha256": "fd7183a67dc8933ded6c27df89efcf9e38c8ddc2b7f3d2d3205630ddbc2beb4f"
     }
   ]
 }

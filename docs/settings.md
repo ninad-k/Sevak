@@ -28,6 +28,21 @@ Pages: [General](#general), [Hotkeys](#hotkeys), [Appearance](#appearance), [Sea
 
 ## General
 
+### Language
+
+Choose the language of the launcher, the Settings window and the tray menu:
+**Automatic** (the default) follows your operating system, or pick English,
+Español, Deutsch, Français or हिन्दी. Each language is listed in its own name.
+The change applies at once, before you save; **Cancel** goes back to the saved
+language. If the system language is not one of these, Sevak uses English.
+
+Spanish, German, French and Hindi are machine-drafted translations that still
+need review by native speakers. Search results that plugins produce (app names,
+calculator answers, file results, error messages from Sevak's core) stay in
+English for now. See [Localisation](localisation.md).
+
+Links to: `[general] language` in [Configuration](configuration.md#general).
+
 ### Shortcut
 
 The global hotkey to show and hide Sevak. Tap it to toggle the launcher from anywhere.
@@ -93,15 +108,49 @@ This is off on a fresh install and applies only to your account, even when the
 Windows app is installed for everyone. The Windows installer checkbox controls
 the same preference; **Start Sevak now** is a separate, one-time action.
 
-Sevak reports errors if it cannot register startup, rather than reporting a
-successful save. It also shows a warning when your saved opt-in has been
-disabled outside Sevak or the startup entry is missing. Windows exposes the
+**Startup status** shows the OS registration separately from your saved
+preference: **Enabled for your account**, **Disabled outside Sevak**, **Entry
+missing**, **Off**, or **Unavailable** when the OS cannot be checked.
+**Registered for another copy of Sevak** means the entry starts a different
+executable, such as a portable or development copy. **Enabled outside Sevak's
+saved setting** means an entry is active although your saved preference is
+off; remove it in the OS startup settings, or turn the switch on and **Save**,
+then off and **Save** again. Click
+**Check status** after changing your OS startup controls; this does not save
+settings or enable anything. Windows exposes the
 entry under **Settings → Apps → Startup** (also **Task Manager → Startup apps**).
 macOS may restrict background items in **System Settings → General → Login
 Items**; Linux desktops have their own startup application settings. Turning
-startup off in your OS is respected when Sevak next starts or you save unrelated
-settings. To re-enable it, use the OS control or turn this option off and **Save**,
-then on and **Save** again.
+startup off using the OS's disable control is respected when Sevak next starts;
+if Sevak has moved, it points that disabled entry at its new location without
+enabling it, so a later OS re-enable starts the right copy.
+Saving unrelated settings leaves disabled or missing entries untouched. While
+**Save** runs, the settings page is disabled so nothing typed meanwhile is lost
+when the saved settings reload.
+While the saved preference remains on, restarting Sevak can recreate a missing
+entry. Other actions, such as **Reload index** or installing from the Gallery,
+re-apply startup only when the saved preference itself changed, for example
+after restoring a backup.
+
+If your saved preference is on but startup is inactive, click **Enable again**
+for a disabled entry, or **Repair startup** for a missing or unreadable entry or
+one registered for another copy of Sevak. This
+explicit action registers the installed copy immediately and verifies the OS
+accepted it; it does not open the launcher or require another **Save**. Other
+unsaved edits stay in the form. If you have changed the startup switch itself,
+save or undo that draft change first. Repair and Save cannot run together, and
+Sevak applies one startup change at a time, so a rollback never undoes a newer
+change. The installer's `--set-startup` runs as a separate process; repair
+re-checks the saved preference so it never overrides a change made there.
+
+A failed repair reports the error and restores the previous registration where
+possible. It never silently enables startup during an unrelated save or changes
+your saved preference. If the saved preference was turned off outside this
+window (by the installer or `--set-startup off`), repair is refused and Settings
+switches to the saved value without discarding your other edits; **Check
+status** picks up such a change too, and **Save** keeps it. You can also re-enable
+startup through the OS control. An unreadable status or organization policy may
+need to be resolved there before repair can succeed.
 
 Install Sevak in its permanent location first. For an AppImage, keep that file
 in the same folder so the startup entry can find it. A macOS `.dmg` and Linux
@@ -215,9 +264,17 @@ Rounding of the search bar's corners in pixels. Range: 0–32 px (0 = sharp corn
 
 Links to: `[appearance] radius` in configuration.
 
+### Settings window mode
+
+Follow the launcher (default), Light, Dark or System, for the Settings window only. The launcher keeps the **Theme** above. Links to: `[appearance] settings_theme` in configuration.
+
+### Open animation
+
+How the search bar appears: Fade (default), Fade and zoom or None. **Animation length** (0-400 ms, default 150) is hidden while None is selected. The system's reduced-motion setting always wins. Links to: `[appearance] open_animation` and `animation_ms` in configuration.
+
 ### Theme editor and gallery
 
-**Theme editor** creates and edits theme files with a live preview: eight built-in themes (Sevak Light, Sevak Dark, Nord, Dracula, Solarized Light, Solarized Dark, Gruvbox and High Contrast), color pickers, sliders for sizes, a WCAG contrast check, undo and redo, **Save as…**, **Apply**, **Import…** and **Export…**. **Open themes folder** shows the `themes` folder next to `config.toml`.
+**Theme editor** creates and edits theme files with a live preview: eleven built-in themes (Sevak Light, Sevak Dark, Nord, Dracula, Solarized Light, Solarized Dark, Gruvbox, High Contrast, Sevak Glass Light, Sevak Glass Dark and Sevak Violet), color pickers, sliders for sizes, a WCAG contrast check, undo and redo, **Save as…**, **Apply**, **Import…** and **Export…**. **Open themes folder** shows the `themes` folder next to `config.toml`.
 
 **Browse online themes** loads the community theme gallery. Nothing is requested until you click it, and **Install** saves a theme only if its checksum matches.
 

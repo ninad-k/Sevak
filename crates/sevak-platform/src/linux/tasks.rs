@@ -110,9 +110,9 @@ fn graphical_by_environment() -> HashSet<u32> {
 }
 
 pub(crate) fn running_apps() -> Result<Vec<RunningApp>> {
-    use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
+    use sysinfo::{ProcessRefreshKind, ProcessesToUpdate};
 
-    let mut system = System::new();
+    let mut system = crate::tasks::process_table("list apps")?;
     system.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
     let own = std::process::id();
 

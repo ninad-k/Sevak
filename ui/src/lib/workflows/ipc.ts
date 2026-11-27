@@ -59,6 +59,15 @@ export interface TemplateInfo {
 export type GalleryKind = "workflow" | "plugin";
 
 export interface GalleryEntry {
+  /** The version Sevak recorded installing; null for a copy without a record. */
+  installed_version?: string | null;
+  /** A recorded copy: a notice for its version. An unrecorded copy: one for any version. */
+  installed_revocation?: import("../extensions/extensions-ipc").RevocationNotice | null;
+  /** Where the copy on disk is, when there is one. */
+  installed_path?: string | null;
+  deprecated?: string | null;
+  replaced_by?: string | null;
+  revocation?: import("../extensions/extensions-ipc").RevocationNotice | null;
   id: string;
   kind: GalleryKind;
   name: string;
@@ -73,6 +82,8 @@ export interface GalleryEntry {
 }
 
 export interface Gallery {
+  load_error?: string | null;
+  advisories?: import("../extensions/extensions-ipc").AdvisoryStatus;
   /** The address the index was fetched from (pinned to a release tag). */
   source: string;
   /** Set when the list is not from this build's own release, and why. */

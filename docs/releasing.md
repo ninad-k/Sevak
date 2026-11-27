@@ -115,6 +115,87 @@ stop expanding in browsers, and network paths are off. Paste the bullets of
 [Hardening: release notes](security/hardening-release-notes.md) into **Known
 issues and upgrade notes** for that release.
 
+### Failed builds and unverified draft assets
+
+Each build job uploads its installers to the **draft** release (tauri-action
+builds and uploads in one step) and only then runs **Verify publisher signatures
+before publication**. Verifying first would mean re-implementing tauri-action's
+asset naming, which `latest.json` depends on, so the order stays and two rules
+cover the gap:
+
+- When that verification fails, the job deletes the draft, so its unsigned or
+  wrongly signed files cannot be published. The next run creates a new draft.
+- If a run fails or is cancelled in any other way, the draft can still hold
+  some platforms' files, unverified and without `latest.json` or
+  `SHA256SUMS.txt`. **Never publish a draft by hand.** Fix the cause and re-run
+  Release; `plan` deletes the stale draft for that tag first.
+
+With publisher signing not configured, the build log shows a warning
+annotation ("publisher signing not configured") on Windows and macOS. That is
+expected until signing is provisioned. Set `REQUIRE_WINDOWS_SIGNING` /
+`REQUIRE_MACOS_SIGNING` to `true` to turn it into an error
+([Publisher signing](publisher-signing.md)).
+
+### Extension advisories
+
+`extension-advisories.yml` (run by hand from `main`) signs the extension
+revocation feed with the **updater private key**, the same key that authorizes
+application updates. To keep that key contained:
+
+- The signing job runs in the `extension-advisories` environment. **Configure
+  it before the first run:** Settings, Environments, `extension-advisories`,
+  add **required reviewers** (maintainers) and limit deployment branches to
+  `main`. GitHub creates a missing environment without protection, so an
+  unconfigured one gives no protection. Optionally store
+  `TAURI_SIGNING_PRIVATE_KEY` and its password as secrets of this environment
+  as well; Release still needs the repository secrets.
+- The signing job has a read-only token and no dependency caches. A separate
+  `publish` job, which never sees the key, verifies the feed with the app's
+  parser and uploads it with `contents: write`.
+- After signing, the job requires the minisign trusted comment to contain
+  `file:extension-revocations.json`, so the two uses of the key stay
+  distinguishable.
+
+### Gallery index signatures
+
+Every Release run also signs the two gallery lists that builds read at the new
+tag, `gallery/index.json` and `gallery/themes.json`, and attaches
+`index.json.sig` and `themes.json.sig` to the release. Sevak verifies a list
+against the embedded updater key before reading it
+([Gallery trust](security/gallery-trust.md#7-signed-indexes)). No setup is
+needed beyond the `TAURI_SIGNING_PRIVATE_KEY` secret Release already requires.
+
+- `sign-gallery` (read-only token, no caches, `npm ci --ignore-scripts`) copies
+  each list to `target/gallery-signatures/<tag>-<file>`, signs it with
+  `npx tauri signer sign`, and requires the trusted comment to name
+  `<tag>-<file>`. That name binds the signature to the release and the list.
+- `attach-gallery-signatures` (write token, never the key) runs
+  `cargo run --locked -p sevak-plugins --example verify_gallery_index -- <tag> gallery/<file> <sig>`
+  (the app's key, policy and parsers, against the files committed at the release
+  commit) and uploads the two `.sig` files to the draft. **Publish** waits for
+  it, so a release cannot go out with unsigned or unverifiable lists, and
+  `SHA256SUMS.txt` covers the `.sig` files.
+- To check a published release by hand: download `index.json.sig` from the
+  release and run the same example with
+  `gallery/index.json` from a checkout of the tag.
+
+**Rollout.** `SIGNED_SINCE` in `crates/sevak-plugins/src/index_signature.rs`
+(`v0.14.1`, the version after the newest release when signing was added) is the
+first tag whose lists must be signed. Builds accept a list without a signature
+only from older tags, and refuse an invalid signature from any tag.
+
+- **Before merging the change that introduces signing**, make sure no release
+  has been published at or after `SIGNED_SINCE` without signatures. If one has
+  (another pull request merged first), raise `SIGNED_SINCE` to the version this
+  merge will be released as. Otherwise builds that fall back to that unsigned
+  release (development builds and betas, which read the latest stable release)
+  show "publishes no signature" instead of the gallery. That fails closed; it
+  is not a security hole, but it is an outage for those builds.
+- Never lower `SIGNED_SINCE` after a release, and never delete a `.sig` from a
+  release: builds of that release would then refuse their own gallery.
+- Re-running only the signing jobs on an existing draft fails, because the
+  assets already exist; re-run **Release**, which replaces the stale draft.
+
 ## Before promoting a beta
 
 Tick these before you run **Promote** (or, in the auto flow, before merging
@@ -126,7 +207,8 @@ choose the checks that apply to the release.
 
 - [ ] CI is green on `main` on Windows, macOS and Linux (lint, tests, bundle build).
 - [ ] The release run finished: all three build jobs succeeded and the release
-      has installers, `.sig` files, `latest-beta.json` and `SHA256SUMS.txt`.
+      has installers, `.sig` files (including `index.json.sig` and
+      `themes.json.sig`), `latest-beta.json` and `SHA256SUMS.txt`.
 - [ ] Beta notes read well; fill in **Known issues and upgrade notes**.
 
 **By risk area** (do the ones your changes touch)
@@ -134,9 +216,11 @@ choose the checks that apply to the release.
 | Area | Check |
 |---|---|
 | Installer and upgrade | Install the new build **over the previous stable** on Windows (NSIS and, if changed, MSI), macOS (drag to Applications) and Linux (`.deb`/AppImage). Config and data survive; the old version is replaced, not duplicated. |
+| Startup and installer changes | Use the staged flow while validating OS integration. Attach the artifact-inspection and disposable-VM reports from [Installer validation](installer-validation.md). Record actual sign-in/restart and alternate-admin UAC results separately; a compiled MSI check or a silent VM test does not establish those outcomes. |
 | Hotkey | The global hotkey opens Sevak after a fresh install and after an upgrade; the Universal Actions hotkey works; Wayland and GNOME paths if touched. |
 | Updater | From the previous **stable**, switch Update channel to Beta and use the tray's Check for updates: the beta is offered, the signature verifies, install and restart work, the new version number shows. Then switch back to Stable and check no downgrade is offered. Also check a plain stable-to-stable update on the previous release. |
 | Signature | The `.sig` files exist for every installer, `latest-beta.json` lists all platforms with signatures, and `node scripts/verify-release.mjs <dir> <version> latest-beta.json` passes on the downloaded assets (Promote runs this too). |
+| Publisher identity | If configured, the release's Authenticode or Developer ID/notarization checks passed. If unconfigured, the release remains unsigned/ad-hoc; updater `.sig` files do not change that. See [Publisher signing](publisher-signing.md). |
 | Config and migrations | Start the new build with the previous release's `config.toml`; nothing is reset and no warning appears. |
 | Platform integration | Autostart, tray, single-instance, clipboard and file search on each OS you changed. |
 | Packages | If packaging changed, render the manifests: `node scripts/package-manifests.mjs <version> SHA256SUMS.txt out`. |
@@ -241,6 +325,9 @@ Sevak keeps that guard, and there is no downgrade flag in `latest.json`. So:
 | `.github/workflows/rollback.yml` | Serve an earlier release as stable again |
 | `.github/workflows/pr-labels.yml`, `.github/release.yml` | Group the generated release notes by commit type |
 | `.github/workflows/release-checks.yml` | Tests the scripts below and parses the workflows on pull requests |
+| `.github/workflows/extension-advisories.yml` | Signs and publishes the extension advisory feed; see [Extension advisories](#extension-advisories) |
+| `crates/sevak-plugins/examples/verify_gallery_index.rs` | Verifies a gallery list's signature with the app's verifier before Release attaches it; see [Gallery index signatures](#gallery-index-signatures) |
+| `scripts/release-signing.mjs` | Publisher-signing configuration (`prepare`) and verification (`verify`) |
 | `scripts/release-version.mjs` | `next`, `next-beta`, `previous-tag`, `compare`, `set` |
 | `scripts/updater-manifest.mjs` | Writes `latest.json` / `latest-beta.json` |
 | `scripts/verify-release.mjs` | Checks checksums, signatures and the manifest of a downloaded release |

@@ -2,12 +2,18 @@ name: CI
 
 on:
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
+  workflow_dispatch:
+
+# Feature branches run the full matrix through their PR. A separate feature
+# push run would duplicate every build; main still checks the merged result.
+# Only superseded PR runs are cancelled: every push to main finishes, since it
+# is the only check of the merged code.
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -42,9 +48,9 @@ jobs:
 
       - uses: ./.github/actions/setup-rust
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 22
           cache: npm
@@ -90,7 +96,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 22
           cache: npm
@@ -109,7 +115,7 @@ jobs:
 
       - uses: ./.github/actions/setup-rust
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
       - run: cargo test --profile fast-release -p sevak-plugins --test latency -- --nocapture
 
@@ -134,9 +140,9 @@ jobs:
 
       - uses: ./.github/actions/setup-rust
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 22
           cache: npm
@@ -170,9 +176,9 @@ jobs:
           echo "version=$msrv" >> "$GITHUB_OUTPUT"
           rustup toolchain install "$msrv" --profile minimal
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 22
           cache: npm
@@ -216,9 +222,9 @@ jobs:
 
       - uses: ./.github/actions/setup-rust
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 22
           cache: npm
@@ -229,11 +235,37 @@ jobs:
         run: npx tauri build --bundles ${{ matrix.bundles }}
 
       - name: Verify Windows installer startup integration
+        id: inspect_installers
         if: runner.os == 'Windows'
         shell: bash
+        # The versions the build stamped: a stale or unstamped binary must fail.
         run: |
           node --test scripts/installer.test.mjs scripts/installer-startup.test.mjs
-          pwsh -NoProfile -File scripts/test-windows-installer.ps1
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          msi_version=$(node -p "const c = require('./src-tauri/tauri.conf.json'); c.bundle?.windows?.wix?.version ?? c.version")
+          pwsh -NoProfile -File scripts/test-windows-installer.ps1 -NsisPath 'target/release/bundle/nsis/*.exe' -BinaryPath target/release/sevak.exe -ExpectedVersion "$version" -ExpectedMsiVersion "$msi_version" -ReportPath target/installer-validation/artifacts.json
+
+      # This job runs on a fresh GitHub-hosted VM. Never run this mutation suite
+      # on a maintainer's machine or reuse it on a persistent self-hosted runner.
+      - name: Install, repair and uninstall MSI on disposable Windows VM
+        # Also after an artifact-inspection failure, so both reports exist;
+        # not when the build itself failed (inspection then never ran).
+        if: ${{ !cancelled() && runner.os == 'Windows' && (success() || steps.inspect_installers.outcome == 'failure') }}
+        shell: bash
+        env:
+          SEVAK_DISPOSABLE_VM: "1"
+        run: |
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          pwsh -NoProfile -File scripts/test-windows-installer-vm.ps1 -Format Msi -InstallerPath 'target/release/bundle/msi/*.msi' -ExpectedVersion "$version" -DisposableVm -Confirmation I_ACKNOWLEDGE_THIS_IS_A_DISPOSABLE_VM -ReportPath target/installer-validation/msi-vm.json
+
+      - name: Save Windows installer validation reports
+        if: ${{ !cancelled() && runner.os == 'Windows' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-installer-validation
+          if-no-files-found: warn
+          retention-days: 14
+          path: target/installer-validation/
 
       - uses: actions/upload-artifact@v7
         with:
@@ -247,3 +279,139 @@ jobs:
             target/release/bundle/deb/*.deb
             target/release/bundle/rpm/*.rpm
             target/release/bundle/appimage/*.AppImage
+
+  # The real headless startup CLI on each OS, checked against the OS's own
+  # artifacts: the HKCU Run/StartupApproved values on Windows, the LaunchAgent
+  # plist and `launchctl print-disabled` on macOS, ~/.config/autostart on
+  # Linux. Runners are throwaway, so the real per-user stores are used.
+  startup-cli:
+    name: Startup CLI (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential curl file patchelf \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+            libxdo-dev libssl-dev
+
+      - uses: ./.github/actions/setup-rust
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      # The binary embeds the frontend, so it must exist before cargo builds.
+      - run: npm run build
+      - run: cargo build -p sevak
+
+      - name: Exercise --set-startup / --startup-status against the real OS
+        shell: bash
+        run: node scripts/test-startup-cli.mjs --real-home
+
+  # End-to-end UI tests: WebdriverIO drives the real debug app through
+  # tauri-driver (https://v2.tauri.app/develop/tests/webdriver/). Linux uses
+  # WebKitWebDriver under Xvfb, Windows msedgedriver matching the runner's
+  # WebView2 runtime. macOS has no WKWebView driver, so it is not covered.
+  e2e:
+    name: End-to-end UI (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-22.04]
+    env:
+      TAURI_DRIVER_VERSION: 2.1.0
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Linux build and WebDriver dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential curl file patchelf \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+            libxdo-dev libssl-dev \
+            webkit2gtk-driver xvfb dbus dbus-x11
+          which WebKitWebDriver
+
+      - name: Install msedgedriver matching the WebView2 runtime
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $client = 'Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+          $version = $null
+          foreach ($key in @("HKLM:\SOFTWARE\WOW6432Node\$client", "HKLM:\SOFTWARE\$client", "HKCU:\SOFTWARE\$client")) {
+            $item = Get-ItemProperty -Path $key -Name pv -ErrorAction SilentlyContinue
+            if ($item -and $item.pv) { $version = $item.pv; break }
+          }
+          if (-not $version) { throw 'The WebView2 runtime is not installed on this runner.' }
+          Write-Host "WebView2 runtime $version"
+          $dir = Join-Path $env:RUNNER_TEMP 'msedgedriver'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          $zip = Join-Path $dir 'edgedriver_win64.zip'
+          Invoke-WebRequest -Uri "https://msedgedriver.microsoft.com/$version/edgedriver_win64.zip" -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $dir -Force
+          $driver = Join-Path $dir 'msedgedriver.exe'
+          & $driver --version
+          "TAURI_NATIVE_DRIVER=$driver" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - uses: ./.github/actions/setup-rust
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            e2e/package-lock.json
+
+      - run: npm ci
+      - run: npm ci --prefix e2e
+
+      - name: Install tauri-driver
+        run: cargo install tauri-driver --version ${{ env.TAURI_DRIVER_VERSION }} --locked
+
+      # The debug app with embedded assets, as the Tauri WebDriver guide builds it.
+      - name: Build the debug app
+        run: npx tauri build --debug --no-bundle
+
+      - name: Run the end-to-end suite (Linux)
+        if: runner.os == 'Linux'
+        env:
+          SEVAK_E2E_BINARY: target/debug/sevak
+          SEVAK_E2E_PROFILE: ${{ runner.temp }}/sevak-e2e
+        run: dbus-run-session -- xvfb-run -a npm run test:e2e
+
+      - name: Run the end-to-end suite (Windows)
+        if: runner.os == 'Windows'
+        env:
+          SEVAK_E2E_BINARY: target/debug/sevak.exe
+          SEVAK_E2E_PROFILE: ${{ runner.temp }}/sevak-e2e
+        run: npm run test:e2e
+
+      - name: Upload the app's logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-logs-${{ matrix.os }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: ${{ runner.temp }}/sevak-e2e/data/logs

@@ -4,6 +4,7 @@
   // downloaded until "Install" is pressed on an entry.
   import "./workflows.css";
   import MarketplaceLinks from "../MarketplaceLinks.svelte";
+  import { formatList, t, tHtml } from "../i18n.svelte";
   import {
     installGalleryEntry,
     loadGallery,
@@ -33,8 +34,14 @@
     error = null;
     const result = await loadGallery();
     loading = false;
-    if (result.ok) gallery = result.value;
-    else error = result.error;
+    if (result.ok) {
+      gallery = result.value;
+      error = result.value.load_error ?? null;
+    }
+    else {
+      error = result.error;
+      if (gallery) gallery.advisories = { state: "unavailable", message: t("gallery.refreshFailed"), issued_at: gallery.advisories?.issued_at ?? null, expires_at: gallery.advisories?.expires_at ?? null };
+    }
   }
 
   async function install(entry: GalleryEntry) {
@@ -48,11 +55,33 @@
     }
     done[entry.id] =
       entry.kind === "workflow"
-        ? "Installed. Find it under Workflows; Sevak asks before it runs anything."
-        : "Installed. Sevak asks before it runs the plugin; then it appears under Plugins.";
+        ? t("gallery.installedWorkflow")
+        : t("gallery.installedPlugin");
     // Reflect it in the list.
     const found = gallery?.entries.find((e) => e.id === entry.id);
     if (found) found.installed = true;
+  }
+
+  /** The replacement's name when it is listed, otherwise its id. */
+  const replacementName = (id: string) => gallery?.entries.find((e) => e.id === id)?.name ?? id;
+  /** On disk, but Sevak has no record of which version it installed. */
+  const unrecorded = (entry: GalleryEntry) => entry.installed && !entry.installed_version;
+  const revokedVersions = (versions: string[]) =>
+    versions.includes("*")
+      ? t("gallery.everyVersion")
+      : t("gallery.versions", { count: versions.length, list: formatList(versions) });
+  /** What the page says about a copy whose installed version is not on record. */
+  function unknownCheck(entry: GalleryEntry): string {
+    return entry.installed_path
+      ? t("gallery.unknownCheckAt", { path: entry.installed_path })
+      : t("gallery.unknownCheck");
+  }
+  function unrecordedRevoked(entry: GalleryEntry): string {
+    const notice = entry.installed_revocation!;
+    const params = { versions: revokedVersions(notice.versions), reason: notice.reason };
+    return entry.installed_path
+      ? t("gallery.unrecordedRevokedAt", { ...params, path: entry.installed_path })
+      : t("gallery.unrecordedRevoked", params);
   }
 
   const host = (url: string) => {
@@ -65,30 +94,25 @@
 </script>
 
 <div class="wf-page">
-  <h1>Gallery</h1>
-  <p class="wf-lead">
-    Add tools to your launcher with ready-made extensions and workflows.
-    Choose <strong>Load gallery</strong> to browse packages from GitHub, then install what you need.
-    Script plugins ask for your permission before running. Themes are in Appearance → Theme editor.
-  </p>
+  <h1>{t("gallery.title")}</h1>
+  <p class="wf-lead">{@html tHtml("gallery.lead")}</p>
   <MarketplaceLinks />
 
   {#if gallery === null}
     <div class="wf-toolbar">
       <button type="button" class="wf-btn primary" disabled={loading} onclick={load}>
-        {loading ? "Loading…" : "Load gallery"}
+        {loading ? t("common.loading") : t("gallery.load")}
       </button>
-      <span class="wf-sub">Fetches the list from GitHub (raw.githubusercontent.com).</span>
+      <span class="wf-sub">{t("gallery.fetches")}</span>
     </div>
   {:else}
     <div class="wf-toolbar">
       <span class="wf-sub">
-        {gallery.entries.length} entr{gallery.entries.length === 1 ? "y" : "ies"} from
-        <code class="wf-code">{host(gallery.source)}</code>
-        {#if gallery.skipped > 0}· {gallery.skipped} left out (not understood by this Sevak){/if}
+        {@html tHtml("gallery.entries", { count: gallery.entries.length, host: host(gallery.source) })}
+        {#if gallery.skipped > 0}· {t("gallery.skipped", { count: gallery.skipped })}{/if}
       </span>
       <button type="button" class="wf-btn small" disabled={loading || installing !== null} onclick={load}>
-        {loading ? "Loading…" : "Reload"}
+        {loading ? t("common.loading") : t("gallery.reload")}
       </button>
     </div>
   {/if}
@@ -101,50 +125,70 @@
   {/if}
 
   {#if gallery}
+    <p class="wf-msg" class:warn={gallery.advisories?.state !== "verified"} role="status">
+      {gallery.advisories?.message ?? t("gallery.statusUnknown")}
+    </p>
     <div class="filters">
       <div class="field search">
-        <label for="gallery-query">Search extensions</label>
-        <input id="gallery-query" class="wf-input" type="search" bind:value={query} placeholder="Name, keyword or what you want to do…" />
+        <label for="gallery-query">{t("gallery.search")}</label>
+        <input id="gallery-query" class="wf-input" type="search" bind:value={query} placeholder={t("gallery.searchPlaceholder")} />
       </div>
       <div class="field">
-        <label for="gallery-kind">Type</label>
+        <label for="gallery-kind">{t("gallery.type")}</label>
         <select id="gallery-kind" class="wf-input" bind:value={kind}>
-          <option value="all">All types</option>
-          <option value="plugin">Extensions</option>
-          <option value="workflow">Workflows</option>
+          <option value="all">{t("gallery.allTypes")}</option>
+          <option value="plugin">{t("gallery.extensions")}</option>
+          <option value="workflow">{t("gallery.workflows")}</option>
         </select>
       </div>
       <div class="field">
-        <label for="gallery-availability">Availability</label>
+        <label for="gallery-availability">{t("gallery.availability")}</label>
         <select id="gallery-availability" class="wf-input" bind:value={availability}>
-          <option value="all">All packages</option>
-          <option value="available">Not installed</option>
-          <option value="installed">Installed</option>
+          <option value="all">{t("gallery.allPackages")}</option>
+          <option value="available">{t("gallery.notInstalled")}</option>
+          <option value="installed">{t("gallery.installed")}</option>
         </select>
       </div>
     </div>
-    <p class="wf-sub result-count" role="status">{visible.length} of {gallery.entries.length} packages</p>
-    <ul class="rows" aria-label="Gallery entries">
+    <p class="wf-sub result-count" role="status">
+      {t("gallery.shownOf", { shown: visible.length, count: gallery.entries.length })}
+    </p>
+    <ul class="rows" aria-label={t("gallery.listLabel")}>
       {#each visible as entry (entry.id)}
         <li class="wf-card">
           <div class="card-heading">
             <span class="monogram" aria-hidden="true">{entry.name.slice(0, 2)}</span>
             <div>
-              <span class="wf-chip">{entry.kind === "workflow" ? "Workflow" : "Extension · script plugin"}</span>
+              <span class="wf-chip">{entry.kind === "workflow" ? t("gallery.kindWorkflow") : t("gallery.kindPlugin")}</span>
               <h2>{entry.name}</h2>
             </div>
           </div>
           <p class="wf-sub description">{entry.description}</p>
+          {#if entry.deprecated}
+            <p class="wf-msg warn">
+              {entry.replaced_by
+                ? t("gallery.deprecatedReplaced", { reason: entry.deprecated, name: replacementName(entry.replaced_by) })
+                : t("gallery.deprecated", { reason: entry.deprecated })}
+            </p>
+          {/if}
+          {#if entry.revocation}<p class="wf-msg error" role="alert">{t("gallery.listedRevoked", { reason: entry.revocation.reason })} {unrecorded(entry) && !entry.installed_revocation ? unknownCheck(entry) : ""}</p>{/if}
+          {#if entry.installed_revocation}
+            {#if unrecorded(entry)}
+              <p class="wf-msg error" role="alert">{unrecordedRevoked(entry)}</p>
+            {:else}
+              <p class="wf-msg error" role="alert">{t("gallery.installedRevoked", { reason: entry.installed_revocation.reason })}</p>
+            {/if}
+          {/if}
           <div class="meta wf-sub">
-            {#if entry.author}by {entry.author}{/if}
-            {#if entry.version}· version {entry.version}{/if}
+            {#if entry.author}{t("gallery.by", { author: entry.author })}{/if}
+            {#if entry.version}· {t("gallery.version", { version: entry.version })}{/if}
           </div>
           <details class="wf-sub package-details">
-            <summary>Package details</summary>
-            <p>Source: <code class="wf-code">{host(entry.source)}</code></p>
+            <summary>{t("gallery.details")}</summary>
+            <p>{t("gallery.source")} <code class="wf-code">{host(entry.source)}</code></p>
             <p>SHA-256: <code class="checksum">{entry.sha256}</code></p>
-            {#if entry.homepage}<p>Project: <span class="checksum">{entry.homepage}</span></p>{/if}
-            <p>Downloaded only when you install. Sevak verifies the package checksum before installing.</p>
+            {#if entry.homepage}<p>{t("gallery.project")} <span class="checksum">{entry.homepage}</span></p>{/if}
+            <p>{t("gallery.detailsNote")}</p>
           </details>
           {#if done[entry.id]}<p class="wf-msg ok" role="status">{done[entry.id]}</p>{/if}
           {#if failed[entry.id]}<p class="wf-msg error" role="alert">{failed[entry.id]}</p>{/if}
@@ -153,11 +197,19 @@
               type="button"
               class="wf-btn small"
               class:primary={!entry.installed}
-              disabled={entry.installed || installing !== null}
-              aria-label={entry.installed ? `${entry.name} is installed` : `Install ${entry.name}`}
+              disabled={entry.installed || installing !== null || !!entry.deprecated || !!entry.revocation}
+              aria-label={entry.installed
+                ? t("gallery.installedAria", { name: entry.name })
+                : installing === entry.id
+                  ? t("gallery.installingAria", { name: entry.name })
+                  : t("gallery.installAria", { name: entry.name })}
               onclick={() => install(entry)}
             >
-              {entry.installed ? "Installed" : installing === entry.id ? "Installing…" : "Install"}
+              {entry.installed
+                ? t("gallery.installed")
+                : installing === entry.id
+                  ? t("gallery.installing")
+                  : t("gallery.install")}
             </button>
           </div>
         </li>
@@ -165,10 +217,10 @@
     </ul>
     {#if visible.length === 0}
       <div class="wf-card empty">
-        <h2>{gallery.entries.length === 0 ? "The gallery has no packages yet" : "No matching extensions"}</h2>
-        <p class="wf-sub">{gallery.entries.length === 0 ? "Reload later to check for new packages." : "Try another search or reset the filters."}</p>
+        <h2>{gallery.entries.length === 0 ? t("gallery.emptyGallery") : t("gallery.noMatches")}</h2>
+        <p class="wf-sub">{gallery.entries.length === 0 ? t("gallery.emptyGalleryHint") : t("gallery.noMatchesHint")}</p>
         {#if gallery.entries.length > 0}
-          <button class="wf-btn" type="button" onclick={() => { query = ""; kind = "all"; availability = "all"; }}>Reset filters</button>
+          <button class="wf-btn" type="button" onclick={() => { query = ""; kind = "all"; availability = "all"; }}>{t("gallery.resetFilters")}</button>
         {/if}
       </div>
     {/if}
@@ -200,7 +252,7 @@
   .description { margin: 12px 0; line-height: 1.6; flex: 1; }
   .package-details { margin: 12px 0; }
   .package-details summary { cursor: pointer; }
-  .package-details summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .package-details summary:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
   .checksum { overflow-wrap: anywhere; }
   .card-footer { display: flex; justify-content: flex-end; margin-top: 6px; }
   .empty { padding: 20px; }

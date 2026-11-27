@@ -1,11 +1,12 @@
 <script lang="ts">
   import Row from "./Row.svelte";
+  import { t } from "../i18n.svelte";
   import "./pages.css";
 
   /** A keyword field with the live clash check of `validate.ts` under it. */
   let {
     value = $bindable(),
-    label = "Keyword",
+    label,
     hint = "",
     error = "",
     id,
@@ -20,7 +21,7 @@
   } = $props();
 </script>
 
-<Row {label} {hint} forId={id} {error}>
+<Row label={label ?? t("pages.common.keyword")} {hint} forId={id} {error}>
   <input
     {id}
     class="sp-input number"

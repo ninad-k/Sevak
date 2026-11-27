@@ -3,6 +3,7 @@
   // list. Everything shown was prepared by the shell (see `preview` in ipc.ts);
   // nothing here reads files or the network.
   import Glyph from "./Glyph.svelte";
+  import { formatDate, formatNumber, t } from "./i18n.svelte";
   import type { PreviewContent } from "./ipc";
 
   let {
@@ -25,7 +26,9 @@
   let imageSize = $state<string | null>(null);
 
   const modified = $derived(
-    content?.modified != null ? new Date(content.modified * 1000).toLocaleString() : null,
+    content?.modified != null
+      ? formatDate(content.modified * 1000, { dateStyle: "medium", timeStyle: "short" })
+      : null,
   );
   const mod = $derived(mac ? "⌘" : "Ctrl+");
 
@@ -36,7 +39,7 @@
   });
 </script>
 
-<section class="pane" class:loading aria-label="Preview">
+<section class="pane" class:loading aria-label={t("launcher.preview.label")}>
   {#if glyph}
     <div class="big" aria-hidden="true">{glyph}</div>
   {/if}
@@ -45,7 +48,7 @@
     {#if content.body.kind === "text"}
       <pre class="text">{content.body.text}</pre>
       {#if content.body.truncated}
-        <div class="note">Showing the start only.</div>
+        <div class="note">{t("launcher.preview.startOnly")}</div>
       {/if}
     {:else if content.body.kind === "image"}
       <div class="picture">
@@ -55,7 +58,7 @@
           draggable="false"
           onload={(e) => {
             const img = e.currentTarget as HTMLImageElement;
-            imageSize = `${img.naturalWidth} × ${img.naturalHeight} px`;
+            imageSize = `${formatNumber(img.naturalWidth)} × ${formatNumber(img.naturalHeight)} px`;
           }}
         />
       </div>
@@ -68,11 +71,11 @@
           </li>
         {/each}
         {#if content.body.entries.length === 0}
-          <li class="empty">This folder is empty.</li>
+          <li class="empty">{t("launcher.preview.emptyFolder")}</li>
         {/if}
       </ul>
       {#if content.body.truncated}
-        <div class="note">Showing the first {content.body.entries.length} entries.</div>
+        <div class="note">{t("launcher.preview.firstEntries", { count: content.body.entries.length })}</div>
       {/if}
     {:else if content.body.kind === "url"}
       <div class="url">{content.body.url}</div>
@@ -89,24 +92,24 @@
           <dd title={row.value}>{row.value}</dd>
         {/each}
         {#if imageSize}
-          <dt>Dimensions</dt>
+          <dt>{t("launcher.preview.dimensions")}</dt>
           <dd>{imageSize}</dd>
         {/if}
         {#if modified}
-          <dt>Modified</dt>
+          <dt>{t("launcher.preview.modified")}</dt>
           <dd>{modified}</dd>
         {/if}
       </dl>
     {/if}
   {:else if !glyph}
-    <div class="note">{loading ? "Loading…" : "Nothing to preview."}</div>
+    <div class="note">{loading ? t("launcher.preview.loading") : t("launcher.preview.nothing")}</div>
   {/if}
 
   <div class="foot" aria-hidden="true">
     {#if hasTextView}
-      <span class="chip"><kbd>{mod}T</kbd>Full text</span>
+      <span class="chip"><kbd>{mod}T</kbd>{t("launcher.preview.fullText")}</span>
     {/if}
-    <span class="chip more"><kbd>Shift</kbd>/<kbd>{mod}Y</kbd>Close</span>
+    <span class="chip more"><kbd>Shift</kbd>/<kbd>{mod}Y</kbd>{t("launcher.preview.close")}</span>
   </div>
 </section>
 

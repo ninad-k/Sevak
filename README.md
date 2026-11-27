@@ -104,6 +104,11 @@ And more once you know the keys: preview a result, pick emoji from a grid, open 
 | Ask an AI assistant | `ai why is the sky blue` | Sends the question to the provider you chose (Ollama, OpenAI-compatible or Anthropic) and shows the answer; Enter copies it (opt-in, off by default) |
 | Pick an emoji | `:heart` or `emoji thumbs up` | Pastes the selected emoji from a grid |
 | Generate a UUID | `uuid ` or `uuid 5` | Copies a UUID when the plugin is enabled |
+| Connect to an SSH host | `ssh web` | Opens a terminal running `ssh web`, from the hosts in `~/.ssh/config` ([SSH hosts](docs/features/ssh.md)) |
+| Reopen a recent project | `code sevak` | Opens it in VS Code, Cursor, VSCodium or the JetBrains IDE you used ([recent projects](docs/features/projects.md)) |
+| See your agenda | `cal`, `cal tomorrow`, `cal fri` | Lists events from local `.ics` files, offline; Enter copies the details ([calendar](docs/features/calendar.md)) |
+| See the time anywhere, convert time zones | `time`, `time tokyo`, `time 3pm pst in ist` | Copies the [time or conversion](docs/features/clock.md), offline, daylight saving time included |
+| Generate a password or passphrase | `pass`, `pass 24`, `pass 6 words` | Copies it, kept out of clipboard history; shows its strength in bits ([details](docs/features/passwords.md)) |
 
 App results depend on what is installed. `f` covers the folders you choose and
 matches **names**; `ff` and `in` ask your OS file index for the whole disk and
@@ -157,7 +162,7 @@ Sevak also includes:
 - **Custom hotkeys** — extra global keys that open Sevak with text typed in
   (`> `, `g `) or run a result directly.
 - **Themes** — light, dark or system, plus accent color, font, radius, opacity
-  and your own stylesheet. A visual theme editor with a live preview, eight
+  and your own stylesheet. A visual theme editor with a live preview, eleven
   built-in themes and an optional online gallery with eleven more (Tokyo
   Night, Catppuccin, Rosé Pine, GitHub and others) are in Settings →
   Appearance ([themes guide](docs/themes.md)).
@@ -172,6 +177,12 @@ Sevak also includes:
   restored scripts ask for approval again. Automatic backups are off by default.
   [Backup and restore →](docs/backup-and-restore.md)
 - **Tray access and launch at login** — keep Sevak available in the background.
+- **Languages** — the launcher, Settings and tray menu in English, Español,
+  Deutsch, Français and हिन्दी, following your system language or the one you
+  pick in Settings → General; the Windows setup offers English, German, French
+  and Spanish. Translations other than English are machine-drafted and await
+  native review, and plugin results stay in English for now
+  ([Localisation →](docs/localisation.md)).
 - **Optional update checks** — check at startup, every six hours, and when you
   open the launcher if the last check is over an hour old; installation
   requires your agreement and verifies an update signature.
@@ -289,6 +300,13 @@ These features stay on your computer and make no network request:
   words you look up are not saved.
 - The emoji picker, themes (built-in, edited, imported or exported) and the
   notifications and Large Type of workflows are local.
+- SSH hosts, recent projects and the calendar read local files only:
+  `~/.ssh/config` (never a private key), the editors' own recent lists, and
+  the `.ics` files you list. They stay in memory, nothing is sent anywhere,
+  and a symbolic link out of the expected folder is not followed.
+- The world clock (`time`) and the password generator (`pass`) are offline.
+  Generated passwords are never stored, logged or kept in the search history,
+  and are copied marked as secret so clipboard histories leave them out.
 - The optional AI assistant (off by default, `[ai] enabled`) sends a question
   only when you press Enter on it; see the list below. Its questions and answers
   stay in memory and out of the logs, history and diagnostics, and API keys are
@@ -326,7 +344,8 @@ Every network request Sevak itself makes is in this list:
   its SHA-256 matches the one in the list.
 - **Workflow gallery.** Only when you press **Load gallery** (Settings →
   Gallery): one request for `gallery/index.json` from
-  `raw.githubusercontent.com`. **Install** on an entry downloads that one
+  `raw.githubusercontent.com`, plus the signed advisory JSON and signature
+  described below. **Install** on an entry downloads that one
   package, checked against the checksum in the index before anything is
   written, and an installed folder still has to be allowed before it runs.
 
@@ -336,7 +355,19 @@ Every network request Sevak itself makes is in this list:
   Sevak's repository at the tag of your Sevak version. **Install** downloads
   that one package, checked against its checksum, and anything that can run
   code still has to be allowed first. The list is saved locally so the page
-  works offline.
+  works offline. Loading or refreshing also checks the signed advisories below.
+  Each gallery list above comes with one more request, its signature
+  (`index.json.sig`, `themes.json.sig`) from the same release's downloads,
+  checked against the key built into Sevak before the list is read.
+
+- **Extension advisories.** Explicit gallery/list loads, refreshes, and
+  **Check extension advisories** request `extension-revocations.json` and its
+  `.sig` from the GitHub release channel `extension-advisories`. The exact bytes
+  are verified with the embedded updater public key and cached locally. Known
+  revoked versions cannot be installed; matching installed copies show a warning
+  and an Uninstall action. Missing, expired or failed checks show unknown status,
+  while earlier authenticated notices remain effective. Nothing is checked at
+  startup or in the background, and nothing is automatically removed.
 
 All the galleries send nothing but the request itself (no cookies or identifiers
 beyond a `Sevak/<version> (gallery)` user agent). Script plugins and workflows

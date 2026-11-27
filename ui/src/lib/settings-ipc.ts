@@ -3,7 +3,14 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { hasTauri, type Status, type ThemeSetting } from "./ipc";
+import {
+  hasTauri,
+  type OpenAnimationSetting,
+  type SettingsThemeSetting,
+  type Status,
+  type ThemeSetting,
+} from "./ipc";
+import { t } from "./i18n.svelte";
 
 import type { AiConfig } from "./ai";
 
@@ -32,6 +39,12 @@ export interface Appearance {
   /** A theme file in the config folder, such as `themes/Nord.toml`; empty uses none. */
   theme_file: string;
   custom_css: string;
+  /** The Settings window's mode: `follow` uses `theme`. */
+  settings_theme: SettingsThemeSetting;
+  /** How the launcher appears when it opens. */
+  open_animation: OpenAnimationSetting;
+  /** Length of the open animation in milliseconds (0-400). */
+  animation_ms: number;
 }
 
 /** Mirrors `sevak_core::Config` (serde defaults make every field present). */
@@ -47,6 +60,8 @@ export interface Config {
     check_for_updates: boolean;
     /** Release channel: "stable" (default) or "beta" (earlier, less tested builds). */
     update_channel: "stable" | "beta";
+    /** Interface language: "auto" (the OS language) or a code from `LANGUAGES` in i18n.svelte.ts. */
+    language: string;
   };
   window: { width: number };
   linux: { wayland_use_xwayland: boolean };
@@ -128,8 +143,18 @@ export interface Config {
   };
   /** The `>` command: which terminal and shell run it. */
   shell: { terminal: string; shell: string; keep_open: boolean };
+  /** The world clock (`time`): the cities a bare `time` lists. */
+  clock: { keyword: string; cities: string[] };
+  /** The password generator (`pass`): defaults for `length` (4-128) and passphrase `words` (2-20). */
+  passwords: { keyword: string; length: number; words: number; symbols: boolean };
   web_search: WebSearchEngine[];
   hotkey: HotkeyBinding[];
+  /** `ssh <host>`: hosts from ~/.ssh/config (and known_hosts when on). */
+  ssh: { keyword: string; known_hosts: boolean };
+  /** `code <name>`: recent editor projects; `editors` empty reads every editor. */
+  projects: { keyword: string; editors: string[] };
+  /** `cal`: events from local .ics files and folders; `days` is 1-60. */
+  calendar: { keyword: string; files: string[]; days: number };
 }
 
 export interface PluginInfo {
@@ -140,10 +165,20 @@ export interface PluginInfo {
   enabled: boolean;
 }
 
+export interface StartupStatus {
+  registered: boolean;
+  enabled: boolean;
+  /** The entry starts another copy of Sevak (portable or development build). */
+  other_copy?: boolean;
+  error: string | null;
+  /** The preference saved on disk now (the installer or CLI may change it); null if unreadable. */
+  saved?: boolean | null;
+}
+
 export interface SettingsDto {
   config: Config;
   /** OS registration, including startup disabled outside Sevak; separate from the saved preference. */
-  startup: { registered: boolean; enabled: boolean; error: string | null };
+  startup: StartupStatus;
   catalog: PluginInfo[];
   display: Status["display"];
   is_gnome: boolean;
@@ -181,6 +216,26 @@ export async function saveSettings(config: Config): Promise<string | null> {
   } catch (err) {
     console.warn("[ipc] save_settings failed:", err);
     return errorText(err);
+  }
+}
+
+/** Read the OS state without reloading (and discarding) the Settings draft. */
+export async function getStartupStatus(): Promise<StartupStatus> {
+  if (preview()) return { registered: false, enabled: false, error: t("settings.startup.previewStatus"), saved: null };
+  try {
+    return await invoke<StartupStatus>("get_startup_status");
+  } catch (err) {
+    return { registered: false, enabled: false, error: errorText(err), saved: null };
+  }
+}
+
+/** Explicit opt-in to repair an existing saved startup preference, never a draft save. */
+export async function repairStartup(): Promise<{ status: StartupStatus; error: null } | { status: null; error: string }> {
+  if (preview()) return { status: null, error: t("settings.startup.previewRepair") };
+  try {
+    return { status: await invoke<StartupStatus>("repair_startup"), error: null };
+  } catch (err) {
+    return { status: null, error: errorText(err) };
   }
 }
 

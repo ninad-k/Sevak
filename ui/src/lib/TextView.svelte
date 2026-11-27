@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from "./i18n.svelte";
   // Text View: one result's long text in a scrollable, full-height view
   // (Ctrl+T on a row that has text; Esc or Left goes back to the list). Scrolling
   // keys are handled by App.svelte, which calls `scrollBy` / `scrollTo`.
@@ -28,20 +29,20 @@
   const mod = $derived(mac ? "⌘" : "Ctrl+");
 </script>
 
-<section class="view" aria-label="Text">
+<section class="view" aria-label={t("launcher.textView.label")}>
   <div class="body" bind:this={body}>
     {#if content}
       <pre>{content.text}</pre>
-      {#if content.truncated}<div class="note">The text is longer than what is shown.</div>{/if}
+      {#if content.truncated}<div class="note">{t("launcher.textView.truncated")}</div>{/if}
     {:else}
-      <div class="note">Loading…</div>
+      <div class="note">{t("launcher.textView.loading")}</div>
     {/if}
   </div>
   <div class="foot" aria-hidden="true">
-    <span class="chip"><kbd>↑</kbd><kbd>↓</kbd>Scroll</span>
-    <span class="chip"><kbd>{mod}C</kbd>Copy</span>
-    <span class="chip"><kbd>↵</kbd>Run</span>
-    <span class="chip more"><kbd>Esc</kbd>/<kbd>←</kbd>Back</span>
+    <span class="chip"><kbd>↑</kbd><kbd>↓</kbd>{t("launcher.textView.scroll")}</span>
+    <span class="chip"><kbd>{mod}C</kbd>{t("launcher.textView.copy")}</span>
+    <span class="chip"><kbd>↵</kbd>{t("launcher.textView.run")}</span>
+    <span class="chip more"><kbd>Esc</kbd>/<kbd>←</kbd>{t("launcher.textView.back")}</span>
   </div>
 </section>
 

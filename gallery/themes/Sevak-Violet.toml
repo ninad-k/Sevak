@@ -1,0 +1,36 @@
+# Original Sevak palette (Apache-2.0).
+name = "Sevak Violet"
+author = "Sevak"
+description = "A purple-accent dark theme with a violet-tinted selection."
+
+[font]
+size = 15
+
+[layout]
+radius = 16
+opacity = 100
+row_height = 50
+search_size = 24
+icon_size = 34
+window_width = 720
+
+[dark]
+background = "#1a1327"
+text = "#f1eaff"
+subtext = "#b0a3cc"
+border = "rgba(241, 234, 255, 0.14)"
+accent = "#b48cff"
+accent_strong = "#9b6df0"
+on_accent = "#150d24"
+selection = "rgba(180, 140, 255, 0.24)"
+tile = "rgba(241, 234, 255, 0.07)"
+kbd_background = "rgba(241, 234, 255, 0.07)"
+kbd_border = "rgba(241, 234, 255, 0.16)"
+shadow = "0 10px 34px rgba(0, 0, 0, 0.6), 0 1px 3px rgba(0, 0, 0, 0.45)"
+surface = "rgba(241, 234, 255, 0.045)"
+input_background = "rgba(241, 234, 255, 0.06)"
+input_border = "rgba(241, 234, 255, 0.24)"
+switch_off = "rgba(241, 234, 255, 0.28)"
+warn = "#f5c26b"
+error = "#ff8f85"
+ok = "#8ee08a"

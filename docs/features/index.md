@@ -33,6 +33,11 @@ For optional additions, browse the [extensions catalog](../extensions.md).
 | Workflows | Your workflow's keyword, hotkey or trigger | (yours) | Run the workflow | [Workflows →](../workflows.md) |
 | Extensions store | `ext <name>`, `store <name>` | ext, store | Install or update it | [Extensions →](extensions.md) |
 | UUID generator | `uuid ` | uuid | Copy a generated UUID | — |
+| SSH hosts | `ssh <host>` | ssh | Connect in a terminal | [SSH hosts →](ssh.md) |
+| Recent projects | `code <name>` | code | Open the project in its editor | [Recent projects →](projects.md) |
+| Calendar (local .ics) | `cal`, `cal tomorrow`, `cal fri` | cal | Copy the event's details | [Calendar →](calendar.md) |
+| World clock | `time`, `time tokyo`, `time 3pm pst in ist` | time | Copy the time or the conversion | [World clock →](clock.md) |
+| Password generator | `pass`, `pass 24`, `pass 6 words` | pass | Copy it, kept out of clipboard history | [Passwords →](passwords.md) |
 
 ## How query routing works
 

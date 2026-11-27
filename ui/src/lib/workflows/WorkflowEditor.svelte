@@ -10,10 +10,11 @@
   import "./workflows.css";
   import { onMount } from "svelte";
   import NodeFields from "./NodeFields.svelte";
+  import { t, tHtml } from "../i18n.svelte";
   import { checkWorkflow, saveWorkflow } from "./ipc";
   import {
     CATEGORIES,
-    CATEGORY_LABELS,
+    categoryLabel,
     ELSE,
     KINDS,
     NODE_H,
@@ -351,12 +352,12 @@
     const next = raw.trim();
     if (next === node.id) return;
     if (!/^[A-Za-z0-9_-]{1,40}$/.test(next)) {
-      say("An id uses 1 to 40 letters, digits, dashes or underscores.");
+      say(t("workflows.editor.badId"));
       input.value = node.id;
       return;
     }
     if (workflow.node.some((n) => n.id === next)) {
-      say("Another node already has that id.");
+      say(t("workflows.editor.idTaken"));
       input.value = node.id;
       return;
     }
@@ -387,7 +388,11 @@
   }
 
   const portLabel = (port: string) =>
-    port === THEN ? "When true, go to" : port === ELSE ? "Otherwise, go to" : "Next";
+    port === THEN
+      ? t("workflows.editor.portThen")
+      : port === ELSE
+        ? t("workflows.editor.portElse")
+        : t("workflows.editor.portNext");
 
   function targetsFor(node: WfNode, port: string): WfNode[] {
     return workflow.node.filter((other) => canConnect(workflow, node.id, port, other.id).ok);
@@ -411,7 +416,7 @@
     wrap?.scrollTo({
       left: Math.max(0, node.x - 80),
       top: Math.max(0, node.y - 80),
-      behavior: "smooth",
+      behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
     });
   }
 
@@ -429,12 +434,7 @@
     currentFolder = result.value.folder;
     baseline = snapshot(workflow);
     changed = true;
-    say(
-      needsAllow
-        ? "Saved. Sevak will ask you to allow it before it runs anything."
-        : "Saved.",
-      "ok",
-    );
+    say(needsAllow ? t("workflows.editor.savedNeedsAllow") : t("workflows.editor.saved"), "ok");
   }
 
   function back() {
@@ -450,28 +450,30 @@
 <div
   class="editor"
   role="region"
-  aria-label="Workflow builder"
+  aria-label={t("workflows.editor.region")}
   tabindex="0"
   bind:this={root}
   onkeydown={onKeydown}
 >
   <header class="bar">
-    <button type="button" class="wf-btn" onclick={back}>← Workflows</button>
+    <button type="button" class="wf-btn" onclick={back}>{t("workflows.editor.back")}</button>
     <div class="wf-grow name">
-      <strong>{workflow.name || "Untitled"}</strong>
+      <strong>{workflow.name || t("workflows.editor.untitled")}</strong>
       <span class="wf-sub">
-        {currentFolder ? `folder: ${currentFolder}` : "not saved yet"}{dirty ? " · unsaved changes" : ""}
+        {currentFolder
+          ? t("workflows.editor.folder", { folder: currentFolder })
+          : t("workflows.editor.notSaved")}{dirty ? ` · ${t("workflows.editor.unsavedChanges")}` : ""}
       </span>
     </div>
     {#if errors.length > 0}
-      <span class="wf-chip error" role="status">{errors.length} problem{errors.length === 1 ? "" : "s"} to fix</span>
+      <span class="wf-chip error" role="status">{t("workflows.editor.problemsToFix", { count: errors.length })}</span>
     {/if}
     <label class="add">
-      <span class="visually-hidden">Add a node</span>
-      <select class="wf-input" bind:value={addValue} onchange={onAdd} aria-label="Add a node">
-        <option value="">Add a node…</option>
+      <span class="visually-hidden">{t("workflows.editor.addNode")}</span>
+      <select class="wf-input" bind:value={addValue} onchange={onAdd} aria-label={t("workflows.editor.addNode")}>
+        <option value="">{t("workflows.editor.addNodeOption")}</option>
         {#each CATEGORIES as category (category)}
-          <optgroup label={CATEGORY_LABELS[category]}>
+          <optgroup label={categoryLabel(category)}>
             {#each KINDS.filter((k) => k.category === category) as kind (kind.type)}
               <option value={kind.type}>{kind.label}</option>
             {/each}
@@ -479,22 +481,22 @@
         {/each}
       </select>
     </label>
-    <button type="button" class="wf-btn" onclick={tidy} title="Arrange the boxes in columns">
-      Tidy
+    <button type="button" class="wf-btn" onclick={tidy} title={t("workflows.editor.tidyTitle")}>
+      {t("workflows.editor.tidy")}
     </button>
     <button type="button" class="wf-btn primary" disabled={!canSave} onclick={save}>
-      {saving ? "Saving…" : "Save"}
+      {saving ? t("common.saving") : t("common.save")}
     </button>
   </header>
 
   {#if confirmingDiscard}
     <div class="banner" role="alert">
-      <span>You have unsaved changes.</span>
+      <span>{t("workflows.editor.unsavedBanner")}</span>
       <button type="button" class="wf-btn small danger" onclick={() => onclose(changed)}>
-        Discard them
+        {t("workflows.editor.discard")}
       </button>
       <button type="button" class="wf-btn small" onclick={() => (confirmingDiscard = false)}>
-        Keep editing
+        {t("workflows.editor.keepEditing")}
       </button>
     </div>
   {/if}
@@ -506,7 +508,7 @@
         width={canvasW}
         height={canvasH}
         role="application"
-        aria-label="Workflow canvas. Boxes are nodes; drag from a dot on the right edge of a box to another box to connect them."
+        aria-label={t("workflows.editor.canvas")}
         onpointerdown={onBackgroundDown}
         onpointermove={onMove}
         onpointerup={onUp}
@@ -578,9 +580,10 @@
             transform="translate({node.x} {node.y})"
             role="button"
             tabindex="0"
-            aria-label="{nodeLabel(node)}, {def.label}{nodeProblems.length > 0
-              ? `, ${nodeProblems.length} problem${nodeProblems.length === 1 ? '' : 's'}`
-              : ''}"
+            aria-pressed={selection?.kind === "node" && selection.id === node.id}
+            aria-label={nodeProblems.length > 0
+              ? t("workflows.editor.nodeAriaProblems", { label: nodeLabel(node), kind: def.label, count: nodeProblems.length })
+              : t("workflows.editor.nodeAria", { label: nodeLabel(node), kind: def.label })}
             onpointerdown={(e) => onNodeDown(e, node)}
             onkeydown={(e) => onNodeKey(e, node)}
           >
@@ -621,7 +624,7 @@
                   data-port={index}
                   onpointerdown={(e) => onPortDown(e, node, port)}
                 >
-                  <title>Drag to another box to connect ({port})</title>
+                  <title>{t("workflows.editor.portTitle", { port })}</title>
                 </circle>
               </g>
             {/each}
@@ -633,18 +636,16 @@
       {/if}
     </div>
 
-    <aside class="panel" aria-label="Properties">
+    <aside class="panel" aria-label={t("workflows.editor.properties")}>
       {#if selectedNode}
         {@const def = kindOf(selectedNode.type)}
         <h2>{def.label}</h2>
         <p class="wf-hint">{def.summary}</p>
         {#if def.needsApproval}
-          <p class="wf-hint warn">
-            This runs code or commands, so Sevak asks you to allow the workflow first.
-          </p>
+          <p class="wf-hint warn">{t("workflows.editor.needsApproval")}</p>
         {/if}
         <div class="wf-field">
-          <label for="node-title">Label</label>
+          <label for="node-title">{t("workflows.editor.label")}</label>
           <input
             id="node-title"
             class="wf-input"
@@ -654,7 +655,7 @@
             oninput={(e) => (selectedNode.title = e.currentTarget.value)}
           />
           {#if selectedNode.type === "keyword"}
-            <p class="wf-hint">Shown as the result's title; may use {"{query}"}.</p>
+            <p class="wf-hint">{t("workflows.editor.keywordTitleHint")}</p>
           {/if}
         </div>
         {#key selectedNode.id}
@@ -670,21 +671,21 @@
                 <button
                   type="button"
                   class="wf-btn small danger"
-                  aria-label="Remove the connection to {conn.to}"
-                  onclick={() => removeConnection(conn)}>Remove</button
+                  aria-label={t("workflows.editor.removeConnectionTo", { node: conn.to })}
+                  onclick={() => removeConnection(conn)}>{t("common.remove")}</button
                 >
               </div>
             {/each}
             <select
               class="wf-input"
-              aria-label="Connect {port} to"
+              aria-label={t("workflows.editor.connectPort", { port })}
               value=""
               onchange={(e) => {
                 addFromPanel(selectedNode, port, e.currentTarget.value);
                 e.currentTarget.value = "";
               }}
             >
-              <option value="">Connect to…</option>
+              <option value="">{t("workflows.editor.connectTo")}</option>
               {#each targetsFor(selectedNode, port) as other (other.id)}
                 <option value={other.id}>{nodeLabel(other)} ({other.id})</option>
               {/each}
@@ -693,7 +694,7 @@
         {/each}
 
         <div class="wf-field">
-          <label for="node-id">Id</label>
+          <label for="node-id">{t("workflows.editor.id")}</label>
           <input
             id="node-id"
             class="wf-input mono"
@@ -703,16 +704,15 @@
           />
           <p class="wf-hint">
             {#if selectedNode.type === "external"}
-              <code>sevak --trigger {currentFolder ?? "&lt;folder&gt;"}/{selectedNode.id}</code>
-              starts it.
+              {@html tHtml("workflows.editor.externalStarts", { path: `${currentFolder ?? "<folder>"}/${selectedNode.id}` })}
             {:else}
-              Names the node in the file{selectedNode.type === "hotkey" ? " and in the result id of the hotkey" : ""}.
+              {selectedNode.type === "hotkey" ? t("workflows.editor.idHintHotkey") : t("workflows.editor.idHint")}
             {/if}
           </p>
         </div>
-        <button type="button" class="wf-btn danger" onclick={deleteSelection}>Delete node</button>
+        <button type="button" class="wf-btn danger" onclick={deleteSelection}>{t("workflows.editor.deleteNode")}</button>
       {:else if selectedEdge}
-        <h2>Connection</h2>
+        <h2>{t("workflows.editor.connection")}</h2>
         <p>
           {nodeLabel(nodeById(selectedEdge.from) ?? workflow.node[0])}
           {#if portOf(selectedEdge) !== OUT}<span class="wf-chip">{portOf(selectedEdge)}</span>{/if}
@@ -720,69 +720,65 @@
           {nodeLabel(nodeById(selectedEdge.to) ?? workflow.node[0])}
         </p>
         <button type="button" class="wf-btn danger" onclick={deleteSelection}>
-          Delete connection
+          {t("workflows.editor.deleteConnection")}
         </button>
       {:else}
-        <h2>Workflow</h2>
+        <h2>{t("workflows.editor.workflow")}</h2>
         <div class="wf-field">
-          <label for="wf-name">Name</label>
+          <label for="wf-name">{t("workflows.editor.name")}</label>
           <input id="wf-name" class="wf-input" type="text" bind:value={workflow.name} />
         </div>
         <div class="wf-field">
-          <label for="wf-desc">Description</label>
+          <label for="wf-desc">{t("workflows.editor.description")}</label>
           <textarea id="wf-desc" class="wf-input" rows="2" bind:value={workflow.description}></textarea>
         </div>
         <div class="wf-field">
-          <label for="wf-author">Author</label>
+          <label for="wf-author">{t("workflows.editor.author")}</label>
           <input id="wf-author" class="wf-input" type="text" bind:value={workflow.author} />
         </div>
         <div class="wf-field">
-          <label for="wf-version">Version</label>
+          <label for="wf-version">{t("workflows.editor.version")}</label>
           <input id="wf-version" class="wf-input" type="text" bind:value={workflow.version} />
         </div>
         <div class="wf-field">
-          <span class="wf-label">Variables</span>
+          <span class="wf-label">{t("workflows.editor.variables")}</span>
           {#each variableRows as row, index (index)}
             <div class="wf-row var">
               <input
                 class="wf-input mono"
                 type="text"
-                placeholder="name"
-                aria-label="Variable name"
+                placeholder={t("workflows.editor.namePlaceholder")}
+                aria-label={t("workflows.editor.variableName")}
                 bind:value={row.name}
                 oninput={syncVariables}
               />
               <input
                 class="wf-input"
                 type="text"
-                placeholder="value"
-                aria-label="Value of {row.name || 'the variable'}"
+                placeholder={t("workflows.editor.valuePlaceholder")}
+                aria-label={row.name
+                  ? t("workflows.editor.valueOf", { name: row.name })
+                  : t("workflows.editor.valueOfUnnamed")}
                 bind:value={row.value}
                 oninput={syncVariables}
               />
               <button
                 type="button"
                 class="wf-btn small danger"
-                aria-label="Remove the variable {row.name}"
+                aria-label={t("workflows.editor.removeVariable", { name: row.name })}
                 onclick={() => removeVariable(index)}>×</button
               >
             </div>
           {/each}
-          <button type="button" class="wf-btn small" onclick={addVariable}>Add a variable</button>
-          <p class="wf-hint">
-            Every run starts with these: <code>{"{var:name}"}</code>, and an environment variable
-            for scripts.
-          </p>
+          <button type="button" class="wf-btn small" onclick={addVariable}>{t("workflows.editor.addVariable")}</button>
+          <p class="wf-hint">{@html tHtml("workflows.editor.variablesHint")}</p>
         </div>
-        <p class="wf-hint help">
-          Drag a box to move it. Drag from the dot on its right edge to another box to connect
-          them. Click a box or a line, then press Delete to remove it. Ctrl+S saves.
-        </p>
+        <p class="wf-hint help">{t("workflows.editor.help")}</p>
       {/if}
 
       {#if problems.length > 0}
-        <section class="problems" aria-label="Problems">
-          <h3>Problems</h3>
+        <section class="problems" aria-label={t("workflows.editor.problems")}>
+          <h3>{t("workflows.editor.problems")}</h3>
           <ul>
             {#each problems as problem, i (i)}
               <li class={problem.severity}>
@@ -812,6 +808,12 @@
     color: var(--fg);
     font-size: 13.5px;
     outline: none;
+  }
+
+  /* The editor itself takes focus (for its keys); show it when that was by keyboard. */
+  .editor:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: -2px;
   }
 
   .bar {

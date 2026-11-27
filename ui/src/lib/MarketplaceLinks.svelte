@@ -2,6 +2,7 @@
   // "Browse the marketplace" and "Submit your extension": two buttons that open
   // a web page in the default browser (nothing is requested by Sevak itself).
   import { openMarketplace, type MarketplacePage } from "./marketplace-ipc";
+  import { t } from "./i18n.svelte";
 
   let error = $state<string | null>(null);
 
@@ -11,11 +12,11 @@
 </script>
 
 <div class="market">
-  <span class="text">Want more, or made your own?</span>
-  <button type="button" class="link" onclick={() => open("browse")}>Browse the marketplace</button>
+  <span class="text">{t("marketplace.prompt")}</span>
+  <button type="button" class="link" onclick={() => open("browse")}>{t("marketplace.browse")}</button>
   <span class="dot" aria-hidden="true">·</span>
-  <button type="button" class="link" onclick={() => open("submit")}>Submit your extension</button>
-  <span class="text">(opens your browser)</span>
+  <button type="button" class="link" onclick={() => open("submit")}>{t("marketplace.submit")}</button>
+  <span class="text">{t("marketplace.opensBrowser")}</span>
   {#if error}<span class="error" role="alert">{error}</span>{/if}
 </div>
 
@@ -45,7 +46,7 @@
   }
 
   .link:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
     border-radius: 3px;
   }

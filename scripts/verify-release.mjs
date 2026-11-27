@@ -15,9 +15,9 @@
 // matches them. It cannot check the minisign signature itself (that needs the
 // public key and is done by the installed app when it applies an update).
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { TARGETS } from "./updater-manifest.mjs";
 
 const SUMS = "SHA256SUMS.txt";
@@ -124,7 +124,7 @@ export function verify(dir, version, manifests = []) {
   return problems;
 }
 
-if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+if (process.argv[1] && realpathSync(resolve(process.argv[1])) === realpathSync(fileURLToPath(import.meta.url))) {
   const [dir, version, ...manifests] = process.argv.slice(2);
   if (!dir || !version) {
     console.error("usage: verify-release.mjs <assets-dir> <version> [manifest.json ...]");
