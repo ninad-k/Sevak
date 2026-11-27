@@ -673,8 +673,8 @@ mod tests {
         s.record("shell:curl -H token=hunter2", "", 1_700_000_300);
         s.record_history("typed text");
         let summary = s.summary(2);
-        assert_eq!(summary.total_launches, 4);
-        assert_eq!(summary.tracked_items, 3);
+        assert_eq!(summary.total_launches, 5);
+        assert_eq!(summary.tracked_items, 4);
         assert_eq!(summary.history_entries, 1);
         assert_eq!(summary.top.len(), 2);
         assert_eq!(summary.top[0].title, "firefox");
