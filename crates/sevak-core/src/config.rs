@@ -457,6 +457,15 @@ keyword = "code"
 # "jetbrains". [] reads every one that is installed.
 editors = []
 
+[recent]
+# "recent <name>" searches the files you used lately, newest first, from the
+# operating system's own recent lists (Linux recently-used.xbel, the Windows
+# Recent folder, macOS Spotlight). Read locally; nothing is sent anywhere.
+enabled = true
+keyword = "recent"
+# How many files are kept in the list (10-500).
+max_items = 50
+
 [calendar]
 # "cal" shows today's and upcoming events from local .ics files: "cal tomorrow",
 # "cal fri", "cal 2026-12-24", or "cal <text>" to find an event. No accounts and
@@ -523,6 +532,8 @@ pub struct Config {
     pub projects: ProjectsConfig,
     /// `[calendar]`: events from local `.ics` files (`cal`).
     pub calendar: CalendarConfig,
+    /// `[recent]`: search over recently used files (`recent <name>`).
+    pub recent: RecentConfig,
 }
 
 impl Default for Config {
@@ -559,6 +570,7 @@ impl Default for Config {
             ssh: SshConfig::default(),
             projects: ProjectsConfig::default(),
             calendar: CalendarConfig::default(),
+            recent: RecentConfig::default(),
         }
     }
 }
@@ -1445,6 +1457,31 @@ impl ProjectsConfig {
     }
 }
 
+/// Bounds of `[recent] max_items`.
+pub const MIN_RECENT_ITEMS: u32 = 10;
+pub const MAX_RECENT_ITEMS: u32 = 500;
+
+/// The recent documents plugin (`recent <name>`): files the OS says were used
+/// lately.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RecentConfig {
+    pub enabled: bool,
+    pub keyword: String,
+    /// Files kept in the list ([`MIN_RECENT_ITEMS`] to [`MAX_RECENT_ITEMS`]).
+    pub max_items: u32,
+}
+
+impl Default for RecentConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            keyword: "recent".to_owned(),
+            max_items: 50,
+        }
+    }
+}
+
 /// Largest `[calendar] days`.
 pub const MAX_CALENDAR_DAYS: u32 = 60;
 
@@ -1738,6 +1775,7 @@ impl Config {
             (&mut self.ssh.keyword, "ssh"),
             (&mut self.projects.keyword, "code"),
             (&mut self.calendar.keyword, "cal"),
+            (&mut self.recent.keyword, "recent"),
         ] {
             *keyword = keyword.trim().to_owned();
             if keyword.is_empty() || keyword.contains(char::is_whitespace) {
@@ -1748,6 +1786,10 @@ impl Config {
             list.retain(|entry| !entry.trim().is_empty());
         }
         self.calendar.days = self.calendar.days.clamp(1, MAX_CALENDAR_DAYS);
+        self.recent.max_items = self
+            .recent
+            .max_items
+            .clamp(MIN_RECENT_ITEMS, MAX_RECENT_ITEMS);
         self
     }
 }
@@ -2013,6 +2055,21 @@ days = 1000
         )
         .unwrap();
         assert_eq!(config.calendar.days, MAX_CALENDAR_DAYS);
+    }
+
+    #[test]
+    fn recent_defaults_and_normalizing() {
+        let defaults = Config::default();
+        assert!(defaults.recent.enabled);
+        assert_eq!(defaults.recent.keyword, "recent");
+        assert_eq!(defaults.recent.max_items, 50);
+        let config = Config::from_toml_str("[recent]\nkeyword = \"a b\"\nmax_items = 2\n").unwrap();
+        assert_eq!(config.recent.keyword, "recent");
+        assert_eq!(config.recent.max_items, MIN_RECENT_ITEMS);
+        let config =
+            Config::from_toml_str("[recent]\nenabled = false\nmax_items = 9000\n").unwrap();
+        assert!(!config.recent.enabled);
+        assert_eq!(config.recent.max_items, MAX_RECENT_ITEMS);
     }
 
     #[test]

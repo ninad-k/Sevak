@@ -3,6 +3,8 @@ import { mockSettings } from "./mock";
 import type { Appearance, Config, WebSearchEngine } from "./settings-ipc";
 import {
   MAX_DEPTH,
+  MAX_RECENT_ITEMS,
+  MIN_RECENT_ITEMS,
   appearanceErrors,
   engineErrors,
   hotkeyErrors,
@@ -193,6 +195,22 @@ describe("validate", () => {
         c.files.max_depth = bad;
         expect(validate(c).filesDepth, String(bad)).toBeDefined();
       }
+    });
+
+    it("checks the recent documents bounds and keyword", () => {
+      const c = config();
+      for (const ok of [MIN_RECENT_ITEMS, 50, MAX_RECENT_ITEMS]) {
+        c.recent.max_items = ok;
+        expect(validate(c).recentItems, String(ok)).toBeUndefined();
+      }
+      for (const bad of [MIN_RECENT_ITEMS - 1, MAX_RECENT_ITEMS + 1, 2.5, Number.NaN]) {
+        c.recent.max_items = bad;
+        expect(validate(c).recentItems, String(bad)).toBeDefined();
+      }
+      c.recent.max_items = 50;
+      c.recent.keyword = "ff";
+      c.files.index_keyword = "ff";
+      expect(validate(c).keywords["recent.keyword"]).toBeDefined();
     });
 
     it("compares hotkey entries against the main and Universal Actions keys", () => {

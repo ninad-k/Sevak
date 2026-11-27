@@ -435,7 +435,7 @@ pub(crate) fn name_bonus(name: &str, input: &str) -> f64 {
 }
 
 /// The parent directory, with the home prefix shown as `~`.
-fn subtitle(path: &Path, home: Option<&Path>) -> String {
+pub(crate) fn subtitle(path: &Path, home: Option<&Path>) -> String {
     let parent = path.parent().unwrap_or(path);
     if let Some(home) = home {
         if let Ok(rest) = parent.strip_prefix(home) {

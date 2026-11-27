@@ -33,7 +33,7 @@ A minimal config works: missing fields use their defaults, so a nearly empty fil
 
 ### Keywords
 
-Every keyword is one word, and no two searches may share one: the configurable keywords (`[files]` `keyword` / `index_keyword` / `content_keyword`, `[bookmarks]`, `[tasks]`, `[media]`, `[window_management]` `keyword` / `switcher_keyword`, `[contacts]`, `[onepassword]`, `[dictionary]` `define_keyword` / `spell_keyword`, `[ai]`, `[ssh]`, `[projects]`, `[calendar]`, `[clock]`, `[passwords]`), the fixed ones (`>`, `cb`, `s`, `emoji`, `:`, `@`, `uuid`) and your web search keywords. Settings refuses to save a clash; in a hand-edited file a clashing keyword is ignored and logged. An empty keyword turns that keyword off.
+Every keyword is one word, and no two searches may share one: the configurable keywords (`[files]` `keyword` / `index_keyword` / `content_keyword`, `[bookmarks]`, `[tasks]`, `[media]`, `[window_management]` `keyword` / `switcher_keyword`, `[contacts]`, `[onepassword]`, `[dictionary]` `define_keyword` / `spell_keyword`, `[ai]`, `[ssh]`, `[projects]`, `[calendar]`, `[recent]`, `[clock]`, `[passwords]`), the fixed ones (`>`, `cb`, `s`, `emoji`, `:`, `@`, `uuid`) and your web search keywords. Settings refuses to save a clash; in a hand-edited file a clashing keyword is ignored and logged. An empty keyword turns that keyword off.
 
 Keywords of [workflows](workflows.md) and [script plugins](features/script-plugins.md) are checked the same way but only produce a warning (in Settings and in the log), because both plugins then answer the keyword and show their results.
 
@@ -559,6 +559,23 @@ editors = []
 keyword = "cal"
 files = []
 days = 7
+```
+
+### [recent]
+
+[Recent documents](features/files.md#recent-documents) (`recent <name>`): search the files you used lately, from the operating system's own recent lists. Set it in **Settings → Files**.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | boolean | `true` | `false` removes the search; nothing is read. |
+| `keyword` | string | `"recent"` | Keyword for the search. Cannot be empty (an empty value means the default). |
+| `max_items` | integer | `50` | How many recent files the list keeps (10-500). |
+
+```toml
+[recent]
+enabled = true
+keyword = "recent"
+max_items = 50
 ```
 
 ### [clock]
@@ -1162,6 +1179,15 @@ keyword = "code"
 # Editors to read: "vscode", "vscode-insiders", "vscodium", "cursor",
 # "jetbrains". [] reads every one that is installed.
 editors = []
+
+[recent]
+# "recent <name>" searches the files you used lately, newest first, from the
+# operating system's own recent lists (Linux recently-used.xbel, the Windows
+# Recent folder, macOS Spotlight). Read locally; nothing is sent anywhere.
+enabled = true
+keyword = "recent"
+# How many files are kept in the list (10-500).
+max_items = 50
 
 [calendar]
 # "cal" shows today's and upcoming events from local .ics files: "cal tomorrow",

@@ -56,6 +56,9 @@ pub struct MockPlatform {
     pub copied_clips: Mutex<Vec<ClipContent>>,
     /// File lists put on the clipboard.
     pub clipboard_files: Mutex<Vec<Vec<PathBuf>>>,
+    /// What `recent_files` returns, and every limit it was asked for.
+    pub recent: Mutex<Vec<sevak_platform::recent::RecentFile>>,
+    pub recent_calls: Mutex<Vec<usize>>,
     /// Paths `move_to_trash` was given (the mock does not touch the disk).
     pub trashed: Mutex<Vec<PathBuf>>,
     /// Paths `move_to_trash` fails for.
@@ -358,6 +361,17 @@ impl PlatformProvider for MockPlatform {
             .iter()
             .find(|(w, _)| w == word)
             .map(|(_, s)| s.clone())
+    }
+
+    fn recent_files(&self, limit: usize) -> Vec<sevak_platform::recent::RecentFile> {
+        self.recent_calls.lock().unwrap().push(limit);
+        self.recent
+            .lock()
+            .unwrap()
+            .iter()
+            .take(limit)
+            .cloned()
+            .collect()
     }
 
     fn set_clipboard_text_private(&self, text: &str) -> Result<()> {

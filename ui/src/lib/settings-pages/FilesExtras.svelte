@@ -6,6 +6,7 @@
   import KeywordRow from "./KeywordRow.svelte";
   import Row from "./Row.svelte";
   import { BROWSER_KEYS } from "./keys";
+  import { MAX_RECENT_ITEMS, MIN_RECENT_ITEMS } from "../validate";
   import { t, tHtml } from "../i18n.svelte";
   import "./pages.css";
 
@@ -60,6 +61,43 @@
   {#if pluginOff("bookmarks")}
     <p class="sp-note warn" role="status">
       {@html tHtml("pages.common.pluginOff", { name: t("pages.files.bookmarksPlugin") })}
+    </p>
+  {/if}
+
+  <h2 class="sp-h2">{t("pages.files.recentTitle")}</h2>
+  <p class="sp-sub">{@html tHtml("pages.files.recentSub", { keyword: config.recent.keyword.trim() || "recent" })}</p>
+  <div class="sp-group">
+    <Row label={t("pages.files.recentEnabled")} hint={t("pages.files.recentEnabledHint")}>
+      <Toggle bind:checked={config.recent.enabled} label={t("pages.files.recentEnabledToggle")} />
+    </Row>
+    <KeywordRow
+      id="recent-keyword"
+      bind:value={config.recent.keyword}
+      error={problems.keywords["recent.keyword"]}
+    />
+    <Row
+      label={t("pages.files.recentItems")}
+      hint={t("pages.files.recentItemsHint")}
+      forId="recent-items"
+      error={problems.recentItems}
+    >
+      <input
+        id="recent-items"
+        class="sp-input number"
+        class:invalid={!!problems.recentItems}
+        type="number"
+        min={MIN_RECENT_ITEMS}
+        max={MAX_RECENT_ITEMS}
+        step="1"
+        bind:value={config.recent.max_items}
+        aria-invalid={!!problems.recentItems}
+      />
+    </Row>
+  </div>
+  <p class="sp-note privacy">{@html tHtml("pages.files.recentPrivacy")}</p>
+  {#if pluginOff("recent")}
+    <p class="sp-note warn" role="status">
+      {@html tHtml("pages.common.pluginOff", { name: t("pages.files.recentPlugin") })}
     </p>
   {/if}
 </div>

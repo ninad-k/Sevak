@@ -141,6 +141,7 @@
     ssh: { keyword: "ssh", known_hosts: false },
     projects: { keyword: "code", editors: [] },
     calendar: { keyword: "cal", files: [], days: 7 },
+    recent: { enabled: true, keyword: "recent", max_items: 50 },
   });
 
   const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;

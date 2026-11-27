@@ -143,6 +143,8 @@ export interface Config {
   projects: { keyword: string; editors: string[] };
   /** `cal`: events from local .ics files and folders; `days` is 1-60. */
   calendar: { keyword: string; files: string[]; days: number };
+  /** `recent <name>`: recently used files from the OS's own lists; `max_items` is 10-500. */
+  recent: { enabled: boolean; keyword: string; max_items: number };
 }
 
 export interface PluginInfo {
