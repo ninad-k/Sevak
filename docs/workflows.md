@@ -192,6 +192,7 @@ time, no look-around, and limited in size, so a pattern cannot hang Sevak.
 | **Text view** | the text in the launcher window, below the search bar; tick **Markdown** (`"markdown": true`) to draw it as Markdown with headings, lists, tables, code and links (links open in your browser) |
 | **Speak** | reads the text aloud with the system voice (text defaults to `{query}`; *Voice* names an installed voice, empty is the system one). It does not wait for the speech to finish. macOS uses `say`, Windows the .NET speech synthesizer, Linux `spd-say` or `espeak-ng`/`espeak`; the text never goes through a shell |
 | **Play sound** | plays a sound file: `wav`, `mp3`, `aiff`, `aif`, `m4a`, `ogg` or `flac` (macOS `afplay`, Windows PowerShell, Linux `paplay`, `pw-play` or `aplay`). A relative path is inside the workflow's folder; it does not wait for the sound to finish |
+| **Show UI** | opens a small interface described in JSON, in the launcher or a window, waits for it and continues from the output a button names (or `closed`). See [Sevak UI](sevak-ui.md). A UI that declares scripts needs your Allow |
 
 The workflow's **Description** in the editor is also read as Markdown: a preview
 under the box shows how it will look.
@@ -472,7 +473,9 @@ Node types and their fields: `keyword` (`keyword`, `argument`, `subtitle`),
 = `any`, `files` or `folders`), `running_apps` (`keyword`, `output` = `name`,
 `path` or `pid`), `dialog_conditional` (`heading`, `message`, `buttons`; ports
 `button1` to `button3` and `cancel`), `speak` (`text`, `voice`) and
-`play_sound` (`path`). Every node may also have `title`, `x` and `y`. Unknown
+`play_sound` (`path`) and `show_ui` (`target`, `definition`, `file`, `scripts`, `ports`,
+`titlebar`, `always_on_top`; ports are the names its `output` actions use, and
+`closed`; see [Sevak UI](sevak-ui.md)). Every node may also have `title`, `x` and `y`. Unknown
 `type` values make the whole workflow fail to load ("Not loaded: ..." on its row)
 rather than half-work. The examples in
 [`examples/workflows/`](https://github.com/ninad-k/Sevak/tree/main/examples/workflows) show real files.

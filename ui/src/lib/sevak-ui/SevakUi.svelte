@@ -46,7 +46,15 @@
   // svelte-ignore state_referenced_locally
   let images = $state<Record<string, string>>({ ...payload.images });
   // svelte-ignore state_referenced_locally
-  let vals = $state<UiState>(initialState(payload.definition));
+  let vals = $state<UiState>(
+    Object.fromEntries(
+      // Starting text may use {query} and {var:name}.
+      Object.entries(initialState(payload.definition)).map(([id, value]) => [
+        id,
+        typeof value === "string" ? substitute(value, { state: {}, vars: payload.vars, query: payload.query }) : value,
+      ]),
+    ),
+  );
   let busy = $state(0);
   let problem = $state<string | null>(null);
   let ended = false;

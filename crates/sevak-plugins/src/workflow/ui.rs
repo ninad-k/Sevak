@@ -1775,6 +1775,16 @@ mod node_tests {
     }
 
     #[test]
+    fn the_text_transformer_example_is_valid() {
+        let text = include_str!("../../../../examples/workflows/text-transformer/workflow.toml");
+        let workflow = Workflow::from_toml(text).unwrap();
+        assert!(workflow.is_valid(), "{:?}", workflow.validate());
+        let ui = workflow.nodes.iter().find(|n| n.id == "ui").unwrap();
+        assert!(ui.kind.needs_approval());
+        assert_eq!(ui.kind.ports(), ["done", CLOSED]);
+    }
+
+    #[test]
     fn a_ui_node_round_trips_through_the_workflow_file() {
         let workflow = Workflow {
             name: "w".into(),
