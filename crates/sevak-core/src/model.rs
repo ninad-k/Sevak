@@ -411,6 +411,10 @@ pub enum IconSource {
     /// `folder`, `copy`, `terminal`, `plugin`, `lock`, `sleep`, `restart`,
     /// `power`, `logout`, `trash`, `settings`.
     Builtin { name: String },
+    /// A small image held in memory (a contact's photo): `base64` is the
+    /// standard base64 of a `mime` image, shown through a `data:` URL. Never
+    /// written to disk.
+    Inline { mime: String, base64: String },
 }
 
 impl IconSource {

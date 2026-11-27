@@ -64,6 +64,11 @@ Placeholders are **filled in when you press ++enter++**, not while you type. Thi
 | `{date:FORMAT}` | Today in [strftime](https://docs.rs/chrono/latest/chrono/format/strftime/index.html) format | `{date:%d %B %Y}` → `03 October 2026` |
 | `{time:FORMAT}` | Now in strftime format | `{time:%H:%M:%S}` → `14:05:23` |
 | `{datetime:FORMAT}` | Now in strftime format | `{datetime:%Y-%m-%d at %H:%M}` → `2026-10-03 at 14:05` |
+| `{isodate}` | Today, ISO 8601 | `2026-10-03` |
+| `{isotime}` | Now with seconds | `14:05:09` |
+| `{isodatetime}` | Date and time, ISO 8601 | `2026-10-03T14:05:09` |
+| `{snippet:keyword}` | Another snippet's text, with its own placeholders filled in. Found by keyword, else by name (case ignored). Nesting stops at 5 levels, and a snippet that includes itself (directly or through others) is left as written, as is an unknown name. Also works for [typed expansion](#expand-snippets-as-you-type). | `{snippet:sig}` |
+| `{clipboard.lowercase}`, `{clipboard.uppercase}`, `{clipboard.trim}` | The clipboard text in lower case, upper case, or without surrounding whitespace | `{clipboard.trim}` |
 | `{clipboard}` | The text on the clipboard when you pressed ++enter++ | *(whatever you had copied)* |
 | `{uuid}` | A fresh random UUID v4 | `550e8400-e29b-41d4-a716-446655440000` |
 | `{{` | A literal `{` | `{{key}}` → `{key}` |

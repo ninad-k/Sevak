@@ -289,6 +289,10 @@ max_image_bytes = 10485760
 # readable by you only. Files already stored plain are encrypted on the next
 # start.
 encrypt = true
+# Rows shown in the history list (5-100) and characters of an entry shown in
+# its title (40-500).
+viewer_rows = 20
+preview_chars = 100
 # Never record text copied from these apps, e.g. ["Signal", "Messages"].
 # Matched case-insensitively against the program or app name.
 ignore_apps = []
@@ -312,6 +316,9 @@ use_system = true
 # vCard files (.vcf) or folders of them, e.g. ["~/contacts.vcf", "~/Contacts"].
 # This works everywhere and needs no permission.
 vcard_files = []
+# Show a contact's photo (vCard PHOTO, JPEG/PNG) as its icon. Photos are decoded
+# into memory only, never written to disk.
+show_photos = true
 
 [onepassword]
 # Search your 1Password logins ("1p github"): Enter opens the item's website,
@@ -1151,6 +1158,10 @@ pub struct ClipboardConfig {
     /// user, where the system can (Windows: DPAPI). Elsewhere the files are
     /// plain but readable by the owner only.
     pub encrypt: bool,
+    /// Most history rows shown at once (5..=100).
+    pub viewer_rows: usize,
+    /// Characters of an entry shown as the row title (40..=500).
+    pub preview_chars: usize,
 }
 
 impl Default for ClipboardConfig {
@@ -1165,6 +1176,8 @@ impl Default for ClipboardConfig {
             files: true,
             max_image_bytes: 10 * 1024 * 1024,
             encrypt: true,
+            viewer_rows: 20,
+            preview_chars: 100,
         }
     }
 }
@@ -1180,6 +1193,9 @@ pub struct ContactsConfig {
     pub use_system: bool,
     /// `.vcf` files and folders of them; `~` is the home folder.
     pub vcard_files: Vec<String>,
+    /// Show a contact's photo (from its vCard) as the result icon. Photos are
+    /// decoded into memory only; nothing is written to disk.
+    pub show_photos: bool,
 }
 
 impl Default for ContactsConfig {
@@ -1189,6 +1205,7 @@ impl Default for ContactsConfig {
             keyword: "c".to_owned(),
             use_system: true,
             vcard_files: Vec::new(),
+            show_photos: true,
         }
     }
 }
@@ -1730,6 +1747,8 @@ impl Config {
             .clipboard
             .max_image_bytes
             .clamp(1, MAX_CLIPBOARD_IMAGE_BYTES_LIMIT);
+        self.clipboard.viewer_rows = self.clipboard.viewer_rows.clamp(5, 100);
+        self.clipboard.preview_chars = self.clipboard.preview_chars.clamp(40, 500);
         self.clipboard
             .ignore_apps
             .retain(|app| !app.trim().is_empty());
@@ -2428,6 +2447,28 @@ keep_between_shows = true
             MAX_CLIPBOARD_ITEM_BYTES_LIMIT
         );
         assert_eq!(config.clipboard.ignore_apps, ["KeePassXC"]);
+    }
+
+    #[test]
+    fn clipboard_viewer_options_and_contact_photos_have_defaults_and_ranges() {
+        let config = Config::default();
+        assert_eq!(config.clipboard.viewer_rows, 20);
+        assert_eq!(config.clipboard.preview_chars, 100);
+        assert!(config.contacts.show_photos);
+        let low =
+            Config::from_toml_str("[clipboard]\nviewer_rows = 1\npreview_chars = 1\n").unwrap();
+        assert_eq!(
+            (low.clipboard.viewer_rows, low.clipboard.preview_chars),
+            (5, 40)
+        );
+        let high = Config::from_toml_str("[clipboard]\nviewer_rows = 999\npreview_chars = 9999\n")
+            .unwrap();
+        assert_eq!(
+            (high.clipboard.viewer_rows, high.clipboard.preview_chars),
+            (100, 500)
+        );
+        let off = Config::from_toml_str("[contacts]\nshow_photos = false\n").unwrap();
+        assert!(!off.contacts.show_photos);
     }
 
     #[test]

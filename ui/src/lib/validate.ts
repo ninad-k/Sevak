@@ -72,6 +72,8 @@ export interface ClipboardErrors {
   maxItems?: string;
   maxItemBytes?: string;
   maxImageBytes?: string;
+  viewerRows?: string;
+  previewChars?: string;
 }
 
 export interface Problems {
@@ -287,6 +289,13 @@ export function clipboardErrors(config: Config): ClipboardErrors {
   if (text) errors.maxItemBytes = text;
   const image = sizeError(max_image_bytes, MAX_CLIPBOARD_IMAGE_BYTES, `${formatNumber(64)} MB`);
   if (image) errors.maxImageBytes = image;
+  const { viewer_rows, preview_chars } = config.clipboard;
+  if (!Number.isInteger(viewer_rows) || viewer_rows < 5 || viewer_rows > 100) {
+    errors.viewerRows = wholeNumber(5, 100);
+  }
+  if (!Number.isInteger(preview_chars) || preview_chars < 40 || preview_chars > 500) {
+    errors.previewChars = wholeNumber(40, 500);
+  }
   return errors;
 }
 

@@ -385,6 +385,8 @@ Clipboard history settings (opt-in feature).
 | `ignore_apps` | array of strings | `[]` | Apps whose copies are never recorded, e.g. `["Signal", "Messages"]`. Matched case-insensitively against the program or app name. |
 | `default_ignore_apps` | boolean | `true` | Also never record copies from the built-in list of password managers (KeePass, KeePassXC, 1Password, Bitwarden, LastPass, Dashlane, Enpass, NordPass, RoboForm, Keeper, Proton Pass and others), system credential prompts and ssh/gpg passphrase prompts, in addition to `ignore_apps`. The [full list](features/clipboard.md#password-managers-and-other-apps-skipped-by-default) is in the clipboard documentation. `false` turns it off. |
 | `encrypt` | boolean | `true` | Encrypt the history file and the image files for the current user where the system can: Windows (DPAPI). macOS and Linux have no such encryption here; their files are plain, readable by your user only. A history stored plain is encrypted at the next start. |
+| `viewer_rows` | integer | `20` | How many history rows `cb` lists at most. Range: 5–100. |
+| `preview_chars` | integer | `100` | How many characters of an entry its row title shows. Range: 40–500. |
 
 ```toml
 [clipboard]
@@ -397,6 +399,8 @@ max_image_bytes = 10485760
 ignore_apps = []
 default_ignore_apps = true
 encrypt = true
+viewer_rows = 20
+preview_chars = 100
 ```
 
 ### [file_buffer]
@@ -422,6 +426,7 @@ keep_between_shows = false
 | `keyword` | string | `"c"` | Keyword to search contacts. The `@` keyword always works too. `""` keeps the default. |
 | `use_system` | boolean | `true` | Also read the system address book: macOS Contacts (asks for permission the first time you use it), the Windows People store and Evolution's local address books on Linux. |
 | `vcard_files` | array of strings | `[]` | vCard files (`.vcf`) or folders of them, e.g. `["~/contacts.vcf", "~/Contacts"]`. Works everywhere and needs no permission. |
+| `show_photos` | boolean | `true` | Show a contact's vCard photo (inline JPEG or PNG, at most 64 KB) as its icon. Photos are held in memory only, never written to disk. |
 
 ```toml
 [contacts]
@@ -429,6 +434,7 @@ enabled = false
 keyword = "c"
 use_system = true
 vcard_files = []
+show_photos = true
 ```
 
 ### [onepassword]
@@ -986,6 +992,10 @@ images = true
 files = true
 # An image whose PNG is larger than this is not recorded.
 max_image_bytes = 10485760
+# Rows shown in the history list (5-100) and characters of an entry shown in
+# its title (40-500).
+viewer_rows = 20
+preview_chars = 100
 # Never record text copied from these apps, e.g. ["Signal", "Messages"].
 # Matched case-insensitively against the program or app name.
 ignore_apps = []
@@ -1014,6 +1024,9 @@ use_system = true
 # vCard files (.vcf) or folders of them, e.g. ["~/contacts.vcf", "~/Contacts"].
 # This works everywhere and needs no permission.
 vcard_files = []
+# Show a contact's photo (vCard PHOTO, JPEG/PNG) as its icon. Photos are decoded
+# into memory only, never written to disk.
+show_photos = true
 
 [onepassword]
 # Search your 1Password logins ("1p github"): Enter opens the item's website,

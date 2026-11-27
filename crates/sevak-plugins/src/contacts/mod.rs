@@ -21,6 +21,14 @@
 //! "Allow access" row), the Windows People store, and Evolution's local
 //! address books on Linux. See [`sources`].
 //!
+//! # Photos
+//!
+//! A vCard's inline `PHOTO` (JPEG or PNG, at most 64 KB; never a link) is the
+//! result's icon when `[contacts] show_photos` is on (the default). It is
+//! decoded at load time and held in memory like the rest: it is never written
+//! to disk, and a contact without a usable photo keeps the plugin icon. Photos
+//! of the system address books are not read.
+//!
 //! # Privacy
 //!
 //! Contacts are read on a background thread by [`Plugin::refresh`] and kept in
@@ -56,6 +64,8 @@ const AT_ID: &str = "contacts:at";
 const MAX_ROWS: usize = 30;
 /// Contacts kept; more than this is not an address book, it is a mistake.
 const MAX_CONTACTS: usize = 100_000;
+/// All the photos together, as base64 text kept in memory.
+const PHOTO_BUDGET_BYTES: usize = 16 * 1024 * 1024;
 /// Extra addresses/numbers offered in the action panel.
 const MAX_EXTRA: usize = 3;
 /// A name or company that starts with the input beats a looser match.
@@ -144,6 +154,7 @@ impl Shared {
             }
         }
 
+        limit_photos(&mut contacts, self.config.show_photos);
         let entries = index(contacts);
         tracing::info!(
             contacts = entries.len(),
@@ -177,6 +188,22 @@ impl Shared {
             });
         if let Err(err) = spawned {
             tracing::warn!(%err, "could not start the contacts thread");
+        }
+    }
+}
+
+/// Drops every photo when they are off, and the photos that would take the
+/// total over [`PHOTO_BUDGET_BYTES`]: a large address book with a photo each
+/// must not fill memory.
+fn limit_photos(contacts: &mut [Contact], show: bool) {
+    let mut total = 0;
+    for contact in contacts {
+        let Some(photo) = &contact.photo else {
+            continue;
+        };
+        total += photo.base64.len();
+        if !show || total > PHOTO_BUDGET_BYTES {
+            contact.photo = None;
         }
     }
 }
@@ -407,7 +434,13 @@ impl ContactsPlugin {
             Action::CopyText { text: primary },
         )
         .with_subtitle(subtitle)
-        .with_icon(IconSource::builtin("plugin"));
+        .with_icon(match &contact.photo {
+            Some(photo) => IconSource::Inline {
+                mime: photo.mime.to_owned(),
+                base64: photo.base64.clone(),
+            },
+            None => IconSource::builtin("plugin"),
+        });
 
         if let Some(url) = contact.emails.first().and_then(|e| mailto_url(e)) {
             item = item.with_secondary(
@@ -628,6 +661,7 @@ mod tests {
             phones: phones.iter().map(|s| (*s).to_owned()).collect(),
             company: company.map(str::to_owned),
             card_id: None,
+            photo: None,
         }
     }
 
@@ -912,6 +946,56 @@ mod tests {
             *platform.opened_links.lock().unwrap(),
             ["addressbook://AB12-34:ABPerson"]
         );
+    }
+
+    fn with_photo(mut list: Vec<Contact>) -> Vec<Contact> {
+        list[0].photo = Some(sevak_platform::contacts::ContactPhoto {
+            mime: "image/png",
+            base64: "iVBORw0KGgo=".to_owned(),
+        });
+        list
+    }
+
+    #[test]
+    fn a_contact_photo_is_the_icon_and_stays_in_memory() {
+        let platform = granted(with_photo(people()));
+        let plugins = loaded(&platform, enabled());
+        let ada = plugins[0].query("ada lovelace").remove(0);
+        assert_eq!(
+            ada.icon,
+            Some(IconSource::Inline {
+                mime: "image/png".into(),
+                base64: "iVBORw0KGgo=".into()
+            })
+        );
+        let grace = plugins[0].query("grace hopper").remove(0);
+        assert_eq!(grace.icon, Some(IconSource::builtin("plugin")));
+    }
+
+    #[test]
+    fn photos_can_be_turned_off() {
+        let platform = granted(with_photo(people()));
+        let config = ContactsConfig {
+            show_photos: false,
+            ..enabled()
+        };
+        let plugins = loaded(&platform, config);
+        let ada = plugins[0].query("ada lovelace").remove(0);
+        assert_eq!(ada.icon, Some(IconSource::builtin("plugin")));
+    }
+
+    #[test]
+    fn photos_beyond_the_budget_are_dropped() {
+        let big = || sevak_platform::contacts::ContactPhoto {
+            mime: "image/png",
+            base64: "A".repeat(PHOTO_BUDGET_BYTES / 2 + 1),
+        };
+        let mut list = people();
+        for contact in list.iter_mut().take(3) {
+            contact.photo = Some(big());
+        }
+        limit_photos(&mut list, true);
+        assert!(list[0].photo.is_some() && list[1].photo.is_none() && list[2].photo.is_none());
     }
 
     #[test]

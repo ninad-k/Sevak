@@ -54,7 +54,7 @@ use sevak_platform::{KeyEvent, KeyListener, KeyListenerSupport, PlatformProvider
 use zeroize::Zeroize;
 
 use crate::example_uuid::random_uuid_v4;
-use crate::snippets::{expand, Env};
+use crate::snippets::{expand_from, find_snippet, Env};
 
 /// How many of the latest typed characters are remembered.
 pub const BUFFER_CHARS: usize = 64;
@@ -527,7 +527,7 @@ impl Worker {
             return;
         };
         if allowed(&target, &self.settings) {
-            let mut text = self.fill_in(&snippet.text);
+            let mut text = self.fill_in(&snippet.text, &snippet.name);
             if let Some(delimiter) = found.delimiter {
                 text.push(delimiter);
             }
@@ -556,14 +556,16 @@ impl Worker {
 
     /// The snippet's text with `{date}`, `{clipboard}` and the other placeholders
     /// filled in, as when it is pasted from the launcher.
-    fn fill_in(&self, template: &str) -> String {
+    fn fill_in(&self, template: &str, root: &str) -> String {
         let clipboard = || self.platform.clipboard_text().ok().flatten();
+        let snippet = |wanted: &str| find_snippet(&self.snippets, wanted);
         let env = Env {
             now: Local::now().fixed_offset(),
             clipboard: &clipboard,
             uuid: &random_uuid_v4,
+            snippet: &snippet,
         };
-        expand(template, &env)
+        expand_from(template, &env, Some(root))
     }
 }
 

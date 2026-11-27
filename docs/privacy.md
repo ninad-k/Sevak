@@ -11,7 +11,7 @@ Sevak is local-first. Your data stays on your machine except when you explicitly
 - Search history (if enabled)
 - Clipboard history (if enabled), including copied images (PNG files) and the paths of copied files, in the local (non-roaming) data folder, encrypted for your account on Windows
 - Snippet library, and snippet expansion as you type (if enabled): the last 64 typed characters are kept in memory only, never stored, logged or sent
-- Contacts (if enabled) and the 1Password list of logins (if enabled): in memory only, and kept out of the search history and usage statistics
+- Contacts (if enabled), including vCard photos shown as icons, and the 1Password list of logins (if enabled): in memory only (photos are never written to disk or downloaded), and kept out of the search history and usage statistics
 - The dictionary and spelling checker (bundled WordNet data or the system's own), the emoji picker, automation tasks and media controls
 - The AI assistant's question and answer (if you use it), in memory only; its API keys, if you save any, in `ai-keys.json` (see [below](#ai-assistant))
 - Themes: built-in, edited, imported or exported

@@ -5,6 +5,7 @@ import {
   MAX_DEPTH,
   MAX_FILE_RESULTS,
   appearanceErrors,
+  clipboardErrors,
   engineErrors,
   hotkeyErrors,
   isColor,
@@ -248,5 +249,25 @@ describe("validate", () => {
       expect(problems.keywords["dictionary.spell_keyword"]).toBe("Required");
       expect(problems.count.integrations).toBe(4);
     });
+  });
+});
+
+describe("clipboardErrors viewer options", () => {
+  it("accepts 5..100 rows and 40..500 preview characters", () => {
+    const c = config();
+    for (const [rows, chars] of [[5, 40], [20, 100], [100, 500]]) {
+      c.clipboard.viewer_rows = rows;
+      c.clipboard.preview_chars = chars;
+      expect(clipboardErrors(c)).toEqual({});
+    }
+  });
+
+  it("rejects values outside the ranges", () => {
+    const c = config();
+    c.clipboard.viewer_rows = 4;
+    c.clipboard.preview_chars = 501;
+    const errors = clipboardErrors(c);
+    expect(errors.viewerRows).toBeDefined();
+    expect(errors.previewChars).toBeDefined();
   });
 });

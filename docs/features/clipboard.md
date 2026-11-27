@@ -65,6 +65,8 @@ Files are only recorded by their path: if one has been moved or deleted by the t
 | Enabled | `false` | Turn clipboard history on or off | [`[clipboard] enabled`](../configuration.md#clipboard) |
 | Max items | `200` | Keep this many entries; oldest are dropped (1–5000) | [`[clipboard] max_items`](../configuration.md#clipboard) |
 | Max item size | `64 KB` | Longer text is not recorded (1 B–4 MB) | [`[clipboard] max_item_bytes`](../configuration.md#clipboard) |
+| Rows shown | `20` | Most entries `cb` lists at once (5–100) | [`[clipboard] viewer_rows`](../configuration.md#clipboard) |
+| Preview length | `100` | Characters of an entry shown in its title (40–500) | [`[clipboard] preview_chars`](../configuration.md#clipboard) |
 | Images | `true` | Also record copied images (as PNG files) | [`[clipboard] images`](../configuration.md#clipboard) |
 | Files | `true` | Also record copied files and folders (their paths) | [`[clipboard] files`](../configuration.md#clipboard) |
 | Max image size | `10 MB` | An image whose PNG is larger is not recorded (1 B–64 MB) | [`[clipboard] max_image_bytes`](../configuration.md#clipboard) |
