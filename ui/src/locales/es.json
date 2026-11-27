@@ -733,6 +733,36 @@
     "submit": "Enviar tu extensión",
     "opensBrowser": "(se abre en tu navegador)"
   },
+  "usage": {
+    "title": "Uso",
+    "lead": "Lo que Sevak ha contado en este equipo para ordenar tus resultados. Nada sale de él.",
+    "total": "Lanzamientos registrados",
+    "items": "Elementos registrados",
+    "history": "Entradas del historial",
+    "top": "Elementos más usados",
+    "item": "Elemento",
+    "plugin": "Plugin",
+    "count": "Lanzamientos",
+    "last": "Último uso",
+    "perPlugin": "Lanzamientos por plugin",
+    "copy": "Copiar estadísticas",
+    "copied": "Copiado.",
+    "empty": "Aún no hay nada contado. Lanza algo y aparecerá aquí.",
+    "privacy": "Solo nombres de elementos: sin búsquedas escritas ni rutas de carpetas. Copiar estadísticas copia este mismo texto.",
+    "loadFailed": "No se pudieron leer las estadísticas de uso."
+  },
+  "filters": {
+    "sections": {
+      "label": "Filtrar ajustes",
+      "placeholder": "Filtrar secciones",
+      "none": "Ninguna sección coincide."
+    },
+    "tasks": {
+      "label": "Filtrar tareas",
+      "placeholder": "Filtrar tareas por nombre",
+      "none": "Ninguna tarea coincide."
+    }
+  },
   "settings": {
     "title": "Ajustes de Sevak",
     "loadFailed": "No se pudieron cargar los ajustes. Cierra esta ventana y vuelve a intentarlo desde el menú de la bandeja.",
@@ -756,7 +786,8 @@
       "system": "Sistema y terminal",
       "linux": "Linux",
       "backup": "Copia de seguridad",
-      "help": "Ayuda"
+      "help": "Ayuda",
+      "usage": "Uso"
     },
     "problems": {
       "one": "{count} problema",
@@ -980,6 +1011,7 @@
       "emoji": "el selector de emojis",
       "contacts": "los contactos",
       "uuid": "el generador de UUID",
+      "settings": "la búsqueda de ajustes de Sevak",
       "files": "la búsqueda de archivos",
       "indexFiles": "la búsqueda de archivos en todo el disco",
       "contentFiles": "la búsqueda en el contenido de archivos",

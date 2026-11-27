@@ -2,6 +2,7 @@
   import "./pages.css";
   import type { KeyOption } from "./types";
   import { t } from "../i18n.svelte";
+  import { filterOptions } from "./filter";
 
   /**
    * A checklist over a list of keys in the config file. In `hide` mode the list
@@ -16,12 +17,15 @@
     mode,
     label,
     id,
+    filter = "",
   }: {
     list: string[];
     options: KeyOption[];
     mode: "hide" | "only";
     label: string;
     id: string;
+    /** Shows only the options matching these words (the checked state is kept). */
+    filter?: string;
   } = $props();
 
   const norm = (key: string) => key.trim().toLowerCase();
@@ -37,14 +41,15 @@
     }
   }
 
+  const visible = $derived(filterOptions(options, filter));
   const known = $derived(new Set(options.map((option) => option.key)));
   const extras = $derived(list.filter((entry) => !known.has(norm(entry))));
 </script>
 
 <fieldset class="sp-keys" aria-labelledby="{id}-label">
   <legend class="sp-name" id="{id}-label" style="display: none">{label}</legend>
-  {#each options as option, i (option.key)}
-    {#if option.group && option.group !== options[i - 1]?.group}
+  {#each visible as option, i (option.key)}
+    {#if option.group && option.group !== visible[i - 1]?.group}
       <div class="sp-key-group" style="grid-column: 1 / -1">{option.group}</div>
     {/if}
     <label class="sp-key" class:hidden={mode === "hide" && !checked(option.key)}>

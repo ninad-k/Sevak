@@ -56,6 +56,10 @@ Examples:
 
 **New installations**: on first run, all results are equally ranked. As you use Sevak, personalization kicks in.
 
+### Searching Sevak's own settings
+
+Type `? ` followed by a word to find a setting, for example `? clipboard history`, `? dark` or `? shortcut`. Each result is a Settings tab or a well-known option; ++enter++ opens Settings on that tab. See [Find a setting](settings.md#find-a-setting).
+
 ### Query history
 
 On an **empty search bar**, press **++arrow-up++** and **++arrow-down++** to step through your last 50 searches, newest first.

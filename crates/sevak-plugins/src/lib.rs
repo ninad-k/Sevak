@@ -71,6 +71,7 @@ pub mod pwgen;
 pub mod registry;
 pub mod script;
 pub mod selection;
+pub mod settings_search;
 pub mod shell;
 pub mod snippet_expansion;
 pub mod snippets;

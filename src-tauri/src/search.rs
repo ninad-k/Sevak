@@ -73,6 +73,14 @@ fn all_plugins(
     if config.plugins.is_enabled("backup") {
         plugins.push(Arc::new(crate::backup::BackupPlugin));
     }
+    // `? ` finds a setting and opens Settings on its section.
+    if config.plugins.is_enabled("settings") {
+        plugins.push(Arc::new(
+            sevak_plugins::settings_search::SettingsSearchPlugin::new(Arc::new(
+                crate::settings::open_from_launcher,
+            )),
+        ));
+    }
     plugins.extend(extensions.plugins(config));
     // A keyword two plugins answer is not an error, but say so once.
     KeywordOwners::collect(config, scripts, workflows).log_shared();
@@ -450,6 +458,7 @@ pub fn start(app: &AppHandle) {
         .attach_notifier(&results_notifier(app));
     state.search.sink.attach(app);
     extensions::attach(app);
+    crate::settings::attach(app);
     script_plugins::review_new(app);
     workflows::review_new(app);
 

@@ -739,6 +739,36 @@
     "submit": "Proposer votre extension",
     "opensBrowser": "(ouvre votre navigateur)"
   },
+  "usage": {
+    "title": "Utilisation",
+    "lead": "Ce que Sevak a compté sur cet ordinateur pour classer vos résultats. Rien n'en sort.",
+    "total": "Lancements comptés",
+    "items": "Éléments comptés",
+    "history": "Entrées d'historique",
+    "top": "Éléments les plus utilisés",
+    "item": "Élément",
+    "plugin": "Plugin",
+    "count": "Lancements",
+    "last": "Dernier usage",
+    "perPlugin": "Lancements par plugin",
+    "copy": "Copier les statistiques",
+    "copied": "Copié.",
+    "empty": "Rien n'est encore compté. Lancez quelque chose et cela apparaîtra ici.",
+    "privacy": "Noms d'éléments uniquement : ni recherches saisies, ni chemins de dossiers. Copier les statistiques copie ce même texte.",
+    "loadFailed": "Impossible de lire les statistiques d'utilisation."
+  },
+  "filters": {
+    "sections": {
+      "label": "Filtrer les réglages",
+      "placeholder": "Filtrer les sections",
+      "none": "Aucune section ne correspond."
+    },
+    "tasks": {
+      "label": "Filtrer les tâches",
+      "placeholder": "Filtrer les tâches par nom",
+      "none": "Aucune tâche ne correspond."
+    }
+  },
   "settings": {
     "title": "Paramètres de Sevak",
     "loadFailed": "Impossible de charger les paramètres. Fermez cette fenêtre et réessayez depuis le menu de la zone de notification.",
@@ -762,7 +792,8 @@
       "system": "Système et terminal",
       "linux": "Linux",
       "backup": "Sauvegarde et restauration",
-      "help": "Aide"
+      "help": "Aide",
+      "usage": "Utilisation"
     },
     "problems": {
       "one": "{count} problème",
@@ -988,6 +1019,7 @@
       "emoji": "le sélecteur d'emoji",
       "contacts": "les contacts",
       "uuid": "le générateur d'UUID",
+      "settings": "la recherche dans les réglages de Sevak",
       "files": "la recherche de fichiers",
       "indexFiles": "la recherche de fichiers sur tout le disque",
       "contentFiles": "la recherche dans le contenu des fichiers",

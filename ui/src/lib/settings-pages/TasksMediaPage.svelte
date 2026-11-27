@@ -6,6 +6,7 @@
   import KeywordRow from "./KeywordRow.svelte";
   import Row from "./Row.svelte";
   import { TASK_KEYS } from "./keys";
+  import { filterOptions } from "./filter";
   import { t, tHtml } from "../i18n.svelte";
   import "./pages.css";
 
@@ -20,6 +21,9 @@
     platform: "windows" | "macos" | "linux";
     pluginOff: (id: string) => boolean;
   } = $props();
+
+  let taskFilter = $state("");
+  const noTaskMatches = $derived(taskFilter.trim() !== "" && filterOptions(TASK_KEYS, taskFilter).length === 0);
 </script>
 
 <div class="sp-page">
@@ -44,11 +48,28 @@
     <div class="sp-field">
       <span class="sp-name">{t("pages.tasks.offer")}</span>
       <span class="sp-hint">{t("pages.tasks.offerHint")}</span>
+      <input
+        type="search"
+        class="sp-filter"
+        aria-label={t("filters.tasks.label")}
+        placeholder={t("filters.tasks.placeholder")}
+        bind:value={taskFilter}
+        onkeydown={(e) => {
+          if (e.key === "Escape" && taskFilter !== "") {
+            e.stopPropagation();
+            taskFilter = "";
+          }
+        }}
+      />
+      {#if noTaskMatches}
+        <p class="sp-hint" role="status">{t("filters.tasks.none")}</p>
+      {/if}
       <KeySet
         id="tasks-keys"
         label={t("pages.tasks.offer")}
         mode="hide"
         options={TASK_KEYS}
+        filter={taskFilter}
         bind:list={config.tasks.disabled}
       />
     </div>

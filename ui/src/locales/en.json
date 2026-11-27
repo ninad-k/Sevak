@@ -718,6 +718,36 @@
     "submit": "Submit your extension",
     "opensBrowser": "(opens your browser)"
   },
+  "usage": {
+    "title": "Usage",
+    "lead": "What Sevak has counted on this computer to rank your results. Nothing leaves it.",
+    "total": "Launches tracked",
+    "items": "Items tracked",
+    "history": "History entries",
+    "top": "Most used items",
+    "item": "Item",
+    "plugin": "Plugin",
+    "count": "Launches",
+    "last": "Last used",
+    "perPlugin": "Launches per plugin",
+    "copy": "Copy stats",
+    "copied": "Copied.",
+    "empty": "Nothing counted yet. Launch something and it shows up here.",
+    "privacy": "Item names only: no typed searches, no folder paths. Copy stats copies the same text you see here.",
+    "loadFailed": "Could not read the usage statistics."
+  },
+  "filters": {
+    "sections": {
+      "label": "Filter settings",
+      "placeholder": "Filter sections",
+      "none": "No section matches."
+    },
+    "tasks": {
+      "label": "Filter tasks",
+      "placeholder": "Filter tasks by name",
+      "none": "No task matches."
+    }
+  },
   "settings": {
     "title": "Sevak Settings",
     "loadFailed": "Could not load the settings. Close this window and try again from the tray menu.",
@@ -741,7 +771,8 @@
       "system": "System & terminal",
       "linux": "Linux",
       "backup": "Backup & restore",
-      "help": "Help"
+      "help": "Help",
+      "usage": "Usage"
     },
     "problems": {
       "one": "{count} problem",
@@ -965,6 +996,7 @@
       "emoji": "the emoji picker",
       "contacts": "contacts",
       "uuid": "the UUID generator",
+      "settings": "the Sevak settings search",
       "files": "the files search",
       "indexFiles": "the whole-disk file search",
       "contentFiles": "the file contents search",
