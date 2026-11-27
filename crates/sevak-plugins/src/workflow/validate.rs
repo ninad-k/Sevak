@@ -21,6 +21,78 @@ use super::model::{
     MAX_NODES, SOUND_EXTENSIONS,
 };
 
+/// Checks a `show_ui` node's own fields. The definition is checked as far as
+/// it can be without the workflow folder (a `file` is read when the workflow
+/// runs, and by the builder's Validate button).
+fn check_show_ui(
+    definition: Option<&str>,
+    file: Option<&str>,
+    scripts: &std::collections::BTreeMap<String, super::ui::UiScript>,
+    ports: &[String],
+    error: &mut dyn FnMut(&str),
+) {
+    use super::ui;
+    let inline = definition.map(str::trim).filter(|text| !text.is_empty());
+    let file = file.map(str::trim).filter(|text| !text.is_empty());
+    match (inline, file) {
+        (None, None) => error("write the UI as JSON, or name a JSON file"),
+        (Some(_), Some(_)) => error("use either the definition or a file, not both"),
+        _ => {}
+    }
+    if let Some(file) = file {
+        if crate::script::relative_inside(std::path::Path::new(""), file).is_none() {
+            error("the UI file must be a path inside the workflow folder");
+        }
+    }
+    if scripts.len() > ui::MAX_UI_SCRIPTS {
+        error(&format!("a UI has at most {} scripts", ui::MAX_UI_SCRIPTS));
+    }
+    for (id, script) in scripts {
+        if !ui::valid_script_id(id) {
+            error(&format!(
+                "\"{id}\" is not a valid script id (letters, digits, - and _)"
+            ));
+        }
+        if ui::language_extension(&script.language).is_none() {
+            error(&format!(
+                "the script \"{id}\" has an unknown language (use shell, python, javascript or powershell)"
+            ));
+        }
+        if script.script.trim().is_empty() {
+            error(&format!("the script \"{id}\" is empty"));
+        }
+    }
+    for port in ports {
+        if !ui::valid_port(port) {
+            error(&format!("\"{port}\" is not a valid output name"));
+        }
+    }
+    if let Some(text) = inline {
+        let known: std::collections::BTreeSet<String> = scripts.keys().cloned().collect();
+        let loaded = serde_json::from_str::<serde_json::Value>(text)
+            .map_err(|err| format!("the UI definition is not valid JSON: {err}"))
+            .and_then(|value| {
+                // `{file:...}` includes are only read at run time.
+                if has_include(&value) {
+                    return Ok(());
+                }
+                ui::parse_value(value, &known).map(drop)
+            });
+        if let Err(message) = loaded {
+            error(&message);
+        }
+    }
+}
+
+fn has_include(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::String(text) => text.trim().starts_with("{file:"),
+        serde_json::Value::Array(items) => items.iter().any(has_include),
+        serde_json::Value::Object(map) => map.values().any(has_include),
+        _ => false,
+    }
+}
+
 /// Largest compiled regular expression a node may use.
 pub const REGEX_SIZE_LIMIT: usize = 256 * 1024;
 
@@ -232,7 +304,7 @@ impl Workflow {
                 ));
                 continue;
             };
-            if !from.kind.output_ports().contains(&conn.port.as_str()) {
+            if !from.kind.ports().iter().any(|port| *port == conn.port) {
                 problems.push(Problem::error(
                     Some(&conn.from),
                     format!(
@@ -640,6 +712,19 @@ fn check_node(node: &Node, problems: &mut Vec<Problem>) {
             }
         }
         NodeKind::PlaySound { path } => check_sound_path(path, &mut error),
+        NodeKind::ShowUi {
+            definition,
+            file,
+            scripts,
+            ports,
+            ..
+        } => check_show_ui(
+            definition.as_deref(),
+            file.as_deref(),
+            scripts,
+            ports,
+            &mut error,
+        ),
     }
 }
 

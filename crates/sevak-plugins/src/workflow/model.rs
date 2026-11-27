@@ -30,6 +30,8 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use super::ui::{UiScript, UiTarget};
+
 /// The workflow file format this Sevak reads and writes.
 pub const FORMAT: u32 = 1;
 /// Name of the workflow file inside a workflow folder.
@@ -237,10 +239,6 @@ fn yes() -> bool {
     true
 }
 
-fn is_true(value: &bool) -> bool {
-    *value
-}
-
 fn split_prefix() -> String {
     "split_".to_owned()
 }
@@ -297,6 +295,8 @@ pub const MAX_DIALOG_BUTTONS: usize = 3;
 pub const CANCEL: &str = "cancel";
 /// The output ports of a `dialog_conditional`, one per button, then `cancel`.
 pub const DIALOG_PORTS: [&str; 4] = ["button1", "button2", "button3", CANCEL];
+/// The output port of a `show_ui` node taken when the UI is dismissed.
+pub const UI_CLOSED: &str = super::ui::CLOSED;
 /// Most rows of a `list_filter`.
 pub const MAX_LIST_ITEMS: usize = 500;
 /// File extensions a `play_sound` node accepts.
@@ -604,6 +604,35 @@ pub enum NodeKind {
     },
     /// Plays a sound file (`wav`, `mp3`, `aiff`, `aif`, `m4a`, `ogg`, `flac`).
     PlaySound { path: String },
+    /// Opens a Sevak UI (see `ui.rs`) and waits for it. Continues along the
+    /// port an `output` action names, or `closed` when it is dismissed.
+    ShowUi {
+        #[serde(default)]
+        target: UiTarget,
+        /// The UI as inline JSON.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        definition: Option<String>,
+        /// Or a JSON file in the workflow folder.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        file: Option<String>,
+        /// Scripts the UI's `run` actions may start. Part of what the user
+        /// approves.
+        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+        scripts: BTreeMap<String, UiScript>,
+        /// Output ports a `file` definition uses (an inline definition is
+        /// read for them).
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        ports: Vec<String>,
+        /// A window's title bar; off for a bare window.
+        #[serde(default = "yes", skip_serializing_if = "is_true")]
+        titlebar: bool,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        always_on_top: bool,
+    },
+}
+
+fn is_true(value: &bool) -> bool {
+    *value
 }
 
 fn is_any_scope(scope: &FileScope) -> bool {
@@ -670,6 +699,7 @@ impl NodeKind {
             Self::DialogConditional { .. } => "dialog_conditional",
             Self::Speak { .. } => "speak",
             Self::PlaySound { .. } => "play_sound",
+            Self::ShowUi { .. } => "show_ui",
         }
     }
 
@@ -708,7 +738,8 @@ impl NodeKind {
             | Self::LargeType { .. }
             | Self::TextView { .. }
             | Self::Speak { .. }
-            | Self::PlaySound { .. } => Category::Output,
+            | Self::PlaySound { .. }
+            | Self::ShowUi { .. } => Category::Output,
         }
     }
 
@@ -722,7 +753,23 @@ impl NodeKind {
         match self {
             Self::Conditional { .. } => &[THEN, ELSE],
             Self::DialogConditional { .. } => &DIALOG_PORTS,
+            Self::ShowUi { .. } => &[UI_CLOSED],
             _ => &[OUT],
+        }
+    }
+
+    /// The output ports, including those that depend on the node's own
+    /// settings (a `show_ui` node has the ones its definition names).
+    pub fn ports(&self) -> Vec<String> {
+        match self {
+            Self::ShowUi {
+                definition, ports, ..
+            } => super::ui::node_ports(definition.as_deref(), ports),
+            other => other
+                .output_ports()
+                .iter()
+                .map(|p| (*p).to_owned())
+                .collect(),
         }
     }
 
@@ -748,7 +795,7 @@ impl NodeKind {
                 | Self::Paste { .. }
                 | Self::WriteFile { .. }
                 | Self::CallExternal { .. }
-        )
+        ) || matches!(self, Self::ShowUi { scripts, .. } if !scripts.is_empty())
     }
 }
 

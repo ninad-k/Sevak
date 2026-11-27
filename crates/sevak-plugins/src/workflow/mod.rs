@@ -28,6 +28,7 @@ pub mod model;
 mod plugins;
 pub mod template;
 pub mod templates;
+pub mod ui;
 pub mod validate;
 
 #[cfg(test)]

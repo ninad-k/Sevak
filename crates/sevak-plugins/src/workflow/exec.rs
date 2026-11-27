@@ -16,12 +16,13 @@
 //! selected or copied is never logged, and neither is a program's output
 //! (unless the node asks for `log_stderr`).
 
-use std::collections::{BTreeMap, HashMap};
+use std::borrow::Cow;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt;
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex, Weak};
 use std::thread;
@@ -38,6 +39,7 @@ use super::model::{
     MAX_SCRIPT_TIMEOUT_MS, OUT, SOUND_EXTENSIONS, THEN,
 };
 use super::template::{expand, expand_command, Scope, Target};
+use super::ui::{self, Component, UiDefinition, UiScript, UiTarget};
 use super::validate::{compile_regex, valid_variable_name};
 use crate::files::{expand_home, home_dir};
 use crate::script::{resolve_launch, Launch};
@@ -107,6 +109,80 @@ pub trait OutputSink: Send + Sync {
     fn ask(&self, _heading: &str, _message: &str, _buttons: &[String]) -> Option<usize> {
         None
     }
+    /// Opens a Sevak UI and waits until it ends: the user pressed something
+    /// that continues the workflow, or dismissed it (`closed`). It runs on
+    /// the workflow's own thread, so blocking is fine; while it waits, the run's
+    /// deadline is paused. `host` runs the node's scripts for the UI. `None`
+    /// means the sink cannot show UIs (the default).
+    fn show_ui(&self, _session: &UiSession, _host: &dyn UiHost) -> Option<UiOutcome> {
+        None
+    }
+}
+
+/// A Sevak UI to show: the validated definition and what the renderer needs
+/// around it. Sinks that draw it never log any of it (it holds what the user
+/// typed and selected).
+#[derive(Clone)]
+pub struct UiSession {
+    /// The workflow's folder name and display name.
+    pub folder: String,
+    pub workflow: String,
+    pub node: String,
+    pub target: UiTarget,
+    pub titlebar: bool,
+    pub always_on_top: bool,
+    pub definition: UiDefinition,
+    /// `data:` URLs of the images, by the path written in the definition.
+    pub images: BTreeMap<String, String>,
+    pub vars: BTreeMap<String, String>,
+    /// The argument the node received (`{query}`).
+    pub query: String,
+    /// Ids of the scripts `run` actions may name.
+    pub scripts: BTreeSet<String>,
+}
+
+impl fmt::Debug for UiSession {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("UiSession")
+            .field("folder", &self.folder)
+            .field("node", &self.node)
+            .field("target", &self.target)
+            .finish()
+    }
+}
+
+/// How a UI ended.
+#[derive(Debug, Clone, PartialEq)]
+pub struct UiOutcome {
+    /// The output port to continue from (`closed` when dismissed).
+    pub port: String,
+    /// The argument for the next nodes; the JSON of `state` when `None`.
+    pub arg: Option<String>,
+    /// The state when the UI ended.
+    pub state: serde_json::Value,
+}
+
+/// What running a UI script changes in the open UI.
+#[derive(Debug, Clone, PartialEq, Default, serde::Serialize)]
+pub struct UiUpdate {
+    pub set: BTreeMap<String, serde_json::Value>,
+    /// A component that replaces the whole UI, already checked.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub root: Option<Component>,
+    pub images: BTreeMap<String, String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notify: Option<String>,
+    pub close: bool,
+}
+
+/// What a sink may ask of the workflow while its UI is open.
+pub trait UiHost {
+    /// Runs the node's script `id` (the node's approved scripts only) with
+    /// `input` (`{event, component, state, vars}`) on standard input.
+    fn run_script(&self, id: &str, input: &serde_json::Value) -> Result<UiUpdate, String>;
+    /// Whether the workflow is being stopped (Sevak is closing or reloading):
+    /// a sink that waits for the user gives up.
+    fn cancelled(&self) -> bool;
 }
 
 /// Drops everything (workflows built without a shell).
@@ -161,7 +237,7 @@ pub struct RunReport {
 
 struct Step {
     ctx: Ctx,
-    port: &'static str,
+    port: Cow<'static, str>,
 }
 
 /// What a whole call chain may spend: every `call_external` shares the
@@ -169,6 +245,16 @@ struct Step {
 struct Budget {
     deadline: Instant,
     steps: AtomicUsize,
+    /// Milliseconds spent waiting for the user in a `show_ui` node. The run
+    /// limit is about a workflow doing work, not about a person reading.
+    paused_ms: AtomicU64,
+}
+
+impl Budget {
+    fn expired(&self) -> bool {
+        Instant::now()
+            > self.deadline + Duration::from_millis(self.paused_ms.load(Ordering::SeqCst))
+    }
 }
 
 struct Run {
@@ -349,6 +435,7 @@ impl Runtime {
         let budget = Arc::new(Budget {
             deadline: Instant::now() + RUN_LIMIT,
             steps: AtomicUsize::new(0),
+            paused_ms: AtomicU64::new(0),
         });
         self.run_blocking_at(start, ctx, 0, budget)
     }
@@ -394,7 +481,7 @@ impl Runtime {
             Some("Sevak is closing or reloading")
         } else if run.budget.steps.load(Ordering::SeqCst) >= MAX_STEPS {
             Some("the run reached the limit of steps")
-        } else if Instant::now() > run.budget.deadline {
+        } else if run.budget.expired() {
             Some("the run took too long")
         } else {
             None
@@ -414,7 +501,7 @@ impl Runtime {
         run.report.executed.push(id.to_owned());
         run.budget.steps.fetch_add(1, Ordering::SeqCst);
         match self.execute(node, &ctx, run.depth, &run.budget) {
-            Ok(step) => self.follow(id, step.port, &step.ctx, run),
+            Ok(step) => self.follow(id, &step.port, &step.ctx, run),
             Err(message) => {
                 tracing::warn!(
                     workflow = self.folder,
@@ -444,6 +531,7 @@ impl Runtime {
         let plain = |text: &str| expand(text, &scope, Target::Plain);
         let mut next = ctx.clone();
         let mut port = OUT;
+        let mut dynamic_port: Option<String> = None;
         match &node.kind {
             NodeKind::Keyword { .. }
             | NodeKind::Hotkey { .. }
@@ -831,6 +919,57 @@ impl Runtime {
                     _ => CANCEL,
                 };
             }
+            NodeKind::ShowUi {
+                target,
+                definition,
+                file,
+                scripts,
+                titlebar,
+                always_on_top,
+                ..
+            } => {
+                let ids: BTreeSet<String> = scripts.keys().cloned().collect();
+                let loaded = ui::load(
+                    &ui::Source {
+                        inline: definition.as_deref(),
+                        file: file.as_deref(),
+                        dir: &self.dir,
+                    },
+                    &ids,
+                )?;
+                let (images, problems) = ui::load_images(&loaded.root, &self.dir);
+                if let Some(problem) = problems.first() {
+                    self.sink.notify(&self.display_name(), problem);
+                }
+                let session = UiSession {
+                    folder: self.folder.clone(),
+                    workflow: self.display_name(),
+                    node: node.id.clone(),
+                    target: *target,
+                    titlebar: *titlebar,
+                    always_on_top: *always_on_top,
+                    definition: loaded,
+                    images,
+                    vars: ctx.vars.clone(),
+                    query: ctx.arg.clone(),
+                    scripts: ids,
+                };
+                let host = NodeUiHost {
+                    runtime: self,
+                    node,
+                    ctx,
+                    session: &session,
+                    scripts,
+                };
+                let started = Instant::now();
+                let outcome = self.sink.show_ui(&session, &host);
+                budget
+                    .paused_ms
+                    .fetch_add(started.elapsed().as_millis() as u64, Ordering::SeqCst);
+                let outcome = outcome.ok_or("this Sevak cannot show the UI here")?;
+                next.arg = outcome.arg.unwrap_or_else(|| outcome.state.to_string());
+                dynamic_port = Some(outcome.port);
+            }
             NodeKind::Speak { text, voice } => {
                 let text = plain(text);
                 let voice = voice.as_deref().map(plain);
@@ -854,7 +993,10 @@ impl Runtime {
                     .map_err(|err| format!("could not play the sound: {err}"))?;
             }
         }
-        Ok(Step { ctx: next, port })
+        Ok(Step {
+            ctx: next,
+            port: dynamic_port.map_or(Cow::Borrowed(port), Cow::Owned),
+        })
     }
 
     /// Sleeps for `total`, waking early when the runtime shuts down. False
@@ -1102,6 +1244,88 @@ impl Runtime {
 struct Limits {
     timeout: Duration,
     log_stderr: bool,
+}
+
+/// Runs the scripts of one `show_ui` node for its open UI.
+struct NodeUiHost<'a> {
+    runtime: &'a Runtime,
+    node: &'a Node,
+    ctx: &'a Ctx,
+    session: &'a UiSession,
+    scripts: &'a BTreeMap<String, UiScript>,
+}
+
+impl UiHost for NodeUiHost<'_> {
+    fn run_script(&self, id: &str, input: &serde_json::Value) -> Result<UiUpdate, String> {
+        let script = self
+            .scripts
+            .get(id)
+            .ok_or_else(|| format!("the UI has no script \"{id}\""))?;
+        let extension = ui::language_extension(&script.language)
+            .ok_or_else(|| "the script's language is not supported".to_owned())?;
+        let runtime = self.runtime;
+        // The source is written fresh for each run, next to the workflow's other
+        // data, so the interpreter gets a plain file path (no quoting of source
+        // on a command line).
+        let folder = runtime.data_dir.join("ui-scripts");
+        std::fs::create_dir_all(&folder)
+            .map_err(|err| format!("could not prepare the script: {err}"))?;
+        let path = folder.join(format!("{}-{id}.{extension}", self.node.id));
+        std::fs::write(&path, &script.script)
+            .map_err(|err| format!("could not prepare the script: {err}"))?;
+        let mut argv = match sevak_platform::process::script_runner(extension) {
+            sevak_platform::process::ScriptRunner::Interpreter(mut prefix) => {
+                if let Some(first) = prefix.first_mut() {
+                    *first = sevak_platform::process::pin_program(first)
+                        .map_err(|err| format!("could not start `{first}`: {err}"))?;
+                }
+                prefix
+            }
+            sevak_platform::process::ScriptRunner::Direct => {
+                return Err(format!(
+                    "no interpreter for {} scripts on this system",
+                    script.language
+                ))
+            }
+            sevak_platform::process::ScriptRunner::Missing(names) => {
+                return Err(format!("none of {} is on PATH", names.join(", ")))
+            }
+        };
+        argv.push(path.to_string_lossy().into_owned());
+        let environment = runtime.environment(self.ctx);
+        let limits = Limits {
+            timeout: Duration::from_millis(DEFAULT_SCRIPT_TIMEOUT_MS),
+            log_stderr: false,
+        };
+        let stdout = runtime.run_program(
+            &self.node.id,
+            &argv,
+            Some(input.to_string()),
+            &environment,
+            &limits,
+        )?;
+        let reply = ui::parse_reply(&String::from_utf8_lossy(&stdout))?;
+        let mut update = UiUpdate {
+            set: reply.set,
+            notify: reply.notify,
+            close: reply.close,
+            ..UiUpdate::default()
+        };
+        if let Some(root) = reply.root {
+            let root = ui::replacement_root(root, &self.session.definition, &self.session.scripts)?;
+            let (images, problems) = ui::load_images(&root, &runtime.dir);
+            if let Some(problem) = problems.first() {
+                update.notify.get_or_insert_with(|| problem.clone());
+            }
+            update.images = images;
+            update.root = Some(root);
+        }
+        Ok(update)
+    }
+
+    fn cancelled(&self) -> bool {
+        self.runtime.cancelled()
+    }
 }
 
 /// Whether a variable becomes an environment variable of the scripts: a plain
@@ -3157,5 +3381,254 @@ mod utility_node_tests {
         let report = f.runtime.run_blocking("k", Ctx::default());
         assert_eq!(report.errors.len(), 1);
         assert!(report.errors[0].message.contains("other"), "{report:?}");
+    }
+}
+
+#[cfg(test)]
+mod ui_node_tests {
+    use super::*;
+    use crate::workflow::testing::{
+        clipboard, copy, fixture_with, keyword, node, wire, wire_port, Fixture, RecordingSink,
+        UiScripted,
+    };
+    use serde_json::json;
+
+    const DEFINITION: &str = r#"{
+        "state": {"name": ""},
+        "root": {"type": "column", "children": [
+            {"type": "textfield", "id": "name"},
+            {"type": "button", "label": "Save", "events": {"click": {"output": "save"}}},
+            {"type": "button", "label": "Run", "events": {"click": {"run": "up"}}}
+        ]}
+    }"#;
+
+    fn show_ui(scripts: &[(&str, &str, &str)]) -> Node {
+        node(
+            "ui",
+            NodeKind::ShowUi {
+                target: UiTarget::Launcher,
+                definition: Some(DEFINITION.to_owned()),
+                file: None,
+                scripts: scripts
+                    .iter()
+                    .map(|(id, language, script)| {
+                        (
+                            (*id).to_owned(),
+                            UiScript {
+                                language: (*language).to_owned(),
+                                script: (*script).to_owned(),
+                            },
+                        )
+                    })
+                    .collect(),
+                ports: Vec::new(),
+                titlebar: true,
+                always_on_top: false,
+            },
+        )
+    }
+
+    fn flow(scripts: &[(&str, &str, &str)], ui_script: Vec<UiScripted>) -> Fixture {
+        let sink = RecordingSink::default();
+        sink.ui_script.lock().unwrap().extend(ui_script);
+        let f = fixture_with(
+            vec![
+                keyword("k"),
+                show_ui(scripts),
+                copy("saved", "saved:{query}"),
+                copy("closed", "closed"),
+            ],
+            vec![
+                wire("k", "ui"),
+                wire_port("ui", "save", "saved"),
+                wire_port("ui", "closed", "closed"),
+            ],
+            sink,
+        );
+        std::fs::create_dir_all(&f.runtime.dir).unwrap();
+        f
+    }
+
+    fn outcome(port: &str, arg: Option<&str>) -> UiOutcome {
+        UiOutcome {
+            port: port.to_owned(),
+            arg: arg.map(str::to_owned),
+            state: json!({"name": "Ada"}),
+        }
+    }
+
+    #[test]
+    fn the_workflow_continues_from_the_port_the_ui_chose() {
+        let f = flow(
+            &[("up", "shell", "echo")],
+            vec![UiScripted {
+                runs: vec![],
+                outcome: outcome("save", None),
+            }],
+        );
+        let report = f.runtime.run_blocking("k", Ctx::with_arg("seed"));
+        assert!(report.errors.is_empty(), "{:?}", report.errors);
+        // No explicit argument: the state as JSON.
+        assert_eq!(clipboard(&f), [r#"saved:{"name":"Ada"}"#]);
+        let sessions = f.sink.ui_sessions.lock().unwrap();
+        assert_eq!(sessions[0].query, "seed");
+        assert_eq!(sessions[0].node, "ui");
+        assert_eq!(sessions[0].scripts.len(), 1);
+    }
+
+    #[test]
+    fn an_explicit_argument_and_the_closed_port() {
+        let f = flow(
+            &[("up", "shell", "echo")],
+            vec![UiScripted {
+                runs: vec![],
+                outcome: outcome("save", Some("Ada")),
+            }],
+        );
+        f.runtime.run_blocking("k", Ctx::default());
+        assert_eq!(clipboard(&f), ["saved:Ada"]);
+
+        let f = flow(
+            &[("up", "shell", "echo")],
+            vec![UiScripted {
+                runs: vec![],
+                outcome: outcome("closed", None),
+            }],
+        );
+        f.runtime.run_blocking("k", Ctx::default());
+        assert_eq!(clipboard(&f), ["closed"]);
+    }
+
+    #[test]
+    fn a_sink_that_cannot_show_uis_fails_the_node() {
+        let f = flow(&[("up", "shell", "echo")], vec![]);
+        let report = f.runtime.run_blocking("k", Ctx::default());
+        assert_eq!(report.errors.len(), 1, "{report:?}");
+        assert!(
+            report.errors[0].message.contains("cannot show"),
+            "{report:?}"
+        );
+        assert!(clipboard(&f).is_empty());
+    }
+
+    #[test]
+    fn a_broken_definition_is_a_node_error_and_never_reaches_the_sink() {
+        let mut broken = show_ui(&[]);
+        if let NodeKind::ShowUi {
+            definition, file, ..
+        } = &mut broken.kind
+        {
+            *definition = None;
+            *file = Some("ui.json".to_owned());
+        }
+        let f = fixture_with(
+            vec![keyword("k"), broken],
+            vec![wire("k", "ui")],
+            RecordingSink::default(),
+        );
+        std::fs::create_dir_all(&f.runtime.dir).unwrap();
+        std::fs::write(
+            f.runtime.dir.join("ui.json"),
+            r#"{"root": {"type": "webview"}}"#,
+        )
+        .unwrap();
+        let report = f.runtime.run_blocking("k", Ctx::default());
+        assert_eq!(report.errors.len(), 1);
+        assert!(report.errors[0].message.contains("not valid"), "{report:?}");
+        assert!(f.sink.ui_sessions.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn waiting_for_the_user_does_not_use_up_the_run_limit() {
+        let budget = Budget {
+            deadline: Instant::now() - Duration::from_secs(5),
+            steps: AtomicUsize::new(0),
+            paused_ms: AtomicU64::new(0),
+        };
+        assert!(budget.expired());
+        budget.paused_ms.store(60_000, Ordering::SeqCst);
+        assert!(!budget.expired());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_script_gets_the_event_on_stdin_and_its_json_updates_the_ui() {
+        let script = r#"
+read input
+case "$input" in
+  *Ada*) echo '{"set": {"out": "got Ada"}, "notify": "hi"}' ;;
+  *) echo '{"set": {"out": "no"}}' ;;
+esac
+"#;
+        let f = flow(
+            &[("up", "shell", script)],
+            vec![UiScripted {
+                runs: vec![
+                    (
+                        "up".to_owned(),
+                        json!({"event": "click", "component": "go", "state": {"name": "Ada"}, "vars": {}}),
+                    ),
+                    ("up".to_owned(), json!({"state": {"name": "Bob"}})),
+                    ("missing".to_owned(), json!({})),
+                ],
+                outcome: outcome("closed", None),
+            }],
+        );
+        let report = f.runtime.run_blocking("k", Ctx::default());
+        assert!(report.errors.is_empty(), "{:?}", report.errors);
+        let updates = f.sink.ui_updates.lock().unwrap();
+        let first = updates[0].as_ref().unwrap();
+        assert_eq!(first.set["out"], json!("got Ada"));
+        assert_eq!(first.notify.as_deref(), Some("hi"));
+        assert_eq!(updates[1].as_ref().unwrap().set["out"], json!("no"));
+        assert!(updates[2].as_ref().unwrap_err().contains("no script"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_script_can_replace_the_whole_ui_and_bad_output_is_an_error() {
+        let replace = r#"
+cat > /dev/null
+echo '{"root": {"type": "label", "text": "new"}}'
+"#;
+        let invalid = "cat > /dev/null; echo '{\"root\": {\"type\": \"webview\"}}'";
+        let text = "cat > /dev/null; echo hello";
+        let f = flow(
+            &[
+                ("a", "shell", replace),
+                ("b", "shell", invalid),
+                ("c", "shell", text),
+                ("up", "shell", "true"),
+            ],
+            vec![UiScripted {
+                runs: ["a", "b", "c"]
+                    .map(|id| (id.to_owned(), json!({})))
+                    .to_vec(),
+                outcome: outcome("closed", None),
+            }],
+        );
+        // The definition names only "up"; scripts a to c are declared by the node.
+        f.runtime.run_blocking("k", Ctx::default());
+        let updates = f.sink.ui_updates.lock().unwrap();
+        assert!(matches!(
+            updates[0].as_ref().unwrap().root,
+            Some(Component::Label { .. })
+        ));
+        assert!(updates[1].is_err());
+        assert!(updates[2].as_ref().unwrap_err().contains("JSON"));
+    }
+
+    #[test]
+    fn a_failing_script_reports_its_exit_code() {
+        let f = flow(
+            &[("up", "shell", "exit 3")],
+            vec![UiScripted {
+                runs: vec![("up".to_owned(), json!({}))],
+                outcome: outcome("closed", None),
+            }],
+        );
+        f.runtime.run_blocking("k", Ctx::default());
+        let updates = f.sink.ui_updates.lock().unwrap();
+        assert!(updates[0].is_err(), "{updates:?}");
     }
 }
