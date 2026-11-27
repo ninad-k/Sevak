@@ -879,7 +879,18 @@
       "none": "None",
       "missing": "{keyword} (missing)",
       "remember": "Remember searches",
-      "rememberHint": "Up and Down on an empty search bar recall what you last ran. Kept on this computer only."
+      "rememberHint": "Up and Down on an empty search bar recall what you last ran. Kept on this computer only.",
+      "retention": "Keep searches for",
+      "retentionHint": "Older searches are forgotten. They also show up after ! in the launcher.",
+      "retention24h": "24 hours",
+      "retention7d": "7 days",
+      "retention30d": "30 days",
+      "retention90d": "90 days",
+      "persist": "Save searches to disk",
+      "persistHint": "Off keeps them in memory until Sevak quits and removes what was saved.",
+      "clear": "Clear history",
+      "clearHint": "Forget every remembered search now.",
+      "cleared": "Cleared."
     },
     "plugins": {
       "enable": "Enable {name}",
@@ -1002,6 +1013,9 @@
     "size": "Enter a size above 0, up to {max}",
     "wholeNumber": "Enter a whole number from {min} to {max}",
     "fallbackGone": "The engine \"{keyword}\" no longer exists.",
+    "emptyAlias": "Alias cannot be empty",
+    "aliasTwice": "\"{alias}\" is listed twice",
+    "retention": "Use hours or days, such as 24h, 7d or 90d",
     "owner": {
       "terminal": "terminal commands",
       "clipboard": "clipboard history",
@@ -1010,6 +1024,7 @@
       "contacts": "contacts",
       "uuid": "the UUID generator",
       "settings": "the Sevak settings search",
+      "history": "the query history",
       "files": "the files search",
       "indexFiles": "the whole-disk file search",
       "contentFiles": "the file contents search",

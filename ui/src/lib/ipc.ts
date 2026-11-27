@@ -119,6 +119,8 @@ export interface ResultDto {
   text_view?: boolean;
   /** Enter opens the Text View instead of running the action. */
   text_on_enter?: boolean;
+  /** Enter puts `autocomplete` into the input instead of running the action (query history). */
+  complete_on_enter?: boolean;
   /** What Ctrl+L shows as Large Type instead of the title (a phone number, say). */
   large_text?: string | null;
 }
@@ -299,6 +301,16 @@ export async function queryHistory(): Promise<string[]> {
   } catch (err) {
     console.warn("[ipc] query_history failed:", err);
     return [];
+  }
+}
+
+/** Forgets every remembered search (Settings' "Clear history"). */
+export async function clearQueryHistory(): Promise<void> {
+  if (import.meta.env.DEV && !hasTauri()) return;
+  try {
+    await invoke("clear_query_history");
+  } catch (err) {
+    console.warn("[ipc] clear_query_history failed:", err);
   }
 }
 

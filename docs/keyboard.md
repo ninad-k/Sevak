@@ -114,6 +114,14 @@ On an **empty search bar**:
 
 Typing leaves history. Toggle history on or off with `[search] query_history`.
 
+With the `!` keyword (`! rust`) the same searches are listed and filtered:
+
+| Key | Action |
+|---|---|
+| ++enter++ | Put the highlighted search back into the search bar |
+| ++ctrl+enter++ | Delete it from the history |
+| ++alt+enter++ | Clear the whole history (asks first) |
+
 ### Closing
 
 | Key | Action |

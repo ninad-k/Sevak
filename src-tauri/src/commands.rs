@@ -80,6 +80,9 @@ pub struct ResultDto {
     pub text_view: bool,
     /// Enter opens the Text View instead of running the action.
     pub text_on_enter: bool,
+    /// Enter puts `autocomplete` into the input instead of running the action
+    /// (the query history).
+    pub complete_on_enter: bool,
     /// What Ctrl+L shows as Large Type when it is not the title.
     pub large_text: Option<String>,
 }
@@ -141,6 +144,7 @@ pub(crate) fn to_dtos(icons: Vec<Option<IconDto>>, items: &[ResultItem]) -> Vec<
                         | ViewHint::Markdown { on_enter: true, .. }
                 )
             ),
+            complete_on_enter: matches!(item.view, Some(ViewHint::Complete)),
             large_text: item.large_text.clone(),
         })
         .collect()
@@ -235,6 +239,14 @@ pub async fn open_link(url: String) -> Result<(), String> {
 #[tauri::command]
 pub fn query_history(state: State<'_, AppState>) -> Vec<String> {
     state.search.engine().history()
+}
+
+/// Forgets every remembered query (Settings' "Clear history") and rewrites
+/// `usage.json` without them.
+#[tauri::command]
+pub fn clear_query_history(state: State<'_, AppState>) {
+    state.search.engine().clear_history();
+    state.search.saver.poke();
 }
 
 /// Executes result `id` of search `ticket`, the result set the UI is showing.

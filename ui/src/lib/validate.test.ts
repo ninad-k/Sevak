@@ -11,6 +11,10 @@ import {
   engineErrors,
   hotkeyErrors,
   isColor,
+  isRetention,
+  keywordAliases,
+  keywordProblems,
+  primaryKeyword,
   totalProblems,
   validate,
 } from "./validate";
@@ -287,5 +291,73 @@ describe("clipboardErrors viewer options", () => {
     const errors = clipboardErrors(c);
     expect(errors.viewerRows).toBeDefined();
     expect(errors.previewChars).toBeDefined();
+  });
+});
+
+describe("keyword aliases", () => {
+  it("splits, trims and lowercases aliases; the first one is primary", () => {
+    expect(keywordAliases(" G || Google ")).toEqual(["g", "google"]);
+    expect(keywordAliases("")).toEqual([]);
+    expect(primaryKeyword(" G || Google ")).toBe("G");
+    expect(primaryKeyword("")).toBe("");
+  });
+
+  it("checks each alias of a built-in keyword on its own", () => {
+    const base = config();
+    base.tasks.keyword = "todo||t2";
+    base.web_search = [engine("g||google")];
+    expect(keywordProblems(base)["tasks.keyword"]).toBeUndefined();
+
+    const problem = (keyword: string, tweak: (c: Config) => void = () => {}) => {
+      const c = config();
+      c.web_search = [engine("g||google")];
+      c.tasks.keyword = keyword;
+      tweak(c);
+      return keywordProblems(c)["tasks.keyword"];
+    };
+    expect(problem("a||")).toBe("Alias cannot be empty");
+    expect(problem("||")).toBe("Alias cannot be empty");
+    expect(problem("a||b c")).toBe("No spaces");
+    expect(problem("a||A")).toBe('"a" is listed twice');
+    expect(problem("x||GOOGLE")).toBe("Already a web search keyword");
+    expect(problem("x||!")).toBe("Already used by the query history");
+    expect(problem("x||uuid")).toBe("Already used by the UUID generator");
+    expect(problem("x||zz", (c) => (c.media.keyword = "y||ZZ"))).toBe("Already used by media controls");
+  });
+
+  it("checks the aliases of a web engine and lets the fallback name any of them", () => {
+    const all = [engine("g||google"), engine("yt||Google")];
+    expect(engineErrors(all[0], all).keyword).toBe("Already used");
+    expect(engineErrors(engine("a||"), [engine("a||")]).keyword).toBe("Alias cannot be empty");
+    expect(engineErrors(engine("a||!"), [], new Map([["!", "the query history"]])).keyword).toBe(
+      "Used by the query history",
+    );
+    const lone = engine("g||google");
+    expect(engineErrors(lone, [lone]).keyword).toBeUndefined();
+
+    const c = config();
+    c.web_search = [engine("g||google")];
+    c.search.fallback_web_search = "google";
+    expect(validate(c).fallback).toBeUndefined();
+    c.search.fallback_web_search = "bing";
+    expect(validate(c).fallback).toContain("bing");
+  });
+});
+
+describe("history retention", () => {
+  it("accepts hours and days like Rust", () => {
+    for (const ok of ["24h", "7d", "30d", "90d", " 12H ", "3650d"]) expect(isRetention(ok), ok).toBe(true);
+    for (const bad of ["", "d", "0h", "0d", "7", "5w", "3651d", "1.5d", "-1d"]) {
+      expect(isRetention(bad), bad).toBe(false);
+    }
+  });
+
+  it("flags a bad value in the search section", () => {
+    const c = config();
+    expect(validate(c).historyRetention).toBeUndefined();
+    c.search.history_retention = "soon";
+    const problems = validate(c);
+    expect(problems.historyRetention).toBeDefined();
+    expect(problems.count.search).toBe(1);
   });
 });

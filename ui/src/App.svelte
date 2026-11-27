@@ -1236,6 +1236,7 @@
       e.preventDefault();
       const modifier = modifierOf(e);
       if (modifier === null && current?.text_on_enter) void openTextView();
+      else if (modifier === null && current?.complete_on_enter && current.autocomplete) complete(false);
       else if (modifier === null) void run(selected);
       else runModified(modifier);
     } else if (ctrl && /^[1-9]$/.test(key)) {

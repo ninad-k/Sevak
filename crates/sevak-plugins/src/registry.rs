@@ -36,7 +36,8 @@ use crate::{
     WindowManagerPlugin,
 };
 use crate::{
-    CalendarPlugin, ClockPlugin, PasswordPlugin, ProjectsPlugin, RecentDocsPlugin, SshPlugin,
+    CalendarPlugin, ClockPlugin, PasswordPlugin, ProjectsPlugin, QueryHistoryPlugin,
+    RecentDocsPlugin, SshPlugin,
 };
 
 /// Builds the instances of one plugin family.
@@ -363,6 +364,12 @@ impl PluginRegistry {
                 ))]
             },
         ));
+        registry.register(PluginDescriptor::new(
+            "history",
+            "Query history",
+            "Type `!` to list the searches you ran, newest first; Enter puts one back in the search box.",
+            |_, _| vec![Arc::new(QueryHistoryPlugin::new())],
+        ));
         registry
     }
 
@@ -427,7 +434,10 @@ impl PluginRegistry {
                     id: plugin.id().to_owned(),
                     name: plugin.name().to_owned(),
                     description: plugin.description().to_owned(),
-                    keyword: plugin.keyword().map(str::to_owned),
+                    // The first alias is the primary keyword shown in hints.
+                    keyword: plugin
+                        .keyword()
+                        .map(|k| sevak_core::keyword::primary(k).to_owned()),
                     enabled: family_enabled && config.plugins.is_enabled(plugin.id()),
                 });
             }
@@ -489,7 +499,8 @@ mod tests {
                 "recent",
                 "calendar",
                 "clock",
-                "pwgen"
+                "pwgen",
+                "history"
             ]
         );
     }
@@ -531,7 +542,8 @@ mod tests {
                 "recent",
                 "calendar",
                 "clock",
-                "pwgen"
+                "pwgen",
+                "history"
             ]
         );
     }
@@ -571,7 +583,8 @@ mod tests {
                 "recent",
                 "calendar",
                 "clock",
-                "pwgen"
+                "pwgen",
+                "history"
             ]
         );
     }
@@ -611,7 +624,8 @@ mod tests {
                 "recent",
                 "calendar",
                 "clock",
-                "pwgen"
+                "pwgen",
+                "history"
             ]
         );
     }
@@ -667,6 +681,7 @@ mod tests {
                 ("calendar", true),
                 ("clock", true),
                 ("pwgen", true),
+                ("history", true),
             ]
         );
     }

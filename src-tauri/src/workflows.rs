@@ -88,7 +88,7 @@ impl OutputSink for TauriSink {
     // Shown to the user in the launcher window, never logged: it holds what
     // they typed and selected.
     fn debug(&self, text: &str) {
-        self.show(OutputKind::TextView, "Workflow debug", text);
+        self.show(OutputKind::TextView, "Workflow debug", text, false);
     }
 
     fn confirm(&self, question: &str) -> bool {

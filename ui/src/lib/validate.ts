@@ -93,6 +93,8 @@ export interface Problems {
   /** `[recent] max_items` out of range. */
   recentItems?: string;
   fallback?: string;
+  /** `[search] history_retention` is not hours or days. */
+  historyRetention?: string;
   filesDepth?: string;
   filesResults?: string;
   /** Number of problems per section (hotkey problems are added by the form). */
@@ -122,6 +124,18 @@ export const MAX_CALENDAR_DAYS = 60;
 export const MIN_RECENT_ITEMS = 10;
 export const MAX_RECENT_ITEMS = 500;
 
+/** Longest `[search] history_retention`, in days (as in Rust's `MAX_HISTORY_RETENTION_DAYS`). */
+export const MAX_HISTORY_RETENTION_DAYS = 3650;
+
+/** `24h` / `7d` style retention (as in Rust's `parse_retention`). */
+export function isRetention(text: string): boolean {
+  const match = /^(\d+)([hd])$/i.exec(text.trim());
+  if (!match) return false;
+  const n = Number(match[1]);
+  const hours = match[2].toLowerCase() === "d" ? n * 24 : n;
+  return hours >= 1 && hours <= MAX_HISTORY_RETENTION_DAYS * 24;
+}
+
 /** What answers a keyword, as the message key of its name ("the emoji picker"). */
 type Owner = MessageKey & `validate.owner.${string}`;
 
@@ -135,6 +149,7 @@ const FIXED_KEYWORDS: [string, Owner][] = [
   ["@", "validate.owner.contacts"],
   ["uuid", "validate.owner.uuid"],
   ["?", "validate.owner.settings"],
+  ["!", "validate.owner.history"],
 ];
 
 interface KeywordSpec {
@@ -169,12 +184,43 @@ const KEYWORDS: KeywordSpec[] = [
   { field: "passwords.keyword", owner: "validate.owner.passwords", required: true, section: "integrations", read: (c) => c.passwords.keyword },
 ];
 
-/** Every keyword of a built-in search (lowercased) and what answers it, named in the UI language. */
+/** Separates the aliases of one keyword (`g||google`), as in Rust's `sevak_core::keyword`. */
+export const ALIAS_SEPARATOR = "||";
+
+/** The aliases of a keyword, trimmed and lowercased; empty ones are kept so a check can flag them. */
+export function keywordAliases(keyword: string): string[] {
+  const text = keyword.trim();
+  return text === "" ? [] : text.split(ALIAS_SEPARATOR).map((alias) => alias.trim().toLowerCase());
+}
+
+/** The first alias as written: the keyword shown in hints. */
+export function primaryKeyword(keyword: string): string {
+  return (
+    keyword
+      .split(ALIAS_SEPARATOR)
+      .map((alias) => alias.trim())
+      .find((alias) => alias !== "") ?? ""
+  );
+}
+
+/** What is wrong with the aliases of one keyword on their own (an empty alias, spaces, a repeat). */
+export function aliasProblem(keyword: string): string | undefined {
+  const aliases = keywordAliases(keyword);
+  for (const [index, alias] of aliases.entries()) {
+    if (alias === "") return t("validate.emptyAlias");
+    if (/\s/.test(alias)) return t("validate.noSpaces");
+    if (aliases.indexOf(alias) !== index) return t("validate.aliasTwice", { alias });
+  }
+  return undefined;
+}
+
+/** Every keyword (and alias) of a built-in search (lowercased) and what answers it, named in the UI language. */
 function reservedKeywords(config: Config): Map<string, string> {
   const reserved = new Map(FIXED_KEYWORDS.map(([keyword, owner]) => [keyword, t(owner)]));
   for (const spec of KEYWORDS) {
-    const keyword = spec.read(config).trim().toLowerCase();
-    if (keyword !== "" && !reserved.has(keyword)) reserved.set(keyword, t(spec.owner));
+    for (const alias of keywordAliases(spec.read(config))) {
+      if (alias !== "" && !reserved.has(alias)) reserved.set(alias, t(spec.owner));
+    }
   }
   return reserved;
 }
@@ -187,7 +233,7 @@ function reservedKeywords(config: Config): Map<string, string> {
  * except for the contacts, 1Password and dictionary ones, which cannot be off.
  */
 export function keywordProblems(config: Config): Partial<Record<KeywordField, string>> {
-  const web = new Set(config.web_search.map((engine) => engine.keyword.trim().toLowerCase()));
+  const web = new Set(config.web_search.flatMap((engine) => keywordAliases(engine.keyword)));
   const problems: Partial<Record<KeywordField, string>> = {};
   for (const spec of KEYWORDS) {
     const keyword = spec.read(config).trim();
@@ -195,15 +241,22 @@ export function keywordProblems(config: Config): Partial<Record<KeywordField, st
       if (spec.required) problems[spec.field] = t("validate.required");
       continue;
     }
-    const lower = keyword.toLowerCase();
-    const fixed = FIXED_KEYWORDS.find(([used]) => used === lower);
-    const other = KEYWORDS.find(
-      (candidate) => candidate !== spec && candidate.read(config).trim().toLowerCase() === lower,
-    );
-    if (/\s/.test(keyword)) problems[spec.field] = t("validate.noSpaces");
-    else if (web.has(lower)) problems[spec.field] = t("validate.webKeyword");
-    else if (fixed) problems[spec.field] = t("validate.usedBy", { owner: t(fixed[1]) });
-    else if (other) problems[spec.field] = t("validate.usedBy", { owner: t(other.owner) });
+    const own = aliasProblem(keyword);
+    if (own) {
+      problems[spec.field] = own;
+      continue;
+    }
+    // Each alias on its own: the first one that clashes is the one reported.
+    for (const lower of keywordAliases(keyword)) {
+      const fixed = FIXED_KEYWORDS.find(([used]) => used === lower);
+      const other = KEYWORDS.find(
+        (candidate) => candidate !== spec && keywordAliases(candidate.read(config)).includes(lower),
+      );
+      if (web.has(lower)) problems[spec.field] = t("validate.webKeyword");
+      else if (fixed) problems[spec.field] = t("validate.usedBy", { owner: t(fixed[1]) });
+      else if (other) problems[spec.field] = t("validate.usedBy", { owner: t(other.owner) });
+      if (problems[spec.field]) break;
+    }
   }
   return problems;
 }
@@ -263,12 +316,20 @@ export function engineErrors(
   const errors: EngineErrors = {};
   const keyword = engine.keyword.trim();
   if (keyword === "") errors.keyword = t("validate.required");
-  else if (/\s/.test(keyword)) errors.keyword = t("validate.noSpaces");
-  else if (reserved.has(keyword.toLowerCase())) {
-    errors.keyword = t("validate.engineUsedBy", { owner: reserved.get(keyword.toLowerCase())! });
-  }
-  else if (all.filter((other) => other.keyword.trim().toLowerCase() === keyword.toLowerCase()).length > 1) {
-    errors.keyword = t("validate.alreadyUsed");
+  else {
+    const own = aliasProblem(keyword);
+    if (own) errors.keyword = own;
+    else {
+      for (const alias of keywordAliases(keyword)) {
+        const owner = reserved.get(alias);
+        if (owner !== undefined) {
+          errors.keyword = t("validate.engineUsedBy", { owner });
+        } else if (all.some((other) => other !== engine && keywordAliases(other.keyword).includes(alias))) {
+          errors.keyword = t("validate.alreadyUsed");
+        }
+        if (errors.keyword) break;
+      }
+    }
   }
   if (engine.name.trim() === "") errors.name = t("validate.required");
   const url = engine.url.trim();
@@ -339,7 +400,7 @@ export function validate(config: Config): Problems {
   const appearance = appearanceErrors(config.appearance);
   count.appearance += Object.keys(appearance).length;
 
-  const keywords = new Set(config.web_search.map((engine) => engine.keyword.trim().toLowerCase()));
+  const keywords = new Set(config.web_search.flatMap((engine) => keywordAliases(engine.keyword)));
   const keywordErrors = keywordProblems(config);
   for (const spec of KEYWORDS) {
     if (keywordErrors[spec.field]) count[spec.section]++;
@@ -387,6 +448,11 @@ export function validate(config: Config): Problems {
   );
   if (missing !== undefined) {
     problems.fallback = t("validate.fallbackGone", { keyword: missing });
+    count.search++;
+  }
+
+  if (!isRetention(config.search.history_retention)) {
+    problems.historyRetention = t("validate.retention");
     count.search++;
   }
 

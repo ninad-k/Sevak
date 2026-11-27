@@ -65,6 +65,8 @@ const GROUPS: &[(&str, &[Field])] = &[
             ("search.max_results", Show::Value),
             ("search.fallback_web_search", Show::Value),
             ("search.query_history", Show::Value),
+            ("search.history_retention", Show::Value),
+            ("search.history_persist", Show::Value),
             ("plugins.disabled", Show::Value),
             ("calculator.currency", Show::Value),
         ],

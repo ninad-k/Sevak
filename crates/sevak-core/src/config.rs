@@ -83,9 +83,16 @@ max_results = 8
 # Keyword of the web search engine offered when nothing else matches ("" to
 # disable). A list offers several, in order: ["g", "yt", "gh"].
 fallback_web_search = "g"
-# Up/Down on an empty search box recalls the last 50 searches you ran. They are
-# kept in usage.json in the data folder; false stops recording and forgets them.
+# Up/Down on an empty search box recalls the searches you ran (the last 500 at
+# most), and the "!" keyword lists them. They are kept in usage.json in the data
+# folder; false stops recording and forgets them.
 query_history = true
+# How long a remembered search is kept: "24h", "7d", "30d", "90d" (any number
+# of hours "h" or days "d" up to 3650d works). Older ones are dropped.
+history_retention = "30d"
+# false keeps the history in memory for this session only: it is never written
+# to usage.json, and what was saved there is removed.
+history_persist = true
 
 [appearance]
 # "system", "light" or "dark".
@@ -702,6 +709,47 @@ pub struct SearchConfig {
     pub fallback_web_search: FallbackSearch,
     /// Remember executed queries so Up/Down can recall them.
     pub query_history: bool,
+    /// How long a remembered query is kept: `<n>h` or `<n>d` (see
+    /// [`parse_retention`]).
+    pub history_retention: String,
+    /// Write the query history to `usage.json`; false keeps it in memory for
+    /// the session only.
+    pub history_persist: bool,
+}
+
+/// The default `[search] history_retention`.
+pub const DEFAULT_HISTORY_RETENTION: &str = "30d";
+
+/// Longest `[search] history_retention`, in days.
+pub const MAX_HISTORY_RETENTION_DAYS: u64 = 3650;
+
+/// `"24h"` / `"7d"` as seconds; `None` when it is not `<n>h` or `<n>d` with
+/// `n` from 1 up to [`MAX_HISTORY_RETENTION_DAYS`] days.
+pub fn parse_retention(text: &str) -> Option<u64> {
+    let text = text.trim().to_ascii_lowercase();
+    let (digits, unit) = text.split_at(text.len().checked_sub(1)?);
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let n: u64 = digits.parse().ok()?;
+    let secs = match unit {
+        "h" => n.checked_mul(3600)?,
+        "d" => n.checked_mul(86_400)?,
+        _ => return None,
+    };
+    (1..=MAX_HISTORY_RETENTION_DAYS * 86_400)
+        .contains(&secs)
+        .then_some(secs)
+}
+
+impl SearchConfig {
+    /// [`SearchConfig::history_retention`] in seconds; the default when it
+    /// does not parse.
+    pub fn history_retention_secs(&self) -> u64 {
+        parse_retention(&self.history_retention)
+            .or_else(|| parse_retention(DEFAULT_HISTORY_RETENTION))
+            .unwrap_or(30 * 86_400)
+    }
 }
 
 impl Default for SearchConfig {
@@ -710,6 +758,8 @@ impl Default for SearchConfig {
             max_results: 8,
             fallback_web_search: FallbackSearch::single("g"),
             query_history: true,
+            history_retention: DEFAULT_HISTORY_RETENTION.to_owned(),
+            history_persist: true,
         }
     }
 }
@@ -1770,6 +1820,9 @@ impl Config {
         if self.files.max_results != 0 {
             self.files.max_results = self.files.max_results.clamp(1, MAX_FILES_RESULTS_LIMIT);
         }
+        if parse_retention(&self.search.history_retention).is_none() {
+            self.search.history_retention = DEFAULT_HISTORY_RETENTION.to_owned();
+        }
         // Engines without a keyword or a `{query}` placeholder cannot work.
         self.web_search
             .retain(|engine| !engine.keyword.trim().is_empty() && engine.url.contains("{query}"));
@@ -1797,7 +1850,7 @@ impl Config {
             (&mut self.clock.keyword, "time"),
             (&mut self.passwords.keyword, "pass"),
         ] {
-            *keyword = keyword.trim().to_owned();
+            *keyword = crate::keyword::normalize(keyword);
             if keyword.is_empty() || keyword.contains(char::is_whitespace) {
                 *keyword = default.to_owned();
             }
@@ -1812,7 +1865,7 @@ impl Config {
             &mut self.window_management.keyword,
             &mut self.window_management.switcher_keyword,
         ] {
-            *keyword = keyword.trim().to_owned();
+            *keyword = crate::keyword::normalize(keyword);
         }
         self.window_management.gap = self
             .window_management
@@ -3115,6 +3168,24 @@ text = "Best,\nme"
         config.search.fallback_web_search = FallbackSearch::single("yt");
         let text = saved(Some(&text), &config);
         assert!(text.contains("fallback_web_search = \"yt\""), "{text}");
+    }
+
+    #[test]
+    fn history_retention_parses_hours_and_days() {
+        assert_eq!(parse_retention("24h"), Some(86_400));
+        assert_eq!(parse_retention(" 7D "), Some(7 * 86_400));
+        assert_eq!(parse_retention("90d"), Some(90 * 86_400));
+        for bad in [
+            "", "d", "0h", "0d", "7", "7w", "-1d", "1.5d", "3651d", "x7d",
+        ] {
+            assert_eq!(parse_retention(bad), None, "{bad}");
+        }
+        let defaults = Config::default().search;
+        assert_eq!(defaults.history_retention, "30d");
+        assert!(defaults.history_persist);
+        assert_eq!(defaults.history_retention_secs(), 30 * 86_400);
+        let bad = Config::from_toml_str("[search]\nhistory_retention = \"soon\"\n").unwrap();
+        assert_eq!(bad.search.history_retention, "30d");
     }
 
     #[test]

@@ -382,6 +382,7 @@ mod tests {
                     glyph: None,
                     text_view: false,
                     text_on_enter: false,
+                    complete_on_enter: false,
                     large_text: None,
                 },
                 window: None,
