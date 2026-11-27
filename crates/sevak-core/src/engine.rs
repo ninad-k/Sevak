@@ -248,6 +248,11 @@ impl SearchEngine {
     /// (used after a config reload). A launch still finishing on the old engine
     /// is therefore recorded in the new one too, rather than lost with a copy.
     pub fn rebuild(&self, plugins: Vec<Arc<dyn Plugin>>, options: EngineOptions) -> Self {
+        // Queries typed while history was not persisted were never meant for
+        // the disk: turning persistence on must not write them out.
+        if !self.options.history_persist && options.history_persist {
+            self.usage_write().clear_history();
+        }
         let engine = Self {
             plugins,
             usage: Arc::clone(&self.usage),
@@ -1015,6 +1020,37 @@ mod tests {
         assert_eq!(e.history_at(T0), vec!["typed"]);
         assert!(e.usage_snapshot_at(T0).history().is_empty());
         assert_eq!(e.usage_snapshot_at(T0).get("ok:a").unwrap().count, 1);
+    }
+
+    #[test]
+    fn turning_persistence_on_does_not_save_what_was_typed_while_it_was_off() {
+        let ok = Mock::fixed("ok", &[("a", "A", 1.0)]).arc();
+        let transient = SearchEngine::new(
+            vec![ok.clone() as Arc<dyn Plugin>],
+            UsageStore::default(),
+            EngineOptions {
+                history_persist: false,
+                ..EngineOptions::default()
+            },
+        );
+        transient
+            .execute_at(&item("ok", "a", "A", 1.0), "secret", T0)
+            .unwrap();
+        assert_eq!(transient.history_at(T0), vec!["secret"]);
+
+        let persistent = transient.rebuild(
+            vec![ok as Arc<dyn Plugin>],
+            EngineOptions {
+                history_persist: true,
+                ..EngineOptions::default()
+            },
+        );
+        assert!(persistent.history_at(T0).is_empty());
+        assert!(persistent.usage_snapshot_at(T0).history().is_empty());
+        persistent
+            .execute_at(&item("ok", "a", "A", 1.0), "later", T0)
+            .unwrap();
+        assert_eq!(persistent.usage_snapshot_at(T0).history(), ["later"]);
     }
 
     #[test]
