@@ -33,7 +33,9 @@ A minimal config works: missing fields use their defaults, so a nearly empty fil
 
 ### Keywords
 
-Every keyword is one word, and no two searches may share one: the configurable keywords (`[files]` `keyword` / `index_keyword` / `content_keyword`, `[bookmarks]`, `[tasks]`, `[media]`, `[window_management]` `keyword` / `switcher_keyword`, `[contacts]`, `[onepassword]`, `[dictionary]` `define_keyword` / `spell_keyword`, `[ai]`, `[ssh]`, `[projects]`, `[calendar]`, `[clock]`, `[passwords]`), the fixed ones (`>`, `cb`, `s`, `emoji`, `:`, `@`, `uuid`) and your web search keywords. Settings refuses to save a clash; in a hand-edited file a clashing keyword is ignored and logged. An empty keyword turns that keyword off.
+Every keyword is one word, and no two searches may share one: the configurable keywords (`[files]` `keyword` / `index_keyword` / `content_keyword`, `[bookmarks]`, `[tasks]`, `[media]`, `[window_management]` `keyword` / `switcher_keyword`, `[contacts]`, `[onepassword]`, `[dictionary]` `define_keyword` / `spell_keyword`, `[ai]`, `[ssh]`, `[projects]`, `[calendar]`, `[clock]`, `[passwords]`), the fixed ones (`>`, `cb`, `s`, `emoji`, `:`, `@`, `uuid`, `!`) and your web search keywords. Settings refuses to save a clash; in a hand-edited file a clashing keyword is ignored and logged. An empty keyword turns that keyword off.
+
+**Aliases.** Any configurable keyword (including a web engine's and a workflow's `keyword` trigger) may list several alternatives separated by `||`, for example `keyword = "g||google"`. Each alias routes to the same search, is compared case-insensitively and must be one word. Settings checks every alias on its own for clashes and repeats and refuses an empty one (`"a||"`). The first alias is the primary keyword: it names the search in hints, and a web engine's plugin id (`web:g`) and the `fallback_web_search` entry use it (the fallback also accepts any alias).
 
 Keywords of [workflows](workflows.md) and [script plugins](features/script-plugins.md) are checked the same way but only produce a warning (in Settings and in the log), because both plugins then answer the keyword and show their results.
 
@@ -130,13 +132,17 @@ Search behaviour and fallback when no results match.
 |---|---|---|---|---|
 | `max_results` | integer | `8` | 1–20 | Maximum number of results shown at once. |
 | `fallback_web_search` | string or list | `"g"` | any keyword from `[[web_search]]` entries | When a query has no local results, offer a web search with this engine. Write as a single string `"g"` or a list to try several in order: `["g", "yt", "gh"]`. Empty string `""` disables the fallback. Keywords are matched case-insensitively; only one keyword per engine. |
-| `query_history` | boolean | `true` | — | Remember the last 50 queries you ran. Press Up/Down on an empty search box to recall them. `false` disables history and clears it. |
+| `query_history` | boolean | `true` | — | Remember the queries you ran (at most 500; the cap is fixed). Press Up/Down on an empty search box to recall them, or type `!` to list and filter them. `false` disables history and clears it. |
+| `history_retention` | string | `"30d"` | `<n>h` or `<n>d`, 1 hour to 3650 days | How long a remembered query is kept; older ones are dropped when Sevak loads or saves. Settings offers `24h`, `7d`, `30d` and `90d`. Entries saved by an older version have no time and start counting when first loaded. |
+| `history_persist` | boolean | `true` | — | `false` keeps the history in memory for the session only: it is never written to `usage.json`, and any history already saved there is removed. |
 
 ```toml
 [search]
 max_results = 8
 fallback_web_search = "g"
 query_history = true
+history_retention = "30d"
+history_persist = true
 ```
 
 ### [appearance]
@@ -173,7 +179,7 @@ Which plugins are active. Each built-in plugin can be disabled.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `disabled` | array of strings | `[]` | Plugin ids to turn off. Available ids: `"apps"`, `"calculator"`, `"web"` (all engines) or `"web:<keyword>"` (one engine), `"files"` (its instances `"files:names"` and `"files:content"` are the `ff` and `in` searches), `"bookmarks"`, `"system"`, `"tasks"` (automation tasks), `"media"` (media controls), `"windows"` (window layouts; `"windows:switch"` is the window switcher), `"shell"`, `"clipboard"`, `"snippets"`, `"emoji"` (the emoji picker; `"emoji:word"` and `"emoji:colon"` are its two keywords), `"selection"` (Universal Actions), `"contacts"`, `"1password"`, `"dict"` (`define` and `spell`), `"uuid"`, `"clock"` (the world clock), `"pwgen"` (the password generator), `"backup"` (the `backup settings` and `restore settings` [launcher commands](backup-and-restore.md#from-the-command-line-and-the-launcher)), `"script"` or `"script:<name>"` (script plugins) and `"workflow"` or `"workflow:<folder>"` ([workflows](workflows.md); each also has its own switch in **Settings → Workflows**). Example: `disabled = ["files", "web:yt"]` turns off file search and YouTube search. Unknown ids are ignored. |
+| `disabled` | array of strings | `[]` | Plugin ids to turn off. Available ids: `"apps"`, `"calculator"`, `"web"` (all engines) or `"web:<keyword>"` (one engine), `"files"` (its instances `"files:names"` and `"files:content"` are the `ff` and `in` searches), `"bookmarks"`, `"system"`, `"tasks"` (automation tasks), `"media"` (media controls), `"windows"` (window layouts; `"windows:switch"` is the window switcher), `"shell"`, `"clipboard"`, `"snippets"`, `"emoji"` (the emoji picker; `"emoji:word"` and `"emoji:colon"` are its two keywords), `"selection"` (Universal Actions), `"contacts"`, `"1password"`, `"dict"` (`define` and `spell`), `"uuid"`, `"clock"` (the world clock), `"pwgen"` (the password generator), `"history"` (the `!` query history), `"backup"` (the `backup settings` and `restore settings` [launcher commands](backup-and-restore.md#from-the-command-line-and-the-launcher)), `"script"` or `"script:<name>"` (script plugins) and `"workflow"` or `"workflow:<folder>"` ([workflows](workflows.md); each also has its own switch in **Settings → Workflows**). Example: `disabled = ["files", "web:yt"]` turns off file search and YouTube search. Unknown ids are ignored. |
 
 ```toml
 [plugins]
@@ -789,9 +795,16 @@ max_results = 8
 # Keyword of the web search engine offered when nothing else matches ("" to
 # disable). A list offers several, in order: ["g", "yt", "gh"].
 fallback_web_search = "g"
-# Up/Down on an empty search box recalls the last 50 searches you ran. They are
-# kept in usage.json in the data folder; false stops recording and forgets them.
+# Up/Down on an empty search box recalls the searches you ran (the last 500 at
+# most), and the "!" keyword lists them. They are kept in usage.json in the data
+# folder; false stops recording and forgets them.
 query_history = true
+# How long a remembered search is kept: "24h", "7d", "30d", "90d" (any number
+# of hours "h" or days "d" up to 3650d works). Older ones are dropped.
+history_retention = "30d"
+# false keeps the history in memory for this session only: it is never written
+# to usage.json, and what was saved there is removed.
+history_persist = true
 
 [appearance]
 # "system", "light" or "dark".

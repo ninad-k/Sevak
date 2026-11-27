@@ -13,6 +13,7 @@ pub mod diagnostics;
 pub mod engine;
 pub mod fuzzy;
 pub mod gallery_source;
+pub mod keyword;
 pub mod language;
 pub mod model;
 pub mod netpath;
@@ -34,7 +35,7 @@ pub use config::{
     GeneralConfig, HotkeyBinding, HotkeyTarget, LinuxConfig, PasteConfig, ShellConfig, Snippet,
     SnippetsConfig, UpdateChannel, WindowConfig, WindowManagementConfig,
 };
-pub use engine::{EngineOptions, SearchEngine};
+pub use engine::{EngineOptions, HistoryHandle, SearchEngine};
 pub use fuzzy::FuzzyQuery;
 pub use model::{
     Action, AppEntry, ClipContent, IconData, IconSource, LaunchTarget, Modifier, PreviewHint,

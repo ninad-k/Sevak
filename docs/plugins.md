@@ -161,8 +161,17 @@ secondary action.)
   real matches. Its `autocomplete` is the full replacement input (`g `). Web
   search uses it; hints never replace the fallback.
 - **Query history.** The engine records every executed query (the whole input,
-  keyword included) in the usage file for Up/Down recall, unless
-  `[search] query_history = false`.
+  keyword included, with its time) in the usage file for Up/Down recall and the
+  `!` plugin, unless `[search] query_history = false`. Entries past
+  `history_retention` are dropped; with `history_persist = false` they are never
+  saved. A plugin that wants them overrides `Plugin::attach_history` to get a
+  `HistoryHandle` onto the in-memory store (no disk I/O in `query`).
+- **Keyword aliases.** `Plugin::keyword()` may return `a||b`: the engine routes
+  any alias (`sevak_core::keyword`) and a bare alias's hint row completes to the
+  alias typed. Keep ids stable by deriving them from the first alias.
+- **Complete on Enter.** A row with `ViewHint::Complete` puts its `autocomplete`
+  text (the full new input, no keyword prefix) in the search box when Enter is
+  pressed instead of running its action.
 
 The engine logs a warning for any query slower than 16 ms, naming the slowest
 plugin. Plugin panics are **not** caught; the release profile aborts the

@@ -20,7 +20,7 @@
   import { onSettingsPage } from "./lib/extensions/extensions-ipc";
   import GalleryPage from "./lib/workflows/GalleryPage.svelte";
   import WorkflowsPage from "./lib/workflows/WorkflowsPage.svelte";
-  import { getStatus, onStatus, type Status } from "./lib/ipc";
+  import { clearQueryHistory, getStatus, onStatus, type Status } from "./lib/ipc";
   import {
     closeSettings,
     getSettings,
@@ -49,6 +49,7 @@
     MAX_DEPTH,
     MAX_WIDTH,
     MIN_WIDTH,
+    primaryKeyword,
     totalProblems,
     validate,
     type SectionId,
@@ -69,7 +70,13 @@
     linux: { wayland_use_xwayland: true },
     actions: { use_primary_selection: true, use_clipboard_fallback: false },
     paste: { restore_clipboard: false },
-    search: { max_results: 8, fallback_web_search: "", query_history: true },
+    search: {
+      max_results: 8,
+      fallback_web_search: "",
+      query_history: true,
+      history_retention: "30d",
+      history_persist: true,
+    },
     appearance: {
       theme: "system",
       accent: "",
@@ -243,15 +250,27 @@
   ] as const);
 
   const engineKeywords = $derived(
-    [...new Set(draft.web_search.map((e) => e.keyword.trim()).filter((k) => k !== ""))].map(
+    [...new Set(draft.web_search.map((e) => primaryKeyword(e.keyword)).filter((k) => k !== ""))].map(
       (keyword) => ({
         keyword,
-        name: draft.web_search.find((e) => e.keyword.trim() === keyword)?.name.trim() ?? "",
+        name: draft.web_search.find((e) => primaryKeyword(e.keyword) === keyword)?.name.trim() ?? "",
       }),
     ),
   );
   // config.toml may list several fallbacks; the select shows one, and leaves a
   // list alone until the user picks an engine.
+  const RETENTIONS = ["24h", "7d", "30d", "90d"] as const;
+  const retentionLabels = $derived({
+    "24h": t("settings.search.retention24h"),
+    "7d": t("settings.search.retention7d"),
+    "30d": t("settings.search.retention30d"),
+    "90d": t("settings.search.retention90d"),
+  });
+  let historyCleared = $state(false);
+  async function clearHistory() {
+    await clearQueryHistory();
+    historyCleared = true;
+  }
   const MANY_FALLBACKS = "__many__";
   const fallbackKeywords = $derived(fallbackList(draft.search.fallback_web_search));
   const fallbackMany = $derived(fallbackKeywords.length > 1);
@@ -1022,6 +1041,47 @@
               </div>
               <Toggle bind:checked={draft.search.query_history} label={t("settings.search.remember")} />
             </div>
+
+            {#if draft.search.query_history}
+              <div class="row">
+                <div class="label">
+                  <label class="name" for="history-retention">{t("settings.search.retention")}</label>
+                  <span class="hint">{t("settings.search.retentionHint")}</span>
+                  {#if problems.historyRetention}
+                    <span class="msg error" role="alert">{problems.historyRetention}</span>
+                  {/if}
+                </div>
+                <select
+                  id="history-retention"
+                  class="input select"
+                  class:invalid={!!problems.historyRetention}
+                  bind:value={draft.search.history_retention}
+                >
+                  {#each RETENTIONS as option (option)}
+                    <option value={option}>{retentionLabels[option]}</option>
+                  {/each}
+                  {#if !(RETENTIONS as readonly string[]).includes(draft.search.history_retention)}
+                    <option value={draft.search.history_retention}>{draft.search.history_retention}</option>
+                  {/if}
+                </select>
+              </div>
+
+              <div class="row">
+                <div class="label">
+                  <span class="name">{t("settings.search.persist")}</span>
+                  <span class="hint">{t("settings.search.persistHint")}</span>
+                </div>
+                <Toggle bind:checked={draft.search.history_persist} label={t("settings.search.persist")} />
+              </div>
+
+              <div class="row">
+                <div class="label">
+                  <span class="name">{t("settings.search.clear")}</span>
+                  <span class="hint">{historyCleared ? t("settings.search.cleared") : t("settings.search.clearHint")}</span>
+                </div>
+                <button type="button" class="btn" onclick={clearHistory}>{t("settings.search.clear")}</button>
+              </div>
+            {/if}
           </section>
         {:else if active === "plugins"}
           <h1>{t("settings.sections.plugins")}</h1>

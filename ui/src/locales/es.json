@@ -844,7 +844,18 @@
       "none": "Ninguna",
       "missing": "{keyword} (no existe)",
       "remember": "Recordar búsquedas",
-      "rememberHint": "Arriba y Abajo en una barra de búsqueda vacía recuperan lo último que ejecutaste. Se guarda solo en este equipo."
+      "rememberHint": "Arriba y Abajo en una barra de búsqueda vacía recuperan lo último que ejecutaste. Se guarda solo en este equipo.",
+      "retention": "Conservar búsquedas durante",
+      "retentionHint": "Las búsquedas más antiguas se olvidan. También aparecen tras ! en el lanzador.",
+      "retention24h": "24 horas",
+      "retention7d": "7 días",
+      "retention30d": "30 días",
+      "retention90d": "90 días",
+      "persist": "Guardar búsquedas en disco",
+      "persistHint": "Desactivado las mantiene en memoria hasta cerrar Sevak y borra lo guardado.",
+      "clear": "Borrar historial",
+      "clearHint": "Olvida ahora todas las búsquedas recordadas.",
+      "cleared": "Borrado."
     },
     "plugins": {
       "enable": "Activar {name}",
@@ -960,6 +971,9 @@
     "size": "Introduce un tamaño mayor que 0 y de hasta {max}",
     "wholeNumber": "Introduce un número entero de {min} a {max}",
     "fallbackGone": "El motor «{keyword}» ya no existe.",
+    "emptyAlias": "El alias no puede estar vacío",
+    "aliasTwice": "«{alias}» aparece dos veces",
+    "retention": "Usa horas o días, como 24h, 7d o 90d",
     "owner": {
       "terminal": "los comandos de terminal",
       "clipboard": "el historial del portapapeles",
@@ -967,6 +981,7 @@
       "emoji": "el selector de emojis",
       "contacts": "los contactos",
       "uuid": "el generador de UUID",
+      "history": "el historial de búsquedas",
       "files": "la búsqueda de archivos",
       "indexFiles": "la búsqueda de archivos en todo el disco",
       "contentFiles": "la búsqueda en el contenido de archivos",

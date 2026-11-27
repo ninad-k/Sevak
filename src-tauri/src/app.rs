@@ -81,6 +81,7 @@ pub fn run(
             commands::text_view,
             commands::set_large_type,
             commands::query_history,
+            commands::clear_query_history,
             file_buffer::file_buffer_get,
             file_buffer::file_buffer_add,
             file_buffer::file_buffer_remove,

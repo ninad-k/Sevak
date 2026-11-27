@@ -20,7 +20,7 @@ Each tab covers a different aspect of Sevak. Changes are **not saved** until you
 | ++arrow-up++/++arrow-down++ on a tab button | Move between tabs |
 | ++home++/++end++ on a tab button | Jump to first or last tab |
 
-Validation errors appear under each field and prevent saving until they are fixed. A red dot on a tab says that the page has a problem. Keywords are checked as you type: Sevak tells you when one is already used by a web search engine, a fixed keyword (`>`, `cb`, `s`, `emoji`, `:`, `@`, `uuid`) or another search, and both fields of a clash are marked.
+Validation errors appear under each field and prevent saving until they are fixed. A red dot on a tab says that the page has a problem. Keywords are checked as you type: Sevak tells you when one is already used by a web search engine, a fixed keyword (`>`, `cb`, `s`, `emoji`, `:`, `@`, `uuid`, `!`) or another search; a keyword may list aliases separated by `||` and each is checked, and both fields of a clash are marked.
 
 Saving keeps your comments, the order of your keys and every `[[snippet]]` entry exactly as they are in `config.toml`; only the lines you changed are rewritten.
 
@@ -300,11 +300,15 @@ Links to: `[search] fallback_web_search` in configuration.
 
 ### Remember searches
 
-On an empty search bar, press ++arrow-up++ and ++arrow-down++ to step through your last 50 searches, newest first.
+On an empty search bar, press ++arrow-up++ and ++arrow-down++ to step through the searches you ran, newest first. Type `!` to list and filter them.
 
-Disabling this also deletes the stored search history.
+Disabling this also deletes the stored search history. While it is on, the page also has:
 
-Links to: `[search] query_history` in configuration.
+- **Keep searches for**: 24 hours, 7 days, 30 days or 90 days (`history_retention`).
+- **Save searches to disk**: off keeps them in memory until Sevak quits and removes what was saved (`history_persist`).
+- **Clear history**: forgets every remembered search now.
+
+Links to: `[search] query_history`, `history_retention`, `history_persist` in configuration.
 
 ## Plugins
 

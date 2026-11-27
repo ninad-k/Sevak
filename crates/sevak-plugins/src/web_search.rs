@@ -47,11 +47,14 @@ pub struct WebSearchPlugin {
 
 impl WebSearchPlugin {
     pub fn new(engine: &WebSearchEngine, platform: Arc<dyn PlatformProvider>) -> Self {
-        let keyword = engine.keyword.trim().to_owned();
+        // The keyword may list aliases (`g||google`); the first names the
+        // plugin, the engine matches them all.
+        let keyword = sevak_core::keyword::normalize(&engine.keyword);
+        let primary = sevak_core::keyword::primary(&keyword).to_owned();
         Self {
-            id: format!("web:{keyword}"),
+            id: format!("web:{primary}"),
             name: engine.name.clone(),
-            description: format!("Search {} by typing `{keyword} <terms>`.", engine.name),
+            description: format!("Search {} by typing `{primary} <terms>`.", engine.name),
             keyword,
             url_template: engine.url.clone(),
             platform,
@@ -103,7 +106,7 @@ impl Plugin for WebSearchPlugin {
         // Tab turns the bare keyword (`g`) into `g `, ready for search terms.
         Some(
             self.home_row("Press Tab to type your search terms")
-                .with_autocomplete(format!("{} ", self.keyword)),
+                .with_autocomplete(format!("{} ", sevak_core::keyword::primary(&self.keyword))),
         )
     }
 

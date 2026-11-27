@@ -829,7 +829,18 @@
       "none": "Keine",
       "missing": "{keyword} (fehlt)",
       "remember": "Suchen merken",
-      "rememberHint": "Pfeil nach oben und unten in einer leeren Suchleiste rufen zuletzt Ausgeführtes ab. Wird nur auf diesem Computer gespeichert."
+      "rememberHint": "Pfeil nach oben und unten in einer leeren Suchleiste rufen zuletzt Ausgeführtes ab. Wird nur auf diesem Computer gespeichert.",
+      "retention": "Suchen aufbewahren für",
+      "retentionHint": "Ältere Suchen werden vergessen. Sie erscheinen auch nach ! im Launcher.",
+      "retention24h": "24 Stunden",
+      "retention7d": "7 Tage",
+      "retention30d": "30 Tage",
+      "retention90d": "90 Tage",
+      "persist": "Suchen auf der Festplatte speichern",
+      "persistHint": "Aus behält sie nur im Speicher, bis Sevak beendet wird, und löscht das Gespeicherte.",
+      "clear": "Verlauf löschen",
+      "clearHint": "Alle gemerkten Suchen jetzt vergessen.",
+      "cleared": "Gelöscht."
     },
     "plugins": {
       "enable": "{name} aktivieren",
@@ -945,6 +956,9 @@
     "size": "Gib eine Größe über 0 und bis zu {max} ein",
     "wholeNumber": "Gib eine ganze Zahl von {min} bis {max} ein",
     "fallbackGone": "Die Suchmaschine „{keyword}“ gibt es nicht mehr.",
+    "emptyAlias": "Der Alias darf nicht leer sein",
+    "aliasTwice": "„{alias}“ steht doppelt",
+    "retention": "Stunden oder Tage verwenden, etwa 24h, 7d oder 90d",
     "owner": {
       "terminal": "Terminalbefehle",
       "clipboard": "Zwischenablage-Verlauf",
@@ -952,6 +966,7 @@
       "emoji": "Emoji-Auswahl",
       "contacts": "Kontakte",
       "uuid": "UUID-Generator",
+      "history": "der Suchverlauf",
       "files": "Dateisuche",
       "indexFiles": "Dateisuche auf der ganzen Festplatte",
       "contentFiles": "Suche in Dateiinhalten",

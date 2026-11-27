@@ -852,7 +852,18 @@
       "none": "Aucune",
       "missing": "{keyword} (introuvable)",
       "remember": "Mémoriser les recherches",
-      "rememberHint": "Haut et Bas dans une barre de recherche vide rappellent ce que vous avez lancé en dernier. Conservé uniquement sur cet ordinateur."
+      "rememberHint": "Haut et Bas dans une barre de recherche vide rappellent ce que vous avez lancé en dernier. Conservé uniquement sur cet ordinateur.",
+      "retention": "Conserver les recherches pendant",
+      "retentionHint": "Les recherches plus anciennes sont oubliées. Elles apparaissent aussi après ! dans le lanceur.",
+      "retention24h": "24 heures",
+      "retention7d": "7 jours",
+      "retention30d": "30 jours",
+      "retention90d": "90 jours",
+      "persist": "Enregistrer les recherches sur le disque",
+      "persistHint": "Désactivé, elles restent en mémoire jusqu'à la fermeture de Sevak et ce qui était enregistré est supprimé.",
+      "clear": "Effacer l'historique",
+      "clearHint": "Oublie maintenant toutes les recherches mémorisées.",
+      "cleared": "Effacé."
     },
     "plugins": {
       "enable": "Activer {name}",
@@ -968,6 +979,9 @@
     "size": "Saisissez une taille supérieure à 0, jusqu'à {max}",
     "wholeNumber": "Saisissez un nombre entier de {min} à {max}",
     "fallbackGone": "Le moteur « {keyword} » n'existe plus.",
+    "emptyAlias": "L'alias ne peut pas être vide",
+    "aliasTwice": "« {alias} » apparaît deux fois",
+    "retention": "Utilisez des heures ou des jours, comme 24h, 7d ou 90d",
     "owner": {
       "terminal": "les commandes de terminal",
       "clipboard": "l'historique du presse-papiers",
@@ -975,6 +989,7 @@
       "emoji": "le sélecteur d'emoji",
       "contacts": "les contacts",
       "uuid": "le générateur d'UUID",
+      "history": "l'historique des recherches",
       "files": "la recherche de fichiers",
       "indexFiles": "la recherche de fichiers sur tout le disque",
       "contentFiles": "la recherche dans le contenu des fichiers",

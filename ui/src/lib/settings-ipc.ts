@@ -62,6 +62,10 @@ export interface Config {
     /** One engine keyword, or several (config.toml accepts a string or a list). */
     fallback_web_search: string | string[];
     query_history: boolean;
+    /** How long a remembered search is kept: `24h`, `7d`, `30d`, `90d` (any `<n>h` / `<n>d`). */
+    history_retention: string;
+    /** Write the history to disk; false keeps it in memory for the session. */
+    history_persist: boolean;
   };
   appearance: Appearance;
   plugins: { disabled: string[] };

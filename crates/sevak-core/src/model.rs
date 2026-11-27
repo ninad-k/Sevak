@@ -204,6 +204,9 @@ pub enum ViewHint {
     /// A tile in the Grid View, drawn when every result of a search is a tile.
     /// `glyph` is the picture (an emoji); without one the row's icon is drawn.
     Grid { glyph: Option<String> },
+    /// Enter puts the row's `autocomplete` text into the input (like Tab) and
+    /// keeps the launcher open, instead of running the action.
+    Complete,
 }
 
 /// A modifier key held together with Enter to pick a secondary action. The UI

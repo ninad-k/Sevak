@@ -58,9 +58,13 @@ Examples:
 
 ### Query history
 
-On an **empty search bar**, press **++arrow-up++** and **++arrow-down++** to step through your last 50 searches, newest first.
+On an **empty search bar**, press **++arrow-up++** and **++arrow-down++** to step through the searches you ran, newest first (up to 500, none older than `[search] history_retention`, 30 days by default).
 
-Typing leaves history. Toggle this on or off in **Settings → Search → Remember searches** or with `[search] query_history`.
+Typing leaves history. Toggle this on or off in **Settings → Search → Remember searches** or with `[search] query_history`. The same page sets how long searches are kept, whether they are saved to disk (`history_persist = false` keeps them in memory for the session only and removes what was saved in `usage.json`) and has a **Clear history** button.
+
+#### The `!` keyword
+
+Type `!` to list the remembered searches, newest first; text after it filters them fuzzily (`! rust`). **++enter++** puts the highlighted search back into the search bar (nothing runs yet). **++ctrl+enter++** deletes that one search from the history; **++alt+enter++** clears the whole history after asking. `!` is a fixed keyword, so no web engine or other search can use it.
 
 ## Viewing results
 
@@ -328,6 +332,8 @@ Built-in keywords:
 **++enter++** opens the constructed URL in your browser.
 
 When a plain query has no results, a fallback web search is offered (default: Google). Configure or add custom engines in **Settings → Web search** or with `[[web_search]]` in config.toml.
+
+A keyword can list aliases separated by `||`: `keyword = "g||google"` answers both `g rust` and `google rust`. The first alias is the one shown in hints. See [Keywords](configuration.md#keywords).
 
 More: [Web search](features/web-search.md) plugin and [adding custom engines](configuration.md#web_search).
 

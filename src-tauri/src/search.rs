@@ -49,9 +49,22 @@ fn engine_options(config: &Config) -> EngineOptions {
             .fallback_web_search
             .keywords()
             .iter()
-            .map(|keyword| format!("web:{keyword}"))
+            .map(|keyword| {
+                // The plugin is named after its engine's first alias, and the
+                // fallback may name any of them.
+                let primary = config
+                    .web_search
+                    .iter()
+                    .find(|engine| sevak_core::keyword::matches(&engine.keyword, keyword))
+                    .map_or(keyword.as_str(), |engine| {
+                        sevak_core::keyword::primary(&engine.keyword)
+                    });
+                format!("web:{primary}")
+            })
             .collect(),
         query_history: config.search.query_history,
+        history_persist: config.search.history_persist,
+        history_retention_secs: config.search.history_retention_secs(),
     }
 }
 
@@ -288,6 +301,11 @@ impl Search {
             &workflows,
             &extensions,
         );
+        let saver = UsageSaver::new(paths.usage_file.clone());
+        if !config.search.history_persist {
+            // The engine dropped the history it loaded; write the file without it.
+            saver.poke();
+        }
         Self {
             icons: IconStore::new(platform.clone()),
             platform,
@@ -299,7 +317,7 @@ impl Search {
             latest: Mutex::new(Latest::default()),
             next_ticket: AtomicU64::new(1),
             selection_ticket: AtomicU64::new(0),
-            saver: UsageSaver::new(paths.usage_file.clone()),
+            saver,
             indexing: AtomicUsize::new(0),
             reload_generation: AtomicU64::new(0),
             refresh_failures: Mutex::new(Vec::new()),
@@ -367,6 +385,7 @@ impl Search {
         plugins: Vec<Arc<dyn Plugin>>,
         options: EngineOptions,
     ) -> bool {
+        let transient = !options.history_persist;
         let old = {
             let mut current = self
                 .engine
@@ -381,6 +400,10 @@ impl Search {
         // The replaced plugins' background work (script plugin processes) stops
         // now rather than whenever the last in-flight query lets go of them.
         old.shutdown();
+        if transient {
+            // Whatever history an earlier setting saved is removed from the file.
+            self.saver.poke();
+        }
         true
     }
 }

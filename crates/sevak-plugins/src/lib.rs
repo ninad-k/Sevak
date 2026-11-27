@@ -30,6 +30,7 @@
 //! | `calendar`       | [`CalendarPlugin`] (local .ics files)   | `cal`   | no     |
 //! | `clock`          | [`ClockPlugin`] (world clock)           | `time`  | no     |
 //! | `pwgen`          | [`PasswordPlugin`] (password generator) | `pass`  | no     |
+//! | `history`        | [`QueryHistoryPlugin`] (past searches)  | `!`     | no     |
 //!
 //! Script plugins (`script:<name>`, from `<config dir>/plugins/`) are loaded by
 //! [`ScriptPluginHost`]; see [`script`].
@@ -68,6 +69,7 @@ pub mod onepassword;
 pub mod os_files;
 pub mod path_browse;
 pub mod pwgen;
+pub mod query_history;
 pub mod registry;
 pub mod script;
 pub mod selection;
@@ -108,6 +110,7 @@ pub use onepassword::OnePasswordPlugin;
 pub use os_files::{files_family, OsFilesPlugin};
 pub use projects::ProjectsPlugin;
 pub use pwgen::PasswordPlugin;
+pub use query_history::QueryHistoryPlugin;
 pub use registry::{PluginDescriptor, PluginFactory, PluginInfo, PluginRegistry};
 pub use script::{ScriptPlugin, ScriptPluginHost};
 pub use selection::SelectionPlugin;
@@ -124,7 +127,7 @@ pub use workflow::WorkflowHost;
 /// `web:<keyword>` per `[[web_search]]` engine, `files`, `bookmarks`, `system`,
 /// `tasks`, `media`, `shell`, `clipboard`, `snippets`, `emoji`, `selection`,
 /// `contacts`, `1password`, `dict`, `uuid`, `ai`, `ssh`, `projects`,
-/// `calendar`, `clock`, `pwgen`).
+/// `calendar`, `clock`, `pwgen`, `history`).
 ///
 /// Shorthand for `PluginRegistry::builtin().instantiate(config, platform)`.
 ///
@@ -185,7 +188,8 @@ mod tests {
                 "projects",
                 "calendar",
                 "clock",
-                "pwgen"
+                "pwgen",
+                "history"
             ]
         );
     }
@@ -223,7 +227,8 @@ mod tests {
                 "projects",
                 "calendar",
                 "clock",
-                "pwgen"
+                "pwgen",
+                "history"
             ]
         );
     }

@@ -368,7 +368,13 @@ export function mockSettings(): SettingsDto {
       window: { width: 720 },
       linux: { wayland_use_xwayland: true },
       actions: { use_primary_selection: true, use_clipboard_fallback: false },
-      search: { max_results: 8, fallback_web_search: "g", query_history: true },
+      search: {
+        max_results: 8,
+        fallback_web_search: "g",
+        query_history: true,
+        history_retention: "30d",
+        history_persist: true,
+      },
       appearance: {
         theme: "system",
         accent: "",
