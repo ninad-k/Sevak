@@ -56,6 +56,9 @@ pub struct MockPlatform {
     pub copied_clips: Mutex<Vec<ClipContent>>,
     /// File lists put on the clipboard.
     pub clipboard_files: Mutex<Vec<Vec<PathBuf>>>,
+    /// What `recent_files` returns, and every limit it was asked for.
+    pub recent: Mutex<Vec<sevak_platform::recent::RecentFile>>,
+    pub recent_calls: Mutex<Vec<usize>>,
     /// Paths `move_to_trash` was given (the mock does not touch the disk).
     pub trashed: Mutex<Vec<PathBuf>>,
     /// Paths `move_to_trash` fails for.
@@ -90,6 +93,10 @@ pub struct MockPlatform {
     pub spellings: Mutex<Vec<(String, Spelling)>>,
     /// Text put on the clipboard as a secret (`set_clipboard_text_private`).
     pub private_clipboard: Mutex<Vec<String>>,
+    /// `(text, voice)` of every `speak` call.
+    pub spoken: Mutex<Vec<(String, Option<String>)>>,
+    /// Every sound file `play_sound` was given.
+    pub sounds: Mutex<Vec<PathBuf>>,
 }
 
 impl MockPlatform {
@@ -360,8 +367,32 @@ impl PlatformProvider for MockPlatform {
             .map(|(_, s)| s.clone())
     }
 
+    fn recent_files(&self, limit: usize) -> Vec<sevak_platform::recent::RecentFile> {
+        self.recent_calls.lock().unwrap().push(limit);
+        self.recent
+            .lock()
+            .unwrap()
+            .iter()
+            .take(limit)
+            .cloned()
+            .collect()
+    }
+
     fn set_clipboard_text_private(&self, text: &str) -> Result<()> {
         self.private_clipboard.lock().unwrap().push(text.to_owned());
+        Ok(())
+    }
+
+    fn speak(&self, text: &str, voice: Option<&str>) -> Result<()> {
+        self.spoken
+            .lock()
+            .unwrap()
+            .push((text.to_owned(), voice.map(str::to_owned)));
+        Ok(())
+    }
+
+    fn play_sound(&self, path: &Path) -> Result<()> {
+        self.sounds.lock().unwrap().push(path.to_path_buf());
         Ok(())
     }
 }

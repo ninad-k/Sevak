@@ -326,6 +326,7 @@ fn table_label(key: &str) -> String {
         "ssh" => "SSH hosts",
         "projects" => "Recent projects",
         "calendar" => "Calendar",
+        "recent" => "Recent documents",
         other => other,
     }
     .to_owned()

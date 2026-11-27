@@ -27,9 +27,11 @@
 //! | `ai`             | [`AiPlugin`] (opt-in AI assistant)      | `ai`    | no     |
 //! | `ssh`            | [`SshPlugin`] (hosts in ~/.ssh/config)  | `ssh`   | no     |
 //! | `projects`       | [`ProjectsPlugin`] (recent editor projects) | `code` | no  |
+//! | `recent`         | [`RecentDocsPlugin`] (recently used files) | `recent` | no  |
 //! | `calendar`       | [`CalendarPlugin`] (local .ics files)   | `cal`   | no     |
 //! | `clock`          | [`ClockPlugin`] (world clock)           | `time`  | no     |
 //! | `pwgen`          | [`PasswordPlugin`] (password generator) | `pass`  | no     |
+//! | `history`        | [`QueryHistoryPlugin`] (past searches)  | `!`     | no     |
 //!
 //! Script plugins (`script:<name>`, from `<config dir>/plugins/`) are loaded by
 //! [`ScriptPluginHost`]; see [`script`].
@@ -53,6 +55,7 @@ mod clipboard_store;
 pub mod clock;
 pub mod contacts;
 pub mod currency;
+pub mod datefmt;
 pub mod dictionary;
 pub mod emoji;
 pub mod example_uuid;
@@ -68,9 +71,12 @@ pub mod onepassword;
 pub mod os_files;
 pub mod path_browse;
 pub mod pwgen;
+pub mod query_history;
+pub mod recent;
 pub mod registry;
 pub mod script;
 pub mod selection;
+pub mod settings_search;
 pub mod shell;
 pub mod snippet_expansion;
 pub mod snippets;
@@ -108,6 +114,8 @@ pub use onepassword::OnePasswordPlugin;
 pub use os_files::{files_family, OsFilesPlugin};
 pub use projects::ProjectsPlugin;
 pub use pwgen::PasswordPlugin;
+pub use query_history::QueryHistoryPlugin;
+pub use recent::RecentDocsPlugin;
 pub use registry::{PluginDescriptor, PluginFactory, PluginInfo, PluginRegistry};
 pub use script::{ScriptPlugin, ScriptPluginHost};
 pub use selection::SelectionPlugin;
@@ -123,8 +131,8 @@ pub use workflow::WorkflowHost;
 /// Instantiates every enabled built-in plugin (`apps`, `calculator`, one
 /// `web:<keyword>` per `[[web_search]]` engine, `files`, `bookmarks`, `system`,
 /// `tasks`, `media`, `shell`, `clipboard`, `snippets`, `emoji`, `selection`,
-/// `contacts`, `1password`, `dict`, `uuid`, `ai`, `ssh`, `projects`,
-/// `calendar`, `clock`, `pwgen`).
+/// `contacts`, `1password`, `dict`, `uuid`, `ai`, `ssh`, `projects`, `recent`,
+/// `calendar`, `clock`, `pwgen`, `history`).
 ///
 /// Shorthand for `PluginRegistry::builtin().instantiate(config, platform)`.
 ///
@@ -183,9 +191,11 @@ mod tests {
                 "ai",
                 "ssh",
                 "projects",
+                "recent",
                 "calendar",
                 "clock",
-                "pwgen"
+                "pwgen",
+                "history"
             ]
         );
     }
@@ -221,9 +231,11 @@ mod tests {
                 "ai",
                 "ssh",
                 "projects",
+                "recent",
                 "calendar",
                 "clock",
-                "pwgen"
+                "pwgen",
+                "history"
             ]
         );
     }

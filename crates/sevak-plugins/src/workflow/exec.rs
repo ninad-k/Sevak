@@ -16,14 +16,15 @@
 //! selected or copied is never logged, and neither is a program's output
 //! (unless the node asks for `log_stderr`).
 
-use std::collections::BTreeMap;
+use std::borrow::Cow;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt;
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, Weak};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -33,13 +34,15 @@ use sevak_platform::process_tree::ProcessTree;
 use sevak_platform::{PasteOutcome, PlatformProvider, SystemCommand};
 
 use super::model::{
-    Node, NodeKind, Test, TransformOp, Workflow, DEFAULT_SCRIPT_TIMEOUT_MS, ELSE, MAX_DELAY_MS,
-    MAX_SCRIPT_TIMEOUT_MS, OUT, THEN,
+    Delimiter, Node, NodeKind, RandomMode, Test, TransformOp, Workflow, WriteMode, CANCEL,
+    DEFAULT_SCRIPT_TIMEOUT_MS, DIALOG_PORTS, ELSE, MAX_DELAY_MS, MAX_DIALOG_BUTTONS,
+    MAX_SCRIPT_TIMEOUT_MS, OUT, SOUND_EXTENSIONS, THEN,
 };
 use super::template::{expand, expand_command, Scope, Target};
+use super::ui::{self, Component, UiDefinition, UiScript, UiTarget};
 use super::validate::{compile_regex, valid_variable_name};
 use crate::files::{expand_home, home_dir};
-use crate::script::{resolve_launch, Launch};
+use crate::script::{resolve_launch, Launch, ALFRED_COMPAT_VERSION};
 use crate::selection::transform::{base64_encode, title_case};
 use crate::web_search::percent_encode;
 
@@ -49,9 +52,27 @@ pub const MAX_STEPS: usize = 200;
 pub const RUN_LIMIT: Duration = Duration::from_secs(15 * 60);
 /// Workflows running at once, across all of them.
 pub const MAX_CONCURRENT_RUNS: usize = 8;
+/// How many `call_external` nodes may be nested inside each other.
+pub const MAX_CALL_DEPTH: usize = 8;
+/// Most `<prefix>N` variables one `split_arg` sets (`<prefix>count` and the
+/// argument still carry every item).
+const MAX_SPLIT_VARIABLES: usize = 200;
+/// Largest existing file a `write_file` in `prepend` mode will rewrite.
+const MAX_PREPEND_BYTES: u64 = 16 * 1024 * 1024;
 /// Output kept from one script run.
 const MAX_OUTPUT_BYTES: u64 = 1024 * 1024;
 const MAX_STDERR_BYTES: u64 = 64 * 1024;
+/// Whether `path` ends in one of the [`SOUND_EXTENSIONS`].
+pub(super) fn has_sound_extension(path: &std::path::Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| {
+            SOUND_EXTENSIONS
+                .iter()
+                .any(|ok| ext.eq_ignore_ascii_case(ok))
+        })
+}
+
 /// Environment variables larger than this are not exported (Windows allows
 /// 32 767 characters per variable).
 const MAX_ENV_BYTES: usize = 16 * 1024;
@@ -66,12 +87,102 @@ pub trait OutputSink: Send + Sync {
     fn large_type(&self, text: &str);
     /// Shows `text` in the launcher window.
     fn text_view(&self, heading: &str, text: &str);
+    /// Like [`OutputSink::text_view`], told whether `text` is Markdown. Sinks
+    /// that cannot draw Markdown keep the default, which shows it as text.
+    fn text_view_markdown(&self, heading: &str, text: &str, markdown: bool) {
+        let _ = markdown;
+        self.text_view(heading, text);
+    }
     /// Asks the user a yes/no question before something that cannot be undone
     /// (restart, shut down...). Anything but a clear yes is a no, which is what
     /// the default answers.
     fn confirm(&self, _question: &str) -> bool {
         false
     }
+    /// Shows what a `debug` node found (the argument and variables). This is
+    /// the user's own data, so an implementation shows it to the user and
+    /// never writes it to a log. Dropped by default.
+    fn debug(&self, _text: &str) {}
+    /// Shows a dialog with one button per label and returns the index of the
+    /// button pressed, or `None` when it was dismissed (or cannot be shown,
+    /// which is what the default answers).
+    fn ask(&self, _heading: &str, _message: &str, _buttons: &[String]) -> Option<usize> {
+        None
+    }
+    /// Opens a Sevak UI and waits until it ends: the user pressed something
+    /// that continues the workflow, or dismissed it (`closed`). It runs on
+    /// the workflow's own thread, so blocking is fine; while it waits, the run's
+    /// deadline is paused. `host` runs the node's scripts for the UI. `None`
+    /// means the sink cannot show UIs (the default).
+    fn show_ui(&self, _session: &UiSession, _host: &dyn UiHost) -> Option<UiOutcome> {
+        None
+    }
+}
+
+/// A Sevak UI to show: the validated definition and what the renderer needs
+/// around it. Sinks that draw it never log any of it (it holds what the user
+/// typed and selected).
+#[derive(Clone)]
+pub struct UiSession {
+    /// The workflow's folder name and display name.
+    pub folder: String,
+    pub workflow: String,
+    pub node: String,
+    pub target: UiTarget,
+    pub titlebar: bool,
+    pub always_on_top: bool,
+    pub definition: UiDefinition,
+    /// `data:` URLs of the images, by the path written in the definition.
+    pub images: BTreeMap<String, String>,
+    pub vars: BTreeMap<String, String>,
+    /// The argument the node received (`{query}`).
+    pub query: String,
+    /// Ids of the scripts `run` actions may name.
+    pub scripts: BTreeSet<String>,
+}
+
+impl fmt::Debug for UiSession {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("UiSession")
+            .field("folder", &self.folder)
+            .field("node", &self.node)
+            .field("target", &self.target)
+            .finish()
+    }
+}
+
+/// How a UI ended.
+#[derive(Debug, Clone, PartialEq)]
+pub struct UiOutcome {
+    /// The output port to continue from (`closed` when dismissed).
+    pub port: String,
+    /// The argument for the next nodes; the JSON of `state` when `None`.
+    pub arg: Option<String>,
+    /// The state when the UI ended.
+    pub state: serde_json::Value,
+}
+
+/// What running a UI script changes in the open UI.
+#[derive(Debug, Clone, PartialEq, Default, serde::Serialize)]
+pub struct UiUpdate {
+    pub set: BTreeMap<String, serde_json::Value>,
+    /// A component that replaces the whole UI, already checked.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub root: Option<Component>,
+    pub images: BTreeMap<String, String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notify: Option<String>,
+    pub close: bool,
+}
+
+/// What a sink may ask of the workflow while its UI is open.
+pub trait UiHost {
+    /// Runs the node's script `id` (the node's approved scripts only) with
+    /// `input` (`{event, component, state, vars}`) on standard input.
+    fn run_script(&self, id: &str, input: &serde_json::Value) -> Result<UiUpdate, String>;
+    /// Whether the workflow is being stopped (Sevak is closing or reloading):
+    /// a sink that waits for the user gives up.
+    fn cancelled(&self) -> bool;
 }
 
 /// Drops everything (workflows built without a shell).
@@ -126,13 +237,43 @@ pub struct RunReport {
 
 struct Step {
     ctx: Ctx,
-    port: &'static str,
+    port: Cow<'static, str>,
+}
+
+/// What a whole call chain may spend: every `call_external` shares the
+/// budget of the run that started it, so nesting cannot multiply the caps.
+struct Budget {
+    deadline: Instant,
+    steps: AtomicUsize,
+    /// Milliseconds spent waiting for the user in a `show_ui` node. The run
+    /// limit is about a workflow doing work, not about a person reading.
+    paused_ms: AtomicU64,
+}
+
+impl Budget {
+    fn expired(&self) -> bool {
+        Instant::now()
+            > self.deadline + Duration::from_millis(self.paused_ms.load(Ordering::SeqCst))
+    }
 }
 
 struct Run {
     report: RunReport,
-    deadline: Instant,
+    budget: Arc<Budget>,
     stopped: bool,
+    /// How many `call_external` nodes this run is inside of.
+    depth: usize,
+}
+
+/// The runtimes that may run now, by folder; what `call_external` looks in.
+pub type Registry = Mutex<HashMap<String, Arc<Runtime>>>;
+
+type RandomSource = Box<dyn FnMut() -> Option<u64> + Send>;
+
+fn os_random() -> Option<u64> {
+    let mut bytes = [0u8; 8];
+    getrandom::fill(&mut bytes).ok()?;
+    Some(u64::from_le_bytes(bytes))
 }
 
 /// One workflow, ready to run.
@@ -142,12 +283,22 @@ pub struct Runtime {
     pub dir: PathBuf,
     /// A folder the workflow's scripts may keep files in.
     pub data_dir: PathBuf,
+    /// A folder for what can be thrown away (`alfred_workflow_cache`), apart
+    /// from `data_dir`.
+    pub cache_dir: PathBuf,
     pub workflow: Workflow,
+    /// What the user set in the settings form (see [`super::config`]).
+    user_values: BTreeMap<String, String>,
+    /// The variables every run starts with: the workflow's `[variables]`,
+    /// the settings' defaults and the user's values.
+    base_vars: BTreeMap<String, String>,
     platform: Arc<dyn PlatformProvider>,
     sink: Arc<dyn OutputSink>,
     shell: ShellConfig,
     restore_clipboard: bool,
     cancelled: AtomicBool,
+    random: Mutex<RandomSource>,
+    registry: Mutex<Option<Weak<Registry>>>,
 }
 
 impl Runtime {
@@ -160,17 +311,109 @@ impl Runtime {
         sink: Arc<dyn OutputSink>,
         config: &Config,
     ) -> Arc<Self> {
+        // Beside the data folders' parent, never inside a workflow's own data.
+        let cache_dir = data_dir
+            .parent()
+            .map(|parent| parent.with_file_name("workflows-cache").join(folder))
+            .unwrap_or_else(|| data_dir.join(".cache"));
+        Self::configured(
+            folder,
+            dir,
+            data_dir,
+            cache_dir,
+            BTreeMap::new(),
+            workflow,
+            platform,
+            sink,
+            config,
+        )
+    }
+
+    /// Like [`Runtime::new`], with the cache folder and the values the user
+    /// saved in the workflow's settings form.
+    #[allow(clippy::too_many_arguments)]
+    pub fn configured(
+        folder: &str,
+        dir: PathBuf,
+        data_dir: PathBuf,
+        cache_dir: PathBuf,
+        user_values: BTreeMap<String, String>,
+        workflow: Workflow,
+        platform: Arc<dyn PlatformProvider>,
+        sink: Arc<dyn OutputSink>,
+        config: &Config,
+    ) -> Arc<Self> {
+        let base_vars = workflow.effective_variables(&user_values);
         Arc::new(Self {
             folder: folder.to_owned(),
             dir,
             data_dir,
+            cache_dir,
+            user_values,
+            base_vars,
             workflow,
             platform,
             sink,
             shell: config.shell.clone(),
             restore_clipboard: config.paste.restore_clipboard,
             cancelled: AtomicBool::new(false),
+            random: Mutex::new(Box::new(os_random)),
+            registry: Mutex::new(None),
         })
+    }
+
+    /// Replaces the source of random numbers (the operating system's by
+    /// default), so tests can be deterministic.
+    pub fn set_random_source(&self, source: impl FnMut() -> u64 + Send + 'static) {
+        let mut source = source;
+        *self.random.lock().unwrap_or_else(|p| p.into_inner()) = Box::new(move || Some(source()));
+    }
+
+    /// Tells the runtime where `call_external` finds the other workflows.
+    pub fn set_registry(&self, registry: Weak<Registry>) {
+        *self.registry.lock().unwrap_or_else(|p| p.into_inner()) = Some(registry);
+    }
+
+    fn next_random(&self) -> Result<u64, String> {
+        (self.random.lock().unwrap_or_else(|p| p.into_inner()))()
+            .ok_or_else(|| "no random numbers are available".to_owned())
+    }
+
+    /// The runtime of the workflow in `folder`, when it may run.
+    fn find_runtime(&self, folder: &str) -> Result<Arc<Runtime>, String> {
+        let registry = self
+            .registry
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .as_ref()
+            .and_then(Weak::upgrade);
+        registry
+            .and_then(|map| {
+                map.lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .get(folder)
+                    .cloned()
+            })
+            .ok_or_else(|| {
+                format!("no workflow \"{folder}\" is ready to run (is it installed, enabled and allowed?)")
+            })
+    }
+
+    /// The labels of the required settings that still have no value.
+    pub fn missing_config(&self) -> Vec<String> {
+        self.workflow.missing_config(&self.user_values)
+    }
+
+    /// Why this workflow cannot run yet, when a required setting is empty.
+    pub fn configure_message(&self) -> Option<String> {
+        let missing = self.missing_config();
+        (!missing.is_empty())
+            .then(|| super::config::configure_message(&self.display_name(), &missing))
+    }
+
+    /// The variables a run starts with before the trigger adds its own.
+    pub fn base_variables(&self) -> &BTreeMap<String, String> {
+        &self.base_vars
     }
 
     /// The plugin and approval id of this workflow.
@@ -191,6 +434,10 @@ impl Runtime {
     /// Runs the nodes after `start` on a thread of their own. Fails at once
     /// (nothing runs) when too many runs are already going.
     pub fn start(self: &Arc<Self>, start: &str, ctx: Ctx) -> Result<(), String> {
+        if let Some(message) = self.configure_message() {
+            self.sink.notify(&self.display_name(), &message);
+            return Err(message);
+        }
         let Some(guard) = RunGuard::acquire() else {
             return Err("too many workflows are running; try again in a moment".to_owned());
         };
@@ -250,16 +497,59 @@ impl Runtime {
     /// and now. `ctx` carries the trigger's argument and variables; the
     /// workflow's own variables fill in whatever it does not set.
     pub fn run_blocking(&self, start: &str, ctx: Ctx) -> RunReport {
-        let mut vars = self.workflow.variables.clone();
-        vars.extend(ctx.vars);
-        let ctx = Ctx { arg: ctx.arg, vars };
+        let budget = Arc::new(Budget {
+            deadline: Instant::now() + RUN_LIMIT,
+            steps: AtomicUsize::new(0),
+            paused_ms: AtomicU64::new(0),
+        });
+        self.run_blocking_at(start, ctx, 0, budget)
+    }
+
+    /// [`Runtime::run_blocking`] inside `depth` nested `call_external` nodes,
+    /// which spend the `budget` of the run that called them.
+    fn run_blocking_at(
+        &self,
+        start: &str,
+        ctx: Ctx,
+        depth: usize,
+        budget: Arc<Budget>,
+    ) -> RunReport {
         let mut run = Run {
             report: RunReport::default(),
-            deadline: Instant::now() + RUN_LIMIT,
+            budget,
             stopped: false,
+            depth,
         };
-        self.follow(start, OUT, &ctx, &mut run);
+        if let Some(message) = self.configure_message() {
+            run.report.errors.push(NodeFailure {
+                node: start.to_owned(),
+                message,
+            });
+            return run.report;
+        }
+        let mut vars = self.base_vars.clone();
+        vars.extend(ctx.vars);
+        // Alfred workflows read the keyword that started them.
+        if let Some(keyword) = self.start_keyword(start) {
+            vars.entry("alfred_workflow_keyword".to_owned())
+                .or_insert(keyword);
+        }
+        let ctx = Ctx { arg: ctx.arg, vars };
+        // A disabled start node (a trigger switched off in the editor) runs nothing.
+        if self.workflow.node(start).is_some_and(|node| !node.disabled) {
+            self.follow(start, OUT, &ctx, &mut run);
+        }
         run.report
+    }
+
+    /// The keyword of the keyword trigger or script filter `node`.
+    fn start_keyword(&self, node: &str) -> Option<String> {
+        match &self.workflow.node(node)?.kind {
+            NodeKind::Keyword { keyword, .. } | NodeKind::ScriptFilter { keyword, .. } => {
+                Some(keyword.trim().to_owned()).filter(|keyword| !keyword.is_empty())
+            }
+            _ => None,
+        }
     }
 
     fn follow(&self, from: &str, port: &str, ctx: &Ctx, run: &mut Run) {
@@ -279,9 +569,9 @@ impl Runtime {
         }
         let reason = if self.cancelled() {
             Some("Sevak is closing or reloading")
-        } else if run.report.executed.len() >= MAX_STEPS {
+        } else if run.budget.steps.load(Ordering::SeqCst) >= MAX_STEPS {
             Some("the run reached the limit of steps")
-        } else if Instant::now() > run.deadline {
+        } else if run.budget.expired() {
             Some("the run took too long")
         } else {
             None
@@ -298,9 +588,14 @@ impl Runtime {
         let Some(node) = self.workflow.node(id) else {
             return;
         };
+        // A disabled node does not run and stops its branch.
+        if node.disabled {
+            return;
+        }
         run.report.executed.push(id.to_owned());
-        match self.execute(node, &ctx) {
-            Ok(step) => self.follow(id, step.port, &step.ctx, run),
+        run.budget.steps.fetch_add(1, Ordering::SeqCst);
+        match self.execute(node, &ctx, run.depth, &run.budget) {
+            Ok(step) => self.follow(id, &step.port, &step.ctx, run),
             Err(message) => {
                 tracing::warn!(
                     workflow = self.folder,
@@ -316,7 +611,13 @@ impl Runtime {
         }
     }
 
-    fn execute(&self, node: &Node, ctx: &Ctx) -> Result<Step, String> {
+    fn execute(
+        &self,
+        node: &Node,
+        ctx: &Ctx,
+        depth: usize,
+        budget: &Arc<Budget>,
+    ) -> Result<Step, String> {
         let scope = Scope {
             query: &ctx.arg,
             vars: &ctx.vars,
@@ -324,12 +625,16 @@ impl Runtime {
         let plain = |text: &str| expand(text, &scope, Target::Plain);
         let mut next = ctx.clone();
         let mut port = OUT;
+        let mut dynamic_port: Option<String> = None;
         match &node.kind {
             NodeKind::Keyword { .. }
             | NodeKind::Hotkey { .. }
             | NodeKind::Selection { .. }
             | NodeKind::External {}
-            | NodeKind::ScriptFilter { .. } => {
+            | NodeKind::ScriptFilter { .. }
+            | NodeKind::ListFilter { .. }
+            | NodeKind::FileFilter { .. }
+            | NodeKind::RunningApps { .. } => {
                 return Err("a trigger cannot be run as a step".to_owned());
             }
             NodeKind::RunScript {
@@ -492,17 +797,300 @@ impl Runtime {
                 self.sink.notify(&heading, &plain(body));
             }
             NodeKind::LargeType { text } => self.sink.large_type(&plain(text)),
-            NodeKind::TextView { heading, text } => {
+            NodeKind::TextView {
+                heading,
+                text,
+                markdown,
+            } => {
                 let heading = plain(heading);
                 let heading = if heading.trim().is_empty() {
                     self.display_name()
                 } else {
                     heading
                 };
-                self.sink.text_view(&heading, &plain(text));
+                self.sink
+                    .text_view_markdown(&heading, &plain(text), *markdown);
+            }
+            NodeKind::SplitArg {
+                delimiter,
+                custom,
+                discard_empty,
+                trim,
+                prefix,
+            } => {
+                let items = split_items(&ctx.arg, *delimiter, custom, *trim, *discard_empty)?;
+                let prefix = prefix.trim();
+                // The numbered variables of an earlier split must not linger.
+                next.vars.retain(|name, _| {
+                    name.strip_prefix(prefix).is_none_or(|rest| {
+                        rest != "count"
+                            && (rest.is_empty() || !rest.chars().all(|c| c.is_ascii_digit()))
+                    })
+                });
+                for (i, item) in items.iter().take(MAX_SPLIT_VARIABLES).enumerate() {
+                    next.vars.insert(format!("{prefix}{}", i + 1), item.clone());
+                }
+                next.vars
+                    .insert(format!("{prefix}count"), items.len().to_string());
+                next.arg = items.join("\n");
+            }
+            NodeKind::JoinArg {
+                separator,
+                discard_empty,
+            } => {
+                let mut items = list_items(&ctx.arg);
+                if *discard_empty {
+                    items.retain(|item| !item.trim().is_empty());
+                }
+                next.arg = items.join(&unescape(&plain(separator)));
+            }
+            NodeKind::Random {
+                mode,
+                min,
+                max,
+                lines,
+                variable,
+            } => {
+                let result = match mode {
+                    RandomMode::Number => {
+                        if min > max {
+                            return Err("the smallest number is above the largest".to_owned());
+                        }
+                        let span = (i128::from(*max) - i128::from(*min) + 1) as u128;
+                        let offset = u128::from(self.next_random()?) % span;
+                        (i128::from(*min) + offset as i128).to_string()
+                    }
+                    RandomMode::Line => {
+                        let text = plain(lines);
+                        let candidates: Vec<&str> = text
+                            .split('\n')
+                            .map(|line| line.trim_end_matches('\r'))
+                            .filter(|line| !line.trim().is_empty())
+                            .collect();
+                        if candidates.is_empty() {
+                            return Err("there is no line to pick".to_owned());
+                        }
+                        let at = self.next_random()? % candidates.len() as u64;
+                        candidates[at as usize].to_owned()
+                    }
+                    RandomMode::Uuid => {
+                        let mut bytes = [0u8; 16];
+                        bytes[..8].copy_from_slice(&self.next_random()?.to_le_bytes());
+                        bytes[8..].copy_from_slice(&self.next_random()?.to_le_bytes());
+                        crate::example_uuid::format_v4(bytes)
+                    }
+                };
+                match variable
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|name| !name.is_empty())
+                {
+                    Some(name) => {
+                        next.vars.insert(name.to_owned(), result);
+                    }
+                    None => next.arg = result,
+                }
+            }
+            NodeKind::Expression {
+                expression,
+                variable,
+                set_arg,
+            } => {
+                let name = variable.trim();
+                if !valid_variable_name(name) {
+                    return Err("the variable name is not valid".to_owned());
+                }
+                let value = crate::calculator::evaluate(&plain(expression))
+                    .map_err(|err| format!("could not calculate the expression: {err}"))?;
+                let result = crate::calculator::format_number(value);
+                next.vars.insert(name.to_owned(), result.clone());
+                if *set_arg {
+                    next.arg = result;
+                }
+            }
+            NodeKind::WriteFile {
+                path,
+                content,
+                mode,
+                create_dirs,
+            } => {
+                let path = self.resolve_data_path(&plain(path))?;
+                write_text(&path, &plain(content), *mode, *create_dirs)?;
+                next.arg = path.display().to_string();
+            }
+            NodeKind::Debug { passthrough } => {
+                let mut text = format!("argument:\n{}\n\nvariables ({}):", ctx.arg, ctx.vars.len());
+                for (name, value) in &ctx.vars {
+                    text.push_str(&format!("\n{name} = {value}"));
+                }
+                self.sink.debug(&text);
+                if !*passthrough {
+                    next.arg.clear();
+                }
+            }
+            NodeKind::RevealFile { path } => {
+                let text = plain(path);
+                let paths: Vec<&str> = text
+                    .split('\n')
+                    .map(|line| line.trim_end_matches('\r'))
+                    .filter(|line| !line.trim().is_empty())
+                    .collect();
+                if paths.is_empty() {
+                    return Err("there is no file or folder to show".to_owned());
+                }
+                for line in paths {
+                    let path = self.resolve_path(line)?;
+                    self.platform
+                        .reveal_path(&path)
+                        .map_err(|err| format!("could not show the file: {err}"))?;
+                }
+            }
+            NodeKind::CallExternal {
+                workflow,
+                trigger,
+                arg,
+                pass_variables,
+            } => {
+                if depth >= MAX_CALL_DEPTH {
+                    return Err(format!(
+                        "workflows are calling each other more than {MAX_CALL_DEPTH} levels deep"
+                    ));
+                }
+                let (workflow, trigger) = (workflow.trim(), trigger.trim());
+                let target = self.find_runtime(workflow)?;
+                match target.workflow.node(trigger).map(|n| &n.kind) {
+                    Some(NodeKind::External {}) => {}
+                    Some(_) => {
+                        return Err(format!(
+                            "\"{trigger}\" in \"{workflow}\" is not an external trigger"
+                        ))
+                    }
+                    None => {
+                        return Err(format!("\"{workflow}\" has no node \"{trigger}\""));
+                    }
+                }
+                let called = Ctx {
+                    arg: plain(arg),
+                    // The target's own (approved) variables win over passed ones.
+                    vars: if *pass_variables {
+                        ctx.vars
+                            .iter()
+                            .filter(|(name, _)| !target.base_vars.contains_key(*name))
+                            .map(|(name, value)| (name.clone(), value.clone()))
+                            .collect()
+                    } else {
+                        BTreeMap::new()
+                    },
+                };
+                let report = target.run_blocking_at(trigger, called, depth + 1, Arc::clone(budget));
+                if let Some(failure) = report.errors.first() {
+                    return Err(format!(
+                        "\"{}\" in \"{workflow}\" failed: {}",
+                        failure.node, failure.message
+                    ));
+                }
+            }
+            NodeKind::DialogConditional {
+                heading,
+                message,
+                buttons,
+            } => {
+                let heading = plain(heading);
+                let heading = if heading.trim().is_empty() {
+                    self.display_name()
+                } else {
+                    heading
+                };
+                let labels: Vec<String> = buttons
+                    .iter()
+                    .take(MAX_DIALOG_BUTTONS)
+                    .map(|label| plain(label))
+                    .collect();
+                // Dismissing the dialog, or a shell that cannot show one, takes
+                // the `cancel` branch.
+                port = match self.sink.ask(&heading, &plain(message), &labels) {
+                    Some(index) if index < labels.len() => DIALOG_PORTS[index],
+                    _ => CANCEL,
+                };
+            }
+            NodeKind::ShowUi {
+                target,
+                definition,
+                file,
+                scripts,
+                titlebar,
+                always_on_top,
+                ..
+            } => {
+                let ids: BTreeSet<String> = scripts.keys().cloned().collect();
+                let loaded = ui::load(
+                    &ui::Source {
+                        inline: definition.as_deref(),
+                        file: file.as_deref(),
+                        dir: &self.dir,
+                    },
+                    &ids,
+                )?;
+                let (images, problems) = ui::load_images(&loaded.root, &self.dir);
+                if let Some(problem) = problems.first() {
+                    self.sink.notify(&self.display_name(), problem);
+                }
+                let session = UiSession {
+                    folder: self.folder.clone(),
+                    workflow: self.display_name(),
+                    node: node.id.clone(),
+                    target: *target,
+                    titlebar: *titlebar,
+                    always_on_top: *always_on_top,
+                    definition: loaded,
+                    images,
+                    vars: ctx.vars.clone(),
+                    query: ctx.arg.clone(),
+                    scripts: ids,
+                };
+                let host = NodeUiHost {
+                    runtime: self,
+                    node,
+                    ctx,
+                    session: &session,
+                    scripts,
+                };
+                let started = Instant::now();
+                let outcome = self.sink.show_ui(&session, &host);
+                budget
+                    .paused_ms
+                    .fetch_add(started.elapsed().as_millis() as u64, Ordering::SeqCst);
+                let outcome = outcome.ok_or("this Sevak cannot show the UI here")?;
+                next.arg = outcome.arg.unwrap_or_else(|| outcome.state.to_string());
+                dynamic_port = Some(outcome.port);
+            }
+            NodeKind::Speak { text, voice } => {
+                let text = plain(text);
+                let voice = voice.as_deref().map(plain);
+                let voice = voice.as_deref().map(str::trim).filter(|v| !v.is_empty());
+                if !text.trim().is_empty() {
+                    self.platform
+                        .speak(&text, voice)
+                        .map_err(|err| format!("could not speak: {err}"))?;
+                }
+            }
+            NodeKind::PlaySound { path } => {
+                let path = self.resolve_path(&plain(path))?;
+                if !has_sound_extension(&path) {
+                    return Err("that is not a sound file Sevak can play".to_owned());
+                }
+                if !path.is_file() {
+                    return Err("the sound file was not found".to_owned());
+                }
+                self.platform
+                    .play_sound(&path)
+                    .map_err(|err| format!("could not play the sound: {err}"))?;
             }
         }
-        Ok(Step { ctx: next, port })
+        Ok(Step {
+            ctx: next,
+            port: dynamic_port.map_or(Cow::Borrowed(port), Cow::Owned),
+        })
     }
 
     /// Sleeps for `total`, waking early when the runtime shuts down. False
@@ -532,6 +1120,24 @@ impl Runtime {
             path
         } else {
             self.dir.join(path)
+        };
+        sevak_platform::netpath::guard(&path).map_err(|err| err.to_string())?;
+        Ok(path)
+    }
+
+    /// Where `write_file` writes: `~` is the home folder, a relative path is
+    /// inside the workflow's data folder (made when it is missing).
+    fn resolve_data_path(&self, text: &str) -> Result<PathBuf, String> {
+        if text.trim().is_empty() {
+            return Err("no file is set".to_owned());
+        }
+        let path = expand_home(text.trim(), home_dir().as_deref());
+        let path = if path.is_absolute() {
+            path
+        } else {
+            // Best effort: the write reports its own error.
+            let _ = std::fs::create_dir_all(&self.data_dir);
+            self.data_dir.join(path)
         };
         sevak_platform::netpath::guard(&path).map_err(|err| err.to_string())?;
         Ok(path)
@@ -619,9 +1225,18 @@ impl Runtime {
             self.data_dir.display().to_string(),
         );
         env.insert(
-            "alfred_workflow_cache".to_owned(),
-            self.data_dir.display().to_string(),
+            "SEVAK_WORKFLOW_CACHE".to_owned(),
+            self.cache_dir.display().to_string(),
         );
+        env.insert(
+            "alfred_workflow_cache".to_owned(),
+            self.cache_dir.display().to_string(),
+        );
+        env.insert(
+            "alfred_version".to_owned(),
+            ALFRED_COMPAT_VERSION.to_owned(),
+        );
+        env.insert("alfred_debug".to_owned(), "0".to_owned());
         env
     }
 
@@ -630,7 +1245,7 @@ impl Runtime {
     pub(super) fn script_environment(&self) -> Vec<(String, String)> {
         let ctx = Ctx {
             arg: String::new(),
-            vars: self.workflow.variables.clone(),
+            vars: self.base_vars.clone(),
         };
         let mut env = self.environment(&ctx);
         env.remove("SEVAK_QUERY");
@@ -650,8 +1265,9 @@ impl Runtime {
         let (program, args) = argv
             .split_first()
             .ok_or_else(|| "no program is set".to_owned())?;
-        // Best effort: a script that needs the folder reports its own error.
+        // Best effort: a script that needs the folders reports its own error.
         let _ = std::fs::create_dir_all(&self.data_dir);
+        let _ = std::fs::create_dir_all(&self.cache_dir);
         let mut command = Command::new(program);
         // Only the base environment; the node's own variables follow below.
         scrub_environment(&mut command, &[]);
@@ -734,6 +1350,88 @@ struct Limits {
     log_stderr: bool,
 }
 
+/// Runs the scripts of one `show_ui` node for its open UI.
+struct NodeUiHost<'a> {
+    runtime: &'a Runtime,
+    node: &'a Node,
+    ctx: &'a Ctx,
+    session: &'a UiSession,
+    scripts: &'a BTreeMap<String, UiScript>,
+}
+
+impl UiHost for NodeUiHost<'_> {
+    fn run_script(&self, id: &str, input: &serde_json::Value) -> Result<UiUpdate, String> {
+        let script = self
+            .scripts
+            .get(id)
+            .ok_or_else(|| format!("the UI has no script \"{id}\""))?;
+        let extension = ui::language_extension(&script.language)
+            .ok_or_else(|| "the script's language is not supported".to_owned())?;
+        let runtime = self.runtime;
+        // The source is written fresh for each run, next to the workflow's other
+        // data, so the interpreter gets a plain file path (no quoting of source
+        // on a command line).
+        let folder = runtime.data_dir.join("ui-scripts");
+        std::fs::create_dir_all(&folder)
+            .map_err(|err| format!("could not prepare the script: {err}"))?;
+        let path = folder.join(format!("{}-{id}.{extension}", self.node.id));
+        std::fs::write(&path, &script.script)
+            .map_err(|err| format!("could not prepare the script: {err}"))?;
+        let mut argv = match sevak_platform::process::script_runner(extension) {
+            sevak_platform::process::ScriptRunner::Interpreter(mut prefix) => {
+                if let Some(first) = prefix.first_mut() {
+                    *first = sevak_platform::process::pin_program(first)
+                        .map_err(|err| format!("could not start `{first}`: {err}"))?;
+                }
+                prefix
+            }
+            sevak_platform::process::ScriptRunner::Direct => {
+                return Err(format!(
+                    "no interpreter for {} scripts on this system",
+                    script.language
+                ))
+            }
+            sevak_platform::process::ScriptRunner::Missing(names) => {
+                return Err(format!("none of {} is on PATH", names.join(", ")))
+            }
+        };
+        argv.push(path.to_string_lossy().into_owned());
+        let environment = runtime.environment(self.ctx);
+        let limits = Limits {
+            timeout: Duration::from_millis(DEFAULT_SCRIPT_TIMEOUT_MS),
+            log_stderr: false,
+        };
+        let stdout = runtime.run_program(
+            &self.node.id,
+            &argv,
+            Some(input.to_string()),
+            &environment,
+            &limits,
+        )?;
+        let reply = ui::parse_reply(&String::from_utf8_lossy(&stdout))?;
+        let mut update = UiUpdate {
+            set: reply.set,
+            notify: reply.notify,
+            close: reply.close,
+            ..UiUpdate::default()
+        };
+        if let Some(root) = reply.root {
+            let root = ui::replacement_root(root, &self.session.definition, &self.session.scripts)?;
+            let (images, problems) = ui::load_images(&root, &runtime.dir);
+            if let Some(problem) = problems.first() {
+                update.notify.get_or_insert_with(|| problem.clone());
+            }
+            update.images = images;
+            update.root = Some(root);
+        }
+        Ok(update)
+    }
+
+    fn cancelled(&self) -> bool {
+        self.runtime.cancelled()
+    }
+}
+
 /// Whether a variable becomes an environment variable of the scripts: a plain
 /// name that cannot redirect how programs start.
 fn exportable(name: &str, value: &str) -> bool {
@@ -786,6 +1484,118 @@ pub fn script_output(stdout: &[u8]) -> (String, BTreeMap<String, String>) {
         .or_else(|| text.strip_suffix('\n'))
         .unwrap_or(text);
     (trimmed.to_owned(), BTreeMap::new())
+}
+
+/// The items `split_arg` makes of `input`.
+fn split_items(
+    input: &str,
+    delimiter: Delimiter,
+    custom: &str,
+    trim: bool,
+    discard_empty: bool,
+) -> Result<Vec<String>, String> {
+    let parts: Vec<&str> = match delimiter {
+        Delimiter::Newline => input
+            .split('\n')
+            .map(|line| line.strip_suffix('\r').unwrap_or(line))
+            .collect(),
+        Delimiter::Comma => input.split(',').collect(),
+        Delimiter::Tab => input.split('\t').collect(),
+        Delimiter::Space => input.split(' ').collect(),
+        Delimiter::Custom => {
+            if custom.is_empty() {
+                return Err("the text to split at is empty".to_owned());
+            }
+            input.split(custom).collect()
+        }
+    };
+    Ok(parts
+        .into_iter()
+        .map(|part| if trim { part.trim() } else { part })
+        .filter(|part| !(discard_empty && part.is_empty()))
+        .map(str::to_owned)
+        .collect())
+}
+
+/// The items of a list argument: the elements of a JSON array, or the lines.
+fn list_items(arg: &str) -> Vec<String> {
+    if arg.trim_start().starts_with('[') {
+        if let Ok(serde_json::Value::Array(items)) = serde_json::from_str(arg) {
+            return items
+                .into_iter()
+                .map(|item| match item {
+                    serde_json::Value::String(text) => text,
+                    serde_json::Value::Null => String::new(),
+                    other => other.to_string(),
+                })
+                .collect();
+        }
+    }
+    arg.split('\n')
+        .map(|line| line.strip_suffix('\r').unwrap_or(line).to_owned())
+        .collect()
+}
+
+/// `\n`, `\t`, `\r` and `\\` in a separator; anything else stays.
+fn unescape(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
+        match chars.next() {
+            Some('n') => out.push('\n'),
+            Some('t') => out.push('\t'),
+            Some('r') => out.push('\r'),
+            Some('\\') => out.push('\\'),
+            Some(other) => {
+                out.push('\\');
+                out.push(other);
+            }
+            None => out.push('\\'),
+        }
+    }
+    out
+}
+
+/// Writes `text` to `path` the way a `write_file` node says.
+fn write_text(
+    path: &std::path::Path,
+    text: &str,
+    mode: WriteMode,
+    create_dirs: bool,
+) -> Result<(), String> {
+    if create_dirs {
+        if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+            std::fs::create_dir_all(parent)
+                .map_err(|err| format!("could not create the folder: {err}"))?;
+        }
+    }
+    let failed = |err: std::io::Error| format!("could not write the file: {err}");
+    match mode {
+        WriteMode::Overwrite => std::fs::write(path, text).map_err(failed),
+        WriteMode::Append => std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .and_then(|mut file| file.write_all(text.as_bytes()))
+            .map_err(failed),
+        WriteMode::Prepend => {
+            let old = match std::fs::metadata(path) {
+                Ok(meta) if meta.len() > MAX_PREPEND_BYTES => {
+                    return Err("the file is too large to put text in front of".to_owned());
+                }
+                Ok(_) => std::fs::read(path).map_err(failed)?,
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+                Err(err) => return Err(failed(err)),
+            };
+            let mut all = text.as_bytes().to_vec();
+            all.extend_from_slice(&old);
+            std::fs::write(path, all).map_err(failed)
+        }
+    }
 }
 
 /// Applies a `transform` node's operation.
@@ -1011,6 +1821,41 @@ mod tests {
         assert_eq!(report.executed, ["a", "a2", "a3", "b"]);
         assert_eq!(clipboard(&f), ["a", "a2", "a3", "b"]);
         assert!(report.errors.is_empty());
+    }
+
+    #[test]
+    fn disabled_connections_and_nodes_are_skipped() {
+        let mut b = copy("b", "b");
+        b.disabled = true; // not run, and its branch stops
+        let mut skipped = wire("k", "a");
+        skipped.disabled = true;
+        let f = fixture(
+            vec![
+                keyword("k"),
+                copy("a", "a"),
+                b,
+                copy("c", "c"),
+                copy("after_b", "after_b"),
+            ],
+            vec![
+                skipped,
+                wire("k", "b"),
+                wire("k", "c"),
+                wire("b", "after_b"),
+            ],
+        );
+        let report = f.runtime.run_blocking("k", Ctx::with_arg("x"));
+        assert_eq!(report.executed, ["c"]);
+        assert_eq!(clipboard(&f), ["c"]);
+    }
+
+    #[test]
+    fn a_disabled_trigger_runs_nothing() {
+        let mut k = keyword("k");
+        k.disabled = true;
+        let f = fixture(vec![k, copy("a", "a")], vec![wire("k", "a")]);
+        let report = f.runtime.run_blocking("k", Ctx::with_arg("x"));
+        assert!(report.executed.is_empty());
     }
 
     #[test]
@@ -1308,6 +2153,7 @@ mod tests {
                     NodeKind::TextView {
                         heading: "Result".into(),
                         text: "{query}!".into(),
+                        markdown: false,
                     },
                 ),
             ],
@@ -1336,6 +2182,47 @@ mod tests {
             *f.sink.views.lock().unwrap(),
             [("Result".to_owned(), "it's!".to_owned())]
         );
+    }
+
+    #[test]
+    fn a_text_view_node_passes_its_markdown_flag_on() {
+        let view = |id: &str, markdown: bool| {
+            node(
+                id,
+                NodeKind::TextView {
+                    heading: String::new(),
+                    text: "# {query}".into(),
+                    markdown,
+                },
+            )
+        };
+        let f = fixture(
+            vec![keyword("k"), view("plain", false), view("md", true)],
+            vec![wire("k", "plain"), wire("plain", "md")],
+        );
+        let report = f.runtime.run_blocking("k", Ctx::with_arg("x"));
+        assert!(report.errors.is_empty(), "{report:?}");
+        assert_eq!(*f.sink.view_markdown.lock().unwrap(), [false, true]);
+        assert_eq!(f.sink.views.lock().unwrap()[1].1, "# x");
+    }
+
+    #[test]
+    fn a_text_view_node_without_the_flag_loads_as_plain_text() {
+        let kind: NodeKind = serde_json::from_str(r#"{"type":"text_view","text":"hi"}"#).unwrap();
+        assert!(matches!(
+            kind,
+            NodeKind::TextView {
+                markdown: false,
+                ..
+            }
+        ));
+        let json = serde_json::to_string(&kind).unwrap();
+        assert!(!json.contains("markdown"), "{json}");
+        let on: NodeKind =
+            serde_json::from_str(r#"{"type":"text_view","text":"hi","markdown":true}"#).unwrap();
+        assert!(serde_json::to_string(&on)
+            .unwrap()
+            .contains(r#""markdown":true"#));
     }
 
     #[test]
@@ -1647,6 +2534,154 @@ mod tests {
         assert!(!exportable("big", &"x".repeat(MAX_ENV_BYTES + 1)));
     }
 
+    fn dialog(buttons: &[&str]) -> Node {
+        node(
+            "ask",
+            NodeKind::DialogConditional {
+                heading: "Sure?".into(),
+                message: "Delete {query}?".into(),
+                buttons: buttons.iter().map(|b| (*b).into()).collect(),
+            },
+        )
+    }
+
+    fn dialog_flow(button: Option<usize>) -> crate::workflow::testing::Fixture {
+        fixture_with(
+            vec![
+                keyword("k"),
+                dialog(&["Yes", "No {query}"]),
+                copy("one", "one"),
+                copy("two", "two"),
+                copy("none", "none"),
+            ],
+            vec![
+                wire("k", "ask"),
+                wire_port("ask", "button1", "one"),
+                wire_port("ask", "button2", "two"),
+                wire_port("ask", CANCEL, "none"),
+            ],
+            RecordingSink {
+                button,
+                ..RecordingSink::default()
+            },
+        )
+    }
+
+    #[test]
+    fn a_dialog_continues_along_the_button_pressed() {
+        for (button, expected) in [(Some(0), "one"), (Some(1), "two")] {
+            let f = dialog_flow(button);
+            let report = f.runtime.run_blocking("k", Ctx::with_arg("x"));
+            assert_eq!(clipboard(&f), [expected], "{button:?}");
+            assert!(report.errors.is_empty(), "{:?}", report.errors);
+        }
+        let f = dialog_flow(Some(1));
+        f.runtime.run_blocking("k", Ctx::with_arg("x"));
+        // Heading, message and buttons are templates.
+        assert_eq!(
+            *f.sink.dialogs.lock().unwrap(),
+            [(
+                "Sure?".to_owned(),
+                "Delete x?".to_owned(),
+                vec!["Yes".to_owned(), "No x".to_owned()]
+            )]
+        );
+    }
+
+    #[test]
+    fn a_dismissed_or_impossible_dialog_takes_the_cancel_port() {
+        // Dismissed, a button that does not exist, and a sink without dialogs.
+        for button in [None, Some(5)] {
+            let f = dialog_flow(button);
+            f.runtime.run_blocking("k", Ctx::default());
+            assert_eq!(clipboard(&f), ["none"], "{button:?}");
+        }
+    }
+
+    #[test]
+    fn a_dialog_with_no_sink_cancels() {
+        struct Silent;
+        impl OutputSink for Silent {
+            fn notify(&self, _: &str, _: &str) {}
+            fn large_type(&self, _: &str) {}
+            fn text_view(&self, _: &str, _: &str) {}
+        }
+        assert_eq!(Silent.ask("h", "m", &["a".to_owned()]), None);
+        assert_eq!(NoSink.ask("h", "m", &["a".to_owned()]), None);
+    }
+
+    fn speak(text: &str, voice: Option<&str>) -> Node {
+        node(
+            "say",
+            NodeKind::Speak {
+                text: text.into(),
+                voice: voice.map(str::to_owned),
+            },
+        )
+    }
+
+    #[test]
+    fn speak_sends_the_expanded_text_and_voice_to_the_platform() {
+        let f = fixture(
+            vec![keyword("k"), speak("Hello {query}", Some(" {var:v} "))],
+            vec![wire("k", "say")],
+        );
+        let mut ctx = Ctx::with_arg("world");
+        ctx.vars.insert("v".into(), "Samantha".into());
+        f.runtime.run_blocking("k", ctx);
+        assert_eq!(
+            *f.platform.spoken.lock().unwrap(),
+            [("Hello world".to_owned(), Some("Samantha".to_owned()))]
+        );
+
+        // A blank voice means the default one, and nothing is spoken for
+        // empty text.
+        let f = fixture(
+            vec![keyword("k"), speak("{query}", Some("  "))],
+            vec![wire("k", "say")],
+        );
+        f.runtime.run_blocking("k", Ctx::with_arg("hi"));
+        f.runtime.run_blocking("k", Ctx::with_arg("  "));
+        assert_eq!(
+            *f.platform.spoken.lock().unwrap(),
+            [("hi".to_owned(), None)]
+        );
+    }
+
+    #[test]
+    fn play_sound_checks_the_extension_and_the_file() {
+        let f = fixture(
+            vec![
+                keyword("k"),
+                node(
+                    "snd",
+                    NodeKind::PlaySound {
+                        path: "{query}".into(),
+                    },
+                ),
+            ],
+            vec![wire("k", "snd")],
+        );
+        std::fs::create_dir_all(&f.runtime.dir).unwrap();
+        let wav = f.runtime.dir.join("ding.WAV");
+        std::fs::write(&wav, b"RIFF").unwrap();
+        std::fs::write(f.runtime.dir.join("notes.txt"), b"x").unwrap();
+
+        let report = f
+            .runtime
+            .run_blocking("k", Ctx::with_arg(wav.to_string_lossy()));
+        assert!(report.errors.is_empty(), "{:?}", report.errors);
+        // A relative path is inside the workflow folder.
+        f.runtime.run_blocking("k", Ctx::with_arg("ding.WAV"));
+        assert_eq!(*f.platform.sounds.lock().unwrap(), [wav.clone(), wav]);
+
+        let report = f.runtime.run_blocking("k", Ctx::with_arg("notes.txt"));
+        assert!(report.errors[0].message.contains("not a sound file"));
+        let report = f.runtime.run_blocking("k", Ctx::with_arg("missing.mp3"));
+        assert!(report.errors[0].message.contains("not found"));
+        assert_eq!(f.platform.sounds.lock().unwrap().len(), 2);
+    }
+
     #[test]
     fn debug_output_hides_the_argument() {
         let ctx = Ctx::with_arg("my secret");
@@ -1669,5 +2704,1070 @@ mod tests {
         let third = RunGuard::acquire_from(&COUNTER, 2).unwrap();
         drop((second, third));
         assert_eq!(COUNTER.load(Ordering::SeqCst), 0);
+    }
+}
+
+#[cfg(test)]
+mod utility_node_tests {
+    use super::*;
+    use crate::test_util::MockPlatform;
+    use crate::workflow::model::Connection;
+    use crate::workflow::testing::{
+        clipboard, copy, fixture, keyword, node, wire, Fixture, RecordingSink,
+    };
+
+    fn split(delimiter: Delimiter, custom: &str) -> NodeKind {
+        NodeKind::SplitArg {
+            delimiter,
+            custom: custom.into(),
+            discard_empty: true,
+            trim: true,
+            prefix: "split_".into(),
+        }
+    }
+
+    /// `k -> n -> c` where `c` copies `show`; returns what was copied.
+    fn run_one(kind: NodeKind, show: &str, arg: &str) -> Vec<String> {
+        let f = fixture(
+            vec![keyword("k"), node("n", kind), copy("c", show)],
+            vec![wire("k", "n"), wire("n", "c")],
+        );
+        f.runtime.run_blocking("k", Ctx::with_arg(arg));
+        clipboard(&f)
+    }
+
+    fn errors_of(kind: NodeKind, arg: &str) -> Vec<NodeFailure> {
+        let f = fixture(vec![keyword("k"), node("n", kind)], vec![wire("k", "n")]);
+        f.runtime.run_blocking("k", Ctx::with_arg(arg)).errors
+    }
+
+    #[test]
+    fn split_arg_makes_a_list_and_numbered_variables() {
+        assert_eq!(
+            run_one(
+                split(Delimiter::Comma, ""),
+                "{query}|{var:split_count}|{var:split_1}|{var:split_3}",
+                "a, b ,,c"
+            ),
+            ["a\nb\nc|3|a|c"]
+        );
+        assert_eq!(
+            run_one(
+                split(Delimiter::Newline, ""),
+                "{var:split_2}",
+                "x\r\ny\n\nz"
+            ),
+            ["y"]
+        );
+        assert_eq!(
+            run_one(split(Delimiter::Tab, ""), "{var:split_count}", "a\tb"),
+            ["2"]
+        );
+        assert_eq!(
+            run_one(split(Delimiter::Space, ""), "{var:split_2}", "a  b"),
+            ["b"]
+        );
+        assert_eq!(
+            run_one(split(Delimiter::Custom, "::"), "{var:split_2}", "a::b::c"),
+            ["b"]
+        );
+    }
+
+    #[test]
+    fn split_arg_options_and_prefix() {
+        let kind = NodeKind::SplitArg {
+            delimiter: Delimiter::Comma,
+            custom: String::new(),
+            discard_empty: false,
+            trim: false,
+            prefix: "p_".into(),
+        };
+        assert_eq!(
+            run_one(
+                kind,
+                "{var:p_count}[{var:p_1}][{var:p_2}][{var:p_3}]",
+                "a, ,b"
+            ),
+            ["3[a][ ][b]"]
+        );
+    }
+
+    #[test]
+    fn a_second_split_leaves_no_stale_variables() {
+        let f = fixture(
+            vec![
+                keyword("k"),
+                node("s1", split(Delimiter::Comma, "")),
+                node("s2", split(Delimiter::Comma, "")),
+                copy("c", "[{var:split_3}]{var:split_count}"),
+            ],
+            vec![wire("k", "s1"), wire("s1", "s2"), wire("s2", "c")],
+        );
+        // The second split sees the first one's list (one item per line), so
+        // it holds a single item.
+        f.runtime.run_blocking("k", Ctx::with_arg("a,b,c"));
+        assert_eq!(clipboard(&f), ["[]1"]);
+    }
+
+    #[test]
+    fn a_custom_split_needs_its_text() {
+        // The editor refuses it; a hand-written file that gets here fails.
+        assert!(split_items("a", Delimiter::Custom, "", true, true).is_err());
+    }
+
+    fn join(separator: &str, discard_empty: bool) -> NodeKind {
+        NodeKind::JoinArg {
+            separator: separator.into(),
+            discard_empty,
+        }
+    }
+
+    #[test]
+    fn join_arg_joins_lines_and_json_arrays() {
+        assert_eq!(
+            run_one(join(", ", false), "{query}", "a\nb\n\nc"),
+            ["a, b, , c"]
+        );
+        assert_eq!(
+            run_one(join(", ", true), "{query}", "a\nb\n\n \nc"),
+            ["a, b, c"]
+        );
+        assert_eq!(
+            run_one(join("-", false), "{query}", r#"["x", 2, true, null]"#),
+            ["x-2-true-"]
+        );
+        // Not valid JSON: it is just lines.
+        assert_eq!(run_one(join("+", false), "{query}", "[a\nb"), ["[a+b"]);
+    }
+
+    #[test]
+    fn join_arg_separator_escapes() {
+        assert_eq!(run_one(join(r"\t", false), "{query}", "a\nb"), ["a\tb"]);
+        assert_eq!(run_one(join(r"\\", false), "{query}", "a\nb"), [r"a\b"]);
+        assert_eq!(run_one(join(r"\n", false), "{query}", "a\nb"), ["a\nb"]);
+        assert_eq!(
+            unescape(r"x\ny\tz\qw\"),
+            "x\ny\tz\\qw\\",
+            "unknown escapes stay"
+        );
+    }
+
+    fn random(
+        mode: RandomMode,
+        min: i64,
+        max: i64,
+        lines: &str,
+        variable: Option<&str>,
+    ) -> NodeKind {
+        NodeKind::Random {
+            mode,
+            min,
+            max,
+            lines: lines.into(),
+            variable: variable.map(Into::into),
+        }
+    }
+
+    /// A runtime whose random numbers are `values`, in turn.
+    fn seeded(kind: NodeKind, show: &str, values: Vec<u64>) -> Vec<String> {
+        let f = fixture(
+            vec![keyword("k"), node("n", kind), copy("c", show)],
+            vec![wire("k", "n"), wire("n", "c")],
+        );
+        let mut values = values.into_iter().cycle();
+        f.runtime
+            .set_random_source(move || values.next().unwrap_or_default());
+        f.runtime.run_blocking("k", Ctx::with_arg("in"));
+        clipboard(&f)
+    }
+
+    #[test]
+    fn random_numbers_stay_in_range_and_are_inclusive() {
+        for (value, expected) in [(0, "5"), (1, "6"), (2, "7"), (3, "5"), (u64::MAX, "5")] {
+            assert_eq!(
+                seeded(
+                    random(RandomMode::Number, 5, 7, "", None),
+                    "{query}",
+                    vec![value]
+                ),
+                [expected],
+                "{value}"
+            );
+        }
+        assert_eq!(
+            seeded(
+                random(RandomMode::Number, -2, -2, "", None),
+                "{query}",
+                vec![9]
+            ),
+            ["-2"]
+        );
+        // The whole i64 range does not overflow.
+        let all = random(RandomMode::Number, i64::MIN, i64::MAX, "", None);
+        assert_eq!(seeded(all, "{query}", vec![0]), [i64::MIN.to_string()]);
+    }
+
+    #[test]
+    fn random_line_template_and_variable() {
+        let kind = random(
+            RandomMode::Line,
+            0,
+            0,
+            "red\n\nblue {query}\r\ngreen",
+            Some("pick"),
+        );
+        assert_eq!(
+            seeded(kind.clone(), "{query}/{var:pick}", vec![1]),
+            ["in/blue in"]
+        );
+        assert_eq!(seeded(kind, "{var:pick}", vec![5]), ["green"]);
+    }
+
+    #[test]
+    fn random_uuid_is_version_4_and_follows_the_source() {
+        let make = || {
+            seeded(
+                random(RandomMode::Uuid, 0, 0, "", None),
+                "{query}",
+                vec![0x0123_4567_89ab_cdef],
+            )
+        };
+        let out = make();
+        let uuid = &out[0];
+        assert_eq!(uuid.len(), 36, "{uuid}");
+        assert_eq!(&uuid[14..15], "4", "{uuid}");
+        assert!(matches!(&uuid[19..20], "8" | "9" | "a" | "b"), "{uuid}");
+        assert_eq!(make(), out);
+    }
+
+    #[test]
+    fn random_with_nothing_to_pick_fails() {
+        // Valid in the editor, empty once the placeholder is filled in.
+        let empty = random(RandomMode::Line, 0, 0, "{var:none}", None);
+        assert_eq!(errors_of(empty, "").len(), 1);
+    }
+
+    fn expression(text: &str, variable: &str, set_arg: bool) -> NodeKind {
+        NodeKind::Expression {
+            expression: text.into(),
+            variable: variable.into(),
+            set_arg,
+        }
+    }
+
+    #[test]
+    fn expression_calculates_after_placeholders() {
+        let f = fixture(
+            vec![
+                keyword("k"),
+                node(
+                    "s",
+                    NodeKind::SetVariable {
+                        name: "count".into(),
+                        value: "41".into(),
+                    },
+                ),
+                node("e", expression("{var:count} + 1", "next", true)),
+                copy("c", "{query}/{var:next}"),
+            ],
+            vec![wire("k", "s"), wire("s", "e"), wire("e", "c")],
+        );
+        f.runtime.run_blocking("k", Ctx::with_arg("in"));
+        assert_eq!(clipboard(&f), ["42/42"]);
+        // Only the variable.
+        assert_eq!(
+            run_one(
+                expression("2 * {query}", "twice", false),
+                "{query}/{var:twice}",
+                "21"
+            ),
+            ["21/42"]
+        );
+    }
+
+    #[test]
+    fn an_invalid_expression_is_a_node_error() {
+        let failures = errors_of(expression("2 +", "x", true), "");
+        assert_eq!(failures.len(), 1);
+        assert_eq!(failures[0].node, "n");
+        assert!(failures[0].message.contains("expression"), "{failures:?}");
+        assert_eq!(errors_of(expression("1 / 0", "x", true), "").len(), 1);
+    }
+
+    fn write_file(path: &str, content: &str, mode: WriteMode, create_dirs: bool) -> NodeKind {
+        NodeKind::WriteFile {
+            path: path.into(),
+            content: content.into(),
+            mode,
+            create_dirs,
+        }
+    }
+
+    fn data_file(f: &Fixture, name: &str) -> PathBuf {
+        f.runtime.data_dir.join(name)
+    }
+
+    #[test]
+    fn write_file_overwrites_appends_and_prepends_in_the_data_folder() {
+        let f = fixture(
+            vec![
+                keyword("k"),
+                node(
+                    "a",
+                    write_file("notes.txt", "one\n", WriteMode::Overwrite, false),
+                ),
+                node(
+                    "b",
+                    write_file("notes.txt", "two\n", WriteMode::Append, false),
+                ),
+                node(
+                    "c",
+                    write_file("notes.txt", "zero\n", WriteMode::Prepend, false),
+                ),
+                copy("done", "{query}"),
+            ],
+            vec![
+                wire("k", "a"),
+                wire("a", "b"),
+                wire("b", "c"),
+                wire("c", "done"),
+            ],
+        );
+        f.runtime.run_blocking("k", Ctx::with_arg("ignored"));
+        let path = data_file(&f, "notes.txt");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "zero\none\ntwo\n");
+        // The argument that leaves the node is the path.
+        assert_eq!(clipboard(&f), [path.display().to_string()]);
+    }
+
+    #[test]
+    fn write_file_prepend_and_append_create_a_missing_file() {
+        let f = fixture(
+            vec![
+                keyword("k"),
+                node("a", write_file("new.txt", "x", WriteMode::Prepend, false)),
+                node("b", write_file("also.txt", "y", WriteMode::Append, false)),
+            ],
+            vec![wire("k", "a"), wire("a", "b")],
+        );
+        let report = f.runtime.run_blocking("k", Ctx::default());
+        assert!(report.errors.is_empty(), "{report:?}");
+        assert_eq!(
+            std::fs::read_to_string(data_file(&f, "new.txt")).unwrap(),
+            "x"
+        );
+        assert_eq!(
+            std::fs::read_to_string(data_file(&f, "also.txt")).unwrap(),
+            "y"
+        );
+    }
+
+    #[test]
+    fn write_file_needs_create_dirs_for_new_folders() {
+        let f = fixture(
+            vec![
+                keyword("k"),
+                node(
+                    "a",
+                    write_file("deep/er/x.txt", "{query}", WriteMode::Overwrite, false),
+                ),
+                node(
+                    "b",
+                    write_file("deep/er/x.txt", "{query}", WriteMode::Overwrite, true),
+                ),
+            ],
+            vec![wire("k", "a"), wire("k", "b")],
+        );
+        let report = f.runtime.run_blocking("k", Ctx::with_arg("hi"));
+        assert_eq!(report.errors.len(), 1, "{report:?}");
+        assert_eq!(report.errors[0].node, "a");
+        assert_eq!(
+            std::fs::read_to_string(data_file(&f, "deep/er/x.txt")).unwrap(),
+            "hi"
+        );
+    }
+
+    #[test]
+    fn write_file_takes_absolute_paths_and_templates() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("out-{query}.txt");
+        let f = fixture(
+            vec![
+                keyword("k"),
+                node(
+                    "w",
+                    write_file(
+                        &target.display().to_string(),
+                        "{query}!",
+                        WriteMode::Overwrite,
+                        false,
+                    ),
+                ),
+            ],
+            vec![wire("k", "w")],
+        );
+        let report = f.runtime.run_blocking("k", Ctx::with_arg("abc"));
+        assert!(report.errors.is_empty(), "{report:?}");
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("out-abc.txt")).unwrap(),
+            "abc!"
+        );
+        let blank = write_file("{var:none}", "x", WriteMode::Overwrite, false);
+        assert_eq!(errors_of(blank, "").len(), 1);
+    }
+
+    struct DebugSink(Mutex<Vec<String>>);
+
+    impl OutputSink for DebugSink {
+        fn notify(&self, _: &str, _: &str) {}
+        fn large_type(&self, _: &str) {}
+        fn text_view(&self, _: &str, _: &str) {}
+        fn debug(&self, text: &str) {
+            self.0.lock().unwrap().push(text.to_owned());
+        }
+    }
+
+    #[test]
+    fn debug_shows_the_argument_and_variables_and_passes_through() {
+        let dir = tempfile::tempdir().unwrap();
+        let sink = Arc::new(DebugSink(Mutex::default()));
+        let workflow = Workflow {
+            name: "d".into(),
+            nodes: vec![
+                keyword("k"),
+                node("d", NodeKind::Debug { passthrough: true }),
+                node("e", NodeKind::Debug { passthrough: false }),
+                copy("c", "[{query}]"),
+            ],
+            connections: vec![wire("k", "d"), wire("d", "e"), wire("e", "c")],
+            ..Workflow::default()
+        };
+        let platform = MockPlatform::empty();
+        let runtime = Runtime::new(
+            "d",
+            dir.path().join("wf"),
+            dir.path().join("data"),
+            workflow,
+            platform.clone(),
+            sink.clone(),
+            &Config::default(),
+        );
+        let mut vars = BTreeMap::new();
+        vars.insert("who".to_owned(), "Ada".to_owned());
+        runtime.run_blocking(
+            "k",
+            Ctx {
+                arg: "hello".into(),
+                vars,
+            },
+        );
+        let shown = sink.0.lock().unwrap().clone();
+        assert_eq!(shown.len(), 2);
+        assert!(
+            shown[0].contains("hello") && shown[0].contains("who = Ada"),
+            "{shown:?}"
+        );
+        // `e` clears the argument for what follows.
+        assert_eq!(*platform.clipboard.lock().unwrap(), ["[]"]);
+    }
+
+    #[test]
+    fn the_default_sink_drops_debug_output() {
+        NoSink.debug("anything");
+        let f = fixture(
+            vec![
+                keyword("k"),
+                node("d", NodeKind::Debug { passthrough: true }),
+                copy("c", "{query}"),
+            ],
+            vec![wire("k", "d"), wire("d", "c")],
+        );
+        f.runtime.run_blocking("k", Ctx::with_arg("kept"));
+        assert_eq!(clipboard(&f), ["kept"]);
+    }
+
+    #[test]
+    fn reveal_file_shows_every_line() {
+        let f = fixture(
+            vec![
+                keyword("k"),
+                node(
+                    "r",
+                    NodeKind::RevealFile {
+                        path: "{query}".into(),
+                    },
+                ),
+            ],
+            vec![wire("k", "r")],
+        );
+        let dir = f._dir.path().to_path_buf();
+        let (a, b) = (dir.join("a.txt"), dir.join("b dir"));
+        let arg = format!("{}\n\n{}\r\n", a.display(), b.display());
+        let report = f.runtime.run_blocking("k", Ctx::with_arg(arg));
+        assert!(report.errors.is_empty(), "{report:?}");
+        assert_eq!(*f.platform.revealed.lock().unwrap(), [a, b]);
+        assert_eq!(
+            errors_of(
+                NodeKind::RevealFile {
+                    path: "{query}".into()
+                },
+                ""
+            )
+            .len(),
+            1
+        );
+    }
+
+    // ---- call_external ----------------------------------------------------
+
+    fn flow(nodes: Vec<Node>, connections: Vec<Connection>) -> Workflow {
+        Workflow {
+            name: "w".into(),
+            nodes,
+            connections,
+            ..Workflow::default()
+        }
+    }
+
+    /// Runtimes by folder, wired to find each other.
+    fn registry(
+        dir: &tempfile::TempDir,
+        platform: &Arc<MockPlatform>,
+        workflows: Vec<(&str, Workflow)>,
+    ) -> Arc<Registry> {
+        let map: Arc<Registry> = Arc::new(Mutex::new(HashMap::new()));
+        for (folder, workflow) in workflows {
+            assert!(workflow.is_valid(), "{:?}", workflow.validate());
+            let runtime = Runtime::new(
+                folder,
+                dir.path().join(folder),
+                dir.path().join("data").join(folder),
+                workflow,
+                platform.clone(),
+                Arc::new(RecordingSink::default()),
+                &Config::default(),
+            );
+            runtime.set_registry(Arc::downgrade(&map));
+            map.lock().unwrap().insert(folder.to_owned(), runtime);
+        }
+        map
+    }
+
+    fn call(workflow: &str, trigger: &str, arg: &str, pass_variables: bool) -> NodeKind {
+        NodeKind::CallExternal {
+            workflow: workflow.into(),
+            trigger: trigger.into(),
+            arg: arg.into(),
+            pass_variables,
+        }
+    }
+
+    fn external(id: &str) -> Node {
+        node(id, NodeKind::External {})
+    }
+
+    fn runtime_of(map: &Arc<Registry>, folder: &str) -> Arc<Runtime> {
+        map.lock().unwrap()[folder].clone()
+    }
+
+    #[test]
+    fn call_external_runs_the_other_workflows_trigger() {
+        let dir = tempfile::tempdir().unwrap();
+        let platform = MockPlatform::empty();
+        let map = registry(
+            &dir,
+            &platform,
+            vec![
+                (
+                    "caller",
+                    flow(
+                        vec![
+                            keyword("k"),
+                            node("call", call("callee", "go", "<{query}>", false)),
+                            copy("after", "after {query} {var:shared}"),
+                        ],
+                        vec![wire("k", "call"), wire("call", "after")],
+                    ),
+                ),
+                (
+                    "callee",
+                    flow(
+                        vec![
+                            external("go"),
+                            copy("c", "callee got {query} / {var:shared}"),
+                        ],
+                        vec![wire("go", "c")],
+                    ),
+                ),
+            ],
+        );
+        let mut vars = BTreeMap::new();
+        vars.insert("shared".to_owned(), "S".to_owned());
+        let report = runtime_of(&map, "caller").run_blocking(
+            "k",
+            Ctx {
+                arg: "x".into(),
+                vars,
+            },
+        );
+        assert!(report.errors.is_empty(), "{report:?}");
+        // Variables stay home unless asked for; the caller's own arg goes on.
+        assert_eq!(
+            *platform.clipboard.lock().unwrap(),
+            ["callee got <x> / ", "after x S"]
+        );
+    }
+
+    #[test]
+    fn call_external_can_pass_variables() {
+        let dir = tempfile::tempdir().unwrap();
+        let platform = MockPlatform::empty();
+        let map = registry(
+            &dir,
+            &platform,
+            vec![
+                (
+                    "a",
+                    flow(
+                        vec![keyword("k"), node("call", call("b", "go", "{query}", true))],
+                        vec![wire("k", "call")],
+                    ),
+                ),
+                (
+                    "b",
+                    flow(
+                        vec![external("go"), copy("c", "{var:shared}")],
+                        vec![wire("go", "c")],
+                    ),
+                ),
+            ],
+        );
+        let mut vars = BTreeMap::new();
+        vars.insert("shared".to_owned(), "S".to_owned());
+        runtime_of(&map, "a").run_blocking(
+            "k",
+            Ctx {
+                arg: String::new(),
+                vars,
+            },
+        );
+        assert_eq!(*platform.clipboard.lock().unwrap(), ["S"]);
+    }
+
+    #[test]
+    fn passed_variables_do_not_override_the_targets_own() {
+        let dir = tempfile::tempdir().unwrap();
+        let platform = MockPlatform::empty();
+        let mut callee = flow(
+            vec![external("go"), copy("c", "{var:safe}/{var:extra}")],
+            vec![wire("go", "c")],
+        );
+        callee.variables.insert("safe".to_owned(), "own".to_owned());
+        let map = registry(
+            &dir,
+            &platform,
+            vec![
+                (
+                    "a",
+                    flow(
+                        vec![keyword("k"), node("call", call("b", "go", "", true))],
+                        vec![wire("k", "call")],
+                    ),
+                ),
+                ("b", callee),
+            ],
+        );
+        let mut vars = BTreeMap::new();
+        vars.insert("safe".to_owned(), "evil".to_owned());
+        vars.insert("extra".to_owned(), "E".to_owned());
+        runtime_of(&map, "a").run_blocking(
+            "k",
+            Ctx {
+                arg: String::new(),
+                vars,
+            },
+        );
+        assert_eq!(*platform.clipboard.lock().unwrap(), ["own/E"]);
+    }
+
+    #[test]
+    fn call_external_reports_a_missing_target_and_a_failed_callee() {
+        let dir = tempfile::tempdir().unwrap();
+        let platform = MockPlatform::empty();
+        let map = registry(
+            &dir,
+            &platform,
+            vec![
+                (
+                    "a",
+                    flow(
+                        vec![
+                            keyword("k"),
+                            node("none", call("missing", "go", "", false)),
+                            node("notrigger", call("b", "nope", "", false)),
+                            node("notexternal", call("b", "c", "", false)),
+                            node("fails", call("b", "go", "", false)),
+                        ],
+                        vec![
+                            wire("k", "none"),
+                            wire("k", "notrigger"),
+                            wire("k", "notexternal"),
+                            wire("k", "fails"),
+                        ],
+                    ),
+                ),
+                (
+                    "b",
+                    flow(
+                        vec![
+                            external("go"),
+                            node("bad", expression("1 +", "x", true)),
+                            copy("c", "x"),
+                        ],
+                        vec![wire("go", "bad")],
+                    ),
+                ),
+            ],
+        );
+        let report = runtime_of(&map, "a").run_blocking("k", Ctx::default());
+        let by_node: BTreeMap<&str, &str> = report
+            .errors
+            .iter()
+            .map(|e| (e.node.as_str(), e.message.as_str()))
+            .collect();
+        assert!(by_node["none"].contains("missing"), "{by_node:?}");
+        assert!(by_node["notrigger"].contains("no node"), "{by_node:?}");
+        assert!(
+            by_node["notexternal"].contains("not an external"),
+            "{by_node:?}"
+        );
+        assert!(by_node["fails"].contains("failed"), "{by_node:?}");
+    }
+
+    #[test]
+    fn call_external_stops_endless_recursion() {
+        let dir = tempfile::tempdir().unwrap();
+        let platform = MockPlatform::empty();
+        // `loop` calls itself: every level copies once, until the depth limit.
+        let map = registry(
+            &dir,
+            &platform,
+            vec![(
+                "loop",
+                flow(
+                    vec![
+                        external("go"),
+                        copy("c", "level"),
+                        node("again", call("loop", "go", "", false)),
+                    ],
+                    vec![wire("go", "c"), wire("c", "again")],
+                ),
+            )],
+        );
+        let report = runtime_of(&map, "loop").run_blocking("go", Ctx::default());
+        assert_eq!(
+            platform.clipboard.lock().unwrap().len(),
+            MAX_CALL_DEPTH + 1,
+            "one run per level, including the first"
+        );
+        assert_eq!(report.errors.len(), 1, "{report:?}");
+        assert!(report.errors[0].message.contains("failed"), "{report:?}");
+    }
+
+    #[test]
+    fn nested_calls_share_the_step_budget_of_the_run() {
+        let dir = tempfile::tempdir().unwrap();
+        let platform = MockPlatform::empty();
+        // Five workflows of 60 steps each, every one calling the next: 300 in
+        // all, more than one run may take, although none is over on its own.
+        let names: Vec<String> = (0..5).map(|i| format!("w{i}")).collect();
+        let workflows = names
+            .iter()
+            .enumerate()
+            .map(|(i, name)| {
+                let start = if i == 0 { "k" } else { "go" };
+                let mut nodes = vec![if i == 0 { keyword("k") } else { external("go") }];
+                let mut connections = Vec::new();
+                let mut previous = start.to_owned();
+                for n in 0..59 {
+                    let id = format!("s{n}");
+                    nodes.push(crate::workflow::testing::set_var(&id, "x", "1"));
+                    connections.push(wire(&previous, &id));
+                    previous = id;
+                }
+                if let Some(next) = names.get(i + 1) {
+                    nodes.push(node("call", call(next, "go", "", false)));
+                    connections.push(wire(&previous, "call"));
+                }
+                (name.as_str(), flow(nodes, connections))
+            })
+            .collect();
+        let map = registry(&dir, &platform, workflows);
+        let report = runtime_of(&map, "w0").run_blocking("k", Ctx::default());
+        assert_eq!(report.errors.len(), 1, "{report:?}");
+        assert!(
+            report.errors[0].message.contains("limit of steps"),
+            "{report:?}"
+        );
+    }
+
+    #[test]
+    fn call_external_without_a_registry_fails_cleanly() {
+        let f = fixture(
+            vec![keyword("k"), node("c", call("other", "go", "", false))],
+            vec![wire("k", "c")],
+        );
+        let report = f.runtime.run_blocking("k", Ctx::default());
+        assert_eq!(report.errors.len(), 1);
+        assert!(report.errors[0].message.contains("other"), "{report:?}");
+    }
+}
+
+#[cfg(test)]
+mod ui_node_tests {
+    use super::*;
+    use crate::workflow::testing::{
+        clipboard, copy, fixture_with, keyword, node, wire, wire_port, Fixture, RecordingSink,
+        UiScripted,
+    };
+    use serde_json::json;
+
+    const DEFINITION: &str = r#"{
+        "state": {"name": ""},
+        "root": {"type": "column", "children": [
+            {"type": "textfield", "id": "name"},
+            {"type": "button", "label": "Save", "events": {"click": {"output": "save"}}},
+            {"type": "button", "label": "Run", "events": {"click": {"run": "up"}}}
+        ]}
+    }"#;
+
+    fn show_ui(scripts: &[(&str, &str, &str)]) -> Node {
+        node(
+            "ui",
+            NodeKind::ShowUi {
+                target: UiTarget::Launcher,
+                definition: Some(DEFINITION.to_owned()),
+                file: None,
+                scripts: scripts
+                    .iter()
+                    .map(|(id, language, script)| {
+                        (
+                            (*id).to_owned(),
+                            UiScript {
+                                language: (*language).to_owned(),
+                                script: (*script).to_owned(),
+                            },
+                        )
+                    })
+                    .collect(),
+                ports: Vec::new(),
+                titlebar: true,
+                always_on_top: false,
+            },
+        )
+    }
+
+    fn flow(scripts: &[(&str, &str, &str)], ui_script: Vec<UiScripted>) -> Fixture {
+        let sink = RecordingSink::default();
+        sink.ui_script.lock().unwrap().extend(ui_script);
+        let f = fixture_with(
+            vec![
+                keyword("k"),
+                show_ui(scripts),
+                copy("saved", "saved:{query}"),
+                copy("closed", "closed"),
+            ],
+            vec![
+                wire("k", "ui"),
+                wire_port("ui", "save", "saved"),
+                wire_port("ui", "closed", "closed"),
+            ],
+            sink,
+        );
+        std::fs::create_dir_all(&f.runtime.dir).unwrap();
+        f
+    }
+
+    fn outcome(port: &str, arg: Option<&str>) -> UiOutcome {
+        UiOutcome {
+            port: port.to_owned(),
+            arg: arg.map(str::to_owned),
+            state: json!({"name": "Ada"}),
+        }
+    }
+
+    #[test]
+    fn the_workflow_continues_from_the_port_the_ui_chose() {
+        let f = flow(
+            &[("up", "shell", "echo")],
+            vec![UiScripted {
+                runs: vec![],
+                outcome: outcome("save", None),
+            }],
+        );
+        let report = f.runtime.run_blocking("k", Ctx::with_arg("seed"));
+        assert!(report.errors.is_empty(), "{:?}", report.errors);
+        // No explicit argument: the state as JSON.
+        assert_eq!(clipboard(&f), [r#"saved:{"name":"Ada"}"#]);
+        let sessions = f.sink.ui_sessions.lock().unwrap();
+        assert_eq!(sessions[0].query, "seed");
+        assert_eq!(sessions[0].node, "ui");
+        assert_eq!(sessions[0].scripts.len(), 1);
+    }
+
+    #[test]
+    fn an_explicit_argument_and_the_closed_port() {
+        let f = flow(
+            &[("up", "shell", "echo")],
+            vec![UiScripted {
+                runs: vec![],
+                outcome: outcome("save", Some("Ada")),
+            }],
+        );
+        f.runtime.run_blocking("k", Ctx::default());
+        assert_eq!(clipboard(&f), ["saved:Ada"]);
+
+        let f = flow(
+            &[("up", "shell", "echo")],
+            vec![UiScripted {
+                runs: vec![],
+                outcome: outcome("closed", None),
+            }],
+        );
+        f.runtime.run_blocking("k", Ctx::default());
+        assert_eq!(clipboard(&f), ["closed"]);
+    }
+
+    #[test]
+    fn a_sink_that_cannot_show_uis_fails_the_node() {
+        let f = flow(&[("up", "shell", "echo")], vec![]);
+        let report = f.runtime.run_blocking("k", Ctx::default());
+        assert_eq!(report.errors.len(), 1, "{report:?}");
+        assert!(
+            report.errors[0].message.contains("cannot show"),
+            "{report:?}"
+        );
+        assert!(clipboard(&f).is_empty());
+    }
+
+    #[test]
+    fn a_broken_definition_is_a_node_error_and_never_reaches_the_sink() {
+        let mut broken = show_ui(&[]);
+        if let NodeKind::ShowUi {
+            definition, file, ..
+        } = &mut broken.kind
+        {
+            *definition = None;
+            *file = Some("ui.json".to_owned());
+        }
+        let f = fixture_with(
+            vec![keyword("k"), broken],
+            vec![wire("k", "ui")],
+            RecordingSink::default(),
+        );
+        std::fs::create_dir_all(&f.runtime.dir).unwrap();
+        std::fs::write(
+            f.runtime.dir.join("ui.json"),
+            r#"{"root": {"type": "webview"}}"#,
+        )
+        .unwrap();
+        let report = f.runtime.run_blocking("k", Ctx::default());
+        assert_eq!(report.errors.len(), 1);
+        assert!(report.errors[0].message.contains("not valid"), "{report:?}");
+        assert!(f.sink.ui_sessions.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn waiting_for_the_user_does_not_use_up_the_run_limit() {
+        let budget = Budget {
+            deadline: Instant::now() - Duration::from_secs(5),
+            steps: AtomicUsize::new(0),
+            paused_ms: AtomicU64::new(0),
+        };
+        assert!(budget.expired());
+        budget.paused_ms.store(60_000, Ordering::SeqCst);
+        assert!(!budget.expired());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_script_gets_the_event_on_stdin_and_its_json_updates_the_ui() {
+        let script = r#"
+read input
+case "$input" in
+  *Ada*) echo '{"set": {"out": "got Ada"}, "notify": "hi"}' ;;
+  *) echo '{"set": {"out": "no"}}' ;;
+esac
+"#;
+        let f = flow(
+            &[("up", "shell", script)],
+            vec![UiScripted {
+                runs: vec![
+                    (
+                        "up".to_owned(),
+                        json!({"event": "click", "component": "go", "state": {"name": "Ada"}, "vars": {}}),
+                    ),
+                    ("up".to_owned(), json!({"state": {"name": "Bob"}})),
+                    ("missing".to_owned(), json!({})),
+                ],
+                outcome: outcome("closed", None),
+            }],
+        );
+        let report = f.runtime.run_blocking("k", Ctx::default());
+        assert!(report.errors.is_empty(), "{:?}", report.errors);
+        let updates = f.sink.ui_updates.lock().unwrap();
+        let first = updates[0].as_ref().unwrap();
+        assert_eq!(first.set["out"], json!("got Ada"));
+        assert_eq!(first.notify.as_deref(), Some("hi"));
+        assert_eq!(updates[1].as_ref().unwrap().set["out"], json!("no"));
+        assert!(updates[2].as_ref().unwrap_err().contains("no script"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_script_can_replace_the_whole_ui_and_bad_output_is_an_error() {
+        let replace = r#"
+cat > /dev/null
+echo '{"root": {"type": "label", "text": "new"}}'
+"#;
+        let invalid = "cat > /dev/null; echo '{\"root\": {\"type\": \"webview\"}}'";
+        let text = "cat > /dev/null; echo hello";
+        let f = flow(
+            &[
+                ("a", "shell", replace),
+                ("b", "shell", invalid),
+                ("c", "shell", text),
+                ("up", "shell", "true"),
+            ],
+            vec![UiScripted {
+                runs: ["a", "b", "c"]
+                    .map(|id| (id.to_owned(), json!({})))
+                    .to_vec(),
+                outcome: outcome("closed", None),
+            }],
+        );
+        // The definition names only "up"; scripts a to c are declared by the node.
+        f.runtime.run_blocking("k", Ctx::default());
+        let updates = f.sink.ui_updates.lock().unwrap();
+        assert!(matches!(
+            updates[0].as_ref().unwrap().root,
+            Some(Component::Label { .. })
+        ));
+        assert!(updates[1].is_err());
+        assert!(updates[2].as_ref().unwrap_err().contains("JSON"));
+    }
+
+    #[test]
+    fn a_failing_script_reports_its_exit_code() {
+        let f = flow(
+            &[("up", "shell", "exit 3")],
+            vec![UiScripted {
+                runs: vec![("up".to_owned(), json!({}))],
+                outcome: outcome("closed", None),
+            }],
+        );
+        f.runtime.run_blocking("k", Ctx::default());
+        let updates = f.sink.ui_updates.lock().unwrap();
+        assert!(updates[0].is_err(), "{updates:?}");
     }
 }

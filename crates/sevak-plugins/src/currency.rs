@@ -553,6 +553,8 @@ pub struct Answer {
     /// `true` for a conversion (Enter copies the title); `false` for a status
     /// row ("Fetching exchange rates…") that has nothing to copy.
     pub copyable: bool,
+    /// The bare amount (`112.25`) for Tab to complete to; `None` for status rows.
+    pub value: Option<String>,
 }
 
 /// Formats money: two decimals (halves round away from zero, as in a shop)
@@ -582,6 +584,7 @@ pub fn answer(input: &str, availability: &Availability) -> Option<Answer> {
                         request.shown, request.from, request.to
                     ),
                     copyable: false,
+                    value: None,
                 });
             };
             Answer {
@@ -595,6 +598,7 @@ pub fn answer(input: &str, availability: &Availability) -> Option<Answer> {
                     rates.date
                 ),
                 copyable: true,
+                value: Some(format_money(value)),
             }
         }
         Availability::Fetching => Answer {
@@ -604,6 +608,7 @@ pub fn answer(input: &str, availability: &Availability) -> Option<Answer> {
                 request.shown
             ),
             copyable: false,
+            value: None,
         },
         Availability::Unavailable => Answer {
             title: "Exchange rates unavailable".to_owned(),
@@ -612,6 +617,7 @@ pub fn answer(input: &str, availability: &Availability) -> Option<Answer> {
                 request.shown
             ),
             copyable: false,
+            value: None,
         },
     })
 }

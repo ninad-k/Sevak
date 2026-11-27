@@ -8,7 +8,14 @@ Configure Sevak through the Settings window.
   select **Settings** (on Linux, click the icon and select **Settings**)
 - Run `sevak --settings` from the command line
 
-The tabs run from General to Files, with Linux where it applies, then **Backup & restore** and **Help** last.
+The tabs run from General to Files, with **Usage** after System & terminal, Linux where it applies, then **Backup & restore** and **Help** last.
+
+`sevak --settings <section>` (for example `sevak --settings clipboard`) opens Settings on one tab; see [the command line](cli.md#-settings).
+
+### Find a setting
+
+- **Filter box (top of the tab list):** type to show only the tabs whose name or related words match (try `dark`, `shortcut` or `snippets`). ++enter++ jumps to the first match; ++esc++ clears the box.
+- **In the launcher:** type `? ` and a word (for example `? theme`) to list matching tabs and well-known options. ++enter++ opens Settings on that tab. The keyword `?` is fixed. Turn the search off with `[plugins] disabled = ["settings"]`.
 
 ## Using Settings
 
@@ -20,7 +27,7 @@ Each tab covers a different aspect of Sevak. Changes are **not saved** until you
 | ++arrow-up++/++arrow-down++ on a tab button | Move between tabs |
 | ++home++/++end++ on a tab button | Jump to first or last tab |
 
-Validation errors appear under each field and prevent saving until they are fixed. A red dot on a tab says that the page has a problem. Keywords are checked as you type: Sevak tells you when one is already used by a web search engine, a fixed keyword (`>`, `cb`, `s`, `emoji`, `:`, `@`, `uuid`) or another search, and both fields of a clash are marked.
+Validation errors appear under each field and prevent saving until they are fixed. A red dot on a tab says that the page has a problem. Keywords are checked as you type: Sevak tells you when one is already used by a web search engine, a fixed keyword (`>`, `cb`, `s`, `emoji`, `:`, `@`, `uuid`, `!`) or another search; a keyword may list aliases separated by `||` and each is checked, and both fields of a clash are marked.
 
 Saving keeps your comments, the order of your keys and every `[[snippet]]` entry exactly as they are in `config.toml`; only the lines you changed are rewritten.
 
@@ -264,9 +271,17 @@ Rounding of the search bar's corners in pixels. Range: 0–32 px (0 = sharp corn
 
 Links to: `[appearance] radius` in configuration.
 
+### Settings window mode
+
+Follow the launcher (default), Light, Dark or System, for the Settings window only. The launcher keeps the **Theme** above. Links to: `[appearance] settings_theme` in configuration.
+
+### Open animation
+
+How the search bar appears: Fade (default), Fade and zoom or None. **Animation length** (0-400 ms, default 150) is hidden while None is selected. The system's reduced-motion setting always wins. Links to: `[appearance] open_animation` and `animation_ms` in configuration.
+
 ### Theme editor and gallery
 
-**Theme editor** creates and edits theme files with a live preview: eight built-in themes (Sevak Light, Sevak Dark, Nord, Dracula, Solarized Light, Solarized Dark, Gruvbox and High Contrast), color pickers, sliders for sizes, a WCAG contrast check, undo and redo, **Save as…**, **Apply**, **Import…** and **Export…**. **Open themes folder** shows the `themes` folder next to `config.toml`.
+**Theme editor** creates and edits theme files with a live preview: eleven built-in themes (Sevak Light, Sevak Dark, Nord, Dracula, Solarized Light, Solarized Dark, Gruvbox, High Contrast, Sevak Glass Light, Sevak Glass Dark and Sevak Violet), color pickers, sliders for sizes, a WCAG contrast check, undo and redo, **Save as…**, **Apply**, **Import…** and **Export…**. **Open themes folder** shows the `themes` folder next to `config.toml`.
 
 **Browse online themes** loads the community theme gallery. Nothing is requested until you click it, and **Install** saves a theme only if its checksum matches.
 
@@ -300,11 +315,15 @@ Links to: `[search] fallback_web_search` in configuration.
 
 ### Remember searches
 
-On an empty search bar, press ++arrow-up++ and ++arrow-down++ to step through your last 50 searches, newest first.
+On an empty search bar, press ++arrow-up++ and ++arrow-down++ to step through the searches you ran, newest first. Type `!` to list and filter them.
 
-Disabling this also deletes the stored search history.
+Disabling this also deletes the stored search history. While it is on, the page also has:
 
-Links to: `[search] query_history` in configuration.
+- **Keep searches for**: 24 hours, 7 days, 30 days or 90 days (`history_retention`).
+- **Save searches to disk**: off keeps them in memory until Sevak quits and removes what was saved (`history_persist`).
+- **Clear history**: forgets every remembered search now.
+
+Links to: `[search] query_history`, `history_retention`, `history_persist` in configuration.
 
 ## Plugins
 
@@ -519,6 +538,8 @@ Links to: `[paste] restore_clipboard` in configuration.
 
 ## Tasks & media
 
+The list of automation tasks has a filter box above it: type part of a task's name or group (`wifi`, `quit`) to show only matching tasks. Tasks you hide stay hidden while filtering.
+
 ### Automation tasks
 
 [Automation tasks](features/tasks.md) are ready-made actions: dark mode, volume, screenshots, quit or kill an app, eject a drive and more.
@@ -617,6 +638,16 @@ Links to: `[system]` in [configuration](configuration.md#system).
 - **Keep the terminal open**: leave it at a shell prompt after the command exits; off closes it.
 
 Links to: `[shell]` in [configuration](configuration.md#shell).
+
+## Usage
+
+Shows what Sevak has counted on this computer to rank your results (read from `usage.json`; nothing is sent anywhere):
+
+- launches tracked, items tracked and the number of remembered searches (just the number)
+- the 20 most used items with launches and date last used
+- launches per plugin
+
+**Copy stats** copies the same numbers as plain text, for a bug report or your own notes. The text and the page hold item names only: no typed searches, and a file result shows its file name, never its folder. There is no reset button here; remove `usage.json` (see [files and data](files-and-data.md)) to start again.
 
 ## Linux
 

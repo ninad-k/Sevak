@@ -16,7 +16,12 @@
 //! | `{time}`           | now, `14:05`                                           |
 //! | `{datetime}`       | `2026-10-03 14:05`                                     |
 //! | `{date:FORMAT}`    | today in a [strftime](chrono::format::strftime) format, e.g. `{date:%d %B %Y}` (also `{time:..}`, `{datetime:..}`) |
+//! | `{isodate}`        | today, ISO 8601: `2026-10-03`                          |
+//! | `{isotime}`        | now with seconds, `14:05:09`                           |
+//! | `{isodatetime}`    | `2026-10-03T14:05:09`                                  |
 //! | `{clipboard}`      | the clipboard's text when you pressed Enter            |
+//! | `{clipboard.lowercase}`, `{clipboard.uppercase}`, `{clipboard.trim}` | the clipboard's text, changed accordingly |
+//! | `{snippet:keyword}`| another snippet's text, expanded (found by keyword, else by name; at most 5 levels deep; left as written if unknown or circular) |
 //! | `{uuid}`           | a fresh random UUID                                    |
 //! | `{{` and `}}`      | a literal `{` and `}`                                  |
 //!
@@ -48,6 +53,8 @@ pub const KEYWORD: &str = "s";
 const DEFAULT_DATE: &str = "%Y-%m-%d";
 const DEFAULT_TIME: &str = "%H:%M";
 const DEFAULT_DATETIME: &str = "%Y-%m-%d %H:%M";
+/// How many `{snippet:..}` inclusions may be nested.
+const MAX_SNIPPET_DEPTH: usize = 5;
 const PAYLOAD_NOTHING: &str = "nothing";
 const PREVIEW_CHARS: usize = 80;
 /// An exact match on a snippet's keyword outranks any fuzzy match on a name.
@@ -61,10 +68,60 @@ pub struct Env<'a> {
     pub now: DateTime<FixedOffset>,
     pub clipboard: &'a dyn Fn() -> Option<String>,
     pub uuid: &'a dyn Fn() -> Option<String>,
+    /// Finds a snippet for `{snippet:..}`: its identity (to catch cycles) and
+    /// its template.
+    pub snippet: &'a dyn Fn(&str) -> Option<(String, String)>,
+}
+
+/// A `{snippet:..}` lookup that finds nothing.
+pub fn no_snippets(_: &str) -> Option<(String, String)> {
+    None
+}
+
+/// Finds the snippet `wanted` names: by keyword, else by name (ignoring case).
+/// Returns its identity and its template.
+pub fn find_snippet(snippets: &[Snippet], wanted: &str) -> Option<(String, String)> {
+    let wanted = wanted.trim();
+    let found = snippets
+        .iter()
+        .find(|s| {
+            s.keyword
+                .as_deref()
+                .is_some_and(|k| k.trim().eq_ignore_ascii_case(wanted))
+        })
+        .or_else(|| {
+            snippets
+                .iter()
+                .find(|s| s.name.trim().eq_ignore_ascii_case(wanted))
+        })?;
+    Some((identity(&found.name), found.text.clone()))
+}
+
+/// The identity of a snippet, as used to detect `{snippet:..}` cycles.
+pub fn identity(name: &str) -> String {
+    name.trim().to_ascii_lowercase()
+}
+
+/// Snippets being expanded, outermost first.
+struct Nesting {
+    stack: Vec<String>,
 }
 
 /// Fills in the placeholders of `template` (see the module docs).
 pub fn expand(template: &str, env: &Env<'_>) -> String {
+    expand_from(template, env, None)
+}
+
+/// Like [`expand`] for the template of the snippet named `root`, so that a
+/// `{snippet:..}` that leads back to it is left as written.
+pub fn expand_from(template: &str, env: &Env<'_>, root: Option<&str>) -> String {
+    let mut nesting = Nesting {
+        stack: root.map(identity).into_iter().collect(),
+    };
+    expand_nested(template, env, &mut nesting)
+}
+
+fn expand_nested(template: &str, env: &Env<'_>, nesting: &mut Nesting) -> String {
     let mut out = String::with_capacity(template.len());
     let mut rest = template;
     while let Some(at) = rest.find(['{', '}']) {
@@ -85,7 +142,8 @@ pub fn expand(template: &str, env: &Env<'_>) -> String {
             let close = body
                 .find(['{', '}'])
                 .filter(|&i| body.as_bytes()[i] == b'}');
-            match close.and_then(|i| placeholder(&body[..i], env).map(|value| (i, value))) {
+            match close.and_then(|i| placeholder(&body[..i], env, nesting).map(|value| (i, value)))
+            {
                 Some((i, value)) => {
                     out.push_str(&value);
                     rest = &body[i + 1..];
@@ -103,7 +161,7 @@ pub fn expand(template: &str, env: &Env<'_>) -> String {
 
 /// The value of the placeholder written `{inner}`, or `None` if `inner` is not
 /// one (the braces then stay in the text).
-fn placeholder(inner: &str, env: &Env<'_>) -> Option<String> {
+fn placeholder(inner: &str, env: &Env<'_>, nesting: &mut Nesting) -> Option<String> {
     let (name, format) = match inner.split_once(':') {
         Some((name, format)) => (name, Some(format)),
         None => (inner, None),
@@ -112,7 +170,29 @@ fn placeholder(inner: &str, env: &Env<'_>) -> Option<String> {
         "date" => DEFAULT_DATE,
         "time" => DEFAULT_TIME,
         "datetime" => DEFAULT_DATETIME,
+        "snippet" => {
+            let (id, template) = (env.snippet)(format?)?;
+            if nesting.stack.len() >= MAX_SNIPPET_DEPTH || nesting.stack.contains(&id) {
+                return None;
+            }
+            nesting.stack.push(id);
+            let text = expand_nested(&template, env, nesting);
+            nesting.stack.pop();
+            return Some(text);
+        }
+        "isodate" if format.is_none() => return format_time(&env.now, "%Y-%m-%d"),
+        "isotime" if format.is_none() => return format_time(&env.now, "%H:%M:%S"),
+        "isodatetime" if format.is_none() => return format_time(&env.now, "%Y-%m-%dT%H:%M:%S"),
         "clipboard" if format.is_none() => return Some((env.clipboard)().unwrap_or_default()),
+        "clipboard.lowercase" if format.is_none() => {
+            return Some((env.clipboard)().unwrap_or_default().to_lowercase());
+        }
+        "clipboard.uppercase" if format.is_none() => {
+            return Some((env.clipboard)().unwrap_or_default().to_uppercase());
+        }
+        "clipboard.trim" if format.is_none() => {
+            return Some((env.clipboard)().unwrap_or_default().trim().to_owned());
+        }
         "uuid" if format.is_none() => return Some((env.uuid)().unwrap_or_default()),
         _ => return None,
     };
@@ -144,6 +224,8 @@ struct Entry {
 /// The `s` plugin.
 pub struct SnippetsPlugin {
     entries: Vec<Entry>,
+    /// The snippets as configured, for `{snippet:..}`.
+    definitions: Vec<Snippet>,
     restore_clipboard: bool,
     platform: Arc<dyn PlatformProvider>,
 }
@@ -173,6 +255,7 @@ impl SnippetsPlugin {
         }
         Self {
             entries,
+            definitions: snippets.to_vec(),
             restore_clipboard: paste.restore_clipboard,
             platform,
         }
@@ -210,14 +293,16 @@ impl SnippetsPlugin {
         self.entries.iter().find(|entry| entry.key == key)
     }
 
-    fn env_expand(&self, template: &str) -> String {
+    fn env_expand(&self, template: &str, root: Option<&str>) -> String {
         let clipboard = || self.platform.clipboard_text().ok().flatten();
+        let snippet = |wanted: &str| find_snippet(&self.definitions, wanted);
         let env = Env {
             now: Local::now().fixed_offset(),
             clipboard: &clipboard,
             uuid: &random_uuid_v4,
+            snippet: &snippet,
         };
-        expand(template, &env)
+        expand_from(template, &env, root)
     }
 }
 
@@ -323,11 +408,10 @@ impl Plugin for SnippetsPlugin {
             Action::PasteText { text, .. } | Action::CopyText { text } => text,
             _ => return None,
         };
-        let template = self
-            .lookup(item)
-            .map_or(template.as_str(), |e| e.text.as_str());
+        let entry = self.lookup(item);
+        let template = entry.map_or(template.as_str(), |e| e.text.as_str());
         Some(PreviewHint::Text {
-            text: self.env_expand(template),
+            text: self.env_expand(template, entry.map(|e| e.name.as_str())),
         })
     }
 
@@ -340,10 +424,9 @@ impl Plugin for SnippetsPlugin {
             Action::CopyText { text } => (text, false),
             other => return execute_action(self.platform.as_ref(), other),
         };
-        let template = self
-            .lookup(item)
-            .map_or(template.as_str(), |e| e.text.as_str());
-        let text = self.env_expand(template);
+        let entry = self.lookup(item);
+        let template = entry.map_or(template.as_str(), |e| e.text.as_str());
+        let text = self.env_expand(template, entry.map(|e| e.name.as_str()));
         let action = if paste {
             Action::PasteText {
                 text,
@@ -380,8 +463,101 @@ mod tests {
                 now: now(),
                 clipboard: &clipboard,
                 uuid: &uuid,
+                snippet: &no_snippets,
             },
         )
+    }
+
+    fn defs() -> Vec<Snippet> {
+        let make = |name: &str, keyword: Option<&str>, text: &str| Snippet {
+            name: name.into(),
+            keyword: keyword.map(Into::into),
+            text: text.into(),
+        };
+        vec![
+            make("Signature", Some("sig"), "Best, N on {isodate}"),
+            make("Mail", Some("mail"), "Hi\n{snippet:sig}"),
+            make("Loop A", Some("la"), "a>{snippet:lb}"),
+            make("Loop B", Some("lb"), "b>{snippet:la}"),
+            make("Self", Some("me"), "x{snippet:me}"),
+            make("d1", Some("d1"), "1{snippet:d2}"),
+            make("d2", Some("d2"), "2{snippet:d3}"),
+            make("d3", Some("d3"), "3{snippet:d4}"),
+            make("d4", Some("d4"), "4{snippet:d5}"),
+            make("d5", Some("d5"), "5{snippet:d6}"),
+            make("d6", Some("d6"), "6"),
+        ]
+    }
+
+    fn render_with_snippets(template: &str, root: Option<&str>) -> String {
+        let defs = defs();
+        let clipboard = || None;
+        let uuid = || None;
+        let snippet = |wanted: &str| find_snippet(&defs, wanted);
+        expand_from(
+            template,
+            &Env {
+                now: now(),
+                clipboard: &clipboard,
+                uuid: &uuid,
+                snippet: &snippet,
+            },
+            root,
+        )
+    }
+
+    #[test]
+    fn iso_placeholders_use_the_fixed_clock() {
+        assert_eq!(render("{isodate}", None), "2026-10-03");
+        assert_eq!(render("{isotime}", None), "14:05:09");
+        assert_eq!(render("{isodatetime}", None), "2026-10-03T14:05:09");
+        assert_eq!(render("{isodate:%Y}", None), "{isodate:%Y}");
+    }
+
+    #[test]
+    fn clipboard_filters() {
+        assert_eq!(render("{clipboard.lowercase}", Some(" AbC ")), " abc ");
+        assert_eq!(render("{clipboard.uppercase}", Some(" AbC ")), " ABC ");
+        assert_eq!(render("{clipboard.trim}", Some("  AbC \n")), "AbC");
+        assert_eq!(render("{clipboard.trim}", None), "");
+        assert_eq!(render("{clipboard.nope}", Some("x")), "{clipboard.nope}");
+    }
+
+    #[test]
+    fn a_snippet_placeholder_includes_another_snippet() {
+        assert_eq!(
+            render_with_snippets("{snippet:mail}", None),
+            "Hi\nBest, N on 2026-10-03"
+        );
+        // By name, ignoring case.
+        assert_eq!(
+            render_with_snippets("[{snippet:SIGNATURE}]", None),
+            "[Best, N on 2026-10-03]"
+        );
+        assert_eq!(
+            render_with_snippets("{snippet:nope}", None),
+            "{snippet:nope}"
+        );
+        assert_eq!(render("{snippet:sig}", None), "{snippet:sig}");
+    }
+
+    #[test]
+    fn snippet_cycles_and_depth_are_cut_off() {
+        assert_eq!(
+            render_with_snippets("{snippet:la}", None),
+            "a>b>{snippet:la}"
+        );
+        assert_eq!(render_with_snippets("{snippet:me}", None), "x{snippet:me}");
+        // Expanding "Loop A" itself: the way back to it stays as written.
+        assert_eq!(
+            render_with_snippets("a>{snippet:lb}", Some("Loop A")),
+            "a>b>{snippet:la}"
+        );
+        // Five levels are included, the sixth is not.
+        assert_eq!(
+            render_with_snippets("{snippet:d1}", None),
+            "12345{snippet:d6}"
+        );
     }
 
     #[test]
@@ -451,6 +627,7 @@ mod tests {
             now: now(),
             clipboard: &clipboard,
             uuid: &uuid,
+            snippet: &no_snippets,
         };
         assert_eq!(expand("{date} {time}", &env), "2026-10-03 14:05");
         assert_eq!(reads.get(), 0);

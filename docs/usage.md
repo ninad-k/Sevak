@@ -56,11 +56,19 @@ Examples:
 
 **New installations**: on first run, all results are equally ranked. As you use Sevak, personalization kicks in.
 
+### Searching Sevak's own settings
+
+Type `? ` followed by a word to find a setting, for example `? clipboard history`, `? dark` or `? shortcut`. Each result is a Settings tab or a well-known option; ++enter++ opens Settings on that tab. See [Find a setting](settings.md#find-a-setting).
+
 ### Query history
 
-On an **empty search bar**, press **++arrow-up++** and **++arrow-down++** to step through your last 50 searches, newest first.
+On an **empty search bar**, press **++arrow-up++** and **++arrow-down++** to step through the searches you ran, newest first (up to 500, none older than `[search] history_retention`, 30 days by default).
 
-Typing leaves history. Toggle this on or off in **Settings → Search → Remember searches** or with `[search] query_history`.
+Typing leaves history. Toggle this on or off in **Settings → Search → Remember searches** or with `[search] query_history`. The same page sets how long searches are kept, whether they are saved to disk (`history_persist = false` keeps them in memory for the session only and removes what was saved in `usage.json`) and has a **Clear history** button.
+
+#### The `!` keyword
+
+Type `!` to list the remembered searches, newest first; text after it filters them fuzzily (`! rust`). **++enter++** puts the highlighted search back into the search bar (nothing runs yet). **++ctrl+enter++** deletes that one search from the history; **++alt+enter++** clears the whole history after asking. `!` is a fixed keyword, so no web engine or other search can use it.
 
 ## Viewing results
 
@@ -132,6 +140,7 @@ Tap ++shift++ (press and release it alone) or press ++ctrl+y++ (++cmd+y++ on mac
 | Result | The pane shows |
 |---|---|
 | Text and code files | The first 64 KB in a monospace font, with size and modified date |
+| Markdown files (`.md`, `.markdown`) | The first 64 KB drawn as Markdown (headings, lists, tables, code, links), with size and modified date |
 | Images (PNG, JPEG, GIF, WebP, SVG, BMP, ICO; up to 4 MB) | The picture and its pixel size |
 | PDFs (up to 50 MB) | The first page as a picture, with the page count where the system knows it, then kind, size, path and modified date. Linux needs `pdftoppm` (see below) |
 | Word, Excel and PowerPoint files (up to 50 MB) and videos | The system's own thumbnail, when it has one (Windows and macOS), then the details |
@@ -151,6 +160,8 @@ The pane reads only the file or folder the selected result refers to, only when 
 ### Text View
 
 A result that carries a long text (a long or multi-line clipboard entry, a snippet, a script plugin's output) can be opened in a scrollable, taller view with ++ctrl+t++. ++arrow-up++ ++arrow-down++ ++pageup++ ++pagedown++ ++home++ ++end++ scroll; ++ctrl+c++ copies the text, ++enter++ runs the result as usual, and ++escape++ or ++arrow-left++ goes back to the list. Rows that exist only to show text (marked by the script that produced them) open the Text View on ++enter++.
+
+Text that is Markdown is drawn as Markdown: headings (long ones are cut with an ellipsis), emphasis, lists and task lists, quotes, code blocks, tables (columns sized to their content, `:---:` alignment), links, and GitHub alerts (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`) in the theme's colours. The same renderer draws Markdown files in the preview pane, a workflow's [text view node](workflows.md#outputs) when its **Markdown** box is ticked, and a workflow's description in the editor. It is safe by construction: raw HTML is never passed through (tags such as `<kbd>` are dropped and their text kept, `<script>` and `<style>` are dropped with their content), and a link is only drawn for `http`, `https` and `mailto` addresses. Clicking a link opens it in your default browser; Sevak itself never navigates. Images are not fetched: an image shows its alt text (linked when it has an `http(s)` address).
 
 ### Grid View
 
@@ -329,6 +340,8 @@ Built-in keywords:
 
 When a plain query has no results, a fallback web search is offered (default: Google). Configure or add custom engines in **Settings → Web search** or with `[[web_search]]` in config.toml.
 
+A keyword can list aliases separated by `||`: `keyword = "g||google"` answers both `g rust` and `google rust`. The first alias is the one shown in hints. See [Keywords](configuration.md#keywords).
+
 More: [Web search](features/web-search.md) plugin and [adding custom engines](configuration.md#web_search).
 
 ### Script plugins
@@ -395,7 +408,7 @@ On **Wayland**, app-to-app clipboard reading is not possible. Enable **Use the c
 
 | Selection | Actions |
 |---|---|
-| **Text** | Search with each web engine, show as Large Type, copy, paste as plain text, calculate (if it's a math expression or unit conversion), transform: Uppercase, Lowercase, Title Case, Trim, URL-encode, URL-decode, Base64 encode, Base64 decode, Pretty-print JSON, Minify JSON |
+| **Text** | Search with each web engine, show as Large Type, copy, paste as plain text, calculate (if it's a math expression or unit conversion), transform: Uppercase, Lowercase, Title Case, Trim, URL-encode, URL-decode, Base64 encode, Base64 decode, Pretty-print JSON, Minify JSON, Speak (read it aloud with the system voice) |
 | **URLs** (`http://`, `https://`, `mailto:`, `www.`) | Open, copy, Large Type |
 | **Files and folders** | Open, show in file manager, copy path(s), open in terminal (folders), run as admin (Windows programs), send to Sevak (fills search box with the path) |
 | **Path as text** | File actions above, then text actions |

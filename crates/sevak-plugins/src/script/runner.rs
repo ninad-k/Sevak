@@ -30,8 +30,10 @@ use std::time::{Duration, Instant};
 use sevak_platform::process::{configure_helper_command, scrub_environment};
 use sevak_platform::process_tree::ProcessTree;
 
+use super::alfred::Parsed;
 use super::approvals::script_approval_key;
 use super::delivery::Delivery;
+use super::filter_cache::{Clock, FilterCache, Lookup, Rerun, SystemClock};
 use super::items::{convert_items, ItemContext};
 use super::manifest::{Format, Manifest, Mode, PROTOCOL};
 use super::protocol::{parse_line, FromScript, ToScript, MAX_LINE_BYTES};
@@ -62,6 +64,13 @@ pub struct Spec {
     pub dir: PathBuf,
     /// A per-plugin folder the script may keep state in (`SEVAK_PLUGIN_DATA`).
     pub data_dir: PathBuf,
+    /// A per-plugin folder for what can be thrown away and fetched again
+    /// (`SEVAK_PLUGIN_CACHE`, Alfred's `alfred_workflow_cache`). Separate from
+    /// `data_dir`, so clearing the cache never loses state.
+    pub cache_dir: PathBuf,
+    /// A workflow's script filter whose node has "Sevak filters results" on:
+    /// rows are matched against the query by Sevak.
+    pub filter_results: bool,
     /// Extra environment for the script: a workflow's variables.
     pub env: Vec<(String, String)>,
     /// The approval key this plugin was allowed under. It is checked again
@@ -110,12 +119,14 @@ impl Spec {
         }
         // Best effort: a script that wants the folder reports its own error.
         let _ = std::fs::create_dir_all(&self.data_dir);
+        let _ = std::fs::create_dir_all(&self.cache_dir);
         command
             .current_dir(&self.dir)
             .env("SEVAK_VERSION", env!("CARGO_PKG_VERSION"))
             .env("SEVAK_PLUGIN_ID", &self.manifest.id)
             .env("SEVAK_PLUGIN_DIR", &self.dir)
-            .env("SEVAK_PLUGIN_DATA", &self.data_dir);
+            .env("SEVAK_PLUGIN_DATA", &self.data_dir)
+            .env("SEVAK_PLUGIN_CACHE", &self.cache_dir);
         if matches!(
             self.manifest.format,
             Format::Alfred | Format::AlfredWorkflow
@@ -125,13 +136,20 @@ impl Spec {
                 .env("alfred_workflow_bundleid", &self.manifest.id)
                 .env("alfred_workflow_name", &self.manifest.name)
                 .env("alfred_workflow_data", &self.data_dir)
-                .env("alfred_workflow_cache", &self.data_dir);
+                .env("alfred_workflow_cache", &self.cache_dir)
+                .env("alfred_workflow_keyword", &self.manifest.keyword)
+                .env("alfred_version", ALFRED_COMPAT_VERSION)
+                .env("alfred_debug", "0");
         }
         command.envs(self.env.iter().map(|(name, value)| (name, value)));
         configure_helper_command(&mut command);
         Ok(command)
     }
 }
+
+/// What `alfred_version` says: the Alfred release whose Script Filter JSON
+/// this Sevak follows.
+pub const ALFRED_COMPAT_VERSION: &str = "5.5";
 
 /// A message for the writer thread.
 enum Outgoing {
@@ -247,10 +265,20 @@ pub struct Runner {
     pub delivery: Delivery,
     state: Mutex<State>,
     generation: AtomicU64,
+    /// Answers that asked to be cached (one-shot Script Filters).
+    cache: Mutex<FilterCache>,
+    /// The script's own request to run again (`rerun`).
+    pub(super) rerun: Rerun,
+    clock: Arc<dyn Clock>,
 }
 
 impl Runner {
     pub fn new(spec: Spec) -> Arc<Self> {
+        Self::with_clock(spec, Arc::new(SystemClock::default()))
+    }
+
+    /// Like [`Runner::new`] with a clock of the caller's (tests move it by hand).
+    pub fn with_clock(spec: Spec, clock: Arc<dyn Clock>) -> Arc<Self> {
         Arc::new(Self {
             delivery: Delivery::new(&spec.manifest.id),
             spec,
@@ -259,7 +287,81 @@ impl Runner {
                 failures: 0,
             }),
             generation: AtomicU64::new(0),
+            cache: Mutex::new(FilterCache::default()),
+            rerun: Rerun::default(),
+            clock,
         })
+    }
+
+    /// What the answer cache holds for `input` right now.
+    pub(super) fn cache_lookup(&self, input: &str) -> Lookup {
+        if self.spec.manifest.mode != Mode::Oneshot {
+            return Lookup::Miss;
+        }
+        lock(&self.cache).get(input, self.clock.now())
+    }
+
+    /// Notes an answer to request `id` for `input`: caches it when it asked
+    /// to be, and plans the re-run it asked for (the returned plan, for
+    /// [`Runner::spawn_rerun`]). Call before delivering it.
+    pub(super) fn note_answer(&self, id: u64, input: &str, parsed: &Parsed) -> Option<u64> {
+        let now = self.clock.now();
+        {
+            let mut cache = lock(&self.cache);
+            match parsed.cache {
+                Some(spec) => cache.put(input, parsed.items.clone(), spec, now),
+                None => cache.remove(input),
+            }
+        }
+        match parsed.rerun {
+            Some(interval) if self.delivery.is_current(id) => {
+                Some(self.rerun.arm(input, interval, now))
+            }
+            _ => {
+                self.rerun.cancel();
+                None
+            }
+        }
+    }
+
+    /// Waits (on a thread of its own) for plan `token` to come due, then runs
+    /// the script again.
+    pub(super) fn spawn_rerun(self: &Arc<Self>, token: u64) {
+        let runner = Arc::clone(self);
+        let started = thread::Builder::new()
+            .name("sevak-script-rerun".to_owned())
+            .spawn(move || {
+                loop {
+                    match runner.rerun.remaining(token, runner.clock.now()) {
+                        None => return,
+                        Some(left) if left.is_zero() => break,
+                        Some(left) => thread::sleep(left),
+                    }
+                }
+                if let Some(input) = runner.rerun.take_due(token, runner.clock.now()) {
+                    runner.run_again(&input);
+                }
+            });
+        if let Err(err) = started {
+            tracing::warn!("could not start a script rerun thread: {err}");
+        }
+    }
+
+    /// Runs the script again for `input` if that is still the query on
+    /// screen. The answer reaches the shell through the notifier, like a late
+    /// answer.
+    pub(super) fn run_again(self: &Arc<Self>, input: &str) {
+        let Some(id) = self.delivery.refresh(input) else {
+            return;
+        };
+        if !self.request(id, input) {
+            self.delivery.abandon(id);
+        }
+    }
+
+    /// The launcher was hidden: nothing is on screen to refresh.
+    pub(super) fn launcher_hidden(&self) {
+        self.rerun.cancel();
     }
 
     /// Hands request `id` (`input` is the query text) to the script. Returns
@@ -662,14 +764,25 @@ fn log_stderr(plugin: &str, stderr: impl Read) {
 }
 
 /// Parses one-shot output into items according to the manifest's format.
+#[cfg(test)]
 pub(super) fn parse_oneshot(
     spec: &Spec,
     stdout: &str,
 ) -> Result<Vec<sevak_core::ResultItem>, String> {
+    parse_oneshot_full(spec, stdout, "").map(|parsed| parsed.items)
+}
+
+/// [`parse_oneshot`] with what the top level of an Alfred answer asks for
+/// (`cache`, `rerun`). `input` is the query the script was run for; a
+/// workflow filter that lets Sevak filter matches the rows against it.
+pub(super) fn parse_oneshot_full(spec: &Spec, stdout: &str, input: &str) -> Result<Parsed, String> {
     let ctx = spec.item_context();
+    let filter_query =
+        (spec.filter_results && spec.manifest.format == Format::AlfredWorkflow).then_some(input);
+    let alfred_options = |raw| alfred::ParseOptions { raw, filter_query };
     match spec.manifest.format {
-        Format::Alfred => alfred::parse(ctx, stdout),
-        Format::AlfredWorkflow => alfred::parse_workflow(ctx, stdout),
+        Format::Alfred => alfred::parse_document(ctx, stdout, alfred_options(false)),
+        Format::AlfredWorkflow => alfred::parse_document(ctx, stdout, alfred_options(true)),
         Format::Sevak => {
             let value: serde_json::Value =
                 serde_json::from_str(stdout.trim_start_matches('\u{feff}').trim())
@@ -682,7 +795,11 @@ pub(super) fn parse_oneshot(
                 },
                 _ => return Err("the output must be an object with \"items\"".to_owned()),
             };
-            Ok(convert_items(ctx, items))
+            Ok(Parsed {
+                items: convert_items(ctx, items),
+                cache: None,
+                rerun: None,
+            })
         }
     }
 }
@@ -713,6 +830,8 @@ mod tests {
             manifest,
             dir: PathBuf::from("plugin"),
             data_dir: PathBuf::from("data"),
+            cache_dir: PathBuf::from("cache"),
+            filter_results: false,
             env: Vec::new(),
             expected_key: None,
         }
@@ -742,6 +861,200 @@ mod tests {
             items[0].action,
             sevak_core::Action::OpenUrl { .. }
         ));
+    }
+
+    fn workflow_spec(filter_results: bool) -> Spec {
+        let mut spec = spec("mode = \"oneshot\"\nformat = \"alfred\"");
+        spec.manifest.format = Format::AlfredWorkflow;
+        spec.filter_results = filter_results;
+        spec
+    }
+
+    fn fake_runner(
+        spec: Spec,
+    ) -> (
+        Arc<super::super::filter_cache::tests::FakeClock>,
+        Arc<Runner>,
+    ) {
+        let (fake, clock) = super::super::filter_cache::tests::arc_clock();
+        (fake, Runner::with_clock(spec, clock))
+    }
+
+    /// Plays one script answer through the runner the way `oneshot` does.
+    fn answer(runner: &Arc<Runner>, input: &str, json: &str) -> Option<u64> {
+        let super::super::delivery::Begin::Send(id) = runner.delivery.begin(input) else {
+            panic!("expected a new request");
+        };
+        let parsed = parse_oneshot_full(&runner.spec, json, input).unwrap();
+        let token = runner.note_answer(id, input, &parsed);
+        runner.delivery.deliver(id, parsed.items);
+        token
+    }
+
+    #[test]
+    fn a_cached_answer_is_fresh_for_its_seconds_on_the_fake_clock() {
+        let (clock, runner) = fake_runner(workflow_spec(false));
+        let json = r#"{"cache":{"seconds":30},"items":[{"title":"a"}]}"#;
+        assert_eq!(runner.cache_lookup("q"), Lookup::Miss);
+        answer(&runner, "q", json);
+        assert!(matches!(runner.cache_lookup("q"), Lookup::Fresh(items) if items.len() == 1));
+        clock.advance(Duration::from_secs(29));
+        assert!(matches!(runner.cache_lookup("q"), Lookup::Fresh(_)));
+        clock.advance(Duration::from_secs(1));
+        assert_eq!(runner.cache_lookup("q"), Lookup::Miss);
+        // Another query was never cached.
+        assert_eq!(runner.cache_lookup("other"), Lookup::Miss);
+    }
+
+    #[test]
+    fn seconds_are_clamped_and_loosereload_shows_the_stale_answer() {
+        let (clock, runner) = fake_runner(workflow_spec(false));
+        answer(
+            &runner,
+            "q",
+            r#"{"cache":{"seconds":1,"loosereload":true},"items":[{"title":"a"}]}"#,
+        );
+        // 1 second is raised to the 5 second minimum.
+        clock.advance(Duration::from_secs(4));
+        assert!(matches!(runner.cache_lookup("q"), Lookup::Fresh(_)));
+        clock.advance(Duration::from_secs(1));
+        assert!(matches!(runner.cache_lookup("q"), Lookup::Stale(_)));
+        clock.advance(Duration::from_secs(100_000));
+        assert!(matches!(runner.cache_lookup("q"), Lookup::Stale(_)));
+        // A newer answer without `cache` forgets the old one.
+        let id = runner.delivery.refresh("q").unwrap();
+        let parsed = parse_oneshot_full(&runner.spec, r#"{"items":[]}"#, "q").unwrap();
+        runner.note_answer(id, "q", &parsed);
+        assert_eq!(runner.cache_lookup("q"), Lookup::Miss);
+    }
+
+    #[test]
+    fn persistent_plugins_never_use_the_filter_cache() {
+        let (_, runner) = fake_runner(spec(""));
+        runner.cache.lock().unwrap().put(
+            "q",
+            Vec::new(),
+            alfred::CacheSpec {
+                seconds: 60,
+                loose_reload: false,
+            },
+            Duration::ZERO,
+        );
+        assert_eq!(runner.cache_lookup("q"), Lookup::Miss);
+    }
+
+    #[test]
+    fn rerun_comes_due_after_the_interval_while_the_query_stays() {
+        let (clock, runner) = fake_runner(workflow_spec(false));
+        let token = answer(&runner, "q", r#"{"rerun":0.5,"items":[{"title":"a"}]}"#).unwrap();
+        assert_eq!(runner.rerun.take_due(token, clock.now()), None);
+        clock.advance(Duration::from_millis(499));
+        assert_eq!(runner.rerun.take_due(token, clock.now()), None);
+        clock.advance(Duration::from_millis(1));
+        // The query is still the newest one: a new request may start.
+        assert!(runner.delivery.refresh("q").is_some());
+    }
+
+    #[test]
+    fn rerun_stops_when_the_query_changes_or_the_launcher_hides() {
+        let (clock, runner) = fake_runner(workflow_spec(false));
+        let token = answer(&runner, "q", r#"{"rerun":1,"items":[]}"#).unwrap();
+        // Typing on: the old query is no longer the one on screen.
+        assert!(runner
+            .delivery
+            .begin("qu")
+            .eq(&super::super::delivery::Begin::Send(2)));
+        assert_eq!(runner.delivery.refresh("q"), None);
+        clock.advance(Duration::from_secs(2));
+        // The plan itself is still armed for "q", but running it does nothing.
+        assert_eq!(
+            runner.rerun.take_due(token, clock.now()),
+            Some("q".to_owned())
+        );
+
+        let (clock, runner) = fake_runner(workflow_spec(false));
+        let token = answer(&runner, "q", r#"{"rerun":1,"items":[]}"#).unwrap();
+        runner.launcher_hidden();
+        clock.advance(Duration::from_secs(2));
+        assert_eq!(runner.rerun.take_due(token, clock.now()), None);
+    }
+
+    #[test]
+    fn an_answer_without_rerun_cancels_the_plan_and_the_interval_is_clamped() {
+        let (clock, runner) = fake_runner(workflow_spec(false));
+        let token = answer(&runner, "q", r#"{"rerun":0.01,"items":[]}"#).unwrap();
+        // 0.01 s is raised to the 0.1 s minimum.
+        assert_eq!(
+            runner.rerun.remaining(token, clock.now()),
+            Some(Duration::from_millis(100))
+        );
+        // Refresh needs the previous request answered: it was.
+        let id = runner.delivery.refresh("q").unwrap();
+        let parsed = parse_oneshot_full(&runner.spec, r#"{"items":[]}"#, "q").unwrap();
+        runner.note_answer(id, "q", &parsed);
+        assert_eq!(runner.rerun.remaining(token, clock.now()), None);
+        let big = answer(&runner, "q2", r#"{"rerun":60,"items":[]}"#).unwrap();
+        assert_eq!(
+            runner.rerun.remaining(big, clock.now()),
+            Some(Duration::from_secs(5))
+        );
+    }
+
+    #[test]
+    fn sevak_filters_results_with_match_and_keeps_script_order_for_skipknowledge() {
+        let json = r#"{"items":[
+            {"title":"Alpha","match":"zebra crossing"},
+            {"title":"Beta"},
+            {"title":"Gamma","match":"beta tester"}]}"#;
+        let off = parse_oneshot_full(&workflow_spec(false), json, "beta").unwrap();
+        assert_eq!(off.items.len(), 3, "without the option every row stays");
+        let on = parse_oneshot_full(&workflow_spec(true), json, "beta").unwrap();
+        let titles: Vec<&str> = on.items.iter().map(|i| i.title.as_str()).collect();
+        assert_eq!(titles, ["Beta", "Gamma"]);
+        // An empty query shows everything.
+        assert_eq!(
+            parse_oneshot_full(&workflow_spec(true), json, "")
+                .unwrap()
+                .items
+                .len(),
+            3
+        );
+        // Only a workflow filter filters.
+        let mut plain = spec("mode = \"oneshot\"\nformat = \"alfred\"");
+        plain.filter_results = true;
+        assert_eq!(
+            parse_oneshot_full(&plain, json, "beta")
+                .unwrap()
+                .items
+                .len(),
+            3
+        );
+    }
+
+    #[test]
+    fn the_alfred_environment_has_its_own_cache_folder_keyword_and_version() {
+        let mut spec = spec("mode = \"oneshot\"\nformat = \"alfred\"");
+        let program = if cfg!(unix) { "sh" } else { "prog" };
+        spec.manifest.launch = super::super::manifest::Launch::Command(vec![program.into()]);
+        let dir = tempfile::tempdir().unwrap();
+        spec.data_dir = dir.path().join("data");
+        spec.cache_dir = dir.path().join("cache");
+        let command = spec.command(Some("x")).unwrap();
+        let env = |name: &str| {
+            command
+                .get_envs()
+                .find(|(key, _)| *key == name)
+                .and_then(|(_, value)| value.map(|v| v.to_string_lossy().into_owned()))
+        };
+        assert_eq!(env("alfred_workflow_keyword").as_deref(), Some("k"));
+        assert_eq!(env("alfred_version").as_deref(), Some("5.5"));
+        assert_eq!(env("alfred_debug").as_deref(), Some("0"));
+        let cache = dir.path().join("cache").display().to_string();
+        let data = dir.path().join("data").display().to_string();
+        assert_eq!(env("alfred_workflow_cache"), Some(cache.clone()));
+        assert_eq!(env("SEVAK_PLUGIN_CACHE"), Some(cache));
+        assert_eq!(env("alfred_workflow_data"), Some(data));
+        assert!(dir.path().join("cache").is_dir());
     }
 
     #[test]

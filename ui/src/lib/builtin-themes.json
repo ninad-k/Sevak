@@ -343,5 +343,134 @@
       "name": "High Contrast"
     },
     "warnings": []
+  },
+  {
+    "file": "themes/Sevak Glass Light.toml",
+    "spec": {
+      "author": "Sevak",
+      "dark": null,
+      "description": "A roomy, rounded, slightly see-through light theme with a bright indigo selection, made for the frosted-glass blur.",
+      "font": {
+        "family": "",
+        "size": 15
+      },
+      "layout": {
+        "icon_size": 34,
+        "opacity": 85,
+        "radius": 24,
+        "row_height": 56,
+        "search_size": 24,
+        "window_width": 760
+      },
+      "light": {
+        "accent": "#4f46e5",
+        "accent_strong": "#3730a3",
+        "background": "#f6f7fc",
+        "border": "rgba(26, 32, 54, 0.14)",
+        "error": "#b42318",
+        "input_background": "rgba(255, 255, 255, 0.7)",
+        "input_border": "rgba(26, 32, 54, 0.24)",
+        "kbd_background": "rgba(26, 32, 54, 0.07)",
+        "kbd_border": "rgba(26, 32, 54, 0.16)",
+        "ok": "#126b31",
+        "on_accent": "#ffffff",
+        "selection": "rgba(79, 70, 229, 0.18)",
+        "shadow": "0 18px 48px rgba(26, 32, 54, 0.26), 0 2px 6px rgba(26, 32, 54, 0.12)",
+        "subtext": "#525c78",
+        "surface": "rgba(26, 32, 54, 0.045)",
+        "switch_off": "rgba(26, 32, 54, 0.28)",
+        "text": "#1a2036",
+        "tile": "rgba(26, 32, 54, 0.07)",
+        "warn": "#a14a05"
+      },
+      "name": "Sevak Glass Light"
+    },
+    "warnings": []
+  },
+  {
+    "file": "themes/Sevak Glass Dark.toml",
+    "spec": {
+      "author": "Sevak",
+      "dark": {
+        "accent": "#8ea2ff",
+        "accent_strong": "#6f84f0",
+        "background": "#10131f",
+        "border": "rgba(238, 241, 251, 0.14)",
+        "error": "#ff8f85",
+        "input_background": "rgba(238, 241, 251, 0.06)",
+        "input_border": "rgba(238, 241, 251, 0.24)",
+        "kbd_background": "rgba(238, 241, 251, 0.07)",
+        "kbd_border": "rgba(238, 241, 251, 0.16)",
+        "ok": "#8ee08a",
+        "on_accent": "#0c1020",
+        "selection": "rgba(142, 162, 255, 0.26)",
+        "shadow": "0 20px 56px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4)",
+        "subtext": "#a3abc6",
+        "surface": "rgba(238, 241, 251, 0.045)",
+        "switch_off": "rgba(238, 241, 251, 0.28)",
+        "text": "#eef1fb",
+        "tile": "rgba(238, 241, 251, 0.07)",
+        "warn": "#f5c26b"
+      },
+      "description": "A roomy, rounded, slightly see-through dark theme with a bright periwinkle selection, made for the frosted-glass blur.",
+      "font": {
+        "family": "",
+        "size": 15
+      },
+      "layout": {
+        "icon_size": 34,
+        "opacity": 82,
+        "radius": 24,
+        "row_height": 56,
+        "search_size": 24,
+        "window_width": 760
+      },
+      "light": null,
+      "name": "Sevak Glass Dark"
+    },
+    "warnings": []
+  },
+  {
+    "file": "themes/Sevak Violet.toml",
+    "spec": {
+      "author": "Sevak",
+      "dark": {
+        "accent": "#b48cff",
+        "accent_strong": "#9b6df0",
+        "background": "#1a1327",
+        "border": "rgba(241, 234, 255, 0.14)",
+        "error": "#ff8f85",
+        "input_background": "rgba(241, 234, 255, 0.06)",
+        "input_border": "rgba(241, 234, 255, 0.24)",
+        "kbd_background": "rgba(241, 234, 255, 0.07)",
+        "kbd_border": "rgba(241, 234, 255, 0.16)",
+        "ok": "#8ee08a",
+        "on_accent": "#150d24",
+        "selection": "rgba(180, 140, 255, 0.24)",
+        "shadow": "0 10px 34px rgba(0, 0, 0, 0.6), 0 1px 3px rgba(0, 0, 0, 0.45)",
+        "subtext": "#b0a3cc",
+        "surface": "rgba(241, 234, 255, 0.045)",
+        "switch_off": "rgba(241, 234, 255, 0.28)",
+        "text": "#f1eaff",
+        "tile": "rgba(241, 234, 255, 0.07)",
+        "warn": "#f5c26b"
+      },
+      "description": "A purple-accent dark theme with a violet-tinted selection.",
+      "font": {
+        "family": "",
+        "size": 15
+      },
+      "layout": {
+        "icon_size": 34,
+        "opacity": 100,
+        "radius": 16,
+        "row_height": 50,
+        "search_size": 24,
+        "window_width": 720
+      },
+      "light": null,
+      "name": "Sevak Violet"
+    },
+    "warnings": []
   }
 ]

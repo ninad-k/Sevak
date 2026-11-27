@@ -69,8 +69,9 @@ impl<T: Default + PartialEq + Send + Sync + 'static> Cache<T> {
         ttl: Duration,
         load: impl FnOnce() -> T + Send + 'static,
         notify: Option<ResultsNotifier>,
-        plugin_id: &'static str,
+        plugin_id: &str,
     ) {
+        let notify_id = plugin_id.to_owned();
         let fresh = self
             .lock()
             .loaded
@@ -87,7 +88,7 @@ impl<T: Default + PartialEq + Send + Sync + 'static> Cache<T> {
                 let changed = loaded.map(|value| cache.store(value));
                 cache.busy.store(false, Ordering::Release);
                 if let (Ok(true), Some(notify)) = (changed, notify) {
-                    notify(plugin_id);
+                    notify(&notify_id);
                 }
             });
         if let Err(err) = spawned {

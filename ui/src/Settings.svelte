@@ -8,6 +8,8 @@
   import ListEditor from "./lib/settings-pages/ListEditor.svelte";
   import SystemPage from "./lib/settings-pages/SystemPage.svelte";
   import TasksMediaPage from "./lib/settings-pages/TasksMediaPage.svelte";
+  import UsagePage from "./lib/settings-pages/UsagePage.svelte";
+  import { filterSections } from "./lib/settings-search";
   import WindowsPage from "./lib/settings/WindowsPage.svelte";
   import { tidyPluginSettings } from "./lib/settings-pages/tidy";
   import HotkeyField from "./lib/HotkeyField.svelte";
@@ -20,7 +22,7 @@
   import { onSettingsPage } from "./lib/extensions/extensions-ipc";
   import GalleryPage from "./lib/workflows/GalleryPage.svelte";
   import WorkflowsPage from "./lib/workflows/WorkflowsPage.svelte";
-  import { getStatus, onStatus, type Status } from "./lib/ipc";
+  import { clearQueryHistory, getStatus, onStatus, type Status } from "./lib/ipc";
   import {
     closeSettings,
     getSettings,
@@ -43,12 +45,14 @@
   } from "./lib/settings-ipc";
   import { displayAccelerator } from "./lib/accelerator";
   import { applyAppearance } from "./lib/appearance";
-  import { applyTheme } from "./lib/theme";
+  import { applyTheme, resolveSettingsTheme } from "./lib/theme";
   import { LANGUAGES, currentLanguage, formatList, formatNumber, resolveLanguage, setLanguage, t, tHtml } from "./lib/i18n.svelte";
   import {
     MAX_DEPTH,
+    MAX_FILE_RESULTS,
     MAX_WIDTH,
     MIN_WIDTH,
+    primaryKeyword,
     totalProblems,
     validate,
     type SectionId,
@@ -69,7 +73,13 @@
     linux: { wayland_use_xwayland: true },
     actions: { use_primary_selection: true, use_clipboard_fallback: false },
     paste: { restore_clipboard: false },
-    search: { max_results: 8, fallback_web_search: "", query_history: true },
+    search: {
+      max_results: 8,
+      fallback_web_search: "",
+      query_history: true,
+      history_retention: "30d",
+      history_persist: true,
+    },
     appearance: {
       theme: "system",
       accent: "",
@@ -80,6 +90,9 @@
       radius: 14,
       theme_file: "",
       custom_css: "",
+      settings_theme: "follow",
+      open_animation: "fade",
+      animation_ms: 150,
     },
     plugins: { disabled: [] },
     calculator: { currency: false },
@@ -93,6 +106,8 @@
       index_keyword: "ff",
       content_keyword: "in",
       allow_network_paths: false,
+      sort: "relevance",
+      max_results: 0,
     },
     snippets: {
       auto_expand: false,
@@ -115,8 +130,10 @@
       files: true,
       max_image_bytes: 10 * 1024 * 1024,
       encrypt: true,
+      viewer_rows: 20,
+      preview_chars: 100,
     },
-    contacts: { enabled: false, keyword: "c", use_system: true, vcard_files: [] },
+    contacts: { enabled: false, keyword: "c", use_system: true, vcard_files: [], show_photos: true },
     onepassword: { enabled: false, keyword: "1p", op_path: "", account: "", cache_minutes: 10 },
     dictionary: { define_keyword: "define", spell_keyword: "spell", use_system: true },
     ai: {
@@ -141,6 +158,7 @@
     ssh: { keyword: "ssh", known_hosts: false },
     projects: { keyword: "code", editors: [] },
     calendar: { keyword: "cal", files: [], days: 7 },
+    recent: { enabled: true, keyword: "recent", max_items: 50 },
   });
 
   const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
@@ -157,7 +175,7 @@
   let hotkeyParseProblems = $state(0);
 
   /** The workflow pages keep their own files and are not part of the config form. */
-  type PageId = SectionId | "workflows" | "gallery" | "extensions" | "backup" | "help";
+  type PageId = SectionId | "workflows" | "gallery" | "extensions" | "backup" | "help" | "usage";
   let active = $state<PageId>("general");
   let hotkeyError = $state<string | null>(null);
   let actionsHotkeyError = $state<string | null>(null);
@@ -222,6 +240,7 @@
         { id: "integrations", label: t("settings.sections.integrations") },
         { id: "ai", label: t("settings.sections.ai") },
         { id: "system", label: t("settings.sections.system") },
+        { id: "usage", label: t("settings.sections.usage") },
         ...(showLinux ? [{ id: "linux", label: t("settings.sections.linux") }] : []),
         { id: "backup", label: t("settings.sections.backup") },
         { id: "help", label: t("settings.sections.help") },
@@ -236,6 +255,20 @@
     })),
   );
 
+  let sidebarQuery = $state("");
+  const shownSections = $derived(filterSections(sections, sidebarQuery));
+
+  function onSidebarFilterKeydown(e: KeyboardEvent) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (shownSections.length > 0) active = shownSections[0].id;
+    } else if (e.key === "Escape" && sidebarQuery !== "") {
+      e.preventDefault();
+      e.stopPropagation();
+      sidebarQuery = "";
+    }
+  }
+
   const themes = $derived([
     { value: "system", label: t("settings.appearance.system") },
     { value: "light", label: t("settings.appearance.light") },
@@ -243,15 +276,27 @@
   ] as const);
 
   const engineKeywords = $derived(
-    [...new Set(draft.web_search.map((e) => e.keyword.trim()).filter((k) => k !== ""))].map(
+    [...new Set(draft.web_search.map((e) => primaryKeyword(e.keyword)).filter((k) => k !== ""))].map(
       (keyword) => ({
         keyword,
-        name: draft.web_search.find((e) => e.keyword.trim() === keyword)?.name.trim() ?? "",
+        name: draft.web_search.find((e) => primaryKeyword(e.keyword) === keyword)?.name.trim() ?? "",
       }),
     ),
   );
   // config.toml may list several fallbacks; the select shows one, and leaves a
   // list alone until the user picks an engine.
+  const RETENTIONS = ["24h", "7d", "30d", "90d"] as const;
+  const retentionLabels = $derived({
+    "24h": t("settings.search.retention24h"),
+    "7d": t("settings.search.retention7d"),
+    "30d": t("settings.search.retention30d"),
+    "90d": t("settings.search.retention90d"),
+  });
+  let historyCleared = $state(false);
+  async function clearHistory() {
+    await clearQueryHistory();
+    historyCleared = true;
+  }
   const MANY_FALLBACKS = "__many__";
   const fallbackKeywords = $derived(fallbackList(draft.search.fallback_web_search));
   const fallbackMany = $derived(fallbackKeywords.length > 1);
@@ -364,7 +409,9 @@
 
   // Preview the theme while choosing it; saving makes it stick for every window.
   $effect(() => {
-    if (ready) applyTheme(draft.appearance.theme);
+    if (ready) {
+      applyTheme(resolveSettingsTheme(draft.appearance.settings_theme, draft.appearance.theme));
+    }
   });
 
   // Switch the language as soon as it is picked, like the theme.
@@ -601,13 +648,13 @@
   function onTabKeydown(e: KeyboardEvent, index: number) {
     const step = e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : 0;
     const target =
-      e.key === "Home" ? 0 : e.key === "End" ? sections.length - 1 : index + step;
-    if (target === index || target < 0 || target >= sections.length) {
+      e.key === "Home" ? 0 : e.key === "End" ? shownSections.length - 1 : index + step;
+    if (target === index || target < 0 || target >= shownSections.length) {
       if (step !== 0 || e.key === "Home" || e.key === "End") e.preventDefault();
       return;
     }
     e.preventDefault();
-    active = sections[target].id;
+    active = shownSections[target].id;
     void tick().then(() => document.getElementById(`tab-${active}`)?.focus());
   }
 
@@ -619,9 +666,11 @@
     void load();
     void getStatus().then((s) => (status = s));
     const unlisten = onStatus((s) => (status = s));
-    // The launcher's `ext` rows open this window on the Extensions page.
+    // The launcher's `ext` rows, `? ` search and `sevak --settings <section>`
+    // open this window on a section.
     const stopPage = onSettingsPage((page) => {
-      if (page === "extensions") active = "extensions";
+      const target = sections.find((section) => section.id === page);
+      if (target) active = target.id;
     });
     return () => {
       stopPage();
@@ -651,8 +700,17 @@
     <div class="state" role="status">{t("common.loading")}</div>
   {:else}
     <main class="body">
-      <div class="sidebar" role="tablist" aria-orientation="vertical" aria-label={t("settings.sectionsLabel")}>
-        {#each sections as section, i (section.id)}
+      <div class="sidebar">
+        <input
+          type="search"
+          class="sidebar-filter"
+          aria-label={t("filters.sections.label")}
+          placeholder={t("filters.sections.placeholder")}
+          bind:value={sidebarQuery}
+          onkeydown={onSidebarFilterKeydown}
+        />
+        <div class="tabs" role="tablist" aria-orientation="vertical" aria-label={t("settings.sectionsLabel")}>
+        {#each shownSections as section, i (section.id)}
           <button
             id="tab-{section.id}"
             type="button"
@@ -672,6 +730,10 @@
             {/if}
           </button>
         {/each}
+        {#if shownSections.length === 0}
+          <p class="sidebar-none" role="status">{t("filters.sections.none")}</p>
+        {/if}
+        </div>
       </div>
 
       <div id="panel" class="content" role="tabpanel" aria-labelledby="tab-{active}" aria-busy={saving} bind:this={content}>
@@ -1022,6 +1084,47 @@
               </div>
               <Toggle bind:checked={draft.search.query_history} label={t("settings.search.remember")} />
             </div>
+
+            {#if draft.search.query_history}
+              <div class="row">
+                <div class="label">
+                  <label class="name" for="history-retention">{t("settings.search.retention")}</label>
+                  <span class="hint">{t("settings.search.retentionHint")}</span>
+                  {#if problems.historyRetention}
+                    <span class="msg error" role="alert">{problems.historyRetention}</span>
+                  {/if}
+                </div>
+                <select
+                  id="history-retention"
+                  class="input select"
+                  class:invalid={!!problems.historyRetention}
+                  bind:value={draft.search.history_retention}
+                >
+                  {#each RETENTIONS as option (option)}
+                    <option value={option}>{retentionLabels[option]}</option>
+                  {/each}
+                  {#if !(RETENTIONS as readonly string[]).includes(draft.search.history_retention)}
+                    <option value={draft.search.history_retention}>{draft.search.history_retention}</option>
+                  {/if}
+                </select>
+              </div>
+
+              <div class="row">
+                <div class="label">
+                  <span class="name">{t("settings.search.persist")}</span>
+                  <span class="hint">{t("settings.search.persistHint")}</span>
+                </div>
+                <Toggle bind:checked={draft.search.history_persist} label={t("settings.search.persist")} />
+              </div>
+
+              <div class="row">
+                <div class="label">
+                  <span class="name">{t("settings.search.clear")}</span>
+                  <span class="hint">{historyCleared ? t("settings.search.cleared") : t("settings.search.clearHint")}</span>
+                </div>
+                <button type="button" class="btn" onclick={clearHistory}>{t("settings.search.clear")}</button>
+              </div>
+            {/if}
           </section>
         {:else if active === "plugins"}
           <h1>{t("settings.sections.plugins")}</h1>
@@ -1276,6 +1379,40 @@
 
             <div class="row">
               <div class="label">
+                <label class="name" for="files-sort">{t("settings.files.sort")}</label>
+                <span class="hint">{t("settings.files.sortHint")}</span>
+              </div>
+              <select id="files-sort" class="input select" bind:value={draft.files.sort}>
+                <option value="relevance">{t("settings.files.sortRelevance")}</option>
+                <option value="name">{t("settings.files.sortName")}</option>
+                <option value="modified">{t("settings.files.sortModified")}</option>
+              </select>
+            </div>
+
+            <div class="row">
+              <div class="label">
+                <label class="name" for="files-max-results">{t("settings.files.maxResults")}</label>
+                <span class="hint">{t("settings.files.maxResultsHint")}</span>
+                {#if problems.filesResults}
+                  <span class="msg error" id="files-results-error" role="alert">{problems.filesResults}</span>
+                {/if}
+              </div>
+              <input
+                id="files-max-results"
+                class="input number"
+                class:invalid={!!problems.filesResults}
+                type="number"
+                min="0"
+                max={MAX_FILE_RESULTS}
+                step="1"
+                bind:value={draft.files.max_results}
+                aria-invalid={!!problems.filesResults}
+                aria-describedby={problems.filesResults ? "files-results-error" : undefined}
+              />
+            </div>
+
+            <div class="row">
+              <div class="label">
                 <span class="name">{t("settings.files.hidden")}</span>
                 <span class="hint">{t("settings.files.hiddenHint")}</span>
               </div>
@@ -1395,6 +1532,8 @@
           <AiPage bind:config={draft} {problems} {pluginOff} />
         {:else if active === "system"}
           <SystemPage bind:config={draft} {platform} {pluginOff} />
+        {:else if active === "usage"}
+          <UsagePage />
         {:else if active === "linux"}
           <h1>{t("settings.sections.linux")}</h1>
 
@@ -1481,6 +1620,31 @@
   }
 
   /* Sidebar ---------------------------------------------------------------- */
+
+  .tabs {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .sidebar-filter {
+    box-sizing: border-box;
+    width: 100%;
+    margin-bottom: 8px;
+    padding: 6px 9px;
+    border: 1px solid var(--input-border);
+    border-radius: 8px;
+    background: var(--input-bg);
+    color: inherit;
+    font: inherit;
+    font-size: 12.5px;
+  }
+
+  .sidebar-none {
+    margin: 6px 12px;
+    color: var(--muted);
+    font-size: 12px;
+  }
 
   .sidebar {
     display: flex;

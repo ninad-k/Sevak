@@ -112,13 +112,11 @@ const POLL_INTERVAL: Duration = Duration::from_millis(300);
 /// reading it, which costs more than comparing text; so it is looked for once
 /// in this many polls (about every 1.2 s) while the clipboard holds no text.
 const MEDIA_POLL_EVERY: u64 = 4;
-/// Most rows one query returns (the engine shows at most `[search] max_results`,
-/// itself capped at 20).
-const MAX_ROWS: usize = 20;
 /// Only this many characters of each entry are fuzzy-matched, so a query stays
 /// fast even with 200 large entries.
 const SEARCH_CHARS: usize = 1_000;
-const TITLE_CHARS: usize = 100;
+/// The longest text checked for being a link or a file path.
+const MAX_OPENABLE_CHARS: usize = 2_048;
 /// A copy of more files than this is not recorded (a half-recorded list would
 /// paste the wrong thing, and the history file would balloon).
 const MAX_FILES_PER_ENTRY: usize = 1_000;
@@ -1193,6 +1191,48 @@ fn preview(text: &str, max_chars: usize) -> String {
     shown.replace('\t', " ")
 }
 
+/// What a one-line text copied to the clipboard can be opened as.
+#[derive(Debug, PartialEq, Eq)]
+enum Openable {
+    Link(String),
+    Path(PathBuf),
+}
+
+/// `text` as a single http, https or mailto link, if it is one.
+fn as_link(text: &str) -> Option<String> {
+    let text = text.trim();
+    if text.is_empty() || text.len() > MAX_OPENABLE_CHARS || text.contains(char::is_whitespace) {
+        return None;
+    }
+    let lower = text.to_ascii_lowercase();
+    let rest = ["http://", "https://", "mailto:"]
+        .iter()
+        .find_map(|scheme| lower.strip_prefix(scheme))?;
+    (!rest.is_empty()).then(|| text.to_owned())
+}
+
+/// What `text` can be opened as. A path is looked up on disk, so call this
+/// only for the rows that are shown, never for the whole history.
+fn as_openable(text: &str) -> Option<Openable> {
+    if let Some(link) = as_link(text) {
+        return Some(Openable::Link(link));
+    }
+    let text = text.trim();
+    if text.is_empty() || text.len() > MAX_OPENABLE_CHARS || text.contains(['\n', '\r']) {
+        return None;
+    }
+    // Copied text can be a `\\server\share` path; probing it would make
+    // Windows authenticate to that server, so honour the network-path setting
+    // before touching the disk.
+    if sevak_platform::netpath::refusal(text, sevak_platform::netpath::allow_network_paths())
+        .is_some()
+    {
+        return None;
+    }
+    let path = PathBuf::from(text);
+    (path.is_absolute() && path.exists()).then_some(Openable::Path(path))
+}
+
 /// The part of `text` that queries are matched against.
 fn searchable(text: &str) -> &str {
     match text.char_indices().nth(SEARCH_CHARS) {
@@ -1203,7 +1243,7 @@ fn searchable(text: &str) -> &str {
 
 /// The names of copied files for a row title: all of them if they fit, else
 /// the first two and a count.
-fn files_title(files: &[PathBuf]) -> String {
+fn files_title(files: &[PathBuf], title_chars: usize) -> String {
     let name = |path: &PathBuf| {
         path.file_name()
             .unwrap_or(path.as_os_str())
@@ -1216,8 +1256,8 @@ fn files_title(files: &[PathBuf]) -> String {
     } else {
         format!("{} and {} more", names[..2].join(", "), names.len() - 2)
     };
-    if title.chars().count() > TITLE_CHARS {
-        let cut: String = title.chars().take(TITLE_CHARS).collect();
+    if title.chars().count() > title_chars {
+        let cut: String = title.chars().take(title_chars).collect();
         format!("{cut}…")
     } else {
         title
@@ -1241,6 +1281,10 @@ fn existing_files(paths: &[PathBuf]) -> PluginResult<Vec<PathBuf>> {
 pub struct ClipboardPlugin {
     settings: Settings,
     restore_clipboard: bool,
+    /// Most rows one query returns.
+    viewer_rows: usize,
+    /// Characters of an entry shown in its row title.
+    preview_chars: usize,
     platform: Arc<dyn PlatformProvider>,
     /// `None` while disabled.
     shared: Option<Arc<Shared>>,
@@ -1278,6 +1322,8 @@ impl ClipboardPlugin {
         Self {
             settings: Settings::from(config),
             restore_clipboard: paste.restore_clipboard,
+            viewer_rows: config.viewer_rows.clamp(5, 100),
+            preview_chars: config.preview_chars.clamp(40, 500),
             platform,
             shared,
             save_dir: None,
@@ -1318,17 +1364,22 @@ impl ClipboardPlugin {
         }
 
         let total = entries.len();
-        let mut rows: Vec<ResultItem> = ranked
+        // Rank first and build only the rows that are shown: a row may look at
+        // the disk (see `as_openable`).
+        let mut scored: Vec<(f64, &Arc<Entry>)> = ranked
             .into_iter()
             .map(|(position, matched, entry)| {
                 // Equal fuzzy scores keep the newest first.
                 let recency = (total - position) as f64 * 0.001;
-                self.row(shared, entry, &support, now)
-                    .with_score(score::KEYWORD + matched + recency)
+                (score::KEYWORD + matched + recency, entry)
             })
             .collect();
-        rows.sort_by(|a, b| b.score.total_cmp(&a.score));
-        rows.truncate(MAX_ROWS);
+        scored.sort_by(|a, b| b.0.total_cmp(&a.0));
+        scored.truncate(self.viewer_rows);
+        let mut rows: Vec<ResultItem> = scored
+            .into_iter()
+            .map(|(score, entry)| self.row(shared, entry, &support, now).with_score(score))
+            .collect();
 
         let notice = shared.notice().filter(|_| input.is_empty());
         if rows.is_empty() && input.is_empty() {
@@ -1453,14 +1504,35 @@ impl ClipboardPlugin {
         }
         parts.push(hint);
 
-        ResultItem::new(
+        let mut row = ResultItem::new(
             self.id(),
             format!("{:016x}", fnv1a(&entry.text)),
-            preview(&entry.text, TITLE_CHARS),
+            preview(&entry.text, self.preview_chars),
             action,
         )
         .with_subtitle(parts.join(" · "))
-        .with_icon(IconSource::builtin("copy"))
+        .with_icon(IconSource::builtin("copy"));
+        match as_openable(&entry.text) {
+            Some(Openable::Link(url)) => {
+                row =
+                    row.with_secondary("Open link", Some(Modifier::Ctrl), Action::OpenUrl { url });
+            }
+            Some(Openable::Path(path)) => {
+                row = row
+                    .with_secondary(
+                        "Open",
+                        Some(Modifier::Ctrl),
+                        Action::OpenPath { path: path.clone() },
+                    )
+                    .with_secondary(
+                        "Show in folder",
+                        Some(Modifier::Alt),
+                        Action::RevealPath { path },
+                    );
+            }
+            None => {}
+        }
+        row
     }
 
     fn image_row(
@@ -1526,7 +1598,7 @@ impl ClipboardPlugin {
         let mut row = ResultItem::new(
             self.id(),
             format!("files-{:016x}", files_hash(&entry.files)),
-            files_title(&entry.files),
+            files_title(&entry.files, self.preview_chars),
             action,
         )
         .with_subtitle(parts.join(" · "))
@@ -3224,6 +3296,75 @@ mod tests {
     }
 
     #[test]
+    fn a_copied_link_gets_an_open_link_action() {
+        let mut rig = Rig::new();
+        rig.copy_text("https://example.com/a?b=1");
+        rig.copy_text("see https://example.com");
+        let rows = rig.plugin.rows("", 0);
+        let link = rows.iter().find(|r| r.title.starts_with("https")).unwrap();
+        let open = link
+            .secondary
+            .iter()
+            .find(|s| s.label == "Open link")
+            .unwrap();
+        assert_eq!(open.modifier, Some(Modifier::Ctrl));
+        assert_eq!(
+            open.action,
+            Action::OpenUrl {
+                url: "https://example.com/a?b=1".into()
+            }
+        );
+        let prose = rows.iter().find(|r| r.title.starts_with("see")).unwrap();
+        assert!(prose.secondary.is_empty());
+    }
+
+    #[test]
+    fn a_copied_existing_path_gets_open_and_show_in_folder() {
+        let mut rig = Rig::new();
+        let file = rig.dir.path().join("note.txt");
+        fs::write(&file, "x").unwrap();
+        rig.copy_text(&file.to_string_lossy());
+        let missing = rig.dir.path().join("missing.txt");
+        rig.copy_text(&missing.to_string_lossy());
+        let rows = rig.plugin.rows("", 0);
+        let labels = |title_has: &str| -> Vec<String> {
+            rows.iter()
+                .find(|r| r.title.contains(title_has))
+                .unwrap()
+                .secondary
+                .iter()
+                .map(|s| s.label.clone())
+                .collect()
+        };
+        assert_eq!(labels("note.txt"), ["Open", "Show in folder"]);
+        assert!(labels("missing.txt").is_empty());
+    }
+
+    #[test]
+    fn viewer_rows_and_preview_chars_come_from_the_config() {
+        let mut rig = Rig::with(ClipboardConfig {
+            viewer_rows: 5,
+            preview_chars: 40,
+            ..ClipboardConfig::default()
+        });
+        for i in 0..8 {
+            rig.copy_text(&format!("{i} {}", "z".repeat(80)));
+        }
+        let rows = rig.plugin.rows("", 0);
+        assert_eq!(rows.len(), 5);
+        assert!(rows.iter().all(|r| r.title.chars().count() == 41));
+    }
+
+    #[test]
+    fn link_detection_accepts_only_a_single_url() {
+        assert_eq!(as_link(" mailto:a@b.c "), Some("mailto:a@b.c".into()));
+        assert_eq!(as_link("HTTP://x.y"), Some("HTTP://x.y".into()));
+        assert_eq!(as_link("https://"), None);
+        assert_eq!(as_link("ftp://x.y"), None);
+        assert_eq!(as_link("https://a b"), None);
+    }
+
+    #[test]
     fn a_copied_image_is_saved_as_png_with_a_thumbnail_and_listed() {
         let mut rig = Rig::new();
         let image = picture(4);
@@ -3372,14 +3513,14 @@ mod tests {
                 .map(|n| PathBuf::from(format!("/d/{n}")))
                 .collect()
         };
-        assert_eq!(files_title(&paths(&["a.txt"])), "a.txt");
-        assert_eq!(files_title(&paths(&["a", "b", "c"])), "a, b, c");
+        assert_eq!(files_title(&paths(&["a.txt"]), 100), "a.txt");
+        assert_eq!(files_title(&paths(&["a", "b", "c"]), 100), "a, b, c");
         assert_eq!(
-            files_title(&paths(&["a", "b", "c", "d", "e"])),
+            files_title(&paths(&["a", "b", "c", "d", "e"]), 100),
             "a, b and 3 more"
         );
         let long = "x".repeat(200);
-        assert!(files_title(&paths(&[&long])).chars().count() <= TITLE_CHARS + 1);
+        assert!(files_title(&paths(&[&long]), 100).chars().count() <= 101);
     }
 
     #[test]

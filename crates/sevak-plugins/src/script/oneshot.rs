@@ -18,7 +18,7 @@ use std::time::{Duration, Instant};
 
 use sevak_platform::process_tree::ProcessTree;
 
-use super::runner::{parse_oneshot, Runner};
+use super::runner::{parse_oneshot_full, Runner};
 
 /// Wait this long before starting a process, in case the user types on.
 const DEBOUNCE: Duration = Duration::from_millis(30);
@@ -39,7 +39,7 @@ pub(super) fn spawn_query(runner: &Arc<Runner>, id: u64, input: String) {
     }
 }
 
-fn run(runner: &Runner, id: u64, input: &str) {
+fn run(runner: &Arc<Runner>, id: u64, input: &str) {
     let manifest = &runner.spec.manifest;
     thread::sleep(DEBOUNCE);
     if !runner.delivery.is_current(id) {
@@ -113,10 +113,14 @@ fn run(runner: &Runner, id: u64, input: &str) {
         let shown: String = errors.trim().chars().take(500).collect();
         tracing::info!(plugin = manifest.id, "stderr: {shown}");
     }
-    match parse_oneshot(&runner.spec, &output) {
-        Ok(items) => {
+    match parse_oneshot_full(&runner.spec, &output, input) {
+        Ok(parsed) => {
             runner.note_success();
-            runner.delivery.deliver(id, items);
+            let rerun = runner.note_answer(id, input, &parsed);
+            runner.delivery.deliver(id, parsed.items);
+            if let Some(token) = rerun {
+                runner.spawn_rerun(token);
+            }
         }
         Err(err) => {
             tracing::warn!(plugin = manifest.id, "{err}");

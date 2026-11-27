@@ -86,6 +86,8 @@ pub struct ScriptPluginHost {
     dir: PathBuf,
     /// Parent of the per-plugin data folders.
     data_dir: PathBuf,
+    /// Parent of the per-plugin cache folders (`SEVAK_PLUGIN_CACHE`).
+    cache_dir: PathBuf,
     approvals: ApprovalStore,
     /// Plugins the user said "not now" to, until Sevak restarts.
     declined: Mutex<HashSet<String>>,
@@ -95,10 +97,18 @@ impl ScriptPluginHost {
     pub fn new(dir: PathBuf, data_dir: PathBuf, approvals_file: PathBuf) -> Self {
         Self {
             dir,
+            cache_dir: data_dir.with_file_name("plugins-cache"),
             data_dir,
             approvals: ApprovalStore::new(approvals_file),
             declined: Mutex::new(HashSet::new()),
         }
+    }
+
+    /// Where the plugins' cache folders live (apart from their data folders).
+    #[must_use]
+    pub fn with_cache_dir(mut self, cache_dir: PathBuf) -> Self {
+        self.cache_dir = cache_dir;
+        self
     }
 
     /// The folder users drop plugins into.
@@ -226,6 +236,8 @@ impl ScriptPluginHost {
             }
             let spec = Spec {
                 data_dir: self.data_dir.join(&candidate.folder),
+                cache_dir: self.cache_dir.join(&candidate.folder),
+                filter_results: false,
                 dir: candidate.dir,
                 manifest: candidate.manifest,
                 env: Vec::new(),
@@ -723,6 +735,8 @@ license = \"MIT\"
         let candidate = candidates(&f.host).remove(0);
         let spec = Spec {
             data_dir: f._root.path().join("data").join("plugins").join("hello"),
+            cache_dir: f._root.path().join("cache").join("plugins").join("hello"),
+            filter_results: false,
             dir: candidate.dir.clone(),
             expected_key: Some(candidate.key.clone()),
             manifest: candidate.manifest,

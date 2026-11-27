@@ -103,6 +103,9 @@ impl PlatformProvider for WindowsProvider {
             IconSource::Builtin { .. } => Err(PlatformError::Unsupported(
                 "builtin icons are drawn by the UI",
             )),
+            IconSource::Inline { .. } => Err(PlatformError::Unsupported(
+                "inline icons are drawn by the UI",
+            )),
         }
     }
 

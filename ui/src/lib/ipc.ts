@@ -31,6 +31,10 @@ export interface HotkeyStatus {
 }
 
 export type ThemeSetting = "system" | "light" | "dark";
+/** `[appearance] settings_theme`: the Settings window's mode. */
+export type SettingsThemeSetting = "follow" | ThemeSetting;
+/** `[appearance] open_animation`: how the launcher appears. */
+export type OpenAnimationSetting = "fade" | "fade_scale" | "none";
 
 /** How one `[[hotkey]]` entry of the config fared, in config order. */
 export interface CustomHotkeyStatus {
@@ -47,6 +51,10 @@ export interface AppearanceCss {
   custom_css: string;
   /** The window has a blurred backdrop. */
   blur?: boolean;
+  /** How the launcher appears when it opens. */
+  open_animation?: OpenAnimationSetting;
+  /** Length of that animation in milliseconds. */
+  animation_ms?: number;
   /** Why a setting was ignored. */
   warnings: string[];
 }
@@ -111,6 +119,8 @@ export interface ResultDto {
   text_view?: boolean;
   /** Enter opens the Text View instead of running the action. */
   text_on_enter?: boolean;
+  /** Enter puts `autocomplete` into the input instead of running the action (query history). */
+  complete_on_enter?: boolean;
   /** What Ctrl+L shows as Large Type instead of the title (a phone number, say). */
   large_text?: string | null;
 }
@@ -124,6 +134,7 @@ export interface MetaRow {
 export type PreviewBody =
   | { kind: "none" }
   | { kind: "text"; text: string; truncated: boolean }
+  | { kind: "markdown"; text: string; truncated: boolean }
   | { kind: "image"; src: string }
   | { kind: "folder"; entries: { name: string; dir: boolean }[]; truncated: boolean }
   | { kind: "url"; url: string };
@@ -145,6 +156,8 @@ export interface TextViewContent {
   title: string;
   text: string;
   truncated: boolean;
+  /** The text is Markdown, to be drawn as such. */
+  markdown?: boolean;
 }
 
 export type IndexState = "indexing" | "ready";
@@ -244,6 +257,39 @@ export async function textView(id: string, ticket: number): Promise<TextViewCont
   }
 }
 
+/**
+ * Opens a link of rendered Markdown in the default browser (the webview itself
+ * never navigates). Resolves to an error message, or `null` on success; the
+ * shell only opens http, https and mailto addresses.
+ */
+export async function openLink(url: string): Promise<string | null> {
+  if (import.meta.env.DEV && !hasTauri()) return null;
+  try {
+    await invoke("open_link", { url });
+    return null;
+  } catch (err) {
+    return typeof err === "string" ? err : err instanceof Error ? err.message : String(err);
+  }
+}
+
+/**
+ * File number `index` of the "View in Sevak" action `id` of the selection
+ * `ticket`, as the preview pane would draw it; `null` when it could not be read.
+ */
+export async function viewSelectionFile(
+  id: string,
+  ticket: number,
+  index: number,
+): Promise<PreviewContent | null> {
+  if (import.meta.env.DEV && !hasTauri()) return null;
+  try {
+    return await invoke<PreviewContent>("view_selection_file", { id, ticket, index });
+  } catch (err) {
+    console.warn("[ipc] view_selection_file failed:", err);
+    return null;
+  }
+}
+
 /** Executed queries, most recent first (empty when history is off). */
 export async function queryHistory(): Promise<string[]> {
   if (import.meta.env.DEV && !hasTauri()) {
@@ -255,6 +301,16 @@ export async function queryHistory(): Promise<string[]> {
   } catch (err) {
     console.warn("[ipc] query_history failed:", err);
     return [];
+  }
+}
+
+/** Forgets every remembered search (Settings' "Clear history"). */
+export async function clearQueryHistory(): Promise<void> {
+  if (import.meta.env.DEV && !hasTauri()) return;
+  try {
+    await invoke("clear_query_history");
+  } catch (err) {
+    console.warn("[ipc] clear_query_history failed:", err);
   }
 }
 
@@ -324,7 +380,8 @@ async function safeListen<T>(event: string, cb: (payload: T) => void): Promise<U
 /** An action the launcher window carries out itself instead of the shell. */
 export type WindowAction =
   | { kind: "large_type"; text: string }
-  | { kind: "search"; query: string };
+  | { kind: "search"; query: string }
+  | { kind: "view"; count: number };
 
 /** One Universal Actions entry: a result row, and what the window does for it, if anything. */
 export interface SelectionActionDto extends ResultDto {
@@ -347,6 +404,8 @@ export interface OutputPayload {
   kind: "large_type" | "text_view";
   heading: string;
   text: string;
+  /** The text is Markdown (a text view node with its Markdown box ticked). */
+  markdown?: boolean;
 }
 
 /** What the launcher is asked to show with (`sevak --query`, hotkey entries, errors). */
@@ -359,6 +418,8 @@ export interface ShowPayload {
   selection?: SelectionPayload | null;
   /** Output of a workflow (Large Type or a block of text). */
   output?: OutputPayload | null;
+  /** A Sevak UI a workflow's `show_ui` node opens in the launcher. */
+  ui?: import("./sevak-ui/types").UiPayload | null;
 }
 
 /** Window is being shown: clear the query, focus the input, apply the payload. */

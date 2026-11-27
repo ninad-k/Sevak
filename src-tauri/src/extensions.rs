@@ -13,7 +13,7 @@
 //! Opening the page reads local files (what is installed, and the list saved by
 //! an earlier load).
 
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, OnceLock};
 
 use serde::Serialize;
 use sevak_core::config::Config;
@@ -28,20 +28,15 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_notification::NotificationExt;
 
 use crate::state::AppState;
-use crate::{app, commands, settings, window};
+use crate::{app, commands, settings};
 
 /// Emitted to every window when a change made from the launcher finished, so
 /// an open page reloads its lists.
 pub const EVENT_CHANGED: &str = "sevak:extensions";
-/// Emitted to the settings window to switch page (see [`show_page`]).
-const EVENT_PAGE: &str = "sevak:settings-page";
 
 /// The one app handle, set at startup ([`attach`]). The launcher plugin is built
 /// before the app exists, so its hooks reach the app through this.
 static APP: OnceLock<AppHandle> = OnceLock::new();
-/// A page the settings window should open on, for a window that is still
-/// loading when [`show_page`] is called.
-static PENDING_PAGE: Mutex<Option<&'static str>> = Mutex::new(None);
 
 /// Where the store keeps things, from the app's folders.
 pub fn store_dirs(paths: &AppPaths) -> StoreDirs {
@@ -118,19 +113,14 @@ fn finished(report: Report) {
 
 /// Opens Settings on the Extensions page.
 fn show_page(app: &AppHandle) {
-    *PENDING_PAGE.lock().unwrap_or_else(|p| p.into_inner()) = Some("extensions");
-    settings::open(app);
-    let _ = app.emit_to(window::SETTINGS_LABEL, EVENT_PAGE, "extensions");
+    settings::open_at(app, "extensions");
 }
 
 /// The page the settings window was asked to open on, once. Called when the
 /// window starts, for the case where the event came before it was listening.
 #[tauri::command]
-pub fn extensions_take_page() -> Option<&'static str> {
-    PENDING_PAGE
-        .lock()
-        .unwrap_or_else(|p| p.into_inner())
-        .take()
+pub fn extensions_take_page() -> Option<String> {
+    settings::take_pending_section()
 }
 
 // ---- what the page shows -----------------------------------------------------------

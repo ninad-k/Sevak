@@ -3,6 +3,7 @@
   import { formatNumber, t, tHtml } from "./i18n.svelte";
   import type { Appearance } from "./settings-ipc";
   import {
+    MAX_ANIMATION_MS,
     MAX_FONT_SIZE,
     MAX_OPACITY,
     MAX_RADIUS,
@@ -158,6 +159,51 @@
       <output for="radius">{t("appearance.units.px", { value: appearance.radius })}</output>
     </div>
   </div>
+
+  <div class="row">
+    <div class="label">
+      <label class="name" for="settings-theme">{t("appearance.extras.settingsTheme")}</label>
+      <span class="hint">{t("appearance.extras.settingsThemeHint")}</span>
+    </div>
+    <select id="settings-theme" class="input select" bind:value={appearance.settings_theme}>
+      <option value="follow">{t("appearance.extras.settingsThemeFollow")}</option>
+      <option value="light">{t("appearance.extras.settingsThemeLight")}</option>
+      <option value="dark">{t("appearance.extras.settingsThemeDark")}</option>
+      <option value="system">{t("appearance.extras.settingsThemeSystem")}</option>
+    </select>
+  </div>
+
+  <div class="row">
+    <div class="label">
+      <label class="name" for="open-animation">{t("appearance.extras.openAnimation")}</label>
+      <span class="hint">{t("appearance.extras.openAnimationHint")}</span>
+    </div>
+    <select id="open-animation" class="input select" bind:value={appearance.open_animation}>
+      <option value="fade">{t("appearance.extras.openFade")}</option>
+      <option value="fade_scale">{t("appearance.extras.openFadeScale")}</option>
+      <option value="none">{t("appearance.extras.openNone")}</option>
+    </select>
+  </div>
+
+  {#if appearance.open_animation !== "none"}
+    <div class="row">
+      <div class="label">
+        <label class="name" for="animation-ms">{t("appearance.extras.animationMs")}</label>
+        <span class="hint">{t("appearance.extras.animationMsHint")}</span>
+      </div>
+      <div class="slider">
+        <input
+          id="animation-ms"
+          type="range"
+          min="0"
+          max={MAX_ANIMATION_MS}
+          step="10"
+          bind:value={appearance.animation_ms}
+        />
+        <output for="animation-ms">{t("appearance.units.ms", { value: appearance.animation_ms })}</output>
+      </div>
+    </div>
+  {/if}
 
   <div class="row">
     <div class="label">

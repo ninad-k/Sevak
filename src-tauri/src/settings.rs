@@ -14,7 +14,7 @@ use sevak_plugins::keywords::{
     configurable_keywords, ConfigurableKeyword, KeywordOwners, FIXED_KEYWORDS,
 };
 use sevak_plugins::{clipboard_history, PluginInfo, PluginRegistry};
-use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
@@ -24,6 +24,50 @@ use crate::{app, autostart, hotkey, takeover, window};
 const WINDOW_TITLE: &str = "Sevak Settings";
 /// Same frontend as the launcher; `main.ts` picks the view from the hash.
 const WINDOW_URL: &str = "index.html#settings";
+
+const EVENT_PAGE: &str = "sevak:settings-page";
+
+/// The section a new settings window was asked to open on, once. The window
+/// reads it when it starts, for the case where the event came before it was
+/// listening.
+static PENDING_SECTION: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+static APP: std::sync::OnceLock<AppHandle> = std::sync::OnceLock::new();
+
+/// Gives the module the app handle. Called once, from `search::start`.
+pub fn attach(app: &AppHandle) {
+    let _ = APP.set(app.clone());
+}
+
+/// What the `? ` launcher search calls: opens Settings on `section`.
+pub fn open_from_launcher(section: &str) {
+    if let Some(app) = APP.get() {
+        open_at(app, section);
+    }
+}
+
+/// Takes the section the window was asked to open on.
+pub fn take_pending_section() -> Option<String> {
+    PENDING_SECTION
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .take()
+}
+
+/// Opens the settings window on `section` (a section id such as `clipboard`),
+/// or switches the open one to it.
+pub fn open_at(app: &AppHandle, section: &str) {
+    let already_open = app.get_webview_window(window::SETTINGS_LABEL).is_some();
+    if !already_open {
+        *PENDING_SECTION.lock().unwrap_or_else(|p| p.into_inner()) = Some(section.to_owned());
+    }
+    open(app);
+    if already_open {
+        if let Err(err) = app.emit_to(window::SETTINGS_LABEL, EVENT_PAGE, section) {
+            tracing::warn!("could not emit {EVENT_PAGE}: {err}");
+        }
+    }
+}
 
 /// Opens the settings window, or brings the open one to the front.
 /// The launcher steps aside first so it does not sit on top of it.
@@ -47,7 +91,10 @@ pub fn open(app: &AppHandle) {
     tracing::info!("opening the settings window");
     let theme = app
         .try_state::<AppState>()
-        .map(|state| state.config().appearance.theme)
+        .map(|state| {
+            let appearance = state.config().appearance;
+            appearance.settings_theme.resolve(appearance.theme)
+        })
         .and_then(window_theme);
     let mut builder = WebviewWindowBuilder::new(
         app,
@@ -162,12 +209,15 @@ pub fn validate(config: &Config, strategy: HotkeyStrategy) -> Result<(), String>
         if keyword.is_empty() {
             return Err("A web search engine needs a keyword.".to_owned());
         }
-        if keyword.chars().any(char::is_whitespace) {
-            return Err(format!("The keyword \"{keyword}\" cannot contain spaces."));
+        // `g||google`: every alias is a keyword of its own.
+        let aliases = sevak_core::keyword::check(keyword)
+            .map_err(|problem| problem.message(&format!("The keyword \"{keyword}\"")))?;
+        for alias in aliases {
+            if !keywords.insert(alias) {
+                return Err(format!("The keyword \"{keyword}\" is used twice."));
+            }
         }
-        if !keywords.insert(keyword.to_lowercase()) {
-            return Err(format!("The keyword \"{keyword}\" is used twice."));
-        }
+        let keyword = sevak_core::keyword::primary(keyword);
         if engine.name.trim().is_empty() {
             return Err(format!("The engine \"{keyword}\" needs a name."));
         }
@@ -191,6 +241,13 @@ pub fn validate(config: &Config, strategy: HotkeyStrategy) -> Result<(), String>
     }
 
     validate_builtin_keywords(config, &keywords)?;
+    if sevak_core::config::parse_retention(&config.search.history_retention).is_none() {
+        return Err(format!(
+            "The history retention \"{}\" must be a number of hours or days such as 24h, 7d, 30d or 90d (up to {} days).",
+            config.search.history_retention.trim(),
+            sevak_core::config::MAX_HISTORY_RETENTION_DAYS
+        ));
+    }
     if config
         .files
         .directories
@@ -232,6 +289,24 @@ fn validate_limits(config: &Config) -> Result<(), String> {
             return Err(format!("{what} must be from 1 to {max}."));
         }
     }
+    for (what, value, min, max) in [
+        (
+            "Clipboard history: the rows shown",
+            clipboard.viewer_rows,
+            5,
+            100,
+        ),
+        (
+            "Clipboard history: the preview length",
+            clipboard.preview_chars,
+            40,
+            500,
+        ),
+    ] {
+        if !(min..=max).contains(&value) {
+            return Err(format!("{what} must be from {min} to {max}."));
+        }
+    }
     let minutes = config.onepassword.cache_minutes;
     if !(1..=MAX_ONEPASSWORD_CACHE_MINUTES).contains(&minutes) {
         return Err(format!(
@@ -241,11 +316,28 @@ fn validate_limits(config: &Config) -> Result<(), String> {
     if let Some(problem) = config.ai.problem() {
         return Err(problem);
     }
+    let file_results = config.files.max_results;
+    let max_file_results = sevak_core::config::MAX_FILES_RESULTS_LIMIT;
+    if file_results > max_file_results {
+        return Err(format!(
+            "Files: the number of results must be from 0 to {max_file_results}; 0 uses the search limit."
+        ));
+    }
     let days = config.calendar.days;
     let max_days = sevak_core::config::MAX_CALENDAR_DAYS;
     if !(1..=max_days).contains(&days) {
         return Err(format!(
             "Calendar: the days ahead must be from 1 to {max_days}."
+        ));
+    }
+    let items = config.recent.max_items;
+    let (min_items, max_items) = (
+        sevak_core::config::MIN_RECENT_ITEMS,
+        sevak_core::config::MAX_RECENT_ITEMS,
+    );
+    if !(min_items..=max_items).contains(&items) {
+        return Err(format!(
+            "Recent documents: the number of files must be from {min_items} to {max_items}."
         ));
     }
     let gap = config.window_management.gap;
@@ -294,21 +386,22 @@ fn validate_builtin_keywords(config: &Config, web: &HashSet<String>) -> Result<(
             }
             continue;
         }
-        if keyword.chars().any(char::is_whitespace) {
-            return Err(format!("The {label} keyword cannot contain spaces."));
+        // `a||b`: each alias is checked on its own.
+        let aliases = sevak_core::keyword::check(keyword)
+            .map_err(|problem| problem.message(&format!("The {label} keyword")))?;
+        for lower in aliases {
+            if web.contains(&lower) {
+                return Err(format!(
+                    "The {label} keyword \"{lower}\" is already a web search keyword."
+                ));
+            }
+            if let Some((_, other)) = taken.iter().find(|(used, _)| *used == lower) {
+                return Err(format!(
+                    "The {label} keyword \"{lower}\" is already used by {other}."
+                ));
+            }
+            taken.push((lower, owner));
         }
-        let lower = keyword.to_lowercase();
-        if web.contains(&lower) {
-            return Err(format!(
-                "The {label} keyword \"{keyword}\" is already a web search keyword."
-            ));
-        }
-        if let Some((_, other)) = taken.iter().find(|(used, _)| *used == lower) {
-            return Err(format!(
-                "The {label} keyword \"{keyword}\" is already used by {other}."
-            ));
-        }
-        taken.push((lower, owner));
     }
     Ok(())
 }
@@ -586,6 +679,26 @@ pub async fn open_marketplace(target: String) -> Result<(), String> {
     open::open_url(url).map_err(|err| err.to_string())
 }
 
+/// What the Usage page shows: the summary and the text "Copy stats" copies.
+#[derive(Serialize)]
+pub struct UsageStats {
+    #[serde(flatten)]
+    pub summary: sevak_core::UsageSummary,
+    pub text: String,
+}
+
+/// Read-only digest of the usage statistics (no queries, no folder paths).
+#[tauri::command]
+pub fn usage_stats(state: State<'_, AppState>) -> UsageStats {
+    let summary = state
+        .search
+        .engine()
+        .usage_snapshot()
+        .summary(sevak_core::SUMMARY_TOP);
+    let text = summary.to_plain_text();
+    UsageStats { summary, text }
+}
+
 #[tauri::command]
 pub fn close_settings(app: AppHandle) {
     if let Some(window) = app.get_webview_window(window::SETTINGS_LABEL) {
@@ -830,9 +943,88 @@ mod tests {
     }
 
     #[test]
+    fn the_file_result_limit_is_zero_to_fifty() {
+        for good in [0, 1, 50] {
+            let mut config = Config::default();
+            config.files.max_results = good;
+            assert_eq!(check(&config), Ok(()), "files results = {good}");
+        }
+        for bad in [51, 500] {
+            let mut config = Config::default();
+            config.files.max_results = bad;
+            let err = check(&config).unwrap_err();
+            assert!(err.contains("Files"), "files results = {bad}: {err}");
+        }
+    }
+
+    #[test]
+    fn keyword_aliases_are_checked_one_by_one() {
+        let mut config = Config::default();
+        config.tasks.keyword = "todo||t2".into();
+        config.web_search[0].keyword = "g||google".into();
+        assert_eq!(check(&config), Ok(()));
+        // The fallback may name any alias.
+        config.search.fallback_web_search = sevak_core::config::FallbackSearch::single("google");
+        assert_eq!(check(&config), Ok(()));
+
+        type Tweak = fn(&mut Config);
+        let cases: [(Tweak, &str); 12] = [
+            (|c| c.tasks.keyword = "a||".into(), "empty alias"),
+            (|c| c.tasks.keyword = "||".into(), "empty alias"),
+            (|c| c.tasks.keyword = "a||b c".into(), "spaces"),
+            (|c| c.tasks.keyword = "a||A".into(), "twice"),
+            // An alias clashing with a web alias, a fixed keyword or another search.
+            (|c| c.tasks.keyword = "x||google".into(), "web search"),
+            (|c| c.tasks.keyword = "x||!".into(), "query history"),
+            (|c| c.tasks.keyword = "x||uuid".into(), "UUID"),
+            (|c| c.media.keyword = "x||Z".into(), "automation tasks"),
+            (|c| c.web_search[1].keyword = "yt||GOOGLE".into(), "twice"),
+            (
+                |c| c.web_search[1].keyword = "yt||!".into(),
+                "query history",
+            ),
+            (|c| c.web_search[1].keyword = "yt||".into(), "empty alias"),
+            (|c| c.contacts.keyword = "c||".into(), "empty alias"),
+        ];
+        for (set, expect) in cases {
+            let mut config = Config::default();
+            config.tasks.keyword = "t".into();
+            config.web_search[0].keyword = "g||google".into();
+            if expect == "automation tasks" {
+                config.tasks.keyword = "y||z".into();
+            }
+            set(&mut config);
+            let err = check(&config).unwrap_err();
+            assert!(err.contains(expect), "{expect}: {err}");
+        }
+    }
+
+    #[test]
+    fn history_retention_must_be_hours_or_days() {
+        for ok in ["24h", "7d", "30d", "90d", " 12H "] {
+            let mut config = Config::default();
+            config.search.history_retention = ok.into();
+            assert_eq!(check(&config), Ok(()), "{ok}");
+        }
+        for bad in ["", "soon", "0d", "7", "5w", "9999d"] {
+            let mut config = Config::default();
+            config.search.history_retention = bad.into();
+            let err = check(&config).unwrap_err();
+            assert!(err.contains("history retention"), "{bad}: {err}");
+        }
+    }
+
+    #[test]
     fn the_plugin_numbers_have_the_ranges_the_form_shows() {
         type Set = fn(&mut Config, usize);
-        let setters: [(&str, Set, usize, usize); 4] = [
+        let setters: [(&str, Set, usize, usize); 6] = [
+            ("rows shown", |c, n| c.clipboard.viewer_rows = n, 5, 100),
+            (
+                "preview length",
+                |c, n| c.clipboard.preview_chars = n,
+                40,
+                500,
+            ),
             (
                 "number of items",
                 |c, n| c.clipboard.max_items = n,
@@ -864,7 +1056,7 @@ mod tests {
                 set(&mut config, good);
                 assert_eq!(check(&config), Ok(()), "{what} = {good}");
             }
-            for bad in [0, max + 1] {
+            for bad in [min - 1, max + 1] {
                 let mut config = Config::default();
                 set(&mut config, bad);
                 let err = check(&config).unwrap_err();
@@ -910,6 +1102,13 @@ mod tests {
         config.calendar.days = 0;
         assert!(check(&config).unwrap_err().contains("Calendar"));
         config.calendar.days = 14;
+        config.recent.keyword = "rdoc".into();
+        config.recent.max_items = 9;
+        assert!(check(&config).unwrap_err().contains("Recent documents"));
+        config.recent.max_items = 501;
+        assert!(check(&config).unwrap_err().contains("Recent documents"));
+        config.recent.max_items = 500;
+        assert_eq!(check(&config), Ok(()));
         config.calendar.keyword = "ssh".into();
         config.ssh.keyword = "ssh".into();
         assert!(check(&config).is_err());
@@ -1043,6 +1242,11 @@ mod tests {
         config.appearance.accent = String::new();
         config.appearance.opacity = 10;
         assert!(check(&config).is_err());
+        config.appearance.opacity = 100;
+        config.appearance.animation_ms = 400;
+        assert_eq!(check(&config), Ok(()));
+        config.appearance.animation_ms = 401;
+        assert!(check(&config).unwrap_err().starts_with("Appearance:"));
     }
 
     #[test]

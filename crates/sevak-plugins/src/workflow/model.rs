@@ -30,6 +30,8 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use super::ui::{UiScript, UiTarget};
+
 /// The workflow file format this Sevak reads and writes.
 pub const FORMAT: u32 = 1;
 /// Name of the workflow file inside a workflow folder.
@@ -37,7 +39,8 @@ pub const FILE: &str = "workflow.toml";
 /// Every workflow plugin id starts with this; it is also the family id, so
 /// `[plugins] disabled = ["workflow"]` switches all workflows off.
 pub const FAMILY: &str = "workflow";
-/// The output port of every node except [`NodeKind::Conditional`].
+/// The output port of every node except [`NodeKind::Conditional`] and
+/// [`NodeKind::DialogConditional`].
 pub const OUT: &str = "out";
 /// The branch of a conditional taken when its test holds.
 pub const THEN: &str = "then";
@@ -73,6 +76,11 @@ pub struct Workflow {
     pub nodes: Vec<Node>,
     #[serde(rename = "connection", skip_serializing_if = "Vec::is_empty")]
     pub connections: Vec<Connection>,
+    /// The settings form the user fills in (`[[config]]`); see
+    /// [`super::config`]. The values are the user's own data: they live
+    /// outside the workflow folder and are not part of what is approved.
+    #[serde(rename = "config", skip_serializing_if = "Vec::is_empty")]
+    pub config: Vec<super::config::ConfigField>,
 }
 
 impl Default for Workflow {
@@ -87,6 +95,7 @@ impl Default for Workflow {
             variables: BTreeMap::new(),
             nodes: Vec::new(),
             connections: Vec::new(),
+            config: Vec::new(),
         }
     }
 }
@@ -107,6 +116,14 @@ pub struct Node {
     pub x: f64,
     #[serde(default)]
     pub y: f64,
+    /// A free-text comment shown under the box on the canvas. Documentation
+    /// only: it never affects what runs or what has to be approved.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub note: String,
+    /// A disabled node is skipped: it does not run, its branch stops there,
+    /// and a disabled trigger does not register its keyword or hotkey.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub disabled: bool,
     #[serde(flatten)]
     pub kind: NodeKind,
 }
@@ -118,6 +135,13 @@ pub struct Connection {
     #[serde(default = "out", skip_serializing_if = "is_out")]
     pub port: String,
     pub to: String,
+    /// A disabled connection is not followed when the workflow runs.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub disabled: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 fn out() -> String {
@@ -195,6 +219,110 @@ pub enum Test {
     NotEmpty,
 }
 
+/// Where a `split_arg` node cuts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Delimiter {
+    #[default]
+    Newline,
+    Comma,
+    Tab,
+    Space,
+    /// The text in the node's `custom` field.
+    Custom,
+}
+
+/// What a `random` node produces.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RandomMode {
+    /// A whole number from `min` to `max`, both included.
+    #[default]
+    Number,
+    /// One line of `lines`.
+    Line,
+    /// A version 4 UUID.
+    Uuid,
+}
+
+/// How a `write_file` node treats a file that already exists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WriteMode {
+    #[default]
+    Overwrite,
+    Append,
+    /// The new text goes in front of what the file holds.
+    Prepend,
+}
+
+fn yes() -> bool {
+    true
+}
+
+fn split_prefix() -> String {
+    "split_".to_owned()
+}
+
+fn join_separator() -> String {
+    ", ".to_owned()
+}
+
+fn default_min() -> i64 {
+    1
+}
+
+fn default_max() -> i64 {
+    100
+}
+/// Which entries a `file_filter` node lists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FileScope {
+    /// Files and folders.
+    #[default]
+    Any,
+    Files,
+    Folders,
+}
+
+/// What a `running_apps` node passes on for the app that was picked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AppOutput {
+    #[default]
+    Name,
+    /// The application's path, when it can be found (else its name).
+    Path,
+    /// The process id of its first process.
+    Pid,
+}
+
+/// One row of a `list_filter` node.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ListItem {
+    pub title: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub subtitle: String,
+    /// What the nodes after the filter receive; the title when empty.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub arg: String,
+}
+
+/// Most buttons a `dialog_conditional` node shows.
+pub const MAX_DIALOG_BUTTONS: usize = 3;
+/// The output port taken when the dialog is dismissed (or cannot be shown).
+pub const CANCEL: &str = "cancel";
+/// The output ports of a `dialog_conditional`, one per button, then `cancel`.
+pub const DIALOG_PORTS: [&str; 4] = ["button1", "button2", "button3", CANCEL];
+/// The output port of a `show_ui` node taken when the UI is dismissed.
+pub const UI_CLOSED: &str = super::ui::CLOSED;
+/// Most rows of a `list_filter`.
+pub const MAX_LIST_ITEMS: usize = 500;
+/// File extensions a `play_sound` node accepts.
+pub const SOUND_EXTENSIONS: [&str; 7] = ["wav", "mp3", "aiff", "aif", "m4a", "ogg", "flac"];
+
 fn query_template() -> String {
     "{query}".to_owned()
 }
@@ -251,6 +379,11 @@ pub enum NodeKind {
         /// to 60 000 ms; default 3000).
         #[serde(default, skip_serializing_if = "is_default_timeout")]
         hard_timeout_ms: Option<u64>,
+        /// "Sevak filters results": Sevak matches what is typed against each
+        /// row's `match` (else its title) and drops the rows that do not
+        /// match, instead of trusting the script to filter.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        filter_results: bool,
     },
 
     // ---- actions ----------------------------------------------------------
@@ -359,7 +492,181 @@ pub enum NodeKind {
         heading: String,
         #[serde(default = "query_template")]
         text: String,
+        /// Draw the text as Markdown (headings, lists, tables, links...).
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        markdown: bool,
     },
+
+    // ---- more utilities and actions (Alfred parity) -----------------------
+    /// Cuts the argument at a delimiter into a list (one item per line) and
+    /// sets `<prefix>1..N` and `<prefix>count`.
+    SplitArg {
+        #[serde(default)]
+        delimiter: Delimiter,
+        /// The delimiter when `delimiter` is `custom`.
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        custom: String,
+        #[serde(default = "yes", skip_serializing_if = "is_true")]
+        discard_empty: bool,
+        #[serde(default = "yes", skip_serializing_if = "is_true")]
+        trim: bool,
+        #[serde(default = "split_prefix")]
+        prefix: String,
+    },
+    /// Joins a list (lines, or a JSON array) with a separator (`\n` and `\t`
+    /// escapes work).
+    JoinArg {
+        #[serde(default = "join_separator")]
+        separator: String,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        discard_empty: bool,
+    },
+    /// A random number, line or UUID: the argument, or the variable `variable`.
+    Random {
+        #[serde(default)]
+        mode: RandomMode,
+        #[serde(default = "default_min")]
+        min: i64,
+        #[serde(default = "default_max")]
+        max: i64,
+        /// For `line`: the candidates, one per line. May use placeholders.
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        lines: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        variable: Option<String>,
+    },
+    /// Calculates a math expression (placeholders are filled in first).
+    Expression {
+        #[serde(default = "query_template")]
+        expression: String,
+        /// The variable that receives the result.
+        variable: String,
+        /// Also make the result the argument.
+        #[serde(default = "yes", skip_serializing_if = "is_true")]
+        set_arg: bool,
+    },
+    /// Writes text to a file. Relative paths are inside the workflow's data
+    /// folder.
+    WriteFile {
+        path: String,
+        #[serde(default = "query_template")]
+        content: String,
+        #[serde(default)]
+        mode: WriteMode,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        create_dirs: bool,
+    },
+    /// Shows the argument and variables in the launcher window.
+    Debug {
+        /// `false` empties the argument for the nodes after it.
+        #[serde(default = "yes", skip_serializing_if = "is_true")]
+        passthrough: bool,
+    },
+    /// Shows each file or folder (one per line) in the file manager.
+    RevealFile {
+        #[serde(default = "query_template")]
+        path: String,
+    },
+    /// Runs the `external` trigger `trigger` of another workflow.
+    CallExternal {
+        /// The other workflow's folder.
+        workflow: String,
+        trigger: String,
+        #[serde(default = "query_template")]
+        arg: String,
+        /// Hand the current variables to the other workflow.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        pass_variables: bool,
+    },
+
+    // ---- Alfred parity: filters, dialog, speech and sound -------------------
+    /// A keyword that lists fixed rows (edited in the builder), filtered by the
+    /// typed text; the row you pick starts the nodes after it.
+    ListFilter {
+        keyword: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        items: Vec<ListItem>,
+    },
+    /// A keyword that lists files and folders by name; the path you pick
+    /// starts the nodes after it.
+    FileFilter {
+        keyword: String,
+        /// Folders to look in (`~` is the home folder); the `[files]
+        /// directories` when empty.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        folders: Vec<String>,
+        /// Only names with one of these extensions (`pdf`, `.png`); any when
+        /// empty.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        extensions: Vec<String>,
+        #[serde(default, skip_serializing_if = "is_any_scope")]
+        scope: FileScope,
+    },
+    /// A keyword that lists the running apps; the one you pick starts the
+    /// nodes after it.
+    RunningApps {
+        keyword: String,
+        #[serde(default, skip_serializing_if = "is_default_output")]
+        output: AppOutput,
+    },
+    /// Shows a dialog and continues along the port of the button pressed
+    /// (`button1` to `button3`), or `cancel`.
+    DialogConditional {
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        heading: String,
+        #[serde(default = "query_template")]
+        message: String,
+        /// One to three button labels. May use `{query}`.
+        #[serde(default)]
+        buttons: Vec<String>,
+    },
+    /// Speaks text with the system voice.
+    Speak {
+        #[serde(default = "query_template")]
+        text: String,
+        /// The voice's name; the system's own when empty.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        voice: Option<String>,
+    },
+    /// Plays a sound file (`wav`, `mp3`, `aiff`, `aif`, `m4a`, `ogg`, `flac`).
+    PlaySound { path: String },
+    /// Opens a Sevak UI (see `ui.rs`) and waits for it. Continues along the
+    /// port an `output` action names, or `closed` when it is dismissed.
+    ShowUi {
+        #[serde(default)]
+        target: UiTarget,
+        /// The UI as inline JSON.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        definition: Option<String>,
+        /// Or a JSON file in the workflow folder.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        file: Option<String>,
+        /// Scripts the UI's `run` actions may start. Part of what the user
+        /// approves.
+        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+        scripts: BTreeMap<String, UiScript>,
+        /// Output ports a `file` definition uses (an inline definition is
+        /// read for them).
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        ports: Vec<String>,
+        /// A window's title bar; off for a bare window.
+        #[serde(default = "yes", skip_serializing_if = "is_true")]
+        titlebar: bool,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        always_on_top: bool,
+    },
+}
+
+fn is_true(value: &bool) -> bool {
+    *value
+}
+
+fn is_any_scope(scope: &FileScope) -> bool {
+    *scope == FileScope::Any
+}
+
+fn is_default_output(output: &AppOutput) -> bool {
+    *output == AppOutput::Name
 }
 
 fn default_accepts() -> Vec<Accepts> {
@@ -404,6 +711,21 @@ impl NodeKind {
             Self::Notification { .. } => "notification",
             Self::LargeType { .. } => "large_type",
             Self::TextView { .. } => "text_view",
+            Self::SplitArg { .. } => "split_arg",
+            Self::JoinArg { .. } => "join_arg",
+            Self::Random { .. } => "random",
+            Self::Expression { .. } => "expression",
+            Self::WriteFile { .. } => "write_file",
+            Self::Debug { .. } => "debug",
+            Self::RevealFile { .. } => "reveal_file",
+            Self::CallExternal { .. } => "call_external",
+            Self::ListFilter { .. } => "list_filter",
+            Self::FileFilter { .. } => "file_filter",
+            Self::RunningApps { .. } => "running_apps",
+            Self::DialogConditional { .. } => "dialog_conditional",
+            Self::Speak { .. } => "speak",
+            Self::PlaySound { .. } => "play_sound",
+            Self::ShowUi { .. } => "show_ui",
         }
     }
 
@@ -413,7 +735,10 @@ impl NodeKind {
             | Self::Hotkey { .. }
             | Self::Selection { .. }
             | Self::External {} => Category::Trigger,
-            Self::ScriptFilter { .. } => Category::Input,
+            Self::ScriptFilter { .. }
+            | Self::ListFilter { .. }
+            | Self::FileFilter { .. }
+            | Self::RunningApps { .. } => Category::Input,
             Self::RunScript { .. }
             | Self::OpenUrl { .. }
             | Self::OpenFile { .. }
@@ -421,14 +746,26 @@ impl NodeKind {
             | Self::SystemCommand { .. }
             | Self::TerminalCommand { .. }
             | Self::Copy { .. }
-            | Self::Paste { .. } => Category::Action,
+            | Self::Paste { .. }
+            | Self::WriteFile { .. }
+            | Self::RevealFile { .. }
+            | Self::CallExternal { .. } => Category::Action,
             Self::SetVariable { .. }
             | Self::Transform { .. }
             | Self::Conditional { .. }
-            | Self::Delay { .. } => Category::Utility,
-            Self::Notification { .. } | Self::LargeType { .. } | Self::TextView { .. } => {
-                Category::Output
-            }
+            | Self::Delay { .. }
+            | Self::DialogConditional { .. }
+            | Self::SplitArg { .. }
+            | Self::JoinArg { .. }
+            | Self::Random { .. }
+            | Self::Expression { .. }
+            | Self::Debug { .. } => Category::Utility,
+            Self::Notification { .. }
+            | Self::LargeType { .. }
+            | Self::TextView { .. }
+            | Self::Speak { .. }
+            | Self::PlaySound { .. }
+            | Self::ShowUi { .. } => Category::Output,
         }
     }
 
@@ -441,7 +778,24 @@ impl NodeKind {
     pub fn output_ports(&self) -> &'static [&'static str] {
         match self {
             Self::Conditional { .. } => &[THEN, ELSE],
+            Self::DialogConditional { .. } => &DIALOG_PORTS,
+            Self::ShowUi { .. } => &[UI_CLOSED],
             _ => &[OUT],
+        }
+    }
+
+    /// The output ports, including those that depend on the node's own
+    /// settings (a `show_ui` node has the ones its definition names).
+    pub fn ports(&self) -> Vec<String> {
+        match self {
+            Self::ShowUi {
+                definition, ports, ..
+            } => super::ui::node_ports(definition.as_deref(), ports),
+            other => other
+                .output_ports()
+                .iter()
+                .map(|p| (*p).to_owned())
+                .collect(),
         }
     }
 
@@ -451,7 +805,10 @@ impl NodeKind {
     /// program, script or shortcut, and a relative path reaches files shipped
     /// inside the workflow's folder. `Paste` counts: it types text into
     /// whatever app was in front (a terminal, a chat, a form), which is the
-    /// same as the user typing it.
+    /// same as the user typing it. `WriteFile` counts: it changes files on the
+    /// disk and can replace one the user cares about. `CallExternal` counts:
+    /// it runs another workflow, so the target, trigger and argument are part
+    /// of what the user approves.
     pub fn needs_approval(&self) -> bool {
         matches!(
             self,
@@ -462,7 +819,9 @@ impl NodeKind {
                 | Self::TerminalCommand { .. }
                 | Self::OpenFile { .. }
                 | Self::Paste { .. }
-        )
+                | Self::WriteFile { .. }
+                | Self::CallExternal { .. }
+        ) || matches!(self, Self::ShowUi { scripts, .. } if !scripts.is_empty())
     }
 }
 
@@ -495,12 +854,17 @@ impl Workflow {
     /// The nodes that answer a typed keyword (keyword triggers and script
     /// filters) with that keyword, trimmed.
     pub fn keyword_nodes(&self) -> impl Iterator<Item = (&Node, &str)> {
-        self.nodes.iter().filter_map(|node| match &node.kind {
-            NodeKind::Keyword { keyword, .. } | NodeKind::ScriptFilter { keyword, .. } => {
-                Some((node, keyword.trim()))
-            }
-            _ => None,
-        })
+        self.nodes
+            .iter()
+            .filter(|node| !node.disabled)
+            .filter_map(|node| match &node.kind {
+                NodeKind::Keyword { keyword, .. }
+                | NodeKind::ScriptFilter { keyword, .. }
+                | NodeKind::ListFilter { keyword, .. }
+                | NodeKind::FileFilter { keyword, .. }
+                | NodeKind::RunningApps { keyword, .. } => Some((node, keyword.trim())),
+                _ => None,
+            })
     }
 
     /// The keywords of [`Workflow::keyword_nodes`].
@@ -517,7 +881,7 @@ impl Workflow {
     ) -> impl Iterator<Item = &'a Connection> + 'a {
         self.connections
             .iter()
-            .filter(move |conn| conn.from == from && conn.port == port)
+            .filter(move |conn| conn.from == from && conn.port == port && !conn.disabled)
     }
 
     /// Whether any node needs the user's approval before the workflow runs.
@@ -668,6 +1032,7 @@ mod tests {
                 args: vec!["--x".into()],
                 timeout_ms: Some(80),
                 hard_timeout_ms: Some(2000),
+                filter_results: true,
             },
             NodeKind::RunScript {
                 command: Vec::new(),
@@ -726,6 +1091,46 @@ mod tests {
             NodeKind::TextView {
                 heading: "t".into(),
                 text: "words".into(),
+                markdown: false,
+            },
+            NodeKind::SplitArg {
+                delimiter: Delimiter::Custom,
+                custom: "::".into(),
+                discard_empty: false,
+                trim: false,
+                prefix: "p_".into(),
+            },
+            NodeKind::JoinArg {
+                separator: r"\n".into(),
+                discard_empty: true,
+            },
+            NodeKind::Random {
+                mode: RandomMode::Line,
+                min: -3,
+                max: 9,
+                lines: "a\nb".into(),
+                variable: Some("pick".into()),
+            },
+            NodeKind::Expression {
+                expression: "{var:n} + 1".into(),
+                variable: "next".into(),
+                set_arg: false,
+            },
+            NodeKind::WriteFile {
+                path: "~/log.txt".into(),
+                content: "{query}\n".into(),
+                mode: WriteMode::Prepend,
+                create_dirs: true,
+            },
+            NodeKind::Debug { passthrough: false },
+            NodeKind::RevealFile {
+                path: "{query}".into(),
+            },
+            NodeKind::CallExternal {
+                workflow: "other".into(),
+                trigger: "go".into(),
+                arg: "{query}".into(),
+                pass_variables: true,
             },
         ];
         let names: std::collections::HashSet<_> = kinds.iter().map(|k| k.type_name()).collect();
@@ -741,6 +1146,8 @@ mod tests {
                     title: format!("Node {i}"),
                     x: i as f64 * 10.0,
                     y: 5.0,
+                    note: String::new(),
+                    disabled: false,
                     kind,
                 })
                 .collect(),
@@ -839,6 +1246,13 @@ mod tests {
                 text: "x".into(),
                 restore_clipboard: None,
             },
+            // Calling another workflow runs whatever that one does.
+            NodeKind::CallExternal {
+                workflow: "x".into(),
+                trigger: "go".into(),
+                arg: String::new(),
+                pass_variables: false,
+            },
         ] {
             assert!(kind.needs_approval(), "{}", kind.type_name());
         }
@@ -851,6 +1265,105 @@ mod tests {
         ] {
             assert!(!kind.needs_approval(), "{}", kind.type_name());
         }
+    }
+
+    #[test]
+    fn the_utility_nodes_have_defaults_categories_and_approval() {
+        let workflow = Workflow::from_toml(
+            r#"
+            [[node]]
+            id = "s"
+            type = "split_arg"
+            [[node]]
+            id = "j"
+            type = "join_arg"
+            [[node]]
+            id = "r"
+            type = "random"
+            [[node]]
+            id = "e"
+            type = "expression"
+            variable = "v"
+            [[node]]
+            id = "w"
+            type = "write_file"
+            path = "a.txt"
+            [[node]]
+            id = "d"
+            type = "debug"
+            [[node]]
+            id = "f"
+            type = "reveal_file"
+            [[node]]
+            id = "c"
+            type = "call_external"
+            workflow = "w"
+            trigger = "t"
+            "#,
+        )
+        .unwrap();
+        let kinds: Vec<&NodeKind> = workflow.nodes.iter().map(|n| &n.kind).collect();
+        assert!(matches!(
+            kinds[0],
+            NodeKind::SplitArg { delimiter: Delimiter::Newline, discard_empty: true, trim: true, prefix, .. }
+                if prefix == "split_"
+        ));
+        assert!(
+            matches!(kinds[1], NodeKind::JoinArg { separator, discard_empty: false } if separator == ", ")
+        );
+        assert!(matches!(
+            kinds[2],
+            NodeKind::Random {
+                mode: RandomMode::Number,
+                min: 1,
+                max: 100,
+                variable: None,
+                ..
+            }
+        ));
+        assert!(matches!(
+            kinds[3],
+            NodeKind::Expression { expression, set_arg: true, .. } if expression == "{query}"
+        ));
+        assert!(matches!(
+            kinds[4],
+            NodeKind::WriteFile { content, mode: WriteMode::Overwrite, create_dirs: false, .. }
+                if content == "{query}"
+        ));
+        assert!(matches!(kinds[5], NodeKind::Debug { passthrough: true }));
+        assert!(matches!(kinds[6], NodeKind::RevealFile { path } if path == "{query}"));
+        assert!(matches!(
+            kinds[7],
+            NodeKind::CallExternal { arg, pass_variables: false, .. } if arg == "{query}"
+        ));
+        for kind in &kinds {
+            let utility = matches!(
+                kind.type_name(),
+                "split_arg" | "join_arg" | "random" | "expression" | "debug"
+            );
+            let expected = if utility {
+                Category::Utility
+            } else {
+                Category::Action
+            };
+            assert_eq!(kind.category(), expected, "{}", kind.type_name());
+            assert_eq!(kind.output_ports(), [OUT]);
+            // Only writing files and calling another workflow need the user's yes.
+            assert_eq!(
+                kind.needs_approval(),
+                matches!(kind.type_name(), "write_file" | "call_external"),
+                "{}",
+                kind.type_name()
+            );
+        }
+        assert!(workflow.needs_approval());
+        // Defaults are not spelled out.
+        let text = workflow.to_toml().unwrap();
+        assert!(!text.contains("discard_empty"), "{text}");
+        assert!(!text.contains("passthrough"), "{text}");
+        assert_eq!(Workflow::from_toml(&text).unwrap(), workflow);
+        // `variable` has no default.
+        assert!(Workflow::from_toml("[[node]]\nid = \"e\"\ntype = \"expression\"\n").is_err());
     }
 
     #[test]
@@ -875,5 +1388,127 @@ mod tests {
         ] {
             assert!(!valid_folder_name(bad), "{bad}");
         }
+    }
+
+    const FILTERS: &str = r#"
+        name = "Filters"
+
+        [[node]]
+        id = "list"
+        type = "list_filter"
+        keyword = "pick"
+        [[node.items]]
+        title = "Apple"
+        arg = "a-1"
+
+        [[node]]
+        id = "files"
+        type = "file_filter"
+        keyword = "ff"
+        folders = ["~/Documents"]
+        extensions = ["pdf"]
+        scope = "files"
+
+        [[node]]
+        id = "apps"
+        type = "running_apps"
+        keyword = "apps"
+        output = "pid"
+
+        [[node]]
+        id = "ask"
+        type = "dialog_conditional"
+        message = "Sure?"
+        buttons = ["Yes", "No"]
+
+        [[node]]
+        id = "say"
+        type = "speak"
+
+        [[node]]
+        id = "ding"
+        type = "play_sound"
+        path = "ding.wav"
+    "#;
+
+    #[test]
+    fn filter_dialog_speech_and_sound_nodes_read_and_write_back_the_same() {
+        let w = Workflow::from_toml(FILTERS).unwrap();
+        let kinds: Vec<(&str, Category)> = w
+            .nodes
+            .iter()
+            .map(|n| (n.kind.type_name(), n.kind.category()))
+            .collect();
+        assert_eq!(
+            kinds,
+            [
+                ("list_filter", Category::Input),
+                ("file_filter", Category::Input),
+                ("running_apps", Category::Input),
+                ("dialog_conditional", Category::Utility),
+                ("speak", Category::Output),
+                ("play_sound", Category::Output),
+            ]
+        );
+        // Defaults fill in what a hand-written file leaves out.
+        assert!(matches!(
+            &w.nodes[4].kind,
+            NodeKind::Speak { text, voice: None } if text == "{query}"
+        ));
+        assert!(matches!(
+            &w.nodes[2].kind,
+            NodeKind::RunningApps {
+                output: AppOutput::Pid,
+                ..
+            }
+        ));
+        // None of them runs code, so none needs the user's Allow.
+        assert!(!w.needs_approval());
+        // The input nodes answer to a keyword.
+        let keywords: Vec<&str> = w.keywords().collect();
+        assert_eq!(keywords, ["pick", "ff", "apps"]);
+        assert!(w.nodes[..3].iter().all(|n| n.kind.is_start()));
+
+        let again = Workflow::from_toml(&w.to_toml().unwrap()).unwrap();
+        assert_eq!(again, w);
+    }
+
+    #[test]
+    fn notes_and_disabled_flags_round_trip_and_are_omitted_when_unused() {
+        let plain = Workflow::from_toml(SAMPLE).unwrap();
+        let text = plain.to_toml().unwrap();
+        assert!(!text.contains("note"), "{text}");
+        assert!(!text.contains("disabled"), "{text}");
+
+        let mut marked = plain.clone();
+        marked.nodes[1].note = "only digits".into();
+        marked.nodes[2].disabled = true;
+        marked.connections[0].disabled = true;
+        let text = marked.to_toml().unwrap();
+        assert_eq!(text.matches("disabled = true").count(), 2, "{text}");
+        let again = Workflow::from_toml(&text).unwrap();
+        assert_eq!(again, marked);
+        assert_eq!(again.nodes[1].note, "only digits");
+        assert!(again.nodes[2].disabled && again.connections[0].disabled);
+    }
+
+    #[test]
+    fn disabled_nodes_have_no_keyword_and_disabled_connections_are_not_outgoing() {
+        let mut w = Workflow::from_toml(SAMPLE).unwrap();
+        assert_eq!(w.keywords().collect::<Vec<_>>(), ["docs"]);
+        w.nodes[0].disabled = true;
+        assert_eq!(w.keywords().count(), 0);
+        w.connections[1].disabled = true;
+        assert_eq!(w.outgoing("c", THEN).count(), 0);
+    }
+
+    #[test]
+    fn a_dialog_has_a_port_per_button_and_cancel() {
+        let w = Workflow::from_toml(FILTERS).unwrap();
+        assert_eq!(
+            w.nodes[3].kind.output_ports(),
+            ["button1", "button2", "button3", CANCEL]
+        );
+        assert_eq!(w.nodes[4].kind.output_ports(), [OUT]);
     }
 }

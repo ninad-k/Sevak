@@ -10,8 +10,9 @@
 use std::fmt;
 
 use serde::Serialize;
+use sevak_core::preview::{self as file_preview, PreviewContent};
 use sevak_core::selection::{preview, MAX_SELECTION_BYTES};
-use sevak_core::{Config, Selection};
+use sevak_core::{Action, Config, PreviewHint, Selection};
 use sevak_platform::capture::{clipboard_selection, CaptureOptions, SelectionCapture};
 use sevak_plugins::selection::{ui_request, UiRequest};
 use tauri::{AppHandle, Manager};
@@ -68,6 +69,9 @@ pub enum WindowAction {
     LargeType { text: String },
     /// Put `query` in the search box.
     Search { query: String },
+    /// Show files (images, PDFs, Markdown, text) inside the launcher. The page
+    /// asks for each one by its position (`view_selection_file`), never by path.
+    View { count: usize },
 }
 
 impl From<UiRequest> for WindowAction {
@@ -75,8 +79,52 @@ impl From<UiRequest> for WindowAction {
         match request {
             UiRequest::LargeType(text) => Self::LargeType { text },
             UiRequest::Search(query) => Self::Search { query },
+            UiRequest::View(paths) => Self::View { count: paths.len() },
         }
     }
+}
+
+/// The preview of file number `index` of the "View in Sevak" action `id` of
+/// the selection `ticket`: a picture, the first page of a PDF, text, or
+/// Markdown, drawn like the preview pane does. The page names the file by its
+/// position; the path comes from the stored action, never from the page.
+#[tauri::command]
+pub async fn view_selection_file(
+    app: AppHandle,
+    id: String,
+    ticket: u64,
+    index: usize,
+) -> Result<PreviewContent, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let search = &app.state::<AppState>().search;
+        let Some((item, _)) = search.result(ticket, &id) else {
+            return Err("the selection is gone".to_owned());
+        };
+        let Some(UiRequest::View(paths)) = ui_request(&item.action) else {
+            return Err("this action shows no files".to_owned());
+        };
+        let path = paths
+            .get(index)
+            .ok_or_else(|| "no such file".to_owned())?
+            .clone();
+        let title = path
+            .file_name()
+            .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+        let shown = sevak_core::ResultItem::new(
+            "selection",
+            "view",
+            title,
+            Action::OpenPath { path: path.clone() },
+        );
+        let platform = &search.platform;
+        Ok(file_preview::produce_with(
+            &shown,
+            Some(PreviewHint::Path { path }),
+            &|path, kind| platform.render_thumbnail(path, kind),
+        ))
+    })
+    .await
+    .map_err(|err| format!("the file did not load: {err}"))?
 }
 
 /// The hotkey was pressed: capture the selection and show the actions.
@@ -334,6 +382,7 @@ mod tests {
                     glyph: None,
                     text_view: false,
                     text_on_enter: false,
+                    complete_on_enter: false,
                     large_text: None,
                 },
                 window: None,

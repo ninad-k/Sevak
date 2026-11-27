@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from "vitest";
 import { applyAppearance } from "./appearance";
-import { applyTheme } from "./theme";
+import { applyTheme, resolveSettingsTheme } from "./theme";
 import { cssVars } from "./themes";
 
 beforeEach(() => {
@@ -24,6 +24,22 @@ describe("applyTheme", () => {
       applyTheme(value);
       expect(document.documentElement.dataset.theme, String(value)).toBeUndefined();
     }
+  });
+});
+
+describe("resolveSettingsTheme", () => {
+  it("follows the launcher theme by default", () => {
+    for (const launcher of ["system", "light", "dark"] as const) {
+      expect(resolveSettingsTheme("follow", launcher)).toBe(launcher);
+      expect(resolveSettingsTheme(undefined, launcher)).toBe(launcher);
+      expect(resolveSettingsTheme(null, launcher)).toBe(launcher);
+    }
+  });
+
+  it("overrides the launcher theme for the Settings window", () => {
+    expect(resolveSettingsTheme("light", "dark")).toBe("light");
+    expect(resolveSettingsTheme("dark", "light")).toBe("dark");
+    expect(resolveSettingsTheme("system", "dark")).toBe("system");
   });
 });
 
@@ -58,6 +74,15 @@ describe("applyAppearance", () => {
     expect(document.documentElement.hasAttribute("data-blur")).toBe(true);
     applyAppearance({ css: "", custom_css: "", warnings: [], blur: false });
     expect(document.documentElement.hasAttribute("data-blur")).toBe(false);
+  });
+
+  it("sets the open animation, fade by default", () => {
+    applyAppearance({ css: "", custom_css: "", warnings: [], open_animation: "fade_scale", animation_ms: 200 });
+    expect(document.documentElement.dataset.openAnimation).toBe("fade_scale");
+    applyAppearance({ css: "", custom_css: "", warnings: [] });
+    expect(document.documentElement.dataset.openAnimation).toBe("fade");
+    applyAppearance({ css: "", custom_css: "", warnings: [], open_animation: "none" });
+    expect(document.documentElement.dataset.openAnimation).toBe("none");
   });
 
   it("ignores a missing payload", () => {

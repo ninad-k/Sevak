@@ -11,8 +11,8 @@ use crate::cli::{self, Launch};
 use crate::state::AppState;
 use crate::{
     ai, autostart, backdrop, backup, commands, diagnostics, direct, expansion, extensions,
-    file_buffer, hotkey, icons, search, selection, settings, takeover, themes, tray, updater,
-    webview_args, window, workflows,
+    file_buffer, hotkey, icons, search, selection, settings, sevak_ui, takeover, themes, tray,
+    updater, webview_args, window, workflows,
 };
 
 /// The generated context, with the windows from `tauri.conf.json` given the
@@ -50,6 +50,7 @@ pub fn run(
                 Launch::Actions => selection::trigger(app),
                 Launch::Trigger { target, arg } => workflows::run_trigger(app, target, arg),
                 Launch::Settings => settings::open(app),
+                Launch::SettingsAt(section) => settings::open_at(app, &section),
                 Launch::Background => {}
                 Launch::Quit => quit(app),
             }
@@ -79,8 +80,11 @@ pub fn run(
             commands::copy_result,
             commands::preview,
             commands::text_view,
+            commands::open_link,
+            selection::view_selection_file,
             commands::set_large_type,
             commands::query_history,
+            commands::clear_query_history,
             file_buffer::file_buffer_get,
             file_buffer::file_buffer_add,
             file_buffer::file_buffer_remove,
@@ -114,6 +118,7 @@ pub fn run(
             settings::open_log_dir,
             settings::open_marketplace,
             settings::close_settings,
+            settings::usage_stats,
             themes::list_themes,
             themes::save_theme,
             themes::use_builtin_theme,
@@ -128,12 +133,17 @@ pub fn run(
             workflows::save_workflow,
             workflows::create_workflow,
             workflows::delete_workflow,
+            workflows::get_workflow_config,
+            workflows::set_workflow_config,
             workflows::set_workflow_enabled,
             workflows::review_workflow,
             workflows::workflow_templates,
             workflows::open_workflows_folder,
             workflows::gallery_load,
             workflows::gallery_install,
+            sevak_ui::sevak_ui_session,
+            sevak_ui::sevak_ui_event,
+            sevak_ui::validate_ui_definition,
             backup::backup_overview,
             backup::backup_contents,
             backup::backup_save_as,
@@ -180,6 +190,7 @@ pub fn run(
                 Launch::Actions => selection::trigger(handle),
                 Launch::Trigger { target, arg } => workflows::run_trigger(handle, target, arg),
                 Launch::Settings => settings::open(handle),
+                Launch::SettingsAt(section) => settings::open_at(handle, &section),
                 Launch::Background => {}
                 Launch::Quit => quit(handle),
             }

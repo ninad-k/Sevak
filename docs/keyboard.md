@@ -114,6 +114,14 @@ On an **empty search bar**:
 
 Typing leaves history. Toggle history on or off with `[search] query_history`.
 
+With the `!` keyword (`! rust`) the same searches are listed and filtered:
+
+| Key | Action |
+|---|---|
+| ++enter++ | Put the highlighted search back into the search bar |
+| ++ctrl+enter++ | Delete it from the history |
+| ++alt+enter++ | Clear the whole history (asks first) |
+
 ### Closing
 
 | Key | Action |
@@ -134,9 +142,19 @@ Typing leaves history. Toggle history on or off with `[search] query_history`.
 
 | Key | Action |
 |---|---|
-| Arrow keys on a focused node | Move it (++shift++ moves further) |
-| ++delete++ | Delete the selected node or connection |
+| Click, ++shift++/++ctrl++/++cmd++ + click | Select a box; the modified click adds or removes one |
+| Drag on empty canvas | Select the boxes inside the rectangle |
+| ++alt++ + click a box | Align the selection to that box (uses the last **Align** button) |
+| ++shift+alt++ + click a box | Connect the selected box's first output to it |
+| Arrow keys | Move the selected boxes by 10 px (++shift++: 40 px); scroll the canvas when nothing is selected |
+| ++ctrl++/++cmd++ + arrow | Select the nearest box in that direction |
+| ++ctrl+alt++/++cmd+alt++ + ++arrow-right++ or ++arrow-left++ | Select the first box after or before, along the connections |
+| ++d++ | Disable or enable the selected connection or boxes |
+| Double-click a note | Edit it in the side panel |
+| ++delete++ | Delete the selection |
+| ++escape++ | Clear the selection or cancel a connection |
 | ++ctrl+s++ | Save the workflow |
+| `?` | Show or hide the shortcut list |
 
 See [The builder](workflows.md#the-builder).
 

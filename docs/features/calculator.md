@@ -24,6 +24,8 @@ flowchart TD
 
 Type a math expression and ++enter++ copies the result. Results use up to 12 significant digits.
 
+++tab++ replaces what you typed with the bare result, so you can keep calculating: `2^10`, then ++tab++ gives `1024`, and typing `*3` continues from there. The number has no unit and no thousands separators (`10 km in mi` gives `6.213711922`, and `1000000 * 1000` gives `1000000000`).
+
 | Expression | Result | Operation |
 |---|---|---|
 | `12*7` | `84` | Multiplication |

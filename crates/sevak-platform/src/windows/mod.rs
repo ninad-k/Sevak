@@ -16,6 +16,7 @@ mod packaged;
 mod paste;
 mod people;
 mod provider;
+pub(crate) mod recent;
 pub(crate) mod secret;
 mod shortcuts;
 mod spell;

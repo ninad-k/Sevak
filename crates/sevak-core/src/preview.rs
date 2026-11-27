@@ -94,6 +94,9 @@ pub enum PreviewBody {
     None,
     /// Text for a monospace view. `truncated`: there is more than is shown.
     Text { text: String, truncated: bool },
+    /// Markdown source, drawn by the page (`.md` and `.markdown` files).
+    /// `truncated` as for `Text`.
+    Markdown { text: String, truncated: bool },
     /// A picture as a `data:` URL.
     Image { src: String },
     /// A folder's children, directories first.
@@ -137,6 +140,8 @@ pub struct TextViewContent {
     pub title: String,
     pub text: String,
     pub truncated: bool,
+    /// The text is Markdown, to be drawn as such.
+    pub markdown: bool,
 }
 
 /// A kind of file the operating system can draw a picture of.
@@ -242,7 +247,7 @@ fn subject(item: &ResultItem, hint: Option<PreviewHint>) -> Subject<'_> {
     if let Some(hint) = hint.or_else(|| item.preview.clone()) {
         return Subject::Hint(hint);
     }
-    if let Some(ViewHint::Text { text, .. }) = &item.view {
+    if let Some(ViewHint::Text { text, .. } | ViewHint::Markdown { text, .. }) = &item.view {
         return Subject::Hint(PreviewHint::Text { text: text.clone() });
     }
     match &item.action {
@@ -276,7 +281,10 @@ fn subject(item: &ResultItem, hint: Option<PreviewHint>) -> Subject<'_> {
 /// Whether `item` can be opened in the Text View: it carries a text view, or
 /// the text it copies or pastes is long or has several lines.
 pub fn has_text_view(item: &ResultItem) -> bool {
-    if matches!(item.view, Some(ViewHint::Text { .. })) {
+    if matches!(
+        item.view,
+        Some(ViewHint::Text { .. } | ViewHint::Markdown { .. })
+    ) {
         return true;
     }
     match &item.action {
@@ -292,10 +300,13 @@ pub fn has_text_view(item: &ResultItem) -> bool {
 /// (`hint`, e.g. a snippet with its placeholders filled in), else the item's
 /// text view, else the text its action copies or pastes.
 pub fn text_view(item: &ResultItem, hint: Option<PreviewHint>) -> Option<TextViewContent> {
+    let markdown = matches!(item.view, Some(ViewHint::Markdown { .. }));
     let text = match hint {
         Some(PreviewHint::Text { text }) => text,
         _ => match (&item.view, &item.action) {
-            (Some(ViewHint::Text { text, .. }), _) => text.clone(),
+            (Some(ViewHint::Text { text, .. } | ViewHint::Markdown { text, .. }), _) => {
+                text.clone()
+            }
             (_, Action::CopyText { text } | Action::PasteText { text, .. }) => text.clone(),
             _ => return None,
         },
@@ -305,6 +316,7 @@ pub fn text_view(item: &ResultItem, hint: Option<PreviewHint>) -> Option<TextVie
         title: item.title.clone(),
         text,
         truncated,
+        markdown,
     })
 }
 
@@ -444,6 +456,9 @@ fn file_content(content: &mut PreviewContent, path: &Path, size: u64, render: Re
 
     match read_limited(path, MAX_TEXT_BYTES + 1) {
         Ok(bytes) => match decode_text(&bytes, MAX_TEXT_BYTES) {
+            Some((text, truncated)) if is_markdown_extension(&extension) => {
+                content.body = PreviewBody::Markdown { text, truncated };
+            }
             Some((text, truncated)) => content.body = PreviewBody::Text { text, truncated },
             None => content.note = Some("No preview for this kind of file".to_owned()),
         },
@@ -509,6 +524,11 @@ fn rendered_content(
             pdf
         }
     }
+}
+
+/// Whether a lowercase file extension is Markdown.
+pub fn is_markdown_extension(extension: &str) -> bool {
+    matches!(extension, "md" | "markdown")
 }
 
 const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
@@ -1438,6 +1458,52 @@ mod tests {
             ),
             None
         );
+    }
+
+    #[test]
+    fn markdown_files_preview_as_markdown_and_other_text_does_not() {
+        let dir = tempfile::tempdir().unwrap();
+        for (name, markdown) in [("a.md", true), ("b.MARKDOWN", true), ("c.txt", false)] {
+            let path = dir.path().join(name);
+            fs::write(&path, "# Title\n").unwrap();
+            let body = produce(&open(&path), None).body;
+            if markdown {
+                assert_eq!(
+                    body,
+                    PreviewBody::Markdown {
+                        text: "# Title\n".into(),
+                        truncated: false
+                    },
+                    "{name}"
+                );
+            } else {
+                assert!(matches!(body, PreviewBody::Text { .. }), "{name}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_markdown_view_is_flagged_in_the_text_view() {
+        let plain = item(Action::Custom {
+            payload: "x".into(),
+        })
+        .with_view(ViewHint::Text {
+            text: "# t".into(),
+            on_enter: false,
+        });
+        assert!(!text_view(&plain, None).unwrap().markdown);
+
+        let md = item(Action::Custom {
+            payload: "x".into(),
+        })
+        .with_view(ViewHint::Markdown {
+            text: "# t".into(),
+            on_enter: false,
+        });
+        assert!(has_text_view(&md));
+        let view = text_view(&md, None).unwrap();
+        assert!(view.markdown);
+        assert_eq!(view.text, "# t");
     }
 
     #[test]

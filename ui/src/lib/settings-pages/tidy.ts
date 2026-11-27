@@ -50,6 +50,7 @@ export function tidyPluginSettings(config: Config): void {
   config.projects.editors = trimmed(config.projects.editors);
   config.calendar.keyword = config.calendar.keyword.trim();
   config.calendar.files = trimmed(config.calendar.files);
+  config.recent.keyword = config.recent.keyword.trim();
   config.clock.keyword = config.clock.keyword.trim();
   config.clock.cities = trimmed(config.clock.cities);
   config.passwords.keyword = config.passwords.keyword.trim();

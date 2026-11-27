@@ -56,6 +56,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use crate::keyword;
 use crate::model::{score, ResultItem};
 use crate::plugin::{Plugin, PluginError, PluginResult, ResultsNotifier};
 use crate::selection::Selection;
@@ -87,6 +88,11 @@ pub struct EngineOptions {
     pub fallback_plugins: Vec<String>,
     /// Remember executed queries for recall ([`SearchEngine::history`]).
     pub query_history: bool,
+    /// Write the query history to disk. False: it stays in memory for the
+    /// session ([`SearchEngine::usage_snapshot`] leaves it out).
+    pub history_persist: bool,
+    /// Remembered queries older than this many seconds are dropped.
+    pub history_retention_secs: u64,
 }
 
 impl Default for EngineOptions {
@@ -95,7 +101,48 @@ impl Default for EngineOptions {
             max_results: 8,
             fallback_plugins: Vec::new(),
             query_history: true,
+            history_persist: true,
+            history_retention_secs: 30 * 86_400,
         }
+    }
+}
+
+/// What the query-history plugin sees of the remembered queries: the engine's
+/// in-memory usage store, so listing them never touches the disk.
+#[derive(Clone)]
+pub struct HistoryHandle {
+    usage: Arc<RwLock<UsageStore>>,
+    enabled: bool,
+    retention_secs: u64,
+}
+
+impl HistoryHandle {
+    /// Remembered queries within the retention time, newest first (empty when
+    /// `query_history` is off).
+    pub fn list(&self) -> Vec<String> {
+        if !self.enabled {
+            return Vec::new();
+        }
+        self.usage
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .history_within(unix_now(), self.retention_secs)
+    }
+
+    /// Forgets one query; whether it was remembered.
+    pub fn remove(&self, query: &str) -> bool {
+        self.usage
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove_history(query)
+    }
+
+    /// Forgets every query.
+    pub fn clear(&self) {
+        self.usage
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear_history();
     }
 }
 
@@ -189,6 +236,11 @@ impl SearchEngine {
             options,
         };
         engine.restore_history();
+        // Not persisting: what an older run saved is forgotten now.
+        if !engine.options.history_persist {
+            engine.usage_write().clear_history();
+        }
+        engine.prepare_history();
         engine
     }
 
@@ -196,13 +248,34 @@ impl SearchEngine {
     /// (used after a config reload). A launch still finishing on the old engine
     /// is therefore recorded in the new one too, rather than lost with a copy.
     pub fn rebuild(&self, plugins: Vec<Arc<dyn Plugin>>, options: EngineOptions) -> Self {
+        // Queries typed while history was not persisted were never meant for
+        // the disk: turning persistence on must not write them out.
+        if !self.options.history_persist && options.history_persist {
+            self.usage_write().clear_history();
+        }
         let engine = Self {
             plugins,
             usage: Arc::clone(&self.usage),
             options,
         };
         engine.restore_history();
+        engine.prepare_history();
         engine
+    }
+
+    /// Drops the remembered queries past retention and hands plugins that want
+    /// it (the `!` plugin) a view of them.
+    fn prepare_history(&self) {
+        self.usage_write()
+            .prune_history(unix_now(), self.options.history_retention_secs);
+        let handle = HistoryHandle {
+            usage: Arc::clone(&self.usage),
+            enabled: self.options.query_history,
+            retention_secs: self.options.history_retention_secs,
+        };
+        for plugin in &self.plugins {
+            plugin.attach_history(handle.clone());
+        }
     }
 
     /// Tells every plugin which of its results were run before.
@@ -243,21 +316,22 @@ impl SearchEngine {
     /// and the keyword as typed.
     fn symbol_keyword_route<'a>(&self, input: &'a str) -> Option<KeywordRoute<'_, 'a>> {
         let input = input.trim_start();
-        let matches = |keyword: &str| is_symbol_keyword(keyword) && input.starts_with(keyword);
-        let longest = self
-            .plugins
-            .iter()
-            .filter_map(|p| p.keyword())
-            .filter(|k| matches(k))
-            .map(str::len)
-            .max()?;
+        // Lengths of the symbol aliases of `p` that `input` starts with.
+        let matching = |p: &Arc<dyn Plugin>| -> Vec<usize> {
+            p.keyword()
+                .map(|k| {
+                    keyword::aliases(k)
+                        .filter(|a| is_symbol_keyword(a) && input.starts_with(a))
+                        .map(str::len)
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let longest = self.plugins.iter().flat_map(matching).max()?;
         let plugins = self
             .plugins
             .iter()
-            .filter(|p| {
-                p.keyword()
-                    .is_some_and(|k| k.len() == longest && matches(k))
-            })
+            .filter(|p| matching(p).contains(&longest))
             .collect();
         Some((plugins, input[longest..].trim_start(), &input[..longest]))
     }
@@ -295,10 +369,7 @@ impl SearchEngine {
                     .iter()
                     // Case-insensitive, like the settings' duplicate check, so
                     // Caps Lock or a habitual capital does not bypass the keyword.
-                    .filter(|p| {
-                        p.keyword()
-                            .is_some_and(|k| k.to_lowercase() == kw.to_lowercase())
-                    })
+                    .filter(|p| p.keyword().is_some_and(|k| keyword::matches(k, kw)))
                     .collect();
                 (!plugins.is_empty()).then_some((plugins, rest, kw))
             })
@@ -312,6 +383,11 @@ impl SearchEngine {
                 for item in &mut items {
                     // The plugin completes its own input; the typed keyword
                     // stays in front of it.
+                    // A `Complete` row's text is the whole new input (a history
+                    // entry), so it gets no keyword.
+                    if matches!(item.view, Some(crate::ViewHint::Complete)) {
+                        continue;
+                    }
                     if let Some(text) = item.autocomplete.take() {
                         item.autocomplete = Some(format!("{kw} {text}"));
                     }
@@ -321,15 +397,22 @@ impl SearchEngine {
         } else {
             if !trimmed.contains(char::is_whitespace) {
                 for plugin in &self.plugins {
-                    if plugin
-                        .keyword()
-                        .is_some_and(|k| k.to_lowercase() == trimmed.to_lowercase())
-                    {
-                        hints.extend(
+                    let Some(raw) = plugin.keyword() else {
+                        continue;
+                    };
+                    if keyword::matches(raw, trimmed) {
+                        let mut row =
                             guarded(plugin.as_ref(), "keyword_row", || plugin.keyword_row())
                                 .ok()
-                                .flatten(),
-                        );
+                                .flatten();
+                        // Tab completes to the alias that was typed.
+                        if let Some(row) = row
+                            .as_mut()
+                            .filter(|_| raw.contains(keyword::ALIAS_SEPARATOR))
+                        {
+                            row.autocomplete = Some(format!("{trimmed} "));
+                        }
+                        hints.extend(row);
                     }
                 }
             }
@@ -361,7 +444,7 @@ impl SearchEngine {
                 .filter(|&s| s < score::KEYWORD)
                 .fold(0.0_f64, f64::max);
             for item in &mut collected {
-                if item.score < score::KEYWORD {
+                if item.score < score::KEYWORD && !item.keep_order {
                     let quality = if best > 0.0 {
                         (item.score / best).clamp(0.0, 1.0)
                     } else {
@@ -476,7 +559,7 @@ impl SearchEngine {
         let mut usage = self.usage_write();
         usage.record(&item.id, query, now);
         if self.options.query_history {
-            usage.record_history(query);
+            usage.record_history(query, now);
         } else {
             // Turning the option off also forgets what was kept before.
             usage.clear_history();
@@ -561,22 +644,56 @@ impl SearchEngine {
 
     /// Executed queries, most recent first; empty when `query_history` is off.
     pub fn history(&self) -> Vec<String> {
+        self.history_at(unix_now())
+    }
+
+    /// Like [`SearchEngine::history`] with an explicit unix time (for tests).
+    pub fn history_at(&self, now: u64) -> Vec<String> {
         if self.options.query_history {
-            self.usage_read().history().to_vec()
+            self.usage_read()
+                .history_within(now, self.options.history_retention_secs)
         } else {
             Vec::new()
         }
     }
 
+    /// Forgets every remembered query (Settings' "Clear history").
+    pub fn clear_history(&self) {
+        self.usage_write().clear_history();
+    }
+
     /// A copy of the usage statistics, to save from another thread.
     pub fn usage_snapshot(&self) -> UsageStore {
-        self.usage_read().clone()
+        self.usage_snapshot_at(unix_now())
+    }
+
+    /// Like [`SearchEngine::usage_snapshot`] with an explicit unix time (for
+    /// tests). The copy has no history when it is not persisted, and none older
+    /// than the retention time when it is.
+    pub fn usage_snapshot_at(&self, now: u64) -> UsageStore {
+        let mut snapshot = self.usage_read().clone();
+        if self.options.history_persist {
+            snapshot.prune_history(now, self.options.history_retention_secs);
+        } else {
+            snapshot.clear_history();
+        }
+        snapshot
     }
 
     /// Gives every plugin the shell's "results updated" callback.
     pub fn attach_notifier(&self, notifier: &ResultsNotifier) {
         for plugin in &self.plugins {
             plugin.attach_notifier(Arc::clone(notifier));
+        }
+    }
+
+    /// Tells every plugin the launcher is hidden, so it can stop refreshing
+    /// results nobody sees.
+    pub fn launcher_hidden(&self) {
+        for plugin in &self.plugins {
+            let _ = guarded(plugin.as_ref(), "launcher_hidden", || {
+                plugin.launcher_hidden()
+            });
         }
     }
 
@@ -833,6 +950,120 @@ mod tests {
     }
 
     #[test]
+    fn any_alias_of_a_keyword_routes() {
+        let app = Mock::fixed("app", &[("a", "App", 50.0)]).arc();
+        let web = Mock::fixed("web:g", &[("q", "Search Google", score::KEYWORD)])
+            .keyword("g||Google")
+            .arc();
+        let e = engine(vec![app.clone(), web.clone()], 8, &[]);
+
+        for input in ["g rust", "google rust", "GOOGLE rust"] {
+            web.inputs.lock().unwrap().clear();
+            assert_eq!(ids(&e.query_at(input, T0)), vec!["web:g:q"], "{input}");
+            assert_eq!(*web.inputs.lock().unwrap(), vec!["rust".to_owned()]);
+        }
+        // Not an alias, and not the raw `||` string.
+        assert_eq!(ids(&e.query_at("goo rust", T0)), vec!["app:a"]);
+        assert_eq!(
+            web.inputs.lock().unwrap().len(),
+            1,
+            "the unmatched input never reached it"
+        );
+        // A bare alias gets the Tab hint for the alias that was typed.
+        let mut row = item("web:g", "home", "Search", score::KEYWORD);
+        row.autocomplete = Some("g||Google ".to_owned());
+        let hinted = Mock::fixed("web:g", &[])
+            .keyword("g||google")
+            .with_keyword_row(row)
+            .arc();
+        let e = engine(vec![hinted], 8, &[]);
+        let r = e.query_at("google", T0);
+        assert_eq!(r[0].autocomplete.as_deref(), Some("google "));
+    }
+
+    #[test]
+    fn symbol_aliases_route_without_a_space() {
+        let shell = Mock::fixed("shell", &[("run", "Run", score::KEYWORD)])
+            .keyword("run||>")
+            .arc();
+        let e = engine(vec![shell.clone()], 8, &[]);
+        assert_eq!(ids(&e.query_at(">ls", T0)), vec!["shell:run"]);
+        assert_eq!(*shell.inputs.lock().unwrap(), vec!["ls".to_owned()]);
+        assert_eq!(ids(&e.query_at("run ls", T0)), vec!["shell:run"]);
+    }
+
+    #[test]
+    fn history_older_than_retention_is_hidden_and_not_saved() {
+        let ok = Mock::fixed("ok", &[("a", "A", 1.0)]).arc();
+        let e = SearchEngine::new(
+            vec![ok as Arc<dyn Plugin>],
+            UsageStore::default(),
+            EngineOptions {
+                history_retention_secs: 3600,
+                ..EngineOptions::default()
+            },
+        );
+        let it = item("ok", "a", "A", 1.0);
+        e.execute_at(&it, "old", T0).unwrap();
+        e.execute_at(&it, "new", T0 + 3000).unwrap();
+        assert_eq!(e.history_at(T0 + 3500), vec!["new", "old"]);
+        assert_eq!(e.history_at(T0 + 4000), vec!["new"]);
+        assert_eq!(e.usage_snapshot_at(T0 + 4000).history(), ["new"]);
+    }
+
+    #[test]
+    fn transient_history_stays_in_memory_and_clears_the_saved_one() {
+        let ok = Mock::fixed("ok", &[("a", "A", 1.0)]).arc();
+        let mut usage = UsageStore::default();
+        usage.record_history("from disk", unix_now());
+        let e = SearchEngine::new(
+            vec![ok as Arc<dyn Plugin>],
+            usage,
+            EngineOptions {
+                history_persist: false,
+                ..EngineOptions::default()
+            },
+        );
+        assert!(e.history().is_empty(), "the saved history is forgotten");
+        e.execute_at(&item("ok", "a", "A", 1.0), "typed", T0)
+            .unwrap();
+        assert_eq!(e.history_at(T0), vec!["typed"]);
+        assert!(e.usage_snapshot_at(T0).history().is_empty());
+        assert_eq!(e.usage_snapshot_at(T0).get("ok:a").unwrap().count, 1);
+    }
+
+    #[test]
+    fn turning_persistence_on_does_not_save_what_was_typed_while_it_was_off() {
+        let ok = Mock::fixed("ok", &[("a", "A", 1.0)]).arc();
+        let transient = SearchEngine::new(
+            vec![ok.clone() as Arc<dyn Plugin>],
+            UsageStore::default(),
+            EngineOptions {
+                history_persist: false,
+                ..EngineOptions::default()
+            },
+        );
+        transient
+            .execute_at(&item("ok", "a", "A", 1.0), "secret", T0)
+            .unwrap();
+        assert_eq!(transient.history_at(T0), vec!["secret"]);
+
+        let persistent = transient.rebuild(
+            vec![ok as Arc<dyn Plugin>],
+            EngineOptions {
+                history_persist: true,
+                ..EngineOptions::default()
+            },
+        );
+        assert!(persistent.history_at(T0).is_empty());
+        assert!(persistent.usage_snapshot_at(T0).history().is_empty());
+        persistent
+            .execute_at(&item("ok", "a", "A", 1.0), "later", T0)
+            .unwrap();
+        assert_eq!(persistent.usage_snapshot_at(T0).history(), ["later"]);
+    }
+
+    #[test]
     fn keyword_with_empty_rest_still_routes() {
         let web = Mock::fixed("web:g", &[("hint", "Type to search", score::KEYWORD)])
             .keyword("g")
@@ -951,6 +1182,33 @@ mod tests {
         }
         let e = engine_with(vec![app], usage, 8, &[]);
         assert_eq!(ids(&e.query_at("x", T0)), vec!["app:a", "app:b"]);
+    }
+
+    #[test]
+    fn keep_order_rows_ignore_usage_boosts() {
+        let make = |keep: bool| {
+            Mock::new("app", move |_| {
+                let mut rows = vec![
+                    item("app", "a", "Alpha", 60.0),
+                    item("app", "b", "Beta", 62.0),
+                ];
+                if keep {
+                    rows = rows.into_iter().map(ResultItem::keep_order).collect();
+                }
+                rows
+            })
+            .arc()
+        };
+        let mut usage = UsageStore::default();
+        for _ in 0..5 {
+            usage.record("app:a", "", T0);
+        }
+        let boosted = engine_with(vec![make(false)], usage.clone(), 8, &[]);
+        assert_eq!(ids(&boosted.query_at("x", T0)), vec!["app:a", "app:b"]);
+        let kept = engine_with(vec![make(true)], usage, 8, &[]);
+        let results = kept.query_at("x", T0);
+        assert_eq!(ids(&results), vec!["app:b", "app:a"]);
+        assert_eq!(results[1].score, 60.0, "no boost was added");
     }
 
     #[test]
@@ -1176,14 +1434,14 @@ mod tests {
         e.execute_at(&it, "first", T0).unwrap();
         e.execute_at(&it, " second ", T0).unwrap();
         e.execute_at(&it, "FIRST", T0).unwrap();
-        assert_eq!(e.history(), vec!["FIRST", "second"]);
+        assert_eq!(e.history_at(T0), vec!["FIRST", "second"]);
     }
 
     #[test]
     fn history_off_records_nothing_and_forgets() {
         let ok = Mock::fixed("ok", &[("a", "A", 1.0)]).arc();
         let mut usage = UsageStore::default();
-        usage.record_history("old");
+        usage.record_history("old", T0);
         let e = SearchEngine::new(
             vec![ok as Arc<dyn Plugin>],
             usage,
@@ -1276,7 +1534,7 @@ mod tests {
         // Usage is keyed by the item, not by the action that ran.
         assert_eq!(e.usage_snapshot().get("ok:a").unwrap().count, 1);
         // And the query is remembered for recall, as for the primary action.
-        assert_eq!(e.history(), vec!["Foo"]);
+        assert_eq!(e.history_at(T0), vec!["Foo"]);
     }
 
     #[test]

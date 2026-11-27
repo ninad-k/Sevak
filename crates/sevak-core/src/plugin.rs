@@ -59,6 +59,10 @@ pub trait Plugin: Send + Sync {
         self.keyword().is_none()
     }
 
+    /// Gives the plugin a view of the remembered queries, after the engine is
+    /// built or rebuilt. Only the query-history plugin uses it.
+    fn attach_history(&self, _history: crate::engine::HistoryHandle) {}
+
     /// A row offered when the user has typed exactly this plugin's keyword
     /// without a trailing space (`g`), so Tab can complete it to `g `. Shown
     /// below real matches; its `autocomplete` is the full replacement input.
@@ -160,4 +164,8 @@ pub trait Plugin: Send + Sync {
     /// quits; plugins are also dropped when the config reloads, so anything
     /// that must not outlive the instance should be stopped in `Drop` too.
     fn shutdown(&self) {}
+
+    /// The launcher was hidden: whatever the plugin keeps refreshing for the
+    /// query on screen (a script's `rerun`) can stop. Does nothing by default.
+    fn launcher_hidden(&self) {}
 }

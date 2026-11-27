@@ -116,7 +116,16 @@
       "bookmarksGlobalToggle": "Mostrar los marcadores en las búsquedas normales",
       "browsers": "Navegadores",
       "browsersHint": "Marca los navegadores que quieres leer, con todos sus perfiles. Si no marcas ninguno, se leen todos los que Sevak encuentre. Safari solo existe en macOS, y allí Sevak necesita Acceso total al disco para leerlo.",
-      "bookmarksPlugin": "Marcadores"
+      "bookmarksPlugin": "Marcadores",
+      "recentTitle": "Documentos recientes",
+      "recentSub": "Escribe <code>{keyword}</code> para ver los archivos usados hace poco, los más recientes primero, o <code>{keyword} informe</code> para filtrarlos por nombre.",
+      "recentEnabled": "Documentos recientes",
+      "recentEnabledHint": "Desactivado quita la búsqueda; no se lee nada.",
+      "recentEnabledToggle": "Buscar archivos usados recientemente",
+      "recentItems": "Archivos guardados",
+      "recentItemsHint": "Cuántos archivos recientes guarda la lista (de 10 a 500).",
+      "recentPrivacy": "<strong>Privacidad:</strong> la lista sale de los archivos recientes del propio sistema operativo (recently-used.xbel en Linux, la carpeta Recent de Windows, Spotlight en macOS) y se lee solo en este equipo. Se omiten las ubicaciones de red; no se envía nada a ningún sitio.",
+      "recentPlugin": "Documentos recientes"
     },
     "clock": {
       "title": "Reloj mundial",
@@ -240,6 +249,10 @@
       "keepTitle": "Qué guardar",
       "keepSub": "Esto se aplica mientras el historial esté activado.",
       "items": "Número de elementos",
+      "viewerRows": "Rows shown",
+      "viewerRowsHint": "Most entries listed at once. 5 to 100.",
+      "previewChars": "Preview length",
+      "previewCharsHint": "Characters of an entry shown in its title. 40 to 500.",
       "itemsHint": "Las entradas más antiguas se descartan junto con sus archivos de imagen.",
       "longestText": "Texto más largo",
       "longestTextHint": "El texto más largo no se registra. De 1 a {max} KB.",
@@ -288,6 +301,8 @@
       "vcardsHint": "Exporta un archivo .vcf desde tu libreta de direcciones, Outlook, Google Contactos o un teléfono. Una carpeta añade todos los .vcf que contiene. Funciona en todas partes sin permisos.",
       "pickVcard": "Elige un archivo vCard",
       "pickVcardFolder": "Elige una carpeta de archivos vCard",
+      "contactPhotos": "Show contact photos",
+      "contactPhotosHint": "Use the photo in a vCard as the result icon. Photos stay in memory and are never written to disk.",
       "contactsPrivacy": "<strong>Privacidad:</strong> los contactos se cargan en memoria al iniciar Sevak y cada diez minutos. Nunca se escriben en el disco, ni se registran ni se envían a ninguna parte, y estas búsquedas no entran en el historial de búsqueda.",
       "contactsPlugin": "Contactos",
       "opSub": "Encuentra un inicio de sesión por título o sitio web: <code>{keyword} github</code>. Sevak usa la herramienta oficial de línea de comandos <code>op</code> y nunca lee una contraseña, un código de un solo uso ni una nota.",
@@ -525,6 +540,10 @@
         "noneWithEnv": "Aún no hay clave. Pega una aquí o define la variable de entorno {variable}.",
         "none": "Aún no hay clave."
       }
+    },
+    "fileView": {
+      "label": "Archivo",
+      "step": "Pasar de un archivo a otro"
     }
   },
   "announce": {
@@ -727,6 +746,36 @@
     "submit": "Enviar tu extensión",
     "opensBrowser": "(se abre en tu navegador)"
   },
+  "usage": {
+    "title": "Uso",
+    "lead": "Lo que Sevak ha contado en este equipo para ordenar tus resultados. Nada sale de él.",
+    "total": "Lanzamientos registrados",
+    "items": "Elementos registrados",
+    "history": "Entradas del historial",
+    "top": "Elementos más usados",
+    "item": "Elemento",
+    "plugin": "Plugin",
+    "count": "Lanzamientos",
+    "last": "Último uso",
+    "perPlugin": "Lanzamientos por plugin",
+    "copy": "Copiar estadísticas",
+    "copied": "Copiado.",
+    "empty": "Aún no hay nada contado. Lanza algo y aparecerá aquí.",
+    "privacy": "Solo nombres de elementos: sin búsquedas escritas ni rutas de carpetas. Copiar estadísticas copia este mismo texto.",
+    "loadFailed": "No se pudieron leer las estadísticas de uso."
+  },
+  "filters": {
+    "sections": {
+      "label": "Filtrar ajustes",
+      "placeholder": "Filtrar secciones",
+      "none": "Ninguna sección coincide."
+    },
+    "tasks": {
+      "label": "Filtrar tareas",
+      "placeholder": "Filtrar tareas por nombre",
+      "none": "Ninguna tarea coincide."
+    }
+  },
   "settings": {
     "title": "Ajustes de Sevak",
     "loadFailed": "No se pudieron cargar los ajustes. Cierra esta ventana y vuelve a intentarlo desde el menú de la bandeja.",
@@ -750,7 +799,8 @@
       "system": "Sistema y terminal",
       "linux": "Linux",
       "backup": "Copia de seguridad",
-      "help": "Ayuda"
+      "help": "Ayuda",
+      "usage": "Uso"
     },
     "problems": {
       "one": "{count} problema",
@@ -844,7 +894,18 @@
       "none": "Ninguna",
       "missing": "{keyword} (no existe)",
       "remember": "Recordar búsquedas",
-      "rememberHint": "Arriba y Abajo en una barra de búsqueda vacía recuperan lo último que ejecutaste. Se guarda solo en este equipo."
+      "rememberHint": "Arriba y Abajo en una barra de búsqueda vacía recuperan lo último que ejecutaste. Se guarda solo en este equipo.",
+      "retention": "Conservar búsquedas durante",
+      "retentionHint": "Las búsquedas más antiguas se olvidan. También aparecen tras ! en el lanzador.",
+      "retention24h": "24 horas",
+      "retention7d": "7 días",
+      "retention30d": "30 días",
+      "retention90d": "90 días",
+      "persist": "Guardar búsquedas en disco",
+      "persistHint": "Desactivado las mantiene en memoria hasta cerrar Sevak y borra lo guardado.",
+      "clear": "Borrar historial",
+      "clearHint": "Olvida ahora todas las búsquedas recordadas.",
+      "cleared": "Borrado."
     },
     "plugins": {
       "enable": "Activar {name}",
@@ -907,7 +968,14 @@
       "indexKeyword": "Palabra clave para todo el disco",
       "indexKeywordHint": "Vacío desactiva la búsqueda por nombre.",
       "contentKeyword": "Palabra clave para el contenido",
-      "contentKeywordHint": "Vacío desactiva la búsqueda en el contenido."
+      "contentKeywordHint": "Vacío desactiva la búsqueda en el contenido.",
+      "sort": "Orden de los resultados",
+      "sortHint": "Relevancia según la coincidencia del nombre, Nombre de la A a la Z, Más recientes primero según la última modificación.",
+      "sortRelevance": "Mejor coincidencia",
+      "sortName": "Nombre (de la A a la Z)",
+      "sortModified": "Más recientes primero",
+      "maxResults": "Resultados por búsqueda",
+      "maxResultsHint": "0 usa el límite de Búsqueda. Aquí, hasta 50."
     },
     "linux": {
       "xwayland": "Usar XWayland en Wayland",
@@ -960,6 +1028,9 @@
     "size": "Introduce un tamaño mayor que 0 y de hasta {max}",
     "wholeNumber": "Introduce un número entero de {min} a {max}",
     "fallbackGone": "El motor «{keyword}» ya no existe.",
+    "emptyAlias": "El alias no puede estar vacío",
+    "aliasTwice": "«{alias}» aparece dos veces",
+    "retention": "Usa horas o días, como 24h, 7d o 90d",
     "owner": {
       "terminal": "los comandos de terminal",
       "clipboard": "el historial del portapapeles",
@@ -967,6 +1038,8 @@
       "emoji": "el selector de emojis",
       "contacts": "los contactos",
       "uuid": "el generador de UUID",
+      "settings": "la búsqueda de ajustes de Sevak",
+      "history": "el historial de búsquedas",
       "files": "la búsqueda de archivos",
       "indexFiles": "la búsqueda de archivos en todo el disco",
       "contentFiles": "la búsqueda en el contenido de archivos",
@@ -982,6 +1055,7 @@
       "ssh": "los hosts SSH",
       "projects": "los proyectos recientes",
       "calendar": "el calendario",
+      "recent": "documentos recientes",
       "clock": "el reloj mundial",
       "passwords": "el generador de contraseñas"
     }
@@ -1021,7 +1095,10 @@
       "edit": "Editar",
       "editLabel": "Editar {name}",
       "delete": "Eliminar",
-      "deleteLabel": "Eliminar {name}"
+      "deleteLabel": "Eliminar {name}",
+      "configure": "Configurar…",
+      "configureLabel": "Configurar {name}",
+      "needsSettings": "Necesita ajustes: {fields}"
     },
     "editor": {
       "region": "Editor de flujos de trabajo",
@@ -1084,7 +1161,48 @@
       "saved": "Guardado.",
       "savedNeedsAllow": "Guardado. Sevak te pedirá que lo permitas antes de que ejecute nada.",
       "badId": "Un id usa de 1 a 40 letras, dígitos, guiones o guiones bajos.",
-      "idTaken": "Otro nodo ya tiene ese id."
+      "idTaken": "Otro nodo ya tiene ese id.",
+      "descriptionPreview": "Vista previa de la descripción",
+      "portButton": "Cuando se pulsa el botón {n}, ir a",
+      "portCancel": "Cuando se cierra, ir a",
+      "noteLabel": "Nota",
+      "notePlaceholder": "Un comentario que se muestra bajo el cuadro",
+      "noteHint": "Solo documentación: una nota nunca cambia lo que hace el flujo de trabajo.",
+      "disableNode": "Desactivar este nodo",
+      "disableNodeHint": "Un nodo desactivado no se ejecuta y su rama se detiene ahí. Un disparador desactivado no responde a su palabra clave ni a su atajo.",
+      "disableConnection": "Desactivar esta conexión",
+      "enableConnection": "Activar esta conexión",
+      "connectionDisabledHint": "Una conexión desactivada no se sigue al ejecutar el flujo de trabajo.",
+      "disabledConnection": "desactivada",
+      "multiSelected": "Cuadros seleccionados: {count}",
+      "multiHint": "Muévelos con las teclas de flecha o arrastrando. Usa los botones Alinear de arriba para alinearlos.",
+      "alignGroup": "Alinear",
+      "alignLeft": "Izquierda",
+      "alignCenter": "Centro",
+      "alignTop": "Arriba",
+      "alignMiddle": "Medio",
+      "distributeH": "Distribuir en horizontal",
+      "distributeV": "Distribuir en vertical",
+      "shortcuts": "Atajos",
+      "shortcutsTitle": "Atajos de teclado y gestos",
+      "shortcutsClose": "Cerrar",
+      "noteEdit": "Doble clic para editar la nota",
+      "shortcut": {
+        "select": "Seleccionar un cuadro (añade o quita más con Mayús, Ctrl o Cmd)",
+        "rubber": "Arrastra sobre el lienzo vacío para seleccionar varios cuadros",
+        "alignTo": "Alinear la selección con el cuadro pulsado (usa el último botón Alinear)",
+        "autoConnect": "Conectar el cuadro seleccionado con el cuadro pulsado",
+        "move": "Mover los cuadros seleccionados (Mayús: pasos de 40 px)",
+        "scroll": "Desplazar el lienzo cuando no hay nada seleccionado",
+        "nearest": "Seleccionar el cuadro más cercano en esa dirección",
+        "follow": "Seleccionar el primer cuadro siguiente o anterior según las conexiones",
+        "disable": "Desactivar o activar la conexión o los cuadros seleccionados",
+        "delete": "Quitar la selección",
+        "save": "Guardar",
+        "escape": "Borrar la selección o cancelar una conexión",
+        "help": "Mostrar u ocultar esta lista",
+        "note": "Editar una nota (doble clic en su texto)"
+      }
     },
     "fields": {
       "acceptText": "Texto",
@@ -1093,7 +1211,15 @@
       "pasteDefault": "Usar el ajuste de [paste]",
       "yes": "Sí",
       "no": "No",
-      "noSettings": "Este disparador no tiene ajustes. Inícialo con <code>sevak --trigger &lt;carpeta&gt;/{id}</code> (añade texto después para pasarlo como <code>{query}</code>)."
+      "noSettings": "Este disparador no tiene ajustes. Inícialo con <code>sevak --trigger &lt;carpeta&gt;/{id}</code> (añade texto después para pasarlo como <code>{query}</code>).",
+      "itemTitle": "Título",
+      "itemSubtitle": "Subtítulo",
+      "itemArg": "Argumento (el título si está vacío)",
+      "addItem": "Añadir un elemento",
+      "removeItem": "Quitar el elemento {n}",
+      "jsonInvalid": "Esto aún no es un objeto JSON.",
+      "validateUi": "Validar",
+      "uiValid": "Todo bien: {components} componentes. Salidas: {ports}."
     },
     "connect": {
       "missing": "Ese nodo no existe.",
@@ -1152,6 +1278,37 @@
         "shutdown": "Apagar (pregunta antes)",
         "logout": "Cerrar sesión (pregunta antes)",
         "empty_trash": "Vaciar la papelera (pregunta antes)"
+      },
+      "delimiter": {
+        "newline": "Salto de línea",
+        "comma": "Coma",
+        "tab": "Tabulación",
+        "space": "Espacio",
+        "custom": "Texto propio"
+      },
+      "random": {
+        "number": "Número",
+        "line": "Línea de texto",
+        "uuid": "UUID"
+      },
+      "write": {
+        "overwrite": "Reemplazarlo",
+        "append": "Añadir al final",
+        "prepend": "Añadir al principio"
+      },
+      "fileScope": {
+        "any": "Archivos y carpetas",
+        "files": "Solo archivos",
+        "folders": "Solo carpetas"
+      },
+      "appOutput": {
+        "name": "El nombre",
+        "path": "La ruta",
+        "pid": "El id de proceso"
+      },
+      "uiTarget": {
+        "launcher": "En el lanzador",
+        "window": "En una ventana"
       }
     },
     "program": {
@@ -1220,6 +1377,10 @@
           },
           "hard_timeout_ms": {
             "label": "Detener el script tras (ms)"
+          },
+          "filter_results": {
+            "label": "Sevak filtra los resultados",
+            "hint": "Compara lo escrito con el texto de coincidencia de cada fila (o su título) y oculta el resto. Déjalo desactivado si el script filtra por sí mismo."
           }
         }
       },
@@ -1417,9 +1578,318 @@
           },
           "text": {
             "label": "Texto"
+          },
+          "markdown": {
+            "label": "Markdown",
+            "hint": "Muestra el texto como Markdown: títulos, listas, tablas, enlaces."
+          }
+        }
+      },
+      "split_arg": {
+        "label": "Dividir argumento",
+        "summary": "Divide el argumento en una lista y numera las partes como variables.",
+        "fields": {
+          "delimiter": {
+            "label": "Dividir por"
+          },
+          "custom": {
+            "label": "Delimitador propio",
+            "hint": "Se usa cuando \"Dividir por\" es texto propio."
+          },
+          "discard_empty": {
+            "label": "Quitar partes vacías",
+            "hint": "Las partes vacías (tras recortar, si está activado) se omiten."
+          },
+          "trim": {
+            "label": "Recortar espacios de cada parte"
+          },
+          "prefix": {
+            "label": "Prefijo de las variables",
+            "hint": "Las partes se guardan en variables con el prefijo seguido de 1, 2, 3 ... El prefijo seguido de count indica cuántas hay."
+          }
+        }
+      },
+      "join_arg": {
+        "label": "Unir argumento",
+        "summary": "Une una lista (un elemento por línea, o un array JSON) en una sola línea de texto.",
+        "fields": {
+          "separator": {
+            "label": "Separador",
+            "hint": "Se escribe entre los elementos. \\n y \\t significan salto de línea y tabulación."
+          },
+          "discard_empty": {
+            "label": "Quitar elementos vacíos"
+          }
+        }
+      },
+      "random": {
+        "label": "Aleatorio",
+        "summary": "Genera un número aleatorio, elige una línea al azar o crea un UUID.",
+        "fields": {
+          "mode": {
+            "label": "Qué generar"
+          },
+          "min": {
+            "label": "Número menor",
+            "hint": "Para números; incluido."
+          },
+          "max": {
+            "label": "Número mayor",
+            "hint": "Para números; incluido."
+          },
+          "lines": {
+            "label": "Líneas entre las que elegir",
+            "hint": "Para elegir una línea: un candidato por línea."
+          },
+          "variable": {
+            "label": "Guardar en variable",
+            "hint": "Déjalo vacío para que el resultado sea el argumento."
+          }
+        }
+      },
+      "expression": {
+        "label": "Calcular",
+        "summary": "Calcula una expresión matemática y guarda el resultado.",
+        "fields": {
+          "expression": {
+            "label": "Expresión",
+            "hint": "Primero se rellenan los marcadores y luego la calculadora del lanzador la evalúa. Una expresión incorrecta detiene esta rama."
+          },
+          "variable": {
+            "label": "Guardar en variable",
+            "hint": "Obligatorio."
+          },
+          "set_arg": {
+            "label": "Usar también el resultado como argumento",
+            "hint": "Desactívalo para mantener el argumento."
+          }
+        }
+      },
+      "write_file": {
+        "label": "Escribir archivo",
+        "summary": "Escribe texto en un archivo. El flujo debe permitirse antes.",
+        "fields": {
+          "path": {
+            "label": "Archivo",
+            "hint": "Una ruta relativa está dentro de la carpeta de datos del flujo; también sirven ~ y las rutas completas. Los nodos siguientes reciben la ruta."
+          },
+          "content": {
+            "label": "Texto a escribir"
+          },
+          "mode": {
+            "label": "Si el archivo existe"
+          },
+          "create_dirs": {
+            "label": "Crear las carpetas que falten"
+          }
+        }
+      },
+      "debug": {
+        "label": "Depurar",
+        "summary": "Muestra el argumento y las variables en la ventana del lanzador.",
+        "fields": {
+          "passthrough": {
+            "label": "Pasar el argumento",
+            "hint": "Desactivado vacía el argumento para los nodos siguientes. Lo que se muestra nunca se escribe en el registro."
+          }
+        }
+      },
+      "reveal_file": {
+        "label": "Mostrar en el explorador",
+        "summary": "Muestra archivos o carpetas en el explorador de archivos.",
+        "fields": {
+          "path": {
+            "label": "Archivos o carpetas",
+            "hint": "Uno por línea. Una ruta relativa está dentro de la carpeta del flujo."
+          }
+        }
+      },
+      "call_external": {
+        "label": "Llamar a un flujo",
+        "summary": "Ejecuta el disparador externo de otro flujo y espera a que termine.",
+        "fields": {
+          "workflow": {
+            "label": "Carpeta del flujo",
+            "hint": "El nombre de carpeta de un flujo instalado y permitido (puede ser este mismo)."
+          },
+          "trigger": {
+            "label": "Id del disparador externo",
+            "hint": "El id de un nodo de disparador externo de ese flujo."
+          },
+          "arg": {
+            "label": "Texto a enviar"
+          },
+          "pass_variables": {
+            "label": "Enviar también las variables"
+          }
+        }
+      },
+      "list_filter": {
+        "label": "Filtro de lista",
+        "summary": "Una palabra clave que lista las filas escritas aquí, filtradas por lo que escribes.",
+        "fields": {
+          "keyword": {
+            "label": "Palabra clave"
+          },
+          "items": {
+            "label": "Elementos",
+            "hint": "La fila elegida pasa su argumento (su título si el argumento está vacío)."
+          }
+        }
+      },
+      "file_filter": {
+        "label": "Filtro de archivos",
+        "summary": "Una palabra clave que lista nombres de archivos y carpetas de las carpetas elegidas.",
+        "fields": {
+          "keyword": {
+            "label": "Palabra clave"
+          },
+          "folders": {
+            "label": "Carpetas",
+            "hint": "Una por línea. Déjalo vacío para usar las carpetas de Ajustes > Archivos."
+          },
+          "extensions": {
+            "label": "Solo estas extensiones",
+            "hint": "Una por línea, como pdf o png. Déjalo vacío para todos los archivos."
+          },
+          "scope": {
+            "label": "Mostrar"
+          }
+        }
+      },
+      "running_apps": {
+        "label": "Apps en ejecución",
+        "summary": "Una palabra clave que lista las apps en ejecución.",
+        "fields": {
+          "keyword": {
+            "label": "Palabra clave"
+          },
+          "output": {
+            "label": "Pasar",
+            "hint": "La ruta se conoce para las apps que Sevak también lista en su lanzador; si no, se pasa el nombre."
+          }
+        }
+      },
+      "dialog_conditional": {
+        "label": "Diálogo",
+        "summary": "Hace una pregunta con uno a tres botones y continúa según el botón pulsado.",
+        "fields": {
+          "heading": {
+            "label": "Encabezado"
+          },
+          "message": {
+            "label": "Mensaje"
+          },
+          "buttons": {
+            "label": "Botones",
+            "hint": "Uno por línea, como máximo tres. Cada botón tiene su propia salida; cerrar el diálogo toma la salida de cancelar. Con tres botones, cerrar puede contar como el tercero en algunos sistemas."
+          }
+        }
+      },
+      "speak": {
+        "label": "Decir en voz alta",
+        "summary": "Lee el texto en voz alta con la voz del sistema.",
+        "fields": {
+          "text": {
+            "label": "Texto"
+          },
+          "voice": {
+            "label": "Voz",
+            "hint": "El nombre de una voz instalada en este equipo. Déjalo vacío para la voz del sistema."
+          }
+        }
+      },
+      "play_sound": {
+        "label": "Reproducir sonido",
+        "summary": "Reproduce un archivo de sonido (wav, mp3, aiff, m4a, ogg o flac).",
+        "fields": {
+          "path": {
+            "label": "Archivo de sonido",
+            "hint": "Una ruta completa, una ruta que empiece por ~ o un archivo de la carpeta del flujo."
+          }
+        }
+      },
+      "show_ui": {
+        "label": "Mostrar interfaz",
+        "summary": "Abre una pequeña interfaz descrita en JSON, la espera y continúa por la salida que nombra un botón (o closed).",
+        "fields": {
+          "target": {
+            "label": "Dónde"
+          },
+          "definition": {
+            "label": "Definición (JSON)",
+            "hint": "Componentes, estado y eventos. Consulta la guía de Sevak UI. Usa esto o un archivo."
+          },
+          "file": {
+            "label": "Archivo de definición",
+            "hint": "Un archivo JSON en la carpeta del flujo. {file:otro.json} dentro incluye más archivos."
+          },
+          "scripts": {
+            "label": "Scripts (JSON)",
+            "hint": "Scripts que las acciones \"run\" pueden iniciar, como {\"up\": {\"language\": \"shell\", \"script\": \"...\"}}. Lenguajes: shell, python, javascript, powershell. Una interfaz con scripts necesita tu permiso."
+          },
+          "ports": {
+            "label": "Nombres de salida",
+            "hint": "Uno por línea. Solo hace falta con un archivo de definición; una definición en línea nombra sus propias salidas. \"closed\" siempre existe."
+          },
+          "titlebar": {
+            "label": "Barra de título de la ventana"
+          },
+          "always_on_top": {
+            "label": "Mantener la ventana encima"
           }
         }
       }
+    },
+    "config": {
+      "title": "Configurar {name}",
+      "lead": "Estos ajustes son tuyos. Se guardan fuera del flujo de trabajo, así que actualizarlo o reinstalarlo no los cambia.",
+      "empty": "Este flujo de trabajo no tiene ajustes.",
+      "required": "Obligatorio",
+      "fillIn": "Rellena {fields} para guardar.",
+      "choose": "Elegir…",
+      "browse": "Examinar…",
+      "chooseFile": "Elegir un archivo",
+      "chooseFolder": "Elegir una carpeta"
+    },
+    "builder": {
+      "title": "Formulario de ajustes",
+      "hint": "Lo que el usuario rellena en «Configurar…». Cada ajuste se convierte en la variable <code>{var:name}</code> y en una variable de entorno para los scripts. Un ajuste obligatorio impide ejecutar el flujo hasta que tenga valor.",
+      "add": "Añadir un ajuste",
+      "moveUp": "Subir {name}",
+      "moveDown": "Bajar {name}",
+      "remove": "Quitar el ajuste {name}",
+      "label": "Etiqueta",
+      "variable": "Variable",
+      "kind": "Tipo",
+      "kinds": {
+        "textfield": "Campo de texto",
+        "textarea": "Área de texto",
+        "checkbox": "Casilla",
+        "popup": "Lista desplegable",
+        "slider": "Control deslizante",
+        "filepicker": "Archivo o carpeta"
+      },
+      "required": "Obligatorio",
+      "description": "Descripción",
+      "options": "Opciones",
+      "optionLabel": "Etiqueta de la opción {n}",
+      "optionValue": "Valor de la opción {n}",
+      "optionLabelPlaceholder": "etiqueta",
+      "optionValuePlaceholder": "valor",
+      "addOption": "Añadir una opción",
+      "removeOption": "Quitar la opción {n}",
+      "default": "Valor por defecto",
+      "noDefault": "(ninguno)",
+      "off": "Desactivado",
+      "on": "Activado",
+      "min": "Mínimo",
+      "max": "Máximo",
+      "step": "Paso",
+      "mode": "Elige",
+      "modeFile": "Un archivo",
+      "modeFolder": "Una carpeta",
+      "placeholder": "Texto de ejemplo"
     }
   },
   "gallery": {
@@ -1640,7 +2110,8 @@
   },
   "appearance": {
     "units": {
-      "px": "{value} px"
+      "px": "{value} px",
+      "ms": "{value} ms"
     },
     "extras": {
       "accent": "Color de acento",
@@ -1657,6 +2128,19 @@
       "blurHint": "Desenfoca el escritorio detrás de la barra de búsqueda. Baja la opacidad de arriba para verlo.",
       "radius": "Radio de las esquinas",
       "radiusHint": "Redondez de la barra de búsqueda.",
+      "settingsTheme": "Modo de la ventana de ajustes",
+      "settingsThemeHint": "Claro u oscuro solo para esta ventana. «Como el lanzador» usa el tema del lanzador.",
+      "settingsThemeFollow": "Como el lanzador",
+      "settingsThemeLight": "Claro",
+      "settingsThemeDark": "Oscuro",
+      "settingsThemeSystem": "Sistema",
+      "openAnimation": "Animación de apertura",
+      "openAnimationHint": "Cómo aparece la barra de búsqueda. El ajuste de reducir movimiento del sistema siempre la desactiva.",
+      "openFade": "Fundido",
+      "openFadeScale": "Fundido y zoom",
+      "openNone": "Ninguna",
+      "animationMs": "Duración de la animación",
+      "animationMsHint": "Cuánto dura la animación de apertura.",
       "customCss": "Hoja de estilos personalizada",
       "customCssHint": "Un archivo CSS dentro de la carpeta de configuración que sustituye las variables del tema, como <code>theme.css</code>. Consulta docs/themes.md."
     },
@@ -1892,5 +2376,19 @@
       "saveBeforeExport": "Primero guarda el tema (Guardar como…) y luego expórtalo.",
       "exported": "Se exportó el tema."
     }
+  },
+  "markdown": {
+    "note": "Nota",
+    "tip": "Consejo",
+    "important": "Importante",
+    "warning": "Advertencia",
+    "caution": "Precaución"
+  },
+  "sevakUi": {
+    "scriptFailed": "El script falló: {message}",
+    "progress": "Progreso",
+    "imageMissing": "Imagen no disponible",
+    "running": "Ejecutando…",
+    "gone": "Esta ventana ya no está abierta."
   }
 }

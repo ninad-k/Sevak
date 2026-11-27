@@ -3,7 +3,13 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { hasTauri, type Status, type ThemeSetting } from "./ipc";
+import {
+  hasTauri,
+  type OpenAnimationSetting,
+  type SettingsThemeSetting,
+  type Status,
+  type ThemeSetting,
+} from "./ipc";
 import { t } from "./i18n.svelte";
 
 import type { AiConfig } from "./ai";
@@ -33,6 +39,12 @@ export interface Appearance {
   /** A theme file in the config folder, such as `themes/Nord.toml`; empty uses none. */
   theme_file: string;
   custom_css: string;
+  /** The Settings window's mode: `follow` uses `theme`. */
+  settings_theme: SettingsThemeSetting;
+  /** How the launcher appears when it opens. */
+  open_animation: OpenAnimationSetting;
+  /** Length of the open animation in milliseconds (0-400). */
+  animation_ms: number;
 }
 
 /** Mirrors `sevak_core::Config` (serde defaults make every field present). */
@@ -62,6 +74,10 @@ export interface Config {
     /** One engine keyword, or several (config.toml accepts a string or a list). */
     fallback_web_search: string | string[];
     query_history: boolean;
+    /** How long a remembered search is kept: `24h`, `7d`, `30d`, `90d` (any `<n>h` / `<n>d`). */
+    history_retention: string;
+    /** Write the history to disk; false keeps it in memory for the session. */
+    history_persist: boolean;
   };
   appearance: Appearance;
   plugins: { disabled: string[] };
@@ -77,6 +93,10 @@ export interface Config {
     content_keyword: string;
     /** Windows: use paths on other computers (off: they are never contacted). */
     allow_network_paths: boolean;
+    /** Order of file results: best match, "name" (A to Z) or "modified" (newest first). */
+    sort: "relevance" | "name" | "modified";
+    /** Most file results per search; 0 uses the search limit. */
+    max_results: number;
   };
   bookmarks: { browsers: string[]; keyword: string; global: boolean };
   /** The file buffer: files collected from the results to act on together. */
@@ -94,8 +114,19 @@ export interface Config {
     max_image_bytes: number;
     /** Encrypt the history at rest for this Windows account (DPAPI); other systems keep owner-only files. */
     encrypt: boolean;
+    /** Rows shown in the history list (5 to 100). */
+    viewer_rows: number;
+    /** Characters of an entry shown as its title (40 to 500). */
+    preview_chars: number;
   };
-  contacts: { enabled: boolean; keyword: string; use_system: boolean; vcard_files: string[] };
+  contacts: {
+    enabled: boolean;
+    keyword: string;
+    use_system: boolean;
+    vcard_files: string[];
+    /** Show vCard photos as icons (decoded in memory only). */
+    show_photos: boolean;
+  };
   onepassword: {
     enabled: boolean;
     keyword: string;
@@ -143,6 +174,8 @@ export interface Config {
   projects: { keyword: string; editors: string[] };
   /** `cal`: events from local .ics files and folders; `days` is 1-60. */
   calendar: { keyword: string; files: string[]; days: number };
+  /** `recent <name>`: recently used files from the OS's own lists; `max_items` is 10-500. */
+  recent: { enabled: boolean; keyword: string; max_items: number };
 }
 
 export interface PluginInfo {

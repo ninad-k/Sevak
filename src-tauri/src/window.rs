@@ -119,6 +119,7 @@ pub fn unhide_app(_app: &AppHandle) {}
 /// The actions for a selection (Universal Actions) are dropped with it.
 pub fn announce_hidden(app: &AppHandle) {
     if let Some(state) = app.try_state::<AppState>() {
+        state.search.engine().launcher_hidden();
         state.search.forget_selection();
         state
             .file_buffer
@@ -178,6 +179,10 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
         if matches!(event, WindowEvent::Destroyed) {
             crate::hotkey::apply(window.app_handle());
         }
+        return;
+    }
+    if window.label().starts_with(crate::sevak_ui::LABEL_PREFIX) {
+        crate::sevak_ui::on_window_event(window, event);
         return;
     }
     if window.label() != MAIN_LABEL {

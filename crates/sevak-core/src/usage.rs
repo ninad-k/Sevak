@@ -9,7 +9,10 @@
 //! ```
 //!
 //! The same file also keeps the last [`MAX_HISTORY`] executed queries (as typed)
-//! for Up-arrow recall: `"history": ["g rust", "firefox"]`, most recent first.
+//! for Up-arrow recall and the `!` plugin, most recent first, each with the unix
+//! time it ran: `"history": [{"query": "g rust", "at": 1700000000}]`. Files from
+//! older versions hold plain strings; those load with `at = 0` ("unknown"),
+//! which [`UsageStore::prune_history`] stamps with the current time.
 //!
 //! Saving is atomic (write a sibling `.tmp` file, then rename over the target)
 //! so a crash mid-write never leaves a truncated file behind.
@@ -34,8 +37,9 @@ pub const MAX_QUERIES_PER_ENTRY: usize = 5;
 /// past it, dropping the least recently used.
 pub const MAX_ENTRIES: usize = 2000;
 
-/// How many executed queries are kept for recall.
-pub const MAX_HISTORY: usize = 50;
+/// How many executed queries are kept for recall (fixed; `[search]
+/// history_retention` bounds them by age as well).
+pub const MAX_HISTORY: usize = 500;
 
 // ---------------------------------------------------------------------------
 // Boost tuning
@@ -100,7 +104,37 @@ pub struct UsageStore {
     version: u32,
     entries: BTreeMap<String, UsageEntry>,
     /// Executed queries as typed, most recent first.
-    history: Vec<String>,
+    history: Vec<HistoryEntry>,
+}
+
+/// One remembered query and when it ran.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "HistoryRepr")]
+pub struct HistoryEntry {
+    pub query: String,
+    /// Unix seconds; 0 for an entry written before timestamps existed.
+    pub at: u64,
+}
+
+/// The two on-disk forms of a history entry.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum HistoryRepr {
+    Old(String),
+    New {
+        query: String,
+        #[serde(default)]
+        at: u64,
+    },
+}
+
+impl From<HistoryRepr> for HistoryEntry {
+    fn from(repr: HistoryRepr) -> Self {
+        match repr {
+            HistoryRepr::Old(query) => Self { query, at: 0 },
+            HistoryRepr::New { query, at } => Self { query, at },
+        }
+    }
 }
 
 impl Default for UsageStore {
@@ -192,22 +226,65 @@ impl UsageStore {
         }
     }
 
-    /// Remembers an executed `query` for recall: trimmed, moved to the front if
-    /// already present (ignoring case), at most [`MAX_HISTORY`] kept.
-    pub fn record_history(&mut self, query: &str) {
+    /// Remembers an executed `query` for recall at unix time `now`: trimmed,
+    /// moved to the front if already present (ignoring case), at most
+    /// [`MAX_HISTORY`] kept.
+    pub fn record_history(&mut self, query: &str, now: u64) {
         let query = query.trim();
         if query.is_empty() {
             return;
         }
         let lower = query.to_lowercase();
-        self.history.retain(|q| q.to_lowercase() != lower);
-        self.history.insert(0, query.to_owned());
+        self.history.retain(|e| e.query.to_lowercase() != lower);
+        self.history.insert(
+            0,
+            HistoryEntry {
+                query: query.to_owned(),
+                at: now,
+            },
+        );
         self.history.truncate(MAX_HISTORY);
     }
 
     /// Executed queries, most recent first.
-    pub fn history(&self) -> &[String] {
+    pub fn history(&self) -> Vec<String> {
+        self.history.iter().map(|e| e.query.clone()).collect()
+    }
+
+    /// Executed queries with their times, most recent first.
+    pub fn history_entries(&self) -> &[HistoryEntry] {
         &self.history
+    }
+
+    /// Executed queries no older than `retention_secs` at `now`, most recent
+    /// first (entries without a time count as current).
+    pub fn history_within(&self, now: u64, retention_secs: u64) -> Vec<String> {
+        self.history
+            .iter()
+            .filter(|e| e.at == 0 || now.saturating_sub(e.at) <= retention_secs)
+            .map(|e| e.query.clone())
+            .collect()
+    }
+
+    /// Drops the history entries older than `retention_secs` at `now`. An
+    /// entry from an older file (no time) is stamped `now` instead, so it ages
+    /// out like the rest.
+    pub fn prune_history(&mut self, now: u64, retention_secs: u64) {
+        for entry in &mut self.history {
+            if entry.at == 0 {
+                entry.at = now;
+            }
+        }
+        self.history
+            .retain(|e| now.saturating_sub(e.at) <= retention_secs);
+    }
+
+    /// Forgets one remembered query (ignoring case); whether it was there.
+    pub fn remove_history(&mut self, query: &str) -> bool {
+        let lower = query.trim().to_lowercase();
+        let before = self.history.len();
+        self.history.retain(|e| e.query.to_lowercase() != lower);
+        self.history.len() != before
     }
 
     pub fn clear_history(&mut self) {
@@ -293,6 +370,162 @@ impl UsageStore {
     }
 }
 
+/// How many items the usage page lists.
+pub const SUMMARY_TOP: usize = 20;
+
+/// One row of the usage page's top list.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct UsageTopItem {
+    /// What to show: the item's own name, never a folder path.
+    pub title: String,
+    /// The plugin that owns it (`app`, `files`, `web`...).
+    pub plugin: String,
+    pub count: u32,
+    /// Unix seconds.
+    pub last_used: u64,
+}
+
+/// A read-only digest of the usage statistics for the Settings "Usage" page.
+/// It holds no typed queries and no folder paths.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
+pub struct UsageSummary {
+    /// Launches added up over every tracked item.
+    pub total_launches: u64,
+    /// Distinct items with at least one launch.
+    pub tracked_items: usize,
+    /// Remembered executed queries (the Up-arrow history); only the number.
+    pub history_entries: usize,
+    pub top: Vec<UsageTopItem>,
+    /// Launches per plugin, most first.
+    pub plugins: Vec<(String, u64)>,
+}
+
+/// The owning plugin of a result id (`app:firefox` -> `app`).
+fn plugin_of(id: &str) -> &str {
+    id.split(':').next().unwrap_or(id)
+}
+
+/// The part of a result id after the plugin, cut down to a file or folder name
+/// when it is a path, so a summary never carries a location.
+fn display_key(id: &str) -> String {
+    // Many ids embed what the user typed (web searches, `>` commands,
+    // calculations, script results). Only plugins whose ids name a thing the
+    // user picked, not text they typed, are shown by name.
+    const NAMED: &[&str] = &[
+        "app",
+        "files",
+        "file",
+        "recent",
+        "bookmarks",
+        "tasks",
+        "system",
+        "settings",
+        "workflow",
+        "windows",
+        "win",
+        "builtin",
+        "emoji",
+    ];
+    let Some((plugin, key)) = id.split_once(':') else {
+        return "(item)".to_owned();
+    };
+    if !NAMED.contains(&plugin) {
+        return format!("({plugin} result)");
+    }
+    let name = key
+        .rsplit(['/', '\\'])
+        .find(|part| !part.is_empty())
+        .unwrap_or(key);
+    name.to_owned()
+}
+
+/// `YYYY-MM-DD` (UTC) of a unix time.
+fn utc_date(secs: u64) -> String {
+    let days = (secs / 86_400) as i64;
+    // Civil-from-days (Howard Hinnant's algorithm).
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    format!("{year:04}-{month:02}-{day:02}")
+}
+
+impl UsageStore {
+    /// Totals, the `top` most used items and launches per plugin.
+    pub fn summary(&self, top: usize) -> UsageSummary {
+        let mut rows: Vec<(&String, &UsageEntry)> =
+            self.entries.iter().filter(|(_, e)| e.count > 0).collect();
+        rows.sort_by(|a, b| {
+            b.1.count
+                .cmp(&a.1.count)
+                .then(b.1.last_used.cmp(&a.1.last_used))
+                .then_with(|| a.0.cmp(b.0))
+        });
+        let mut per_plugin: BTreeMap<&str, u64> = BTreeMap::new();
+        let mut total = 0u64;
+        for (id, entry) in &rows {
+            total += u64::from(entry.count);
+            *per_plugin.entry(plugin_of(id)).or_default() += u64::from(entry.count);
+        }
+        let mut plugins: Vec<(String, u64)> = per_plugin
+            .into_iter()
+            .map(|(plugin, count)| (plugin.to_owned(), count))
+            .collect();
+        plugins.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+        UsageSummary {
+            total_launches: total,
+            tracked_items: rows.len(),
+            history_entries: self.history.len(),
+            top: rows
+                .iter()
+                .take(top)
+                .map(|(id, entry)| UsageTopItem {
+                    title: display_key(id),
+                    plugin: plugin_of(id).to_owned(),
+                    count: entry.count,
+                    last_used: entry.last_used,
+                })
+                .collect(),
+            plugins,
+        }
+    }
+}
+
+impl UsageSummary {
+    /// The plain text behind "Copy stats": counts, item names and dates only.
+    pub fn to_plain_text(&self) -> String {
+        let mut out = String::from("Sevak usage statistics\n");
+        out.push_str(&format!("Launches tracked: {}\n", self.total_launches));
+        out.push_str(&format!("Items tracked: {}\n", self.tracked_items));
+        out.push_str(&format!("History entries: {}\n", self.history_entries));
+        if !self.top.is_empty() {
+            out.push_str(&format!("\nTop {} items\n", self.top.len()));
+            for (i, item) in self.top.iter().enumerate() {
+                out.push_str(&format!(
+                    "{}. {} [{}] - {} launches, last used {}\n",
+                    i + 1,
+                    item.title,
+                    item.plugin,
+                    item.count,
+                    utc_date(item.last_used)
+                ));
+            }
+        }
+        if !self.plugins.is_empty() {
+            out.push_str("\nLaunches per plugin\n");
+            for (plugin, count) in &self.plugins {
+                out.push_str(&format!("{plugin}: {count}\n"));
+            }
+        }
+        out
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -325,14 +558,14 @@ mod tests {
     #[test]
     fn history_is_recent_first_deduped_and_capped() {
         let mut s = UsageStore::default();
-        s.record_history("  firefox ");
-        s.record_history("g rust");
-        s.record_history("   ");
-        s.record_history("FireFox");
+        s.record_history("  firefox ", T0);
+        s.record_history("g rust", T0);
+        s.record_history("   ", T0);
+        s.record_history("FireFox", T0);
         assert_eq!(s.history(), ["FireFox", "g rust"]);
 
         for i in 0..(MAX_HISTORY + 5) {
-            s.record_history(&format!("q{i}"));
+            s.record_history(&format!("q{i}"), T0);
         }
         assert_eq!(s.history().len(), MAX_HISTORY);
         assert_eq!(s.history()[0], format!("q{}", MAX_HISTORY + 4));
@@ -348,9 +581,58 @@ mod tests {
         assert!(UsageStore::load(&path).unwrap().history().is_empty());
 
         let mut s = UsageStore::default();
-        s.record_history("a b");
+        s.record_history("a b", T0);
         s.save(&path).unwrap();
         assert_eq!(UsageStore::load(&path).unwrap().history(), ["a b"]);
+    }
+
+    #[test]
+    fn old_string_history_loads_without_times_and_is_stamped_on_prune() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("usage.json");
+        fs::write(
+            &path,
+            r#"{"version":1,"entries":{},"history":["g rust","fi"]}"#,
+        )
+        .unwrap();
+        let mut s = UsageStore::load(&path).unwrap();
+        assert_eq!(s.history(), ["g rust", "fi"]);
+        assert!(s.history_entries().iter().all(|e| e.at == 0));
+        s.prune_history(T0, 24 * HOUR);
+        assert_eq!(s.history(), ["g rust", "fi"]);
+        assert!(s.history_entries().iter().all(|e| e.at == T0));
+        s.prune_history(T0 + 25 * HOUR, 24 * HOUR);
+        assert!(s.history().is_empty());
+    }
+
+    #[test]
+    fn prune_history_drops_only_entries_past_retention() {
+        let mut s = UsageStore::default();
+        s.record_history("old", T0);
+        s.record_history("new", T0 + 47 * HOUR);
+        s.prune_history(T0 + 48 * HOUR, 24 * HOUR);
+        assert_eq!(s.history(), ["new"]);
+
+        let mut s = UsageStore::default();
+        s.record_history("old", T0);
+        s.record_history("new", T0 + 47 * HOUR);
+        assert_eq!(s.history_within(T0 + 48 * HOUR, 24 * HOUR), ["new"]);
+        assert_eq!(s.history().len(), 2, "history_within does not mutate");
+    }
+
+    #[test]
+    fn history_entries_round_trip_with_times_and_can_be_removed() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("usage.json");
+        let mut s = UsageStore::default();
+        s.record_history("a", T0);
+        s.record_history("B", T0 + 1);
+        s.save(&path).unwrap();
+        let mut loaded = UsageStore::load(&path).unwrap();
+        assert_eq!(loaded.history_entries()[0].at, T0 + 1);
+        assert!(loaded.remove_history("b"));
+        assert!(!loaded.remove_history("b"));
+        assert_eq!(loaded.history(), ["a"]);
     }
 
     #[test]
@@ -505,5 +787,41 @@ mod tests {
             UsageStore::load(&path),
             Err(UsageError::Parse { .. })
         ));
+    }
+
+    #[test]
+    fn summary_counts_ranks_and_hides_paths_and_queries() {
+        let mut s = UsageStore::default();
+        s.record("app:firefox", "secret query", 1_700_000_000);
+        s.record("app:firefox", "", 1_700_086_400);
+        s.record("files:/Users/me/private/report.pdf", "", 1_700_000_100);
+        s.record("web:g:rust", "", 1_700_000_200);
+        s.record("shell:curl -H token=hunter2", "", 1_700_000_300);
+        s.record_history("typed text", 1_700_000_400);
+        let summary = s.summary(2);
+        assert_eq!(summary.total_launches, 5);
+        assert_eq!(summary.tracked_items, 4);
+        assert_eq!(summary.history_entries, 1);
+        assert_eq!(summary.top.len(), 2);
+        assert_eq!(summary.top[0].title, "firefox");
+        assert_eq!(summary.top[0].count, 2);
+        assert_eq!(summary.plugins[0], ("app".to_owned(), 2));
+        let text = s.summary(SUMMARY_TOP).to_plain_text();
+        assert!(text.contains("1. firefox [app] - 2 launches, last used 2023-11-15"));
+        assert!(text.contains("report.pdf"));
+        assert!(!text.contains("/Users"));
+        assert!(!text.contains("secret query"));
+        assert!(!text.contains("typed text"));
+        assert!(!text.contains("rust"));
+        assert!(!text.contains("hunter2"));
+        assert!(text.contains("(shell result)"));
+        assert!(text.contains("History entries: 1"));
+    }
+
+    #[test]
+    fn empty_summary_is_plain_zeroes() {
+        let text = UsageStore::default().summary(SUMMARY_TOP).to_plain_text();
+        assert!(text.contains("Launches tracked: 0"));
+        assert!(!text.contains("Top"));
     }
 }

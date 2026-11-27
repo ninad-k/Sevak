@@ -4,13 +4,14 @@
 
 pub mod filters;
 
+use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use chrono::{Local, TimeZone};
 
-use sevak_core::config::FilesConfig;
+use sevak_core::config::{FileSort, FilesConfig, MAX_FILES_RESULTS_LIMIT};
 use sevak_core::model::score;
 use sevak_core::{Action, FuzzyQuery, IconSource, Modifier, Plugin, PluginResult, ResultItem};
 use sevak_platform::netpath::{self, Refusal};
@@ -24,6 +25,11 @@ use filters::{Candidate, FileQuery, FilterError};
 /// Hard limit on indexed entries, to bound memory and per-query work.
 pub const MAX_INDEX_ENTRIES: usize = 100_000;
 const MAX_CANDIDATES: usize = 50;
+/// Best matches re-ordered by name or date. A sort then compares at most this
+/// many rows, however many files the index holds.
+pub(crate) const SORT_POOL: usize = 200;
+/// Score gap between neighbouring rows once they are in name or date order.
+const SORTED_ROW_STEP: f64 = 0.01;
 const MIN_QUERY_CHARS: usize = 2;
 
 /// Directories never descended into, matched case-insensitively.
@@ -332,6 +338,15 @@ impl FilesPlugin {
         }
     }
 
+    /// Most rows one search returns from this plugin: `[files] max_results`,
+    /// or the list length the engine shows anyway when that is 0.
+    fn result_limit(&self) -> usize {
+        match self.config.max_results {
+            0 => MAX_CANDIDATES,
+            n => n.min(MAX_FILES_RESULTS_LIMIT),
+        }
+    }
+
     /// The index search without filters: fuzzy over names.
     fn search_names(&self, input: &str) -> Vec<ResultItem> {
         let mut query = FuzzyQuery::for_paths(input);
@@ -346,13 +361,7 @@ impl FilesPlugin {
                 scored.push((f64::from(s) + name_bonus(&entry.name, input), i));
             }
         }
-
-        let by_score_desc = |a: &(f64, usize), b: &(f64, usize)| b.0.total_cmp(&a.0);
-        if scored.len() > MAX_CANDIDATES {
-            scored.select_nth_unstable_by(MAX_CANDIDATES - 1, by_score_desc);
-            scored.truncate(MAX_CANDIDATES);
-        }
-        scored.sort_by(by_score_desc);
+        order_matches(&mut scored, &index, self.config.sort, self.result_limit());
 
         scored
             .into_iter()
@@ -393,12 +402,7 @@ impl FilesPlugin {
             scored.push((score, i));
         }
 
-        let by_score_desc = |a: &(f64, usize), b: &(f64, usize)| b.0.total_cmp(&a.0);
-        if scored.len() > MAX_CANDIDATES {
-            scored.select_nth_unstable_by(MAX_CANDIDATES - 1, by_score_desc);
-            scored.truncate(MAX_CANDIDATES);
-        }
-        scored.sort_by(by_score_desc);
+        order_matches(&mut scored, &index, self.config.sort, self.result_limit());
 
         scored
             .into_iter()
@@ -434,8 +438,64 @@ pub(crate) fn name_bonus(name: &str, input: &str) -> f64 {
     }
 }
 
+/// Keeps `limit` of `matches` (score, position in `entries`) in `sort` order.
+///
+/// Relevance keeps the best scores first. Name and date take the best
+/// [`SORT_POOL`] matches and order those by name, or by the modification time
+/// the index recorded (no file is touched). The engine sorts rows by score, so
+/// those rows get scores that fall with their new position.
+pub(crate) fn order_matches(
+    matches: &mut Vec<(f64, usize)>,
+    entries: &[FileEntry],
+    sort: FileSort,
+    limit: usize,
+) {
+    let by_score_desc = |a: &(f64, usize), b: &(f64, usize)| b.0.total_cmp(&a.0);
+    let pool = match sort {
+        FileSort::Relevance => limit,
+        FileSort::Name | FileSort::Modified => SORT_POOL.max(limit),
+    }
+    .max(1);
+    if matches.len() > pool {
+        matches.select_nth_unstable_by(pool - 1, by_score_desc);
+        matches.truncate(pool);
+    }
+    matches.sort_by(by_score_desc);
+    let top = matches.first().map_or(0.0, |m| m.0);
+    match sort {
+        FileSort::Relevance => {}
+        FileSort::Name => matches.sort_by(|a, b| {
+            entries[a.1]
+                .name
+                .to_lowercase()
+                .cmp(&entries[b.1].name.to_lowercase())
+                .then_with(|| by_score_desc(a, b))
+        }),
+        FileSort::Modified => matches.sort_by(|a, b| {
+            newest_first(entries[a.1].modified, entries[b.1].modified)
+                .then_with(|| by_score_desc(a, b))
+        }),
+    }
+    matches.truncate(limit);
+    if sort != FileSort::Relevance {
+        for (rank, (score, _)) in matches.iter_mut().enumerate() {
+            *score = top - rank as f64 * SORTED_ROW_STEP;
+        }
+    }
+}
+
+/// Newest modification first; a file whose time is unknown goes last.
+fn newest_first(a: Option<i64>, b: Option<i64>) -> Ordering {
+    match (a, b) {
+        (Some(a), Some(b)) => b.cmp(&a),
+        (Some(_), None) => Ordering::Less,
+        (None, Some(_)) => Ordering::Greater,
+        (None, None) => Ordering::Equal,
+    }
+}
+
 /// The parent directory, with the home prefix shown as `~`.
-fn subtitle(path: &Path, home: Option<&Path>) -> String {
+pub(crate) fn subtitle(path: &Path, home: Option<&Path>) -> String {
     let parent = path.parent().unwrap_or(path);
     if let Some(home) = home {
         if let Ok(rest) = parent.strip_prefix(home) {
@@ -488,7 +548,7 @@ fn is_skipped(entry: &DirEntry, include_hidden: bool) -> bool {
 
 /// Walks `roots`, returning at most `cap` entries; the bool is true when the
 /// cap cut the walk short.
-fn scan(
+pub(crate) fn scan(
     roots: &[PathBuf],
     max_depth: usize,
     include_hidden: bool,
@@ -1357,6 +1417,177 @@ mod tests {
         };
         let plugin = indexed(config, Some(root.to_path_buf()));
         (home, plugin)
+    }
+
+    fn listed(name: &str, modified: Option<i64>) -> FileEntry {
+        FileEntry {
+            name: name.to_owned(),
+            path: PathBuf::from("/files").join(name),
+            modified,
+            ..FileEntry::default()
+        }
+    }
+
+    /// The names of `matches`, in the order given, with their scores.
+    fn ordered(
+        entries: &[FileEntry],
+        scores: &[f64],
+        sort: FileSort,
+        limit: usize,
+    ) -> Vec<(String, f64)> {
+        let mut matches: Vec<(f64, usize)> = scores.iter().copied().zip(0..).collect();
+        order_matches(&mut matches, entries, sort, limit);
+        matches
+            .into_iter()
+            .map(|(score, i)| (entries[i].name.clone(), score))
+            .collect()
+    }
+
+    fn names_of(rows: &[(String, f64)]) -> Vec<&str> {
+        rows.iter().map(|(name, _)| name.as_str()).collect()
+    }
+
+    #[test]
+    fn relevance_keeps_the_best_scores_first_within_the_limit() {
+        let entries = [
+            listed("b.txt", Some(1)),
+            listed("a.txt", Some(9)),
+            listed("c.txt", None),
+        ];
+        let rows = ordered(&entries, &[10.0, 30.0, 20.0], FileSort::Relevance, 2);
+        assert_eq!(names_of(&rows), ["a.txt", "c.txt"]);
+        // Relevance scores are the matcher's own, untouched.
+        assert_eq!(rows[0].1, 30.0);
+        assert_eq!(rows[1].1, 20.0);
+    }
+
+    #[test]
+    fn name_order_ignores_case_and_rescores_to_match() {
+        let entries = [
+            listed("Zeta.txt", None),
+            listed("alpha.txt", None),
+            listed("Beta.txt", None),
+        ];
+        let rows = ordered(&entries, &[300.0, 100.0, 200.0], FileSort::Name, 10);
+        assert_eq!(names_of(&rows), ["alpha.txt", "Beta.txt", "Zeta.txt"]);
+        // The engine sorts by score, so the scores must fall with the new order.
+        assert!(rows[0].1 > rows[1].1 && rows[1].1 > rows[2].1, "{rows:?}");
+    }
+
+    #[test]
+    fn modified_order_is_newest_first_with_unknown_times_last() {
+        let entries = [
+            listed("old.txt", Some(100)),
+            listed("unknown.txt", None),
+            listed("new.txt", Some(900)),
+            listed("mid.txt", Some(500)),
+        ];
+        let rows = ordered(
+            &entries,
+            &[400.0, 300.0, 200.0, 100.0],
+            FileSort::Modified,
+            10,
+        );
+        assert_eq!(
+            names_of(&rows),
+            ["new.txt", "mid.txt", "old.txt", "unknown.txt"]
+        );
+    }
+
+    #[test]
+    fn equal_times_keep_the_relevance_order() {
+        let entries = [listed("a.txt", Some(5)), listed("b.txt", Some(5))];
+        let rows = ordered(&entries, &[10.0, 20.0], FileSort::Modified, 10);
+        assert_eq!(names_of(&rows), ["b.txt", "a.txt"]);
+    }
+
+    #[test]
+    fn name_and_date_only_reorder_the_best_pool() {
+        // Entry 250 is the newest but ranks below the SORT_POOL best matches, so
+        // a date sort never sees it: the sort stays bounded.
+        let entries: Vec<FileEntry> = (0..300)
+            .map(|i| {
+                listed(
+                    &format!("f{i:03}.txt"),
+                    Some(if i == 250 { i64::MAX } else { i }),
+                )
+            })
+            .collect();
+        let scores: Vec<f64> = (0..300).map(|i| 1000.0 - i as f64).collect();
+        let rows = ordered(&entries, &scores, FileSort::Modified, 5);
+        assert_eq!(rows.len(), 5);
+        assert!(rows.iter().all(|(name, _)| name != "f250.txt"));
+        assert_eq!(rows[0].0, "f199.txt", "newest of the pool first");
+
+        let rows = ordered(&entries, &scores, FileSort::Name, 3);
+        assert_eq!(names_of(&rows), ["f000.txt", "f001.txt", "f002.txt"]);
+    }
+
+    #[test]
+    fn the_limit_is_respected_for_every_sort() {
+        let entries: Vec<FileEntry> = (0..60).map(|i| listed(&format!("n{i}"), Some(i))).collect();
+        let scores: Vec<f64> = (0..60).map(f64::from).collect();
+        for sort in [FileSort::Relevance, FileSort::Name, FileSort::Modified] {
+            assert_eq!(ordered(&entries, &scores, sort, 7).len(), 7, "{sort:?}");
+        }
+    }
+
+    #[test]
+    fn plugin_sorts_and_limits_its_results() {
+        let entries = vec![
+            listed("report-a.txt", Some(10)),
+            listed("report-c.txt", Some(30)),
+            listed("report-b.txt", Some(20)),
+        ];
+        let plugin_with = |sort: FileSort, max_results: usize| {
+            let plugin = FilesPlugin::with_home(
+                FilesConfig {
+                    sort,
+                    max_results,
+                    ..config_for(&[])
+                },
+                MockPlatform::empty(),
+                None,
+            );
+            plugin.load_entries(entries.clone());
+            plugin
+        };
+        assert_eq!(
+            titles(&plugin_with(FileSort::Modified, 0), "report"),
+            ["report-c.txt", "report-b.txt", "report-a.txt"]
+        );
+        assert_eq!(
+            titles(&plugin_with(FileSort::Name, 0), "report"),
+            ["report-a.txt", "report-b.txt", "report-c.txt"]
+        );
+        assert_eq!(
+            titles(&plugin_with(FileSort::Modified, 2), "report"),
+            ["report-c.txt", "report-b.txt"]
+        );
+        // The filtered path (`ext:` with name text) follows the same sort.
+        assert_eq!(
+            titles(&plugin_with(FileSort::Modified, 0), "report ext:txt"),
+            ["report-c.txt", "report-b.txt", "report-a.txt"]
+        );
+    }
+
+    #[test]
+    fn filter_only_listing_follows_the_sort() {
+        let entries = vec![
+            listed("zeta.pdf", Some(10)),
+            listed("alpha.pdf", Some(30)),
+            listed("beta.txt", Some(20)),
+        ];
+        let plugin = FilesPlugin::with_home(
+            FilesConfig {
+                sort: FileSort::Name,
+                ..config_for(&[])
+            },
+            MockPlatform::empty(),
+            None,
+        );
+        plugin.load_entries(entries);
+        assert_eq!(titles(&plugin, "ext:pdf"), ["alpha.pdf", "zeta.pdf"]);
     }
 
     fn sorted_titles(plugin: &FilesPlugin, query: &str) -> Vec<String> {

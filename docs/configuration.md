@@ -33,7 +33,9 @@ A minimal config works: missing fields use their defaults, so a nearly empty fil
 
 ### Keywords
 
-Every keyword is one word, and no two searches may share one: the configurable keywords (`[files]` `keyword` / `index_keyword` / `content_keyword`, `[bookmarks]`, `[tasks]`, `[media]`, `[window_management]` `keyword` / `switcher_keyword`, `[contacts]`, `[onepassword]`, `[dictionary]` `define_keyword` / `spell_keyword`, `[ai]`, `[ssh]`, `[projects]`, `[calendar]`, `[clock]`, `[passwords]`), the fixed ones (`>`, `cb`, `s`, `emoji`, `:`, `@`, `uuid`) and your web search keywords. Settings refuses to save a clash; in a hand-edited file a clashing keyword is ignored and logged. An empty keyword turns that keyword off.
+Every keyword is one word, and no two searches may share one: the configurable keywords (`[files]` `keyword` / `index_keyword` / `content_keyword`, `[bookmarks]`, `[tasks]`, `[media]`, `[window_management]` `keyword` / `switcher_keyword`, `[contacts]`, `[onepassword]`, `[dictionary]` `define_keyword` / `spell_keyword`, `[ai]`, `[ssh]`, `[projects]`, `[calendar]`, `[recent]`, `[clock]`, `[passwords]`), the fixed ones (`>`, `cb`, `s`, `emoji`, `:`, `@`, `uuid`, `!`) and your web search keywords. Settings refuses to save a clash; in a hand-edited file a clashing keyword is ignored and logged. An empty keyword turns that keyword off.
+
+**Aliases.** Any configurable keyword (including a web engine's and a workflow's `keyword` trigger) may list several alternatives separated by `||`, for example `keyword = "g||google"`. Each alias routes to the same search, is compared case-insensitively and must be one word. Settings checks every alias on its own for clashes and repeats and refuses an empty one (`"a||"`). The first alias is the primary keyword: it names the search in hints, and a web engine's plugin id (`web:g`) and the `fallback_web_search` entry use it (the fallback also accepts any alias).
 
 Keywords of [workflows](workflows.md) and [script plugins](features/script-plugins.md) are checked the same way but only produce a warning (in Settings and in the log), because both plugins then answer the keyword and show their results.
 
@@ -130,13 +132,17 @@ Search behaviour and fallback when no results match.
 |---|---|---|---|---|
 | `max_results` | integer | `8` | 1–20 | Maximum number of results shown at once. |
 | `fallback_web_search` | string or list | `"g"` | any keyword from `[[web_search]]` entries | When a query has no local results, offer a web search with this engine. Write as a single string `"g"` or a list to try several in order: `["g", "yt", "gh"]`. Empty string `""` disables the fallback. Keywords are matched case-insensitively; only one keyword per engine. |
-| `query_history` | boolean | `true` | — | Remember the last 50 queries you ran. Press Up/Down on an empty search box to recall them. `false` disables history and clears it. |
+| `query_history` | boolean | `true` | — | Remember the queries you ran (at most 500; the cap is fixed). Press Up/Down on an empty search box to recall them, or type `!` to list and filter them. `false` disables history and clears it. |
+| `history_retention` | string | `"30d"` | `<n>h` or `<n>d`, 1 hour to 3650 days | How long a remembered query is kept; older ones are dropped when Sevak loads or saves. Settings offers `24h`, `7d`, `30d` and `90d`. Entries saved by an older version have no time and start counting when first loaded. |
+| `history_persist` | boolean | `true` | — | `false` keeps the history in memory for the session only: it is never written to `usage.json`, and any history already saved there is removed. |
 
 ```toml
 [search]
 max_results = 8
 fallback_web_search = "g"
 query_history = true
+history_retention = "30d"
+history_persist = true
 ```
 
 ### [appearance]
@@ -153,6 +159,9 @@ Launcher theme and styling.
 | `blur` | boolean | `false` | `true`, `false` | Frosted-glass blur of the desktop behind the search bar (Windows Acrylic, macOS vibrancy); ignored on Linux. You only see it when `opacity` is below 100. On Windows 11 the corners are rounded by the system, so `radius` is fixed at 8 px while blur is on. |
 | `radius` | integer | `14` | 0–32 (pixels) | Corner radius of the search bar. 0 is sharp corners; 32 is very rounded. Whole numbers only. |
 | `theme_file` | string | `""` (empty) | path in config folder, or `""` | A theme file, such as `"themes/Nord.toml"`, made, imported or installed in **Settings → Appearance → Theme editor**. Applied between the built-in light/dark look and the settings above; `""` uses none. See [Theme files and the editor](themes.md#theme-files-and-the-editor). |
+| `settings_theme` | string | `"follow"` | `"follow"`, `"light"`, `"dark"`, `"system"` | Light or dark mode of the Settings window only. `"follow"` uses `theme`. |
+| `open_animation` | string | `"fade"` | `"fade"`, `"fade_scale"`, `"none"` | How the launcher appears. The system's reduced-motion setting always turns it off. |
+| `animation_ms` | integer | `150` | 0-400 (milliseconds) | Length of the open animation. |
 | `custom_css` | string | `""` (empty) | filename in config folder, or `""` | Stylesheet to override theme colours and layout. Must be a file in the config folder (same folder as `config.toml`), e.g. `"theme.css"`. `""` loads none. See [Themes guide](themes.md) for available CSS variables. |
 
 ```toml
@@ -165,6 +174,9 @@ opacity = 100
 radius = 14
 theme_file = ""
 custom_css = ""
+settings_theme = "follow"
+open_animation = "fade"
+animation_ms = 150
 ```
 
 ### [plugins]
@@ -173,7 +185,7 @@ Which plugins are active. Each built-in plugin can be disabled.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `disabled` | array of strings | `[]` | Plugin ids to turn off. Available ids: `"apps"`, `"calculator"`, `"web"` (all engines) or `"web:<keyword>"` (one engine), `"files"` (its instances `"files:names"` and `"files:content"` are the `ff` and `in` searches), `"bookmarks"`, `"system"`, `"tasks"` (automation tasks), `"media"` (media controls), `"windows"` (window layouts; `"windows:switch"` is the window switcher), `"shell"`, `"clipboard"`, `"snippets"`, `"emoji"` (the emoji picker; `"emoji:word"` and `"emoji:colon"` are its two keywords), `"selection"` (Universal Actions), `"contacts"`, `"1password"`, `"dict"` (`define` and `spell`), `"uuid"`, `"clock"` (the world clock), `"pwgen"` (the password generator), `"backup"` (the `backup settings` and `restore settings` [launcher commands](backup-and-restore.md#from-the-command-line-and-the-launcher)), `"script"` or `"script:<name>"` (script plugins) and `"workflow"` or `"workflow:<folder>"` ([workflows](workflows.md); each also has its own switch in **Settings → Workflows**). Example: `disabled = ["files", "web:yt"]` turns off file search and YouTube search. Unknown ids are ignored. |
+| `disabled` | array of strings | `[]` | Plugin ids to turn off. Available ids: `"apps"`, `"calculator"`, `"web"` (all engines) or `"web:<keyword>"` (one engine), `"files"` (its instances `"files:names"` and `"files:content"` are the `ff` and `in` searches), `"bookmarks"`, `"system"`, `"tasks"` (automation tasks), `"media"` (media controls), `"windows"` (window layouts; `"windows:switch"` is the window switcher), `"shell"`, `"clipboard"`, `"snippets"`, `"emoji"` (the emoji picker; `"emoji:word"` and `"emoji:colon"` are its two keywords), `"selection"` (Universal Actions), `"contacts"`, `"1password"`, `"dict"` (`define` and `spell`), `"uuid"`, `"clock"` (the world clock), `"pwgen"` (the password generator), `"history"` (the `!` query history), `"backup"` (the `backup settings` and `restore settings` [launcher commands](backup-and-restore.md#from-the-command-line-and-the-launcher)), `"settings"` (the `? ` [search of Sevak's own settings](settings.md#find-a-setting)), `"script"` or `"script:<name>"` (script plugins) and `"workflow"` or `"workflow:<folder>"` ([workflows](workflows.md); each also has its own switch in **Settings → Workflows**). Example: `disabled = ["files", "web:yt"]` turns off file search and YouTube search. Unknown ids are ignored. |
 
 ```toml
 [plugins]
@@ -204,6 +216,8 @@ Indexed file search settings.
 | `include_hidden` | boolean | `false` | Index dot-files and dot-folders (starting with `.`). `false` ignores them. |
 | `keyword` | string | `"f"` | Prefix to search only files: type `f filename`. Leave empty `""` to disable keyword search. |
 | `global` | boolean | `true` | Show file results even in ordinary queries without the keyword. `false` requires `f <name>` to search files. |
+| `sort` | string | `"relevance"` | Order of file results: `"relevance"` (best name match first), `"name"` (A to Z, ignoring case) or `"modified"` (newest change first). Name and date orders are applied to the best 200 matches, and the date is the one recorded when the index was last refreshed, so no file is read on each keystroke. Path browsing (`~/Documents/rep`) keeps its own order. |
+| `max_results` | integer | `0` | Most file results per search. `0` uses `[search] max_results`; otherwise `1` to `50`. |
 | `use_os_index` | boolean | `true` | Whole-disk (`ff`) and content (`in`) search through the operating system's own file index (Windows Search, Spotlight, `locate`, Tracker or Baloo). Queries go only to that local index, never over the network. `false` turns both off. See [what each OS needs](features/files.md#whole-disk-and-content-search). |
 | `index_keyword` | string | `"ff"` | Keyword for file names anywhere on the disk: `ff report`. `""` turns off just this search. |
 | `content_keyword` | string | `"in"` | Keyword for words inside files: `in invoice 2026`. `""` turns off just this search. |
@@ -216,6 +230,8 @@ max_depth = 4
 include_hidden = false
 keyword = "f"
 global = true
+sort = "relevance"
+max_results = 0
 use_os_index = true
 index_keyword = "ff"
 content_keyword = "in"
@@ -375,6 +391,8 @@ Clipboard history settings (opt-in feature).
 | `ignore_apps` | array of strings | `[]` | Apps whose copies are never recorded, e.g. `["Signal", "Messages"]`. Matched case-insensitively against the program or app name. |
 | `default_ignore_apps` | boolean | `true` | Also never record copies from the built-in list of password managers (KeePass, KeePassXC, 1Password, Bitwarden, LastPass, Dashlane, Enpass, NordPass, RoboForm, Keeper, Proton Pass and others), system credential prompts and ssh/gpg passphrase prompts, in addition to `ignore_apps`. The [full list](features/clipboard.md#password-managers-and-other-apps-skipped-by-default) is in the clipboard documentation. `false` turns it off. |
 | `encrypt` | boolean | `true` | Encrypt the history file and the image files for the current user where the system can: Windows (DPAPI). macOS and Linux have no such encryption here; their files are plain, readable by your user only. A history stored plain is encrypted at the next start. |
+| `viewer_rows` | integer | `20` | How many history rows `cb` lists at most. Range: 5–100. |
+| `preview_chars` | integer | `100` | How many characters of an entry its row title shows. Range: 40–500. |
 
 ```toml
 [clipboard]
@@ -387,6 +405,8 @@ max_image_bytes = 10485760
 ignore_apps = []
 default_ignore_apps = true
 encrypt = true
+viewer_rows = 20
+preview_chars = 100
 ```
 
 ### [file_buffer]
@@ -412,6 +432,7 @@ keep_between_shows = false
 | `keyword` | string | `"c"` | Keyword to search contacts. The `@` keyword always works too. `""` keeps the default. |
 | `use_system` | boolean | `true` | Also read the system address book: macOS Contacts (asks for permission the first time you use it), the Windows People store and Evolution's local address books on Linux. |
 | `vcard_files` | array of strings | `[]` | vCard files (`.vcf`) or folders of them, e.g. `["~/contacts.vcf", "~/Contacts"]`. Works everywhere and needs no permission. |
+| `show_photos` | boolean | `true` | Show a contact's vCard photo (inline JPEG or PNG, at most 64 KB) as its icon. Photos are held in memory only, never written to disk. |
 
 ```toml
 [contacts]
@@ -419,6 +440,7 @@ enabled = false
 keyword = "c"
 use_system = true
 vcard_files = []
+show_photos = true
 ```
 
 ### [onepassword]
@@ -559,6 +581,23 @@ editors = []
 keyword = "cal"
 files = []
 days = 7
+```
+
+### [recent]
+
+[Recent documents](features/files.md#recent-documents) (`recent <name>`): search the files you used lately, from the operating system's own recent lists. Set it in **Settings → Files**.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | boolean | `true` | `false` removes the search; nothing is read. |
+| `keyword` | string | `"recent"` | Keyword for the search. Cannot be empty (an empty value means the default). |
+| `max_items` | integer | `50` | How many recent files the list keeps (10-500). |
+
+```toml
+[recent]
+enabled = true
+keyword = "recent"
+max_items = 50
 ```
 
 ### [clock]
@@ -789,9 +828,16 @@ max_results = 8
 # Keyword of the web search engine offered when nothing else matches ("" to
 # disable). A list offers several, in order: ["g", "yt", "gh"].
 fallback_web_search = "g"
-# Up/Down on an empty search box recalls the last 50 searches you ran. They are
-# kept in usage.json in the data folder; false stops recording and forgets them.
+# Up/Down on an empty search box recalls the searches you ran (the last 500 at
+# most), and the "!" keyword lists them. They are kept in usage.json in the data
+# folder; false stops recording and forgets them.
 query_history = true
+# How long a remembered search is kept: "24h", "7d", "30d", "90d" (any number
+# of hours "h" or days "d" up to 3650d works). Older ones are dropped.
+history_retention = "30d"
+# false keeps the history in memory for this session only: it is never written
+# to usage.json, and what was saved there is removed.
+history_persist = true
 
 [appearance]
 # "system", "light" or "dark".
@@ -976,6 +1022,10 @@ images = true
 files = true
 # An image whose PNG is larger than this is not recorded.
 max_image_bytes = 10485760
+# Rows shown in the history list (5-100) and characters of an entry shown in
+# its title (40-500).
+viewer_rows = 20
+preview_chars = 100
 # Never record text copied from these apps, e.g. ["Signal", "Messages"].
 # Matched case-insensitively against the program or app name.
 ignore_apps = []
@@ -1004,6 +1054,9 @@ use_system = true
 # vCard files (.vcf) or folders of them, e.g. ["~/contacts.vcf", "~/Contacts"].
 # This works everywhere and needs no permission.
 vcard_files = []
+# Show a contact's photo (vCard PHOTO, JPEG/PNG) as its icon. Photos are decoded
+# into memory only, never written to disk.
+show_photos = true
 
 [onepassword]
 # Search your 1Password logins ("1p github"): Enter opens the item's website,
@@ -1162,6 +1215,15 @@ keyword = "code"
 # Editors to read: "vscode", "vscode-insiders", "vscodium", "cursor",
 # "jetbrains". [] reads every one that is installed.
 editors = []
+
+[recent]
+# "recent <name>" searches the files you used lately, newest first, from the
+# operating system's own recent lists (Linux recently-used.xbel, the Windows
+# Recent folder, macOS Spotlight). Read locally; nothing is sent anywhere.
+enabled = true
+keyword = "recent"
+# How many files are kept in the list (10-500).
+max_items = 50
 
 [calendar]
 # "cal" shows today's and upcoming events from local .ics files: "cal tomorrow",

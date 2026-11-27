@@ -16,9 +16,82 @@ use crate::keywords::KeywordOwners;
 #[cfg(test)]
 use super::model::OUT;
 use super::model::{
-    Accepts, Node, NodeKind, Test, TransformOp, Workflow, FORMAT, MAX_CONNECTIONS, MAX_DELAY_MS,
-    MAX_NODES,
+    valid_folder_name, Accepts, Delimiter, Node, NodeKind, RandomMode, Test, TransformOp, Workflow,
+    DIALOG_PORTS, FORMAT, MAX_CONNECTIONS, MAX_DELAY_MS, MAX_DIALOG_BUTTONS, MAX_LIST_ITEMS,
+    MAX_NODES, SOUND_EXTENSIONS,
 };
+
+/// Checks a `show_ui` node's own fields. The definition is checked as far as
+/// it can be without the workflow folder (a `file` is read when the workflow
+/// runs, and by the builder's Validate button).
+fn check_show_ui(
+    definition: Option<&str>,
+    file: Option<&str>,
+    scripts: &std::collections::BTreeMap<String, super::ui::UiScript>,
+    ports: &[String],
+    error: &mut dyn FnMut(&str),
+) {
+    use super::ui;
+    let inline = definition.map(str::trim).filter(|text| !text.is_empty());
+    let file = file.map(str::trim).filter(|text| !text.is_empty());
+    match (inline, file) {
+        (None, None) => error("write the UI as JSON, or name a JSON file"),
+        (Some(_), Some(_)) => error("use either the definition or a file, not both"),
+        _ => {}
+    }
+    if let Some(file) = file {
+        if crate::script::relative_inside(std::path::Path::new(""), file).is_none() {
+            error("the UI file must be a path inside the workflow folder");
+        }
+    }
+    if scripts.len() > ui::MAX_UI_SCRIPTS {
+        error(&format!("a UI has at most {} scripts", ui::MAX_UI_SCRIPTS));
+    }
+    for (id, script) in scripts {
+        if !ui::valid_script_id(id) {
+            error(&format!(
+                "\"{id}\" is not a valid script id (letters, digits, - and _)"
+            ));
+        }
+        if ui::language_extension(&script.language).is_none() {
+            error(&format!(
+                "the script \"{id}\" has an unknown language (use shell, python, javascript or powershell)"
+            ));
+        }
+        if script.script.trim().is_empty() {
+            error(&format!("the script \"{id}\" is empty"));
+        }
+    }
+    for port in ports {
+        if !ui::valid_port(port) {
+            error(&format!("\"{port}\" is not a valid output name"));
+        }
+    }
+    if let Some(text) = inline {
+        let known: std::collections::BTreeSet<String> = scripts.keys().cloned().collect();
+        let loaded = serde_json::from_str::<serde_json::Value>(text)
+            .map_err(|err| format!("the UI definition is not valid JSON: {err}"))
+            .and_then(|value| {
+                // `{file:...}` includes are only read at run time.
+                if has_include(&value) {
+                    return Ok(());
+                }
+                ui::parse_value(value, &known).map(drop)
+            });
+        if let Err(message) = loaded {
+            error(&message);
+        }
+    }
+}
+
+fn has_include(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::String(text) => text.trim().starts_with("{file:"),
+        serde_json::Value::Array(items) => items.iter().any(has_include),
+        serde_json::Value::Object(map) => map.values().any(has_include),
+        _ => false,
+    }
+}
 
 /// Largest compiled regular expression a node may use.
 pub const REGEX_SIZE_LIMIT: usize = 256 * 1024;
@@ -130,7 +203,17 @@ impl Workflow {
             } else if !ids.insert(&node.id) {
                 problems.push(Problem::error(Some(&node.id), "this id is used twice"));
             }
-            check_node(node, &mut problems);
+            if node.disabled {
+                // It never runs, so what is missing in it is only worth a warning.
+                let mut found = Vec::new();
+                check_node(node, &mut found);
+                problems.extend(found.into_iter().map(|mut problem| {
+                    problem.severity = Severity::Warning;
+                    problem
+                }));
+            } else {
+                check_node(node, &mut problems);
+            }
         }
         self.check_graph(&mut problems);
         // Stable and readable: errors before warnings, otherwise in file order.
@@ -186,6 +269,9 @@ impl Workflow {
                 format!("a workflow may have at most {MAX_CONNECTIONS} connections"),
             ));
         }
+        for message in super::config::field_problems(&self.config) {
+            problems.push(Problem::error(None, message));
+        }
         for name in self.variables.keys() {
             if !valid_variable_name(name) {
                 problems.push(Problem::error(
@@ -231,7 +317,7 @@ impl Workflow {
                 ));
                 continue;
             };
-            if !from.kind.output_ports().contains(&conn.port.as_str()) {
+            if !from.kind.ports().contains(&conn.port) {
                 problems.push(Problem::error(
                     Some(&conn.from),
                     format!(
@@ -240,6 +326,19 @@ impl Workflow {
                     ),
                 ));
                 continue;
+            }
+            if let NodeKind::DialogConditional { buttons, .. } = &from.kind {
+                let wired = DIALOG_PORTS
+                    .iter()
+                    .position(|port| *port == conn.port)
+                    .filter(|index| *index < MAX_DIALOG_BUTTONS);
+                if wired.is_some_and(|index| index >= buttons.len()) {
+                    problems.push(Problem::error(
+                        Some(&conn.from),
+                        format!("the connection {label} leaves a button the dialog does not have"),
+                    ));
+                    continue;
+                }
             }
             if to.kind.is_start() {
                 problems.push(Problem::error(
@@ -502,6 +601,169 @@ fn check_node(node: &Node, problems: &mut Vec<Problem>) {
             }
         }
         NodeKind::LargeType { .. } | NodeKind::TextView { .. } => {}
+        NodeKind::SplitArg {
+            delimiter,
+            custom,
+            prefix,
+            ..
+        } => {
+            if *delimiter == Delimiter::Custom && custom.is_empty() {
+                error("enter the text to split at");
+            }
+            if !valid_variable_name(&format!("{}1", prefix.trim())) {
+                error("the variable prefix may only use letters, digits, _, - and .");
+            }
+        }
+        NodeKind::JoinArg { .. } | NodeKind::Debug { .. } => {}
+        NodeKind::Random {
+            mode,
+            min,
+            max,
+            lines,
+            variable,
+        } => {
+            match mode {
+                RandomMode::Number if min > max => {
+                    error("the smallest number is above the largest")
+                }
+                RandomMode::Line if lines.trim().is_empty() => {
+                    error("enter the lines to pick from")
+                }
+                _ => {}
+            }
+            if let Some(name) = variable.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
+                if !valid_variable_name(name) {
+                    error("the variable name may only use letters, digits, _, - and .");
+                }
+            }
+        }
+        NodeKind::Expression {
+            expression,
+            variable,
+            ..
+        } => {
+            if expression.trim().is_empty() {
+                error("enter an expression");
+            }
+            if !valid_variable_name(variable.trim()) {
+                error("the variable name may only use letters, digits, _, - and .");
+            }
+        }
+        NodeKind::WriteFile { path, .. } => {
+            if path.trim().is_empty() {
+                error("enter a file path");
+            }
+        }
+        NodeKind::RevealFile { path } => {
+            if path.trim().is_empty() {
+                error("enter a file or folder");
+            }
+        }
+        NodeKind::CallExternal {
+            workflow, trigger, ..
+        } => {
+            if !valid_folder_name(workflow.trim()) {
+                error("enter the folder name of the other workflow");
+            }
+            if trigger.trim().is_empty() {
+                error("enter the id of the external trigger to run");
+            }
+        }
+        NodeKind::ListFilter { keyword, items } => {
+            check_keyword(keyword, &mut error);
+            if items.is_empty() {
+                error("add at least one item to the list");
+            } else if items.len() > MAX_LIST_ITEMS {
+                error(&format!("a list may have at most {MAX_LIST_ITEMS} items"));
+            }
+            if items.iter().any(|item| item.title.trim().is_empty()) {
+                error("every item needs a title");
+            }
+        }
+        NodeKind::FileFilter {
+            keyword,
+            folders,
+            extensions,
+            ..
+        } => {
+            check_keyword(keyword, &mut error);
+            if folders.iter().any(|folder| folder.trim().is_empty()) {
+                error("a folder is empty");
+            }
+            for extension in extensions {
+                let ext = extension.trim().trim_start_matches('.');
+                if ext.is_empty() || ext.contains(['/', '\\', '*', '.']) {
+                    error(&format!(
+                        "\"{extension}\" is not a file extension (use pdf, png...)"
+                    ));
+                }
+            }
+        }
+        NodeKind::RunningApps { keyword, .. } => check_keyword(keyword, &mut error),
+        NodeKind::DialogConditional {
+            heading,
+            message,
+            buttons,
+        } => {
+            if buttons.is_empty() || buttons.len() > MAX_DIALOG_BUTTONS {
+                error(&format!(
+                    "a dialog needs between 1 and {MAX_DIALOG_BUTTONS} buttons"
+                ));
+            }
+            if buttons.iter().any(|label| label.trim().is_empty()) {
+                error("every button needs a label");
+            }
+            if heading.trim().is_empty() && message.trim().is_empty() {
+                error("a dialog needs a heading or a message");
+            }
+        }
+        NodeKind::Speak { voice, .. } => {
+            if let Some(voice) = voice.as_deref().map(str::trim) {
+                if voice.starts_with('-') || voice.chars().any(char::is_control) {
+                    error("the voice name is not valid");
+                }
+            }
+        }
+        NodeKind::PlaySound { path } => check_sound_path(path, &mut error),
+        NodeKind::ShowUi {
+            definition,
+            file,
+            scripts,
+            ports,
+            ..
+        } => check_show_ui(
+            definition.as_deref(),
+            file.as_deref(),
+            scripts,
+            ports,
+            &mut error,
+        ),
+    }
+}
+
+/// A sound path must end in a known extension, unless a placeholder decides
+/// the end of it (then it is checked when the node runs).
+fn check_sound_path(path: &str, error: &mut impl FnMut(&str)) {
+    let path = path.trim();
+    if path.is_empty() {
+        error("enter the path of a sound file");
+        return;
+    }
+    let extension = path
+        .rsplit_once('.')
+        .map(|(_, ext)| ext)
+        .filter(|ext| !ext.contains(['/', '\\']));
+    match extension {
+        Some(ext) if ext.contains(['{', '}']) => {}
+        Some(ext)
+            if SOUND_EXTENSIONS
+                .iter()
+                .any(|ok| ext.eq_ignore_ascii_case(ok)) => {}
+        None if path.ends_with('}') => {}
+        _ => error(&format!(
+            "the sound file must be one of: {}",
+            SOUND_EXTENSIONS.join(", ")
+        )),
     }
 }
 
@@ -563,6 +825,8 @@ mod tests {
             title: String::new(),
             x: 0.0,
             y: 0.0,
+            note: String::new(),
+            disabled: false,
             kind,
         }
     }
@@ -587,6 +851,7 @@ mod tests {
             from: from.into(),
             port: OUT.into(),
             to: to.into(),
+            disabled: false,
         }
     }
 
@@ -612,6 +877,93 @@ mod tests {
         errors(workflow)
             .iter()
             .any(|message| message.contains(needle))
+    }
+
+    #[test]
+    fn the_utility_nodes_are_checked() {
+        use crate::workflow::model::{Delimiter, RandomMode, WriteMode};
+        let check = |kind: NodeKind| {
+            workflow(
+                vec![keyword("k", "go"), node("n", kind)],
+                vec![wire("k", "n")],
+            )
+        };
+        let split = |delimiter, custom: &str, prefix: &str| NodeKind::SplitArg {
+            delimiter,
+            custom: custom.into(),
+            discard_empty: true,
+            trim: true,
+            prefix: prefix.into(),
+        };
+        assert!(check(split(Delimiter::Comma, "", "split_")).is_valid());
+        assert!(has_error(
+            &check(split(Delimiter::Custom, "", "split_")),
+            "split at"
+        ));
+        assert!(has_error(
+            &check(split(Delimiter::Comma, "", "bad prefix")),
+            "prefix"
+        ));
+
+        let random = |mode, min, max, lines: &str, variable: Option<&str>| NodeKind::Random {
+            mode,
+            min,
+            max,
+            lines: lines.into(),
+            variable: variable.map(Into::into),
+        };
+        assert!(check(random(RandomMode::Number, 1, 1, "", None)).is_valid());
+        assert!(has_error(
+            &check(random(RandomMode::Number, 2, 1, "", None)),
+            "smallest"
+        ));
+        assert!(has_error(
+            &check(random(RandomMode::Line, 0, 0, "  ", None)),
+            "lines"
+        ));
+        assert!(has_error(
+            &check(random(RandomMode::Uuid, 0, 0, "", Some("a b"))),
+            "variable name"
+        ));
+        assert!(check(random(RandomMode::Uuid, 0, 0, "", Some("id"))).is_valid());
+
+        let expression = |text: &str, variable: &str| NodeKind::Expression {
+            expression: text.into(),
+            variable: variable.into(),
+            set_arg: true,
+        };
+        assert!(check(expression("{var:n} + 1", "n")).is_valid());
+        assert!(has_error(&check(expression("1", " ")), "variable name"));
+        assert!(has_error(&check(expression(" ", "n")), "expression"));
+
+        let write = |path: &str| NodeKind::WriteFile {
+            path: path.into(),
+            content: "{query}".into(),
+            mode: WriteMode::Append,
+            create_dirs: false,
+        };
+        assert!(check(write("a.txt")).is_valid());
+        assert!(has_error(&check(write(" ")), "file path"));
+        assert!(has_error(
+            &check(NodeKind::RevealFile { path: " ".into() }),
+            "file or folder"
+        ));
+
+        let call = |workflow: &str, trigger: &str| NodeKind::CallExternal {
+            workflow: workflow.into(),
+            trigger: trigger.into(),
+            arg: "{query}".into(),
+            pass_variables: false,
+        };
+        assert!(check(call("other-flow", "go")).is_valid());
+        assert!(has_error(&check(call("../x", "go")), "folder name"));
+        assert!(has_error(&check(call("other", " ")), "trigger"));
+        assert!(check(NodeKind::Debug { passthrough: true }).is_valid());
+        assert!(check(NodeKind::JoinArg {
+            separator: ",".into(),
+            discard_empty: false
+        })
+        .is_valid());
     }
 
     #[test]
@@ -662,6 +1014,7 @@ mod tests {
                 from: "k".into(),
                 port: "then".into(),
                 to: "c".into(),
+                disabled: false,
             }],
         );
         assert!(has_error(&bad_port, "no output \"then\""));
@@ -699,11 +1052,13 @@ mod tests {
                     from: "q".into(),
                     port: "then".into(),
                     to: "yes".into(),
+                    disabled: false,
                 },
                 Connection {
                     from: "q".into(),
                     port: "else".into(),
                     to: "no".into(),
+                    disabled: false,
                 },
             ],
         );
@@ -768,6 +1123,174 @@ mod tests {
             found.iter().any(|m| m.contains("letters, digits")),
             "{found:?}"
         );
+    }
+
+    fn list_node(id: &str) -> Node {
+        node(
+            id,
+            NodeKind::ListFilter {
+                keyword: "pick".into(),
+                items: vec![crate::workflow::model::ListItem {
+                    title: "A".into(),
+                    ..Default::default()
+                }],
+            },
+        )
+    }
+
+    fn dialog(buttons: &[&str]) -> Node {
+        node(
+            "ask",
+            NodeKind::DialogConditional {
+                heading: String::new(),
+                message: "Sure?".into(),
+                buttons: buttons.iter().map(|b| (*b).into()).collect(),
+            },
+        )
+    }
+
+    fn wire_port(from: &str, port: &str, to: &str) -> Connection {
+        Connection {
+            from: from.into(),
+            port: port.into(),
+            to: to.into(),
+            disabled: false,
+        }
+    }
+
+    #[test]
+    fn the_new_input_nodes_are_starts_and_are_checked() {
+        use crate::workflow::model::{AppOutput, FileScope};
+        let w = workflow(vec![list_node("l"), copy("c")], vec![wire("l", "c")]);
+        assert_eq!(w.validate(), []);
+
+        let cases: Vec<(NodeKind, &str)> = vec![
+            (
+                NodeKind::ListFilter {
+                    keyword: "k".into(),
+                    items: vec![],
+                },
+                "at least one item",
+            ),
+            (
+                NodeKind::ListFilter {
+                    keyword: "k".into(),
+                    items: vec![Default::default()],
+                },
+                "needs a title",
+            ),
+            (
+                NodeKind::FileFilter {
+                    keyword: "two words".into(),
+                    folders: vec![],
+                    extensions: vec![],
+                    scope: FileScope::Any,
+                },
+                "spaces",
+            ),
+            (
+                NodeKind::FileFilter {
+                    keyword: "f".into(),
+                    folders: vec![],
+                    extensions: vec!["*.pdf".into()],
+                    scope: FileScope::Any,
+                },
+                "not a file extension",
+            ),
+            (
+                NodeKind::RunningApps {
+                    keyword: String::new(),
+                    output: AppOutput::Pid,
+                },
+                "choose a keyword",
+            ),
+            (
+                NodeKind::DialogConditional {
+                    heading: String::new(),
+                    message: "m".into(),
+                    buttons: vec![],
+                },
+                "between 1 and 3",
+            ),
+            (
+                NodeKind::DialogConditional {
+                    heading: String::new(),
+                    message: "m".into(),
+                    buttons: vec!["a".into(), "b".into(), "c".into(), "d".into()],
+                },
+                "between 1 and 3",
+            ),
+            (
+                NodeKind::DialogConditional {
+                    heading: String::new(),
+                    message: " ".into(),
+                    buttons: vec!["a".into()],
+                },
+                "heading or a message",
+            ),
+            (
+                NodeKind::Speak {
+                    text: "x".into(),
+                    voice: Some("-o".into()),
+                },
+                "voice",
+            ),
+            (NodeKind::PlaySound { path: " ".into() }, "path of a sound"),
+            (
+                NodeKind::PlaySound {
+                    path: "a.txt".into(),
+                },
+                "must be one of",
+            ),
+            (NodeKind::PlaySound { path: "a".into() }, "must be one of"),
+        ];
+        for (kind, needle) in cases {
+            let start = if kind.is_start() {
+                vec![node("n", kind)]
+            } else {
+                vec![keyword("k", "go"), node("n", kind)]
+            };
+            let w = workflow(start, vec![]);
+            assert!(has_error(&w, needle), "{needle}: {:?}", errors(&w));
+        }
+    }
+
+    #[test]
+    fn sound_paths_with_placeholders_or_any_case_are_accepted() {
+        for path in [
+            "~/a/ding.WAV",
+            "{query}",
+            "{var:dir}/x.mp3",
+            "x.{var:ext}",
+            "a.flac",
+        ] {
+            let w = workflow(
+                vec![
+                    keyword("k", "go"),
+                    node("p", NodeKind::PlaySound { path: path.into() }),
+                ],
+                vec![wire("k", "p")],
+            );
+            assert_eq!(errors(&w), Vec::<String>::new(), "{path}");
+        }
+    }
+
+    #[test]
+    fn a_dialog_has_a_port_per_button_and_cancel() {
+        let flow = |port: &str, buttons: &[&str]| {
+            workflow(
+                vec![keyword("k", "go"), dialog(buttons), copy("c")],
+                vec![wire("k", "ask"), wire_port("ask", port, "c")],
+            )
+        };
+        assert_eq!(flow("button1", &["a", "b"]).validate(), []);
+        assert_eq!(flow("cancel", &["a"]).validate(), []);
+        assert!(has_error(
+            &flow("button2", &["a"]),
+            "button the dialog does not have"
+        ));
+        assert!(has_error(&flow("out", &["a"]), "no output"));
+        assert!(has_error(&flow("button4", &["a"]), "no output"));
     }
 
     #[test]
@@ -979,5 +1502,19 @@ mod tests {
         assert!(summary.contains("ghost"), "{summary}");
         assert!(!summary.contains("never runs"), "{summary}");
         assert_eq!(error_summary(&[]), None);
+    }
+
+    #[test]
+    fn a_disabled_node_with_missing_fields_only_warns() {
+        let mut bad = keyword("t", "");
+        let w = workflow(vec![bad.clone()], vec![]);
+        assert!(!errors(&w).is_empty());
+        bad.disabled = true;
+        let w = workflow(vec![bad], vec![]);
+        assert!(errors(&w).is_empty(), "{:?}", errors(&w));
+        assert!(w
+            .validate()
+            .iter()
+            .any(|p| !p.is_error() && p.node.as_deref() == Some("t")));
     }
 }

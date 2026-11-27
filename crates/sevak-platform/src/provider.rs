@@ -473,6 +473,13 @@ pub trait PlatformProvider: Send + Sync {
         Err(crate::error::PlatformError::Unsupported("listing displays"))
     }
 
+    /// The files the user used most recently, newest first, at most `limit`
+    /// (the OS's own recent lists; see [`crate::recent`]). Reads files or runs
+    /// a local search: call it from a background thread.
+    fn recent_files(&self, limit: usize) -> Vec<crate::recent::RecentFile> {
+        crate::recent::recent_files(limit)
+    }
+
     /// Like [`PlatformProvider::set_clipboard_text`], for a secret (a generated
     /// password): the text is marked so that the OS clipboard history and cloud
     /// sync (Windows Win+V, macOS clipboard managers honouring
@@ -480,5 +487,16 @@ pub trait PlatformProvider: Send + Sync {
     /// Sevak's own clipboard history leave it out.
     fn set_clipboard_text_private(&self, text: &str) -> Result<()> {
         crate::clipboard::set_text_private(text)
+    }
+
+    /// Speaks `text` with the system's speech engine (the named voice, or the
+    /// default one). Does not wait for the speech to finish.
+    fn speak(&self, text: &str, voice: Option<&str>) -> Result<()> {
+        crate::speech::speak(text, voice)
+    }
+
+    /// Plays the sound file at `path`. Does not wait for it to finish.
+    fn play_sound(&self, path: &Path) -> Result<()> {
+        crate::speech::play_sound(path)
     }
 }
