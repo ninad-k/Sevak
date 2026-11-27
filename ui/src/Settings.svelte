@@ -43,7 +43,7 @@
   } from "./lib/settings-ipc";
   import { displayAccelerator } from "./lib/accelerator";
   import { applyAppearance } from "./lib/appearance";
-  import { applyTheme } from "./lib/theme";
+  import { applyTheme, resolveSettingsTheme } from "./lib/theme";
   import { LANGUAGES, currentLanguage, formatList, formatNumber, resolveLanguage, setLanguage, t, tHtml } from "./lib/i18n.svelte";
   import {
     MAX_DEPTH,
@@ -80,6 +80,9 @@
       radius: 14,
       theme_file: "",
       custom_css: "",
+      settings_theme: "follow",
+      open_animation: "fade",
+      animation_ms: 150,
     },
     plugins: { disabled: [] },
     calculator: { currency: false },
@@ -364,7 +367,9 @@
 
   // Preview the theme while choosing it; saving makes it stick for every window.
   $effect(() => {
-    if (ready) applyTheme(draft.appearance.theme);
+    if (ready) {
+      applyTheme(resolveSettingsTheme(draft.appearance.settings_theme, draft.appearance.theme));
+    }
   });
 
   // Switch the language as soon as it is picked, like the theme.

@@ -1625,7 +1625,8 @@
   },
   "appearance": {
     "units": {
-      "px": "{value} px"
+      "px": "{value} px",
+      "ms": "{value} ms"
     },
     "extras": {
       "accent": "एक्सेंट रंग",
@@ -1642,6 +1643,19 @@
       "blurHint": "खोज बार के पीछे के डेस्कटॉप को धुंधला करता है। इसे देखने के लिए ऊपर अपारदर्शिता कम करें।",
       "radius": "कोनों की गोलाई",
       "radiusHint": "खोज बार के कोने कितने गोल हों।",
+      "settingsTheme": "सेटिंग्स विंडो का मोड",
+      "settingsThemeHint": "केवल इस विंडो के लिए हल्का या गहरा। «लॉन्चर जैसा» लॉन्चर की थीम इस्तेमाल करता है।",
+      "settingsThemeFollow": "लॉन्चर जैसा",
+      "settingsThemeLight": "हल्का",
+      "settingsThemeDark": "गहरा",
+      "settingsThemeSystem": "सिस्टम",
+      "openAnimation": "खुलने का एनिमेशन",
+      "openAnimationHint": "सर्च बार कैसे दिखता है। सिस्टम की रिड्यूस्ड-मोशन सेटिंग इसे हमेशा बंद कर देती है।",
+      "openFade": "फ़ेड",
+      "openFadeScale": "फ़ेड और ज़ूम",
+      "openNone": "कोई नहीं",
+      "animationMs": "एनिमेशन की अवधि",
+      "animationMsHint": "खुलने का एनिमेशन कितनी देर चलता है।",
       "customCss": "अपनी स्टाइलशीट",
       "customCssHint": "कॉन्फ़िग फ़ोल्डर के अंदर की एक CSS फ़ाइल जो थीम के वेरिएबल बदल देती है, जैसे <code>theme.css</code>। docs/themes.md देखें।"
     },

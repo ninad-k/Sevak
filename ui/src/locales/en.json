@@ -1625,7 +1625,8 @@
   },
   "appearance": {
     "units": {
-      "px": "{value} px"
+      "px": "{value} px",
+      "ms": "{value} ms"
     },
     "extras": {
       "accent": "Accent color",
@@ -1642,6 +1643,19 @@
       "blurHint": "Blurs the desktop behind the search bar. Lower the opacity above to see it.",
       "radius": "Corner radius",
       "radiusHint": "Roundness of the search bar.",
+      "settingsTheme": "Settings window mode",
+      "settingsThemeHint": "Light or dark for this window only. Follow uses the launcher's theme.",
+      "settingsThemeFollow": "Follow the launcher",
+      "settingsThemeLight": "Light",
+      "settingsThemeDark": "Dark",
+      "settingsThemeSystem": "System",
+      "openAnimation": "Open animation",
+      "openAnimationHint": "How the search bar appears. Your system's reduced-motion setting always turns it off.",
+      "openFade": "Fade",
+      "openFadeScale": "Fade and zoom",
+      "openNone": "None",
+      "animationMs": "Animation length",
+      "animationMsHint": "How long the open animation takes.",
       "customCss": "Custom stylesheet",
       "customCssHint": "A CSS file inside the config folder that overrides the theme variables, such as <code>theme.css</code>. See docs/themes.md."
     },

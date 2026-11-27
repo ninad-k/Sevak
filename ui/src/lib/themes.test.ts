@@ -384,6 +384,25 @@ describe("theme JSON as the backend sends it (builtin-themes.json)", () => {
     }
   });
 
+  it("ships the three Sevak Glass and Violet themes with the see-through, rounded layout", () => {
+    const byName = (name: string) => themes.find((t) => t.spec.name === name);
+    expect(themes.length).toBe(11);
+    for (const name of ["Sevak Glass Light", "Sevak Glass Dark"]) {
+      const layout = byName(name)!.spec.layout;
+      expect(layout.radius, name).toBeGreaterThanOrEqual(20);
+      expect(layout.opacity, name).toBeLessThan(100);
+      expect(layout.row_height, name).toBeGreaterThan(48);
+    }
+    expect(byName("Sevak Glass Light")!.spec.light).toBeTruthy();
+    expect(byName("Sevak Glass Dark")!.spec.dark).toBeTruthy();
+    expect(byName("Sevak Violet")!.spec.dark!.accent).toMatch(/^#/);
+  });
+
+  it("measures contrast like WCAG on known pairs", () => {
+    expect(contrastRatio(BLACK, WHITE)).toBeCloseTo(21, 5);
+    expect(contrastRatio(WHITE, WHITE)).toBeCloseTo(1, 5);
+  });
+
   it("gives every palette every color key, in a form the editor and Rust both accept", () => {
     for (const theme of themes) {
       for (const mode of ["light", "dark"] as const) {

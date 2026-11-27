@@ -1479,7 +1479,7 @@
   }
 
   .card.opening {
-    animation: open 150ms cubic-bezier(0.2, 0.8, 0.25, 1);
+    animation: open var(--open-ms, 150ms) cubic-bezier(0.2, 0.8, 0.25, 1);
   }
 
   @keyframes open {
@@ -1487,6 +1487,21 @@
       opacity: 0.4;
       transform: translateY(-6px) scale(0.985);
     }
+  }
+
+  :global(:root[data-open-animation="fade_scale"]) .card.opening {
+    animation-name: open-scale;
+  }
+
+  @keyframes open-scale {
+    from {
+      opacity: 0.2;
+      transform: translateY(-10px) scale(0.94);
+    }
+  }
+
+  :global(:root[data-open-animation="none"]) .card.opening {
+    animation: none;
   }
 
   /* A blurred backdrop fills the whole window: no padding or drop shadow around the card. */

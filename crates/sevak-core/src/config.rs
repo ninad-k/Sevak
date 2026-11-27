@@ -109,6 +109,15 @@ theme_file = ""
 # A stylesheet inside this config folder that overrides the theme's CSS variables
 # (see docs/themes.md), for example "theme.css". "" loads none.
 custom_css = ""
+# Light/dark mode of the Settings window only: "follow" (use `theme`), "light",
+# "dark" or "system".
+settings_theme = "follow"
+# How the launcher appears: "fade" (a short fade and settle), "fade_scale"
+# (the same with a stronger zoom) or "none". The system's reduced-motion
+# setting always turns it off.
+open_animation = "fade"
+# Length of that animation in milliseconds (0-400).
+animation_ms = 150
 
 [plugins]
 # Ids of built-in plugins to turn off: "apps", "calculator", "files",
@@ -765,6 +774,40 @@ pub enum Theme {
     Dark,
 }
 
+/// Light/dark mode of the Settings window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SettingsTheme {
+    /// Same as the launcher's `theme`.
+    #[default]
+    Follow,
+    Light,
+    Dark,
+    System,
+}
+
+impl SettingsTheme {
+    /// The mode the Settings window uses, given the launcher's `theme`.
+    pub fn resolve(self, launcher: Theme) -> Theme {
+        match self {
+            Self::Follow => launcher,
+            Self::Light => Theme::Light,
+            Self::Dark => Theme::Dark,
+            Self::System => Theme::System,
+        }
+    }
+}
+
+/// How the launcher appears when it opens.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OpenAnimation {
+    #[default]
+    Fade,
+    FadeScale,
+    None,
+}
+
 /// Appearance settings. Values are stored as written; [`crate::theme::resolve`]
 /// validates them (falling back to the defaults) when they are applied, so a typo
 /// never costs the user the rest of the file.
@@ -789,6 +832,12 @@ pub struct AppearanceConfig {
     pub theme_file: String,
     /// Stylesheet inside the config directory; empty loads none.
     pub custom_css: String,
+    /// Light/dark mode of the Settings window.
+    pub settings_theme: SettingsTheme,
+    /// How the launcher appears when it opens.
+    pub open_animation: OpenAnimation,
+    /// Length of the open animation in milliseconds.
+    pub animation_ms: u32,
 }
 
 impl Default for AppearanceConfig {
@@ -803,6 +852,9 @@ impl Default for AppearanceConfig {
             radius: crate::theme::DEFAULT_RADIUS,
             theme_file: String::new(),
             custom_css: String::new(),
+            settings_theme: SettingsTheme::default(),
+            open_animation: OpenAnimation::default(),
+            animation_ms: crate::theme::DEFAULT_ANIMATION_MS,
         }
     }
 }
@@ -3148,9 +3200,20 @@ query = "no key, dropped"
         config.appearance.radius = 4;
         config.appearance.theme_file = "themes/Nord.toml".to_owned();
         config.appearance.custom_css = "theme.css".to_owned();
+        config.appearance.settings_theme = SettingsTheme::Dark;
+        config.appearance.open_animation = OpenAnimation::FadeScale;
+        config.appearance.animation_ms = 220;
         let text = saved(Some(DEFAULT_CONFIG_TOML), &config);
         assert!(text.contains("# Corner radius of the search bar in pixels (0-32)."));
         assert_eq!(Config::from_toml_str(&text).unwrap(), config);
+    }
+
+    #[test]
+    fn settings_theme_follows_or_overrides_the_launcher_theme() {
+        assert_eq!(SettingsTheme::Follow.resolve(Theme::Dark), Theme::Dark);
+        assert_eq!(SettingsTheme::Light.resolve(Theme::Dark), Theme::Light);
+        assert_eq!(SettingsTheme::Dark.resolve(Theme::Light), Theme::Dark);
+        assert_eq!(SettingsTheme::System.resolve(Theme::Dark), Theme::System);
     }
 
     #[test]

@@ -162,7 +162,7 @@ Sevak also includes:
 - **Custom hotkeys** — extra global keys that open Sevak with text typed in
   (`> `, `g `) or run a result directly.
 - **Themes** — light, dark or system, plus accent color, font, radius, opacity
-  and your own stylesheet. A visual theme editor with a live preview, eight
+  and your own stylesheet. A visual theme editor with a live preview, eleven
   built-in themes and an optional online gallery with eleven more (Tokyo
   Night, Catppuccin, Rosé Pine, GitHub and others) are in Settings →
   Appearance ([themes guide](docs/themes.md)).

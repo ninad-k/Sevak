@@ -153,6 +153,9 @@ Launcher theme and styling.
 | `blur` | boolean | `false` | `true`, `false` | Frosted-glass blur of the desktop behind the search bar (Windows Acrylic, macOS vibrancy); ignored on Linux. You only see it when `opacity` is below 100. On Windows 11 the corners are rounded by the system, so `radius` is fixed at 8 px while blur is on. |
 | `radius` | integer | `14` | 0–32 (pixels) | Corner radius of the search bar. 0 is sharp corners; 32 is very rounded. Whole numbers only. |
 | `theme_file` | string | `""` (empty) | path in config folder, or `""` | A theme file, such as `"themes/Nord.toml"`, made, imported or installed in **Settings → Appearance → Theme editor**. Applied between the built-in light/dark look and the settings above; `""` uses none. See [Theme files and the editor](themes.md#theme-files-and-the-editor). |
+| `settings_theme` | string | `"follow"` | `"follow"`, `"light"`, `"dark"`, `"system"` | Light or dark mode of the Settings window only. `"follow"` uses `theme`. |
+| `open_animation` | string | `"fade"` | `"fade"`, `"fade_scale"`, `"none"` | How the launcher appears. The system's reduced-motion setting always turns it off. |
+| `animation_ms` | integer | `150` | 0-400 (milliseconds) | Length of the open animation. |
 | `custom_css` | string | `""` (empty) | filename in config folder, or `""` | Stylesheet to override theme colours and layout. Must be a file in the config folder (same folder as `config.toml`), e.g. `"theme.css"`. `""` loads none. See [Themes guide](themes.md) for available CSS variables. |
 
 ```toml
@@ -165,6 +168,9 @@ opacity = 100
 radius = 14
 theme_file = ""
 custom_css = ""
+settings_theme = "follow"
+open_animation = "fade"
+animation_ms = 150
 ```
 
 ### [plugins]

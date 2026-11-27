@@ -101,6 +101,7 @@ export const MAX_FONT_SIZE = 22;
 export const MIN_OPACITY = 30;
 export const MAX_OPACITY = 100;
 export const MAX_RADIUS = 32;
+export const MAX_ANIMATION_MS = 400;
 export const MAX_CLIPBOARD_ITEMS = 5_000;
 export const MAX_CLIPBOARD_ITEM_BYTES = 4 * 1024 * 1024;
 export const MAX_CLIPBOARD_IMAGE_BYTES = 64 * 1024 * 1024;

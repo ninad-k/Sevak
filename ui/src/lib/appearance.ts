@@ -29,4 +29,5 @@ export function applyAppearance(appearance: AppearanceCss | null | undefined): v
   setSheet(APPEARANCE_ID, appearance.css);
   setSheet(CUSTOM_ID, appearance.custom_css);
   document.documentElement.toggleAttribute("data-blur", !!appearance.blur);
+  document.documentElement.dataset.openAnimation = appearance.open_animation ?? "fade";
 }

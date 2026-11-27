@@ -264,9 +264,17 @@ Rounding of the search bar's corners in pixels. Range: 0–32 px (0 = sharp corn
 
 Links to: `[appearance] radius` in configuration.
 
+### Settings window mode
+
+Follow the launcher (default), Light, Dark or System, for the Settings window only. The launcher keeps the **Theme** above. Links to: `[appearance] settings_theme` in configuration.
+
+### Open animation
+
+How the search bar appears: Fade (default), Fade and zoom or None. **Animation length** (0-400 ms, default 150) is hidden while None is selected. The system's reduced-motion setting always wins. Links to: `[appearance] open_animation` and `animation_ms` in configuration.
+
 ### Theme editor and gallery
 
-**Theme editor** creates and edits theme files with a live preview: eight built-in themes (Sevak Light, Sevak Dark, Nord, Dracula, Solarized Light, Solarized Dark, Gruvbox and High Contrast), color pickers, sliders for sizes, a WCAG contrast check, undo and redo, **Save as…**, **Apply**, **Import…** and **Export…**. **Open themes folder** shows the `themes` folder next to `config.toml`.
+**Theme editor** creates and edits theme files with a live preview: eleven built-in themes (Sevak Light, Sevak Dark, Nord, Dracula, Solarized Light, Solarized Dark, Gruvbox, High Contrast, Sevak Glass Light, Sevak Glass Dark and Sevak Violet), color pickers, sliders for sizes, a WCAG contrast check, undo and redo, **Save as…**, **Apply**, **Import…** and **Export…**. **Open themes folder** shows the `themes` folder next to `config.toml`.
 
 **Browse online themes** loads the community theme gallery. Nothing is requested until you click it, and **Install** saves a theme only if its checksum matches.
 

@@ -1,0 +1,36 @@
+# Original Sevak palette (Apache-2.0). Meant for Settings > Appearance > Frosted-glass blur (Windows and macOS): the bar is 82% opaque.
+name = "Sevak Glass Dark"
+author = "Sevak"
+description = "A roomy, rounded, slightly see-through dark theme with a bright periwinkle selection, made for the frosted-glass blur."
+
+[font]
+size = 15
+
+[layout]
+radius = 24
+opacity = 82
+row_height = 56
+search_size = 24
+icon_size = 34
+window_width = 760
+
+[dark]
+background = "#10131f"
+text = "#eef1fb"
+subtext = "#a3abc6"
+border = "rgba(238, 241, 251, 0.14)"
+accent = "#8ea2ff"
+accent_strong = "#6f84f0"
+on_accent = "#0c1020"
+selection = "rgba(142, 162, 255, 0.26)"
+tile = "rgba(238, 241, 251, 0.07)"
+kbd_background = "rgba(238, 241, 251, 0.07)"
+kbd_border = "rgba(238, 241, 251, 0.16)"
+shadow = "0 20px 56px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4)"
+surface = "rgba(238, 241, 251, 0.045)"
+input_background = "rgba(238, 241, 251, 0.06)"
+input_border = "rgba(238, 241, 251, 0.24)"
+switch_off = "rgba(238, 241, 251, 0.28)"
+warn = "#f5c26b"
+error = "#ff8f85"
+ok = "#8ee08a"

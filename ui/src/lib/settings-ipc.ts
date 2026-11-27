@@ -3,7 +3,13 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { hasTauri, type Status, type ThemeSetting } from "./ipc";
+import {
+  hasTauri,
+  type OpenAnimationSetting,
+  type SettingsThemeSetting,
+  type Status,
+  type ThemeSetting,
+} from "./ipc";
 import { t } from "./i18n.svelte";
 
 import type { AiConfig } from "./ai";
@@ -33,6 +39,12 @@ export interface Appearance {
   /** A theme file in the config folder, such as `themes/Nord.toml`; empty uses none. */
   theme_file: string;
   custom_css: string;
+  /** The Settings window's mode: `follow` uses `theme`. */
+  settings_theme: SettingsThemeSetting;
+  /** How the launcher appears when it opens. */
+  open_animation: OpenAnimationSetting;
+  /** Length of the open animation in milliseconds (0-400). */
+  animation_ms: number;
 }
 
 /** Mirrors `sevak_core::Config` (serde defaults make every field present). */

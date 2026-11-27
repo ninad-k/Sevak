@@ -47,7 +47,10 @@ pub fn open(app: &AppHandle) {
     tracing::info!("opening the settings window");
     let theme = app
         .try_state::<AppState>()
-        .map(|state| state.config().appearance.theme)
+        .map(|state| {
+            let appearance = state.config().appearance;
+            appearance.settings_theme.resolve(appearance.theme)
+        })
         .and_then(window_theme);
     let mut builder = WebviewWindowBuilder::new(
         app,
@@ -1043,6 +1046,11 @@ mod tests {
         config.appearance.accent = String::new();
         config.appearance.opacity = 10;
         assert!(check(&config).is_err());
+        config.appearance.opacity = 100;
+        config.appearance.animation_ms = 400;
+        assert_eq!(check(&config), Ok(()));
+        config.appearance.animation_ms = 401;
+        assert!(check(&config).unwrap_err().starts_with("Appearance:"));
     }
 
     #[test]

@@ -1661,7 +1661,8 @@
   },
   "appearance": {
     "units": {
-      "px": "{value} px"
+      "px": "{value} px",
+      "ms": "{value} ms"
     },
     "extras": {
       "accent": "Couleur d'accent",
@@ -1678,6 +1679,19 @@
       "blurHint": "Floute le bureau derrière la barre de recherche. Baissez l'opacité ci-dessus pour le voir.",
       "radius": "Arrondi des coins",
       "radiusHint": "Arrondi de la barre de recherche.",
+      "settingsTheme": "Mode de la fenêtre des réglages",
+      "settingsThemeHint": "Clair ou sombre pour cette fenêtre seulement. « Comme le lanceur » reprend le thème du lanceur.",
+      "settingsThemeFollow": "Comme le lanceur",
+      "settingsThemeLight": "Clair",
+      "settingsThemeDark": "Sombre",
+      "settingsThemeSystem": "Système",
+      "openAnimation": "Animation d'ouverture",
+      "openAnimationHint": "Comment la barre de recherche apparaît. Le réglage de réduction des animations du système la désactive toujours.",
+      "openFade": "Fondu",
+      "openFadeScale": "Fondu et zoom",
+      "openNone": "Aucune",
+      "animationMs": "Durée de l'animation",
+      "animationMsHint": "Durée de l'animation d'ouverture.",
       "customCss": "Feuille de style personnalisée",
       "customCssHint": "Un fichier CSS dans le dossier de configuration qui remplace les variables du thème, comme <code>theme.css</code>. Voir docs/themes.md."
     },

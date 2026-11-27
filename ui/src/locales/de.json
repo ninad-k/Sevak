@@ -1625,7 +1625,8 @@
   },
   "appearance": {
     "units": {
-      "px": "{value} px"
+      "px": "{value} px",
+      "ms": "{value} ms"
     },
     "extras": {
       "accent": "Akzentfarbe",
@@ -1642,6 +1643,19 @@
       "blurHint": "Zeichnet den Desktop hinter der Suchleiste unscharf. Verringere oben die Deckkraft, um es zu sehen.",
       "radius": "Eckenradius",
       "radiusHint": "Rundung der Suchleiste.",
+      "settingsTheme": "Modus des Einstellungsfensters",
+      "settingsThemeHint": "Hell oder dunkel nur für dieses Fenster. „Wie Launcher“ übernimmt das Design der Suchleiste.",
+      "settingsThemeFollow": "Wie Launcher",
+      "settingsThemeLight": "Hell",
+      "settingsThemeDark": "Dunkel",
+      "settingsThemeSystem": "System",
+      "openAnimation": "Öffnungsanimation",
+      "openAnimationHint": "Wie die Suchleiste erscheint. Die Systemeinstellung „Bewegung reduzieren“ schaltet sie immer aus.",
+      "openFade": "Einblenden",
+      "openFadeScale": "Einblenden und zoomen",
+      "openNone": "Keine",
+      "animationMs": "Animationsdauer",
+      "animationMsHint": "Wie lange die Öffnungsanimation dauert.",
       "customCss": "Eigenes Stylesheet",
       "customCssHint": "Eine CSS-Datei im Konfigurationsordner, die die Theme-Variablen überschreibt, etwa <code>theme.css</code>. Siehe docs/themes.md."
     },
