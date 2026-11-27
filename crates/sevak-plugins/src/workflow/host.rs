@@ -641,6 +641,15 @@ pub fn approval_key(workflow: &Workflow, dir: &Path) -> Option<String> {
         for file in script_files(node) {
             hasher.file(dir, &file);
         }
+        // A UI's `{file:...}` includes, however deep, are part of what it is.
+        if let NodeKind::ShowUi {
+            definition, file, ..
+        } = &node.kind
+        {
+            for included in super::ui::include_files(definition.as_deref(), file.as_deref(), dir) {
+                hasher.file(dir, &included);
+            }
+        }
     }
     for conn in &workflow.connections {
         hasher.feed("from", conn.from.as_bytes());
@@ -668,6 +677,16 @@ fn script_files(node: &Node) -> Vec<String> {
         | NodeKind::ScriptFilter {
             command, script, ..
         } => (command.as_slice(), script.as_deref()),
+        // The UI file whose buttons run the node's scripts.
+        NodeKind::ShowUi {
+            file: Some(file), ..
+        } => {
+            return if relative_inside(Path::new(""), file).is_some() {
+                vec![file.clone()]
+            } else {
+                Vec::new()
+            };
+        }
         // The file an open-file node starts, when it ships in the folder.
         NodeKind::OpenFile { path } => {
             return if relative_inside(Path::new(""), path).is_some() {
@@ -856,6 +875,23 @@ fn node_runs(node: &Node) -> Option<String> {
         }
         NodeKind::TerminalCommand { command } => {
             format!("runs in a terminal: {}", dialog::sanitize_command(command))
+        }
+        NodeKind::ShowUi { scripts, .. } if !scripts.is_empty() => {
+            let listed: Vec<String> = scripts
+                .iter()
+                .map(|(id, script)| {
+                    format!(
+                        "{} ({}): {}",
+                        show(id),
+                        show(&script.language),
+                        dialog::sanitize_command(&script.script)
+                    )
+                })
+                .collect();
+            format!(
+                "opens a window whose buttons can run these scripts: {}",
+                listed.join("; ")
+            )
         }
         _ => return None,
     })

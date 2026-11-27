@@ -11,8 +11,8 @@ use crate::cli::{self, Launch};
 use crate::state::AppState;
 use crate::{
     ai, autostart, backdrop, backup, commands, diagnostics, direct, expansion, extensions,
-    file_buffer, hotkey, icons, search, selection, settings, takeover, themes, tray, updater,
-    webview_args, window, workflows,
+    file_buffer, hotkey, icons, search, selection, settings, sevak_ui, takeover, themes, tray,
+    updater, webview_args, window, workflows,
 };
 
 /// The generated context, with the windows from `tauri.conf.json` given the
@@ -139,6 +139,9 @@ pub fn run(
             workflows::open_workflows_folder,
             workflows::gallery_load,
             workflows::gallery_install,
+            sevak_ui::sevak_ui_session,
+            sevak_ui::sevak_ui_event,
+            sevak_ui::validate_ui_definition,
             backup::backup_overview,
             backup::backup_contents,
             backup::backup_save_as,

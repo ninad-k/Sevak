@@ -1,10 +1,11 @@
 //! Helpers shared by the unit tests of the workflow modules.
 
+use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use sevak_core::Config;
 
-use super::exec::{OutputSink, Runtime};
+use super::exec::{OutputSink, Runtime, UiHost, UiOutcome, UiSession, UiUpdate};
 use super::model::{Argument, Connection, Node, NodeKind, Workflow, OUT};
 use crate::test_util::MockPlatform;
 
@@ -23,6 +24,19 @@ pub struct RecordingSink {
     pub button: Option<usize>,
     /// `(heading, message, buttons)` of every dialog shown.
     pub dialogs: Mutex<Vec<(String, String, Vec<String>)>>,
+    /// What each `show_ui` does, in order: scripts to run through the host,
+    /// then how the UI ends. With none left, the UI is "unsupported".
+    pub ui_script: Mutex<VecDeque<UiScripted>>,
+    pub ui_sessions: Mutex<Vec<UiSession>>,
+    /// What each script the UI ran answered.
+    pub ui_updates: Mutex<Vec<Result<UiUpdate, String>>>,
+}
+
+/// One scripted `show_ui`: the user's clicks, as far as the workflow sees them.
+pub struct UiScripted {
+    /// `(script id, stdin JSON)` the user's buttons run while the UI is open.
+    pub runs: Vec<(String, serde_json::Value)>,
+    pub outcome: UiOutcome,
 }
 
 impl OutputSink for RecordingSink {
@@ -61,6 +75,16 @@ impl OutputSink for RecordingSink {
             buttons.to_vec(),
         ));
         self.button
+    }
+
+    fn show_ui(&self, session: &UiSession, host: &dyn UiHost) -> Option<UiOutcome> {
+        self.ui_sessions.lock().unwrap().push(session.clone());
+        let scripted = self.ui_script.lock().unwrap().pop_front()?;
+        for (id, input) in &scripted.runs {
+            let update = host.run_script(id, input);
+            self.ui_updates.lock().unwrap().push(update);
+        }
+        Some(scripted.outcome)
     }
 }
 

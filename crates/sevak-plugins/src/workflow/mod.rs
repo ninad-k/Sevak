@@ -28,12 +28,16 @@ pub mod model;
 mod plugins;
 pub mod template;
 pub mod templates;
+pub mod ui;
 pub mod validate;
 
 #[cfg(test)]
 pub(crate) mod testing;
 
-pub use exec::{Ctx, NoSink, NodeFailure, OutputSink, RunReport, Runtime};
+pub use exec::{
+    Ctx, NoSink, NodeFailure, OutputSink, RunReport, Runtime, UiHost, UiOutcome, UiSession,
+    UiUpdate,
+};
 pub use filters::{FileFilterPlugin, ListFilterPlugin, RunningAppsPlugin};
 pub use host::{approval_key, describe, Candidate, Loaded, Saved, Scanned, Summary, WorkflowHost};
 pub use model::{

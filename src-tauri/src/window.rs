@@ -180,6 +180,10 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
         }
         return;
     }
+    if window.label().starts_with(crate::sevak_ui::LABEL_PREFIX) {
+        crate::sevak_ui::on_window_event(window, event);
+        return;
+    }
     if window.label() != MAIN_LABEL {
         return;
     }

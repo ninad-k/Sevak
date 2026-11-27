@@ -14,7 +14,8 @@ use sevak_plugins::keywords::{workflow_key, KeywordOwners};
 use sevak_plugins::workflow::gallery::{self, Dirs, Entry, Kind};
 use sevak_plugins::workflow::templates;
 use sevak_plugins::workflow::{
-    Candidate, Loaded, OutputSink, Problem, Saved, Scanned, Summary, Workflow,
+    Candidate, Loaded, OutputSink, Problem, Saved, Scanned, Summary, UiHost, UiOutcome, UiSession,
+    Workflow,
 };
 use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::{
@@ -127,6 +128,11 @@ impl OutputSink for TauriSink {
             .buttons(layout)
             .blocking_show_with_result();
         answer_index(&result, buttons)
+    }
+
+    fn show_ui(&self, session: &UiSession, host: &dyn UiHost) -> Option<UiOutcome> {
+        let app = self.app.get()?;
+        crate::sevak_ui::show(app, session, host)
     }
 }
 

@@ -48,7 +48,8 @@ export type NodeType =
   | "running_apps"
   | "dialog_conditional"
   | "speak"
-  | "play_sound";
+  | "play_sound"
+  | "show_ui";
 
 export type Category = "trigger" | "input" | "action" | "utility" | "output";
 
@@ -115,7 +116,8 @@ export type FieldKind =
   | "env"
   | "accepts"
   | "tristate"
-  | "items";
+  | "items"
+  | "json";
 
 export interface FieldDef {
   key: string;
@@ -724,6 +726,29 @@ export const KINDS: KindDef[] = (
     ],
     defaults: () => ({ path: "" }),
   },
+  {
+    type: "show_ui",
+    category: "output",
+    fields: [
+      {
+        key: "target",
+        kind: "select",
+        options: { set: "uiTarget", values: ["launcher", "window"] },
+      },
+      { key: "definition", kind: "textarea", mono: true, optional: true, hint: true },
+      { key: "file", kind: "text", mono: true, optional: true, placeholder: "ui.json", hint: true },
+      { key: "scripts", kind: "json", mono: true, optional: true, hint: true },
+      { key: "ports", kind: "lines", mono: true, optional: true, hint: true },
+      { key: "titlebar", kind: "checkbox" },
+      { key: "always_on_top", kind: "checkbox" },
+    ],
+    needsApproval: false,
+    defaults: () => ({
+      target: "launcher",
+      definition: SHOW_UI_EXAMPLE,
+      titlebar: true,
+    }),
+  },
   ] as RawKind[]
 ).map(localize);
 
@@ -743,7 +768,51 @@ export const isStart = (node: WfNode) => {
 };
 
 /** A dialog has a port per button (as many as it has labels, at most three) and `cancel`. */
+/** The starting point of a new `show_ui` node. */
+const SHOW_UI_EXAMPLE = JSON.stringify(
+  {
+    title: "Hello",
+    state: { name: "" },
+    root: {
+      type: "column",
+      children: [
+        { type: "textfield", id: "name", placeholder: "Your name", events: { submit: { output: "done" } } },
+        { type: "button", label: "Done", style: "primary", events: { click: { output: "done" } } },
+      ],
+    },
+  },
+  null,
+  2,
+);
+
+/** The `output` ports a show_ui definition names (an estimate; Rust decides). */
+function uiPorts(node: WfNode): string[] {
+  const found: string[] = [];
+  const add = (port: unknown) => {
+    if (typeof port === "string" && port !== "closed" && !found.includes(port)) found.push(port);
+  };
+  const walk = (value: unknown) => {
+    if (Array.isArray(value)) value.forEach(walk);
+    else if (value && typeof value === "object") {
+      const object = value as Record<string, unknown>;
+      add(object.output);
+      Object.values(object).forEach(walk);
+    }
+  };
+  try {
+    const parsed = JSON.parse(String(node.definition ?? "{}")) as Record<string, unknown>;
+    walk(parsed.root);
+    // Templates only count when something uses them.
+    if (JSON.stringify(parsed.root ?? null).includes('"use"')) walk(parsed.templates);
+  } catch {
+    // An unfinished definition names no ports yet.
+  }
+  if (Array.isArray(node.ports)) node.ports.forEach(add);
+  return [...found.filter((p) => /^[a-z0-9_-]{1,32}$/.test(p)), "closed"];
+}
+
 export const outputPorts = (node: WfNode): string[] => {
+  if (node.type === "show_ui") return uiPorts(node);
   if (node.type === "conditional") return [THEN, ELSE];
   if (node.type === "dialog_conditional") {
     const count = Array.isArray(node.buttons) ? Math.min(node.buttons.length, MAX_DIALOG_BUTTONS) : 0;

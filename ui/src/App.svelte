@@ -7,6 +7,9 @@
   import TextView from "./lib/TextView.svelte";
   import FileView from "./lib/FileView.svelte";
   import Markdown from "./lib/Markdown.svelte";
+  import SevakUi from "./lib/sevak-ui/SevakUi.svelte";
+  import { sendUiEvent } from "./lib/sevak-ui/ipc";
+  import type { UiPayload } from "./lib/sevak-ui/types";
   import { displayAccelerator } from "./lib/accelerator";
   import { debouncedAnnouncer, launcherAnnouncement } from "./lib/announce";
   import { applyAppearance } from "./lib/appearance";
@@ -89,6 +92,9 @@
   let selection = $state<SelectionPayload | null>(null);
   /** A workflow's text view node: a block of text under the search bar. */
   let outputView = $state<{ heading: string; text: string; markdown: boolean } | null>(null);
+  /** A workflow's Sevak UI shown in place of the results. */
+  let uiPayload = $state<UiPayload | null>(null);
+  let uiRef: ReturnType<typeof SevakUi> | undefined = $state();
   /**
    * "View in Sevak": one of the selected files shown full height. `back` is the
    * Universal Actions list to return to; `ticket`/`id` name the stored action.
@@ -340,6 +346,13 @@
   }
 
   function reset() {
+    // A UI that is still open when the launcher resets (hidden, or another
+    // show) is dismissed, so its workflow continues from `closed`.
+    if (uiPayload) {
+      const open = uiPayload;
+      uiPayload = null;
+      void sendUiEvent(open.id, { kind: "close", state: null }).catch(() => null);
+    }
     searchSeq++; // drop any search still in flight
     panelOpen = false;
     selection = null;
@@ -371,6 +384,10 @@
     }
     if (payload?.output) {
       showOutput(payload.output);
+      return;
+    }
+    if (payload?.ui) {
+      uiPayload = payload.ui;
       return;
     }
     if (payload?.error) error = payload.error;
@@ -1045,6 +1062,14 @@
   }
 
   function onKeydown(e: KeyboardEvent) {
+    // A workflow's UI owns the keyboard (Tab order, Enter on buttons); Esc dismisses it.
+    if (uiPayload) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        uiRef?.dismiss();
+      }
+      return;
+    }
     // A lone Shift is a candidate tap. Any other key meanwhile (Shift+Enter, a
     // capital letter, Alt+Shift switching the keyboard layout) or key repeat
     // (holding Shift) makes it not one.
@@ -1538,6 +1563,20 @@
           <span class="chip more"><kbd>→</kbd>{t("launcher.hints.actions")}</span>
         {/if}
       </div>
+    {/if}
+
+    {#if uiPayload}
+      {#key uiPayload.id}
+        <SevakUi
+          bind:this={uiRef}
+          payload={uiPayload}
+          send={(event) => sendUiEvent(uiPayload!.id, event)}
+          onend={() => {
+            uiPayload = null;
+            void hideWindow();
+          }}
+        />
+      {/key}
     {/if}
 
     {#if outputView}

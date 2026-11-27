@@ -1198,7 +1198,10 @@
       "itemSubtitle": "Untertitel",
       "itemArg": "Argument (der Titel, wenn leer)",
       "addItem": "Eintrag hinzufügen",
-      "removeItem": "Eintrag {n} entfernen"
+      "removeItem": "Eintrag {n} entfernen",
+      "jsonInvalid": "Das ist noch kein JSON-Objekt.",
+      "validateUi": "Prüfen",
+      "uiValid": "Sieht gut aus: {components} Komponenten. Ausgänge: {ports}."
     },
     "connect": {
       "missing": "Diesen Knoten gibt es nicht.",
@@ -1284,6 +1287,10 @@
         "name": "Der Name",
         "path": "Der Pfad",
         "pid": "Die Prozess-ID"
+      },
+      "uiTarget": {
+        "launcher": "Im Launcher",
+        "window": "In einem Fenster"
       }
     },
     "program": {
@@ -1779,6 +1786,37 @@
             "hint": "Ein vollständiger Pfad, ein Pfad mit ~ am Anfang oder eine Datei im Workflow-Ordner."
           }
         }
+      },
+      "show_ui": {
+        "label": "Oberfläche anzeigen",
+        "summary": "Öffnet eine kleine, per JSON beschriebene Oberfläche, wartet darauf und macht mit dem Ausgang weiter, den eine Schaltfläche nennt (oder „closed“).",
+        "fields": {
+          "target": {
+            "label": "Wo"
+          },
+          "definition": {
+            "label": "Definition (JSON)",
+            "hint": "Komponenten, Zustand und Ereignisse. Siehe die Sevak-UI-Anleitung. Entweder dies oder eine Datei."
+          },
+          "file": {
+            "label": "Definitionsdatei",
+            "hint": "Eine JSON-Datei im Workflow-Ordner. {file:andere.json} darin bindet weitere Dateien ein."
+          },
+          "scripts": {
+            "label": "Skripte (JSON)",
+            "hint": "Skripte, die „run“-Aktionen starten dürfen, z. B. {\"up\": {\"language\": \"shell\", \"script\": \"...\"}}. Sprachen: shell, python, javascript, powershell. Eine Oberfläche mit Skripten braucht Ihre Erlaubnis."
+          },
+          "ports": {
+            "label": "Ausgangsnamen",
+            "hint": "Einer pro Zeile. Nur mit einer Definitionsdatei nötig; eine eingebettete Definition nennt ihre Ausgänge selbst. „closed“ gibt es immer."
+          },
+          "titlebar": {
+            "label": "Titelleiste des Fensters"
+          },
+          "always_on_top": {
+            "label": "Fenster immer im Vordergrund"
+          }
+        }
       }
     }
   },
@@ -2272,5 +2310,12 @@
     "important": "Wichtig",
     "warning": "Warnung",
     "caution": "Vorsicht"
+  },
+  "sevakUi": {
+    "scriptFailed": "Das Skript ist fehlgeschlagen: {message}",
+    "progress": "Fortschritt",
+    "imageMissing": "Bild nicht verfügbar",
+    "running": "Läuft …",
+    "gone": "Dieses Fenster ist nicht mehr offen."
   }
 }

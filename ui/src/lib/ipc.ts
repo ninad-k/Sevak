@@ -418,6 +418,8 @@ export interface ShowPayload {
   selection?: SelectionPayload | null;
   /** Output of a workflow (Large Type or a block of text). */
   output?: OutputPayload | null;
+  /** A Sevak UI a workflow's `show_ui` node opens in the launcher. */
+  ui?: import("./sevak-ui/types").UiPayload | null;
 }
 
 /** Window is being shown: clear the query, focus the input, apply the payload. */
