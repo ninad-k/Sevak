@@ -15,7 +15,7 @@
 //! |---|---|
 //! | Text | search each web engine, Large Type, copy, paste as plain text, calculate, [`transform`]s (case, trim, URL and Base64 encoding, JSON) |
 //! | URL(s) | open, copy, Large Type |
-//! | Files and folders | open, show in folder, copy path, open in terminal (folders), run as administrator (Windows programs), send to Sevak (path browsing) |
+//! | Files and folders | open, show in folder, copy path, open in terminal (folders), run as administrator (Windows programs), send to Sevak (path browsing), view in Sevak (images, PDFs, Markdown, text) |
 //!
 //! Transformations replace the selection in the app (paste over it) where
 //! pasting works, and copy otherwise; `Ctrl+Enter` always copies instead.
@@ -52,6 +52,23 @@ const CALCULATE_CHARS: usize = 200;
 const TERMINAL_PREFIX: &str = "terminal:";
 const LARGE_TYPE_PREFIX: &str = "large_type:";
 const SEARCH_PREFIX: &str = "search:";
+const VIEW_PREFIX: &str = "view:";
+
+/// Extensions "View in Sevak" shows: pictures, PDFs, Markdown and plain text.
+const VIEW_EXTENSIONS: &[&str] = &[
+    "png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "svg", "pdf", "md", "markdown", "txt",
+    "text", "log", "json", "toml", "yaml", "yml", "csv", "tsv", "xml", "ini", "cfg", "conf", "rs",
+    "py", "js", "ts", "sh", "html", "htm", "css",
+];
+
+/// Whether "View in Sevak" can show `path`: a regular file of a kind above.
+fn viewable(path: &Path) -> bool {
+    let extension = path
+        .extension()
+        .map(|ext| ext.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    VIEW_EXTENSIONS.contains(&extension.as_str()) && path.is_file()
+}
 
 /// What an action asks of the launcher window itself instead of the OS.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -60,6 +77,9 @@ pub enum UiRequest {
     LargeType(String),
     /// Put the text in the search box (path browsing).
     Search(String),
+    /// Show these files (images, PDFs, Markdown, text) inside the launcher; the
+    /// window steps through several with the arrow keys.
+    View(Vec<PathBuf>),
 }
 
 /// The window request behind `action`, if it is one. The shell passes these to
@@ -70,6 +90,14 @@ pub fn ui_request(action: &Action) -> Option<UiRequest> {
     };
     if let Some(text) = payload.strip_prefix(LARGE_TYPE_PREFIX) {
         Some(UiRequest::LargeType(text.to_owned()))
+    } else if let Some(paths) = payload.strip_prefix(VIEW_PREFIX) {
+        Some(UiRequest::View(
+            paths
+                .split('\n')
+                .filter(|path| !path.is_empty())
+                .map(PathBuf::from)
+                .collect(),
+        ))
     } else {
         payload
             .strip_prefix(SEARCH_PREFIX)
@@ -353,6 +381,30 @@ impl SelectionPlugin {
             )
             .with_subtitle("Browse from here in the search box"),
         );
+
+        let viewable: Vec<String> = files
+            .iter()
+            .filter(|path| viewable(path))
+            .map(|path| path.to_string_lossy().into_owned())
+            .collect();
+        if !viewable.is_empty() {
+            let several = viewable.len() > 1;
+            items.push(
+                Self::item(
+                    "file:view",
+                    "View in Sevak",
+                    Action::Custom {
+                        payload: format!("{VIEW_PREFIX}{}", viewable.join("\n")),
+                    },
+                    "file",
+                )
+                .with_subtitle(if several {
+                    format!("{} files, step with \u{2190} \u{2192}", viewable.len())
+                } else {
+                    "Image, PDF, Markdown or text, inside Sevak".to_owned()
+                }),
+            );
+        }
         items
     }
 
@@ -794,7 +846,13 @@ mod tests {
         let items = plugin.selection_actions(&selection_of(&[&file]));
         assert_eq!(
             keys(&items),
-            ["file:open:0", "file:reveal", "file:copy_path", "file:send"]
+            [
+                "file:open:0",
+                "file:reveal",
+                "file:copy_path",
+                "file:send",
+                "file:view"
+            ]
         );
         assert_eq!(items[0].title, "Open \u{201c}notes.txt\u{201d}");
         assert_eq!(items[0].action, Action::OpenPath { path: file.clone() });
@@ -810,6 +868,48 @@ mod tests {
             ui_request(&items[3].action),
             Some(UiRequest::Search(file.to_string_lossy().into_owned()))
         );
+    }
+
+    #[test]
+    fn view_in_sevak_lists_only_existing_images_pdfs_markdown_and_text() {
+        let dir = tempfile::tempdir().unwrap();
+        let (plugin, _) = plugin();
+        let make = |name: &str| {
+            let path = dir.path().join(name);
+            std::fs::write(&path, "x").unwrap();
+            path
+        };
+        let (a, b) = (make("a.PNG"), make("b.md"));
+        let (zip, pdf) = (make("c.zip"), make("d.pdf"));
+        let missing = dir.path().join("gone.txt");
+
+        let items = plugin.selection_actions(&selection_of(&[&a, &zip, &b, &missing, &pdf]));
+        let view = find(&items, "file:view");
+        assert_eq!(view.title, "View in Sevak");
+        // Only the viewable ones, in selection order.
+        assert_eq!(
+            ui_request(&view.action),
+            Some(UiRequest::View(vec![a.clone(), b, pdf]))
+        );
+        assert!(view.subtitle.starts_with("3 files"));
+
+        // Nothing viewable, no action; folders never.
+        for only in [&zip, &missing, &dir.path().to_path_buf()] {
+            let items = plugin.selection_actions(&selection_of(&[only]));
+            assert!(!keys(&items).contains(&"file:view"), "{only:?}");
+        }
+
+        // The window carries it out; the plugin does not.
+        assert!(plugin.execute(view).is_err());
+        // Appended after the existing actions.
+        assert_eq!(
+            *keys(&items_for_single(&plugin, &a)).last().unwrap(),
+            "file:view"
+        );
+    }
+
+    fn items_for_single(plugin: &SelectionPlugin, path: &Path) -> Vec<ResultItem> {
+        plugin.selection_actions(&selection_of(&[path]))
     }
 
     #[test]
