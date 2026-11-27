@@ -735,12 +735,16 @@ impl CalculatorPlugin {
     fn conversion(&self, input: &str) -> Option<ResultItem> {
         let input = strip_prefix(input);
         if let Some(conversion) = units::answer(input) {
-            return Some(Self::copyable(&conversion.text, &conversion.input));
+            return Some(Self::copyable(
+                &conversion.text,
+                &conversion.input,
+                Some(&conversion.value),
+            ));
         }
         let rates = self.currency.as_ref()?;
         let answer = currency::answer(input, &rates.availability())?;
         Some(if answer.copyable {
-            Self::copyable(&answer.title, &answer.subtitle)
+            Self::copyable(&answer.title, &answer.subtitle, answer.value.as_deref())
         } else {
             ResultItem::new(
                 "calculator",
@@ -756,8 +760,10 @@ impl CalculatorPlugin {
         })
     }
 
-    fn copyable(text: &str, detail: &str) -> ResultItem {
-        ResultItem::new(
+    /// `plain` is what Tab puts in the input (the bare number, so the user can
+    /// keep calculating with it); `None` leaves Tab with nothing to complete.
+    fn copyable(text: &str, detail: &str, plain: Option<&str>) -> ResultItem {
+        let item = ResultItem::new(
             "calculator",
             "result",
             text,
@@ -773,7 +779,11 @@ impl CalculatorPlugin {
                 ("Result".to_owned(), text.to_owned()),
                 ("Calculation".to_owned(), detail.to_owned()),
             ],
-        })
+        });
+        match plain {
+            Some(plain) => item.with_autocomplete(plain),
+            None => item,
+        }
     }
 }
 
@@ -801,7 +811,8 @@ impl Plugin for CalculatorPlugin {
         let Some((expression, value)) = answer(input) else {
             return Vec::new();
         };
-        vec![Self::copyable(&format_number(value), &expression)]
+        let number = format_number(value);
+        vec![Self::copyable(&number, &expression, Some(&number))]
     }
 
     fn execute(&self, item: &ResultItem) -> PluginResult<()> {
@@ -1188,6 +1199,32 @@ mod tests {
         assert_eq!(item.icon, Some(IconSource::builtin("calculator")));
         assert_eq!(item.score, score::EXACT_ANSWER);
         assert_eq!(item.action, Action::CopyText { text: "8".into() });
+        assert_eq!(item.autocomplete.as_deref(), Some("8"));
+    }
+
+    #[test]
+    fn tab_completes_math_to_the_plain_number() {
+        let plugin = CalculatorPlugin::new(MockPlatform::empty());
+        // No thousands separators and no float noise, so the user can keep typing.
+        let big = plugin.query("1000000 * 1000");
+        assert_eq!(big[0].title, "1000000000");
+        assert_eq!(big[0].autocomplete.as_deref(), Some("1000000000"));
+        let fraction = plugin.query("1/3");
+        assert_eq!(fraction[0].title, "0.333333333333");
+        assert_eq!(fraction[0].autocomplete.as_deref(), Some("0.333333333333"));
+        let negative = plugin.query("2 - 10");
+        assert_eq!(negative[0].autocomplete.as_deref(), Some("-8"));
+    }
+
+    #[test]
+    fn tab_completes_unit_conversions_to_the_bare_number() {
+        let plugin = CalculatorPlugin::new(MockPlatform::empty());
+        let item = &plugin.query("10 km in mi")[0];
+        assert_eq!(item.title, "6.213711922 mi");
+        assert_eq!(item.autocomplete.as_deref(), Some("6.213711922"));
+        let temperature = &plugin.query("72 F to C")[0];
+        assert_eq!(temperature.title, "22.22222222 °C");
+        assert_eq!(temperature.autocomplete.as_deref(), Some("22.22222222"));
     }
 
     #[test]
@@ -1285,12 +1322,14 @@ mod tests {
         assert_eq!(waiting.len(), 1);
         assert_eq!(waiting[0].title, "Fetching exchange rates…");
         assert_eq!(waiting[0].score, score::EXACT_ANSWER);
+        assert_eq!(waiting[0].autocomplete, None);
         plugin.execute(&waiting[0]).unwrap();
         assert!(platform.clipboard.lock().unwrap().is_empty());
 
         service.refresh_blocking(1_000);
         let rows = plugin.query("100 usd in eur");
         assert_eq!(rows[0].title, "89.09 EUR");
+        assert_eq!(rows[0].autocomplete.as_deref(), Some("89.09"));
         assert_eq!(
             rows[0].subtitle,
             "100 usd → eur · 1 USD = 0.890869 EUR · ECB 2026-10-02 · Enter to copy"
