@@ -376,7 +376,8 @@ mod tests {
         let rows = plugin.query("notes");
         let row = &rows[0];
         assert_eq!(row.id, "recent:/home/me/Documents/notes.txt");
-        assert_eq!(row.subtitle, "~/Documents");
+        // The subtitle uses the platform's separator (`~\Documents` on Windows).
+        assert_eq!(row.subtitle.replace('\\', "/"), "~/Documents");
         assert_eq!(
             row.action,
             Action::OpenPath {
