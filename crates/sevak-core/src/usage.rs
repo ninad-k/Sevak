@@ -331,7 +331,30 @@ fn plugin_of(id: &str) -> &str {
 /// The part of a result id after the plugin, cut down to a file or folder name
 /// when it is a path, so a summary never carries a location.
 fn display_key(id: &str) -> String {
-    let key = id.split_once(':').map_or(id, |(_, key)| key);
+    // Many ids embed what the user typed (web searches, `>` commands,
+    // calculations, script results). Only plugins whose ids name a thing the
+    // user picked, not text they typed, are shown by name.
+    const NAMED: &[&str] = &[
+        "app",
+        "files",
+        "file",
+        "recent",
+        "bookmarks",
+        "tasks",
+        "system",
+        "settings",
+        "workflow",
+        "windows",
+        "win",
+        "builtin",
+        "emoji",
+    ];
+    let Some((plugin, key)) = id.split_once(':') else {
+        return "(item)".to_owned();
+    };
+    if !NAMED.contains(&plugin) {
+        return format!("({plugin} result)");
+    }
     let name = key
         .rsplit(['/', '\\'])
         .find(|part| !part.is_empty())
@@ -647,6 +670,7 @@ mod tests {
         s.record("app:firefox", "", 1_700_086_400);
         s.record("files:/Users/me/private/report.pdf", "", 1_700_000_100);
         s.record("web:g:rust", "", 1_700_000_200);
+        s.record("shell:curl -H token=hunter2", "", 1_700_000_300);
         s.record_history("typed text");
         let summary = s.summary(2);
         assert_eq!(summary.total_launches, 4);
@@ -662,6 +686,9 @@ mod tests {
         assert!(!text.contains("/Users"));
         assert!(!text.contains("secret query"));
         assert!(!text.contains("typed text"));
+        assert!(!text.contains("rust"));
+        assert!(!text.contains("hunter2"));
+        assert!(text.contains("(shell result)"));
         assert!(text.contains("History entries: 1"));
     }
 
