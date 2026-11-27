@@ -89,6 +89,7 @@ export interface Problems {
   calendarDays?: string;
   fallback?: string;
   filesDepth?: string;
+  filesResults?: string;
   /** Number of problems per section (hotkey problems are added by the form). */
   count: Record<SectionId, number>;
 }
@@ -96,6 +97,8 @@ export interface Problems {
 export const MIN_WIDTH = 400;
 export const MAX_WIDTH = 1600;
 export const MAX_DEPTH = 32;
+/** `[files] max_results`: 0 uses the search limit, otherwise 1 to this. */
+export const MAX_FILE_RESULTS = 50;
 export const MIN_FONT_SIZE = 12;
 export const MAX_FONT_SIZE = 22;
 export const MIN_OPACITY = 30;
@@ -366,6 +369,11 @@ export function validate(config: Config): Problems {
   const depth = config.files.max_depth;
   if (!Number.isInteger(depth) || depth < 0 || depth > MAX_DEPTH) {
     problems.filesDepth = wholeNumber(0, MAX_DEPTH);
+    count.files++;
+  }
+  const results = config.files.max_results;
+  if (!Number.isInteger(results) || results < 0 || results > MAX_FILE_RESULTS) {
+    problems.filesResults = wholeNumber(0, MAX_FILE_RESULTS);
     count.files++;
   }
   return problems;

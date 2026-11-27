@@ -401,6 +401,8 @@ export function mockSettings(): SettingsDto {
         index_keyword: "ff",
         content_keyword: "in",
         allow_network_paths: false,
+        sort: "relevance",
+        max_results: 0,
       },
       bookmarks: { browsers: [], keyword: "b", global: true },
       paste: { restore_clipboard: false },

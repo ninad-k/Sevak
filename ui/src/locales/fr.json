@@ -915,7 +915,14 @@
       "indexKeyword": "Mot-clé pour tout le disque",
       "indexKeywordHint": "Vide désactive la recherche par nom.",
       "contentKeyword": "Mot-clé pour le contenu",
-      "contentKeywordHint": "Vide désactive la recherche dans le contenu."
+      "contentKeywordHint": "Vide désactive la recherche dans le contenu.",
+      "sort": "Ordre des résultats",
+      "sortHint": "Pertinence selon la correspondance du nom, Nom de A à Z, Plus récents d’abord selon la dernière modification.",
+      "sortRelevance": "Meilleure correspondance",
+      "sortName": "Nom (de A à Z)",
+      "sortModified": "Plus récents d’abord",
+      "maxResults": "Résultats par recherche",
+      "maxResultsHint": "0 utilise la limite de Recherche. Ici, jusqu’à 50."
     },
     "linux": {
       "xwayland": "Utiliser XWayland sous Wayland",

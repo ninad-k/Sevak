@@ -907,7 +907,14 @@
       "indexKeyword": "Palabra clave para todo el disco",
       "indexKeywordHint": "Vacío desactiva la búsqueda por nombre.",
       "contentKeyword": "Palabra clave para el contenido",
-      "contentKeywordHint": "Vacío desactiva la búsqueda en el contenido."
+      "contentKeywordHint": "Vacío desactiva la búsqueda en el contenido.",
+      "sort": "Orden de los resultados",
+      "sortHint": "Relevancia según la coincidencia del nombre, Nombre de la A a la Z, Más recientes primero según la última modificación.",
+      "sortRelevance": "Mejor coincidencia",
+      "sortName": "Nombre (de la A a la Z)",
+      "sortModified": "Más recientes primero",
+      "maxResults": "Resultados por búsqueda",
+      "maxResultsHint": "0 usa el límite de Búsqueda. Aquí, hasta 50."
     },
     "linux": {
       "xwayland": "Usar XWayland en Wayland",
