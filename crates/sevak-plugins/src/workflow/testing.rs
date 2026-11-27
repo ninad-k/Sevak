@@ -19,6 +19,10 @@ pub struct RecordingSink {
     /// What `confirm` answers.
     pub answer: bool,
     pub asked: Mutex<Vec<String>>,
+    /// The button `ask` answers with; `None` is a dismissed dialog.
+    pub button: Option<usize>,
+    /// `(heading, message, buttons)` of every dialog shown.
+    pub dialogs: Mutex<Vec<(String, String, Vec<String>)>>,
 }
 
 impl OutputSink for RecordingSink {
@@ -48,6 +52,15 @@ impl OutputSink for RecordingSink {
     fn confirm(&self, question: &str) -> bool {
         self.asked.lock().unwrap().push(question.to_owned());
         self.answer
+    }
+
+    fn ask(&self, heading: &str, message: &str, buttons: &[String]) -> Option<usize> {
+        self.dialogs.lock().unwrap().push((
+            heading.to_owned(),
+            message.to_owned(),
+            buttons.to_vec(),
+        ));
+        self.button
     }
 }
 

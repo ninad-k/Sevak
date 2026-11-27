@@ -488,4 +488,15 @@ pub trait PlatformProvider: Send + Sync {
     fn set_clipboard_text_private(&self, text: &str) -> Result<()> {
         crate::clipboard::set_text_private(text)
     }
+
+    /// Speaks `text` with the system's speech engine (the named voice, or the
+    /// default one). Does not wait for the speech to finish.
+    fn speak(&self, text: &str, voice: Option<&str>) -> Result<()> {
+        crate::speech::speak(text, voice)
+    }
+
+    /// Plays the sound file at `path`. Does not wait for it to finish.
+    fn play_sound(&self, path: &Path) -> Result<()> {
+        crate::speech::play_sound(path)
+    }
 }

@@ -16,6 +16,9 @@ import type {
 import catalog from "../../../../gallery/index.json";
 import { isStart, kindOf, normalize, outputPorts, portOf, type Problem, type Workflow } from "./model";
 
+/** The node types that answer to a typed keyword. */
+const KEYWORD_TYPES = new Set(["keyword", "script_filter", "list_filter", "file_filter", "running_apps"]);
+
 function wf(partial: Partial<Workflow> & Pick<Workflow, "name" | "node" | "connection">): Workflow {
   return normalize({
     format: 1,
@@ -118,9 +121,9 @@ export function check(workflow: Workflow): Problem[] {
   for (const node of workflow.node) {
     if (ids.has(node.id)) error(node.id, "this id is used twice");
     ids.add(node.id);
-    if ((node.type === "keyword" || node.type === "script_filter") && !String(node.keyword ?? "").trim()) {
+    if (KEYWORD_TYPES.has(node.type) && !String(node.keyword ?? "").trim()) {
       error(node.id, "choose a keyword");
-    } else if (node.type === "keyword" || node.type === "script_filter") {
+    } else if (KEYWORD_TYPES.has(node.type)) {
       const message = clash(node.keyword);
       if (message) warn(node.id, message);
     }
@@ -198,7 +201,7 @@ function summary(folder: string, workflow: Workflow): WorkflowSummary {
     needs_approval: needs,
     approved: !needs || approved.has(folder),
     keywords: workflow.node
-      .filter((n) => n.type === "keyword" || n.type === "script_filter")
+      .filter((n) => KEYWORD_TYPES.has(n.type))
       .map((n) => String(n.keyword)),
     nodes: workflow.node.length,
     warnings: check(workflow).filter((p) => p.severity === "warning").length,

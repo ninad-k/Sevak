@@ -17,7 +17,9 @@ use sevak_plugins::workflow::{
     Candidate, Loaded, OutputSink, Problem, Saved, Scanned, Summary, Workflow,
 };
 use tauri::{AppHandle, Manager};
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+use tauri_plugin_dialog::{
+    DialogExt, MessageDialogButtons, MessageDialogKind, MessageDialogResult,
+};
 use tauri_plugin_notification::NotificationExt;
 
 use crate::direct::{OutputKind, OutputPayload, ShowPayload};
@@ -96,6 +98,50 @@ impl OutputSink for TauriSink {
             return false;
         };
         commands::confirmed(app, "Continue", question.to_owned())
+    }
+
+    fn ask(&self, heading: &str, message: &str, buttons: &[String]) -> Option<usize> {
+        let app = self.app.get()?;
+        // One or two buttons get an explicit Cancel, so closing the dialog is
+        // told apart from a button; with three, the third doubles as Cancel.
+        let layout = match buttons {
+            [only] => MessageDialogButtons::OkCancelCustom(only.clone(), CANCEL_LABEL.to_owned()),
+            [first, second] => MessageDialogButtons::YesNoCancelCustom(
+                first.clone(),
+                second.clone(),
+                CANCEL_LABEL.to_owned(),
+            ),
+            [first, second, third] => MessageDialogButtons::YesNoCancelCustom(
+                first.clone(),
+                second.clone(),
+                third.clone(),
+            ),
+            _ => return None,
+        };
+        // Runs on the workflow's own thread, never the main thread.
+        let result = app
+            .dialog()
+            .message(message.to_owned())
+            .title(heading.to_owned())
+            .kind(MessageDialogKind::Info)
+            .buttons(layout)
+            .blocking_show_with_result();
+        answer_index(&result, buttons)
+    }
+}
+
+/// The label of the button that dismisses a dialog with fewer than three buttons.
+const CANCEL_LABEL: &str = "Cancel";
+
+/// Which button of `buttons` the dialog's answer names (`None`: dismissed).
+/// macOS answers with the label of the pressed button; the other systems may
+/// answer Yes / No / Cancel by position.
+fn answer_index(result: &MessageDialogResult, buttons: &[String]) -> Option<usize> {
+    match result {
+        MessageDialogResult::Custom(label) => buttons.iter().position(|b| b == label),
+        MessageDialogResult::Yes | MessageDialogResult::Ok => Some(0),
+        MessageDialogResult::No => Some(1).filter(|index| *index < buttons.len()),
+        MessageDialogResult::Cancel => Some(2).filter(|index| *index < buttons.len()),
     }
 }
 
@@ -674,6 +720,20 @@ pub async fn gallery_install(app: AppHandle, id: String) -> Result<Installed, St
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_dialog_answer_names_a_button_or_nothing() {
+        let two = ["Yes".to_owned(), "No".to_owned()];
+        let three = ["A".to_owned(), "B".to_owned(), "C".to_owned()];
+        let custom = |label: &str| MessageDialogResult::Custom(label.to_owned());
+        assert_eq!(answer_index(&custom("No"), &two), Some(1));
+        assert_eq!(answer_index(&custom("Cancel"), &two), None);
+        assert_eq!(answer_index(&MessageDialogResult::Yes, &two), Some(0));
+        assert_eq!(answer_index(&MessageDialogResult::No, &two), Some(1));
+        assert_eq!(answer_index(&MessageDialogResult::Cancel, &two), None);
+        assert_eq!(answer_index(&MessageDialogResult::Cancel, &three), Some(2));
+        assert_eq!(answer_index(&MessageDialogResult::No, &two[..1]), None);
+    }
 
     #[test]
     fn the_template_list_matches_the_engine() {

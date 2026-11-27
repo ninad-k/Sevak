@@ -40,6 +40,7 @@ pub mod recent;
 pub mod secret;
 mod secret_hint;
 pub mod session;
+pub mod speech;
 pub mod spotlight;
 pub mod startup;
 pub mod system;

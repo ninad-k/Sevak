@@ -560,6 +560,45 @@ fn a_script_filter_shows_rows_with_autocomplete_and_mods_and_picking_runs_the_ch
     assert_eq!(w.clipboard().len(), 2);
 }
 
+#[test]
+fn a_list_filter_needs_no_approval_filters_by_the_typed_text_and_runs_the_chain() {
+    let w = World::new();
+    w.add(
+        "list",
+        r#"
+        name = "List"
+        [[node]]
+        id = "pick"
+        type = "list_filter"
+        keyword = "li"
+        [[node.items]]
+        title = "Apple"
+        subtitle = "fruit"
+        arg = "a-1"
+        [[node.items]]
+        title = "Banana"
+        [[node]]
+        id = "copy"
+        type = "copy"
+        text = "got {query}"
+        [[connection]]
+        from = "pick"
+        to = "copy"
+        "#,
+    );
+    // It runs no code, so it is loaded without the user's Allow.
+    let (engine, _rx) = w.engine();
+    let items = engine.query("li ban");
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].title, "Banana");
+    assert_eq!(items[0].plugin_id, "workflow:list:pick");
+    assert_eq!(engine.query("li ").len(), 2);
+
+    engine.execute(&items[0], "li ban").unwrap();
+    wait_until("the pick", || w.clipboard().len() == 1);
+    assert_eq!(w.clipboard(), ["got Banana"]);
+}
+
 // ---- approval ---------------------------------------------------------------
 
 #[test]
