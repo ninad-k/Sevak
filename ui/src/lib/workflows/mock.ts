@@ -3,6 +3,7 @@
 // only imported when there is no Tauri runtime (see ipc.ts).
 
 import type {
+  ConfigValues,
   Gallery,
   GalleryKind,
   InstalledEntry,
@@ -10,6 +11,7 @@ import type {
   Result,
   SavedWorkflow,
   TemplateInfo,
+  WorkflowConfigForm,
   WorkflowList,
   WorkflowSummary,
 } from "./ipc";
@@ -78,10 +80,22 @@ const fruit = (): Workflow =>
     connection: [{ from: "filter", to: "notify" }],
   });
 
+const fruit_settings = (): Workflow => {
+  const flow = fruit();
+  flow.config = [
+    { variable: "api_host", kind: "textfield", label: "Server", required: true, placeholder: "example.com" },
+    { variable: "units", kind: "popup", label: "Units", default: "metric", options: [{ label: "Metric", value: "metric" }, { label: "Imperial", value: "imperial" }] },
+    { variable: "volume", kind: "slider", label: "Volume", default: "40", min: 0, max: 100, step: 5 },
+    { variable: "loud", kind: "checkbox", label: "Shout", description: "Use capitals." },
+    { variable: "root", kind: "filepicker", label: "Folder", mode: "folder" },
+  ];
+  return flow;
+};
+
 const store = new Map<string, Workflow>([
   ["duckduckgo", duckduckgo()],
   ["tidy-text", tidyText()],
-  ["script-filter", fruit()],
+  ["script-filter", fruit_settings()],
 ]);
 const approved = new Set<string>(["duckduckgo", "tidy-text"]);
 
@@ -210,7 +224,49 @@ function summary(folder: string, workflow: Workflow): WorkflowSummary {
       .map((p) => p.message),
     error: null,
     hotkey_errors: [],
+    configurable: (workflow.config ?? []).length > 0,
+    missing_config: missingConfig(folder, workflow),
   };
+}
+
+/** What the user saved in the preview, by folder. */
+const userValues = new Map<string, Record<string, string>>();
+
+function missingConfig(folder: string, workflow: Workflow): string[] {
+  const values = userValues.get(folder) ?? {};
+  return (workflow.config ?? [])
+    .filter((field) => field.required && field.kind !== "checkbox")
+    .filter((field) => (values[field.variable] ?? field.default ?? "").trim() === "")
+    .map((field) => field.label || field.variable);
+}
+
+export function getConfig(folder: string): Result<WorkflowConfigForm> {
+  const workflow = store.get(folder);
+  if (!workflow) return { ok: false, error: "cannot read the workflow: it does not exist" };
+  return {
+    ok: true,
+    value: {
+      folder,
+      name: workflow.name,
+      fields: JSON.parse(JSON.stringify(workflow.config ?? [])),
+      values: { ...(userValues.get(folder) ?? {}) },
+      missing: missingConfig(folder, workflow),
+    },
+  };
+}
+
+export function setConfig(folder: string, values: ConfigValues): Result<null> {
+  const workflow = store.get(folder);
+  if (!workflow) return { ok: false, error: "cannot read the workflow: it does not exist" };
+  const saved: Record<string, string> = {};
+  for (const [name, value] of Object.entries(values)) {
+    if (!(workflow.config ?? []).some((field) => field.variable === name)) {
+      return { ok: false, error: `this workflow has no setting "${name}"` };
+    }
+    saved[name] = String(value);
+  }
+  userValues.set(folder, saved);
+  return { ok: true, value: null };
 }
 
 export function list(): WorkflowList {
@@ -230,6 +286,8 @@ export function list(): WorkflowList {
     keyword_warnings: [],
     error: BROKEN.error,
     hotkey_errors: [],
+    configurable: false,
+    missing_config: [],
   });
   return { folder: "C:\\Users\\you\\AppData\\Roaming\\sevak\\workflows", workflows: rows };
 }

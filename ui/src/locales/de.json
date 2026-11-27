@@ -1080,7 +1080,10 @@
       "edit": "Bearbeiten",
       "editLabel": "{name} bearbeiten",
       "delete": "Löschen",
-      "deleteLabel": "{name} löschen"
+      "deleteLabel": "{name} löschen",
+      "configure": "Konfigurieren…",
+      "configureLabel": "{name} konfigurieren",
+      "needsSettings": "Braucht Einstellungen: {fields}"
     },
     "editor": {
       "region": "Workflow-Editor",
@@ -1314,6 +1317,10 @@
           },
           "hard_timeout_ms": {
             "label": "Skript beenden nach (ms)"
+          },
+          "filter_results": {
+            "label": "Sevak filtert die Ergebnisse",
+            "hint": "Vergleicht die Eingabe mit dem Treffertext jeder Zeile (oder ihrem Titel) und blendet den Rest aus. Lass es aus, wenn das Skript selbst filtert."
           }
         }
       },
@@ -1742,6 +1749,56 @@
           }
         }
       }
+    },
+    "config": {
+      "title": "{name} konfigurieren",
+      "lead": "Diese Einstellungen gehören dir. Sie liegen außerhalb des Workflows, daher ändern ein Update oder eine Neuinstallation sie nicht.",
+      "empty": "Dieser Workflow hat keine Einstellungen.",
+      "required": "Erforderlich",
+      "fillIn": "Fülle {fields} aus, um zu speichern.",
+      "choose": "Auswählen…",
+      "browse": "Durchsuchen…",
+      "chooseFile": "Datei auswählen",
+      "chooseFolder": "Ordner auswählen"
+    },
+    "builder": {
+      "title": "Einstellungsformular",
+      "hint": "Was der Nutzer unter „Konfigurieren…“ ausfüllt. Jede Einstellung wird zur Variablen <code>{var:name}</code> und zu einer Umgebungsvariable für Skripte. Eine erforderliche Einstellung hält den Workflow an, bis sie einen Wert hat.",
+      "add": "Einstellung hinzufügen",
+      "moveUp": "{name} nach oben",
+      "moveDown": "{name} nach unten",
+      "remove": "Einstellung {name} entfernen",
+      "label": "Beschriftung",
+      "variable": "Variable",
+      "kind": "Typ",
+      "kinds": {
+        "textfield": "Textfeld",
+        "textarea": "Textbereich",
+        "checkbox": "Kontrollkästchen",
+        "popup": "Auswahlliste",
+        "slider": "Schieberegler",
+        "filepicker": "Datei oder Ordner"
+      },
+      "required": "Erforderlich",
+      "description": "Beschreibung",
+      "options": "Auswahlmöglichkeiten",
+      "optionLabel": "Beschriftung von Auswahl {n}",
+      "optionValue": "Wert von Auswahl {n}",
+      "optionLabelPlaceholder": "Beschriftung",
+      "optionValuePlaceholder": "Wert",
+      "addOption": "Auswahl hinzufügen",
+      "removeOption": "Auswahl {n} entfernen",
+      "default": "Standard",
+      "noDefault": "(keiner)",
+      "off": "Aus",
+      "on": "An",
+      "min": "Minimum",
+      "max": "Maximum",
+      "step": "Schrittweite",
+      "mode": "Wählt",
+      "modeFile": "Eine Datei",
+      "modeFolder": "Einen Ordner",
+      "placeholder": "Platzhaltertext"
     }
   },
   "gallery": {

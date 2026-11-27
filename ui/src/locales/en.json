@@ -1080,7 +1080,10 @@
       "edit": "Edit",
       "editLabel": "Edit {name}",
       "delete": "Delete",
-      "deleteLabel": "Delete {name}"
+      "deleteLabel": "Delete {name}",
+      "configure": "Configure…",
+      "configureLabel": "Configure {name}",
+      "needsSettings": "Needs settings: {fields}"
     },
     "editor": {
       "region": "Workflow builder",
@@ -1314,6 +1317,10 @@
           },
           "hard_timeout_ms": {
             "label": "Stop the script after (ms)"
+          },
+          "filter_results": {
+            "label": "Sevak filters the results",
+            "hint": "Matches what is typed against each row's match text (or its title) and hides the rest. Leave it off when the script filters by itself."
           }
         }
       },
@@ -1742,6 +1749,56 @@
           }
         }
       }
+    },
+    "config": {
+      "title": "Configure {name}",
+      "lead": "These settings are yours. They are kept outside the workflow, so updating or reinstalling it does not change them.",
+      "empty": "This workflow has no settings.",
+      "required": "Required",
+      "fillIn": "Fill in {fields} to save.",
+      "choose": "Choose…",
+      "browse": "Browse…",
+      "chooseFile": "Choose a file",
+      "chooseFolder": "Choose a folder"
+    },
+    "builder": {
+      "title": "Settings form",
+      "hint": "What the user fills in under Configure…. Each setting becomes the variable <code>{var:name}</code> and an environment variable for scripts. A required setting stops the workflow until it has a value.",
+      "add": "Add a setting",
+      "moveUp": "Move {name} up",
+      "moveDown": "Move {name} down",
+      "remove": "Remove the setting {name}",
+      "label": "Label",
+      "variable": "Variable",
+      "kind": "Type",
+      "kinds": {
+        "textfield": "Text field",
+        "textarea": "Text area",
+        "checkbox": "Checkbox",
+        "popup": "Popup list",
+        "slider": "Slider",
+        "filepicker": "File or folder"
+      },
+      "required": "Required",
+      "description": "Description",
+      "options": "Choices",
+      "optionLabel": "Label of choice {n}",
+      "optionValue": "Value of choice {n}",
+      "optionLabelPlaceholder": "label",
+      "optionValuePlaceholder": "value",
+      "addOption": "Add a choice",
+      "removeOption": "Remove choice {n}",
+      "default": "Default",
+      "noDefault": "(none)",
+      "off": "Off",
+      "on": "On",
+      "min": "Minimum",
+      "max": "Maximum",
+      "step": "Step",
+      "mode": "Chooses",
+      "modeFile": "A file",
+      "modeFolder": "A folder",
+      "placeholder": "Placeholder"
     }
   },
   "gallery": {

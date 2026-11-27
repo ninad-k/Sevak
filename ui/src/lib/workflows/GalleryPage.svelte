@@ -5,7 +5,9 @@
   import "./workflows.css";
   import MarketplaceLinks from "../MarketplaceLinks.svelte";
   import { formatList, t, tHtml } from "../i18n.svelte";
+  import ConfigureForm from "./ConfigureForm.svelte";
   import {
+    getWorkflowConfig,
     installGalleryEntry,
     loadGallery,
     type Gallery,
@@ -18,6 +20,8 @@
   let installing = $state<string | null>(null);
   let done = $state<Record<string, string>>({});
   let failed = $state<Record<string, string>>({});
+  /** A workflow just installed that needs its settings: the form opens at once. */
+  let configuring = $state<string | null>(null);
   let query = $state("");
   let kind = $state("all");
   let availability = $state("all");
@@ -60,6 +64,13 @@
     // Reflect it in the list.
     const found = gallery?.entries.find((e) => e.id === entry.id);
     if (found) found.installed = true;
+    if (entry.kind === "workflow") await configureIfNeeded(result.value.folder);
+  }
+
+  /** Opens the settings form when the new workflow cannot run without it. */
+  async function configureIfNeeded(folder: string) {
+    const form = await getWorkflowConfig(folder);
+    if (form.ok && form.value.missing.length > 0) configuring = folder;
   }
 
   /** The replacement's name when it is listed, otherwise its id. */
@@ -226,6 +237,10 @@
     {/if}
   {/if}
 </div>
+
+{#if configuring}
+  <ConfigureForm folder={configuring} onclose={() => (configuring = null)} />
+{/if}
 
 <style>
   .rows {

@@ -11,11 +11,15 @@ import {
   canConnect,
   categoryLabel,
   inPoint,
+  isConfigVariable,
   isStart,
   kindOf,
   makeNode,
+  newConfigField,
   newWorkflow,
   normalize,
+  optionsFromText,
+  optionsToText,
   outPoint,
   outputPorts,
   removeNode,
@@ -367,5 +371,51 @@ describe("geometry", () => {
   it("puts the input at the left edge", () => {
     const node = { id: "n", type: "copy" as const, x: 100, y: 50 };
     expect(inPoint(node).x).toBe(100);
+  });
+});
+
+describe("the settings form", () => {
+  it("names new fields so that no variable is used twice", () => {
+    const first = newConfigField([]);
+    expect(first.variable).toBe("setting");
+    expect(newConfigField([first]).variable).toBe("setting_2");
+    expect(newConfigField([first, { variable: "setting_2", kind: "textfield" }]).variable).toBe("setting_3");
+  });
+
+  it("accepts the variable names Rust accepts", () => {
+    for (const ok of ["a", "_x", "api_host2"]) expect(isConfigVariable(ok)).toBe(true);
+    for (const bad of ["", "1a", "has space", "dash-ed", "a.b"]) expect(isConfigVariable(bad)).toBe(false);
+  });
+
+  it("round-trips options as lines", () => {
+    const options = optionsFromText("Metric = metric\nimperial\n\n");
+    expect(options).toEqual([
+      { label: "Metric", value: "metric" },
+      { label: "imperial", value: "imperial" },
+    ]);
+    expect(optionsToText(options)).toBe("Metric = metric\nimperial");
+  });
+
+  it("is saved without what its kind does not use", () => {
+    const w = newWorkflow();
+    w.config = [
+      { variable: " host ", kind: "textfield", label: " Server ", required: true, placeholder: "x", options: [{ label: "a", value: "a" }], min: 3 },
+      { variable: "mode", kind: "popup", default: "a", options: [{ label: "A", value: "a" }, { label: "", value: "" }] },
+      { variable: "vol", kind: "slider", min: 0, max: 10, step: null, default: "" },
+      { variable: "dir", kind: "filepicker", mode: "folder" },
+      { variable: "file", kind: "filepicker", mode: "file" },
+    ];
+    expect(toSave(w).config).toEqual([
+      { variable: "host", kind: "textfield", label: "Server", required: true, placeholder: "x" },
+      { variable: "mode", kind: "popup", default: "a", options: [{ label: "A", value: "a" }] },
+      { variable: "vol", kind: "slider", min: 0, max: 10 },
+      { variable: "dir", kind: "filepicker", mode: "folder" },
+      { variable: "file", kind: "filepicker" },
+    ]);
+  });
+
+  it("normalizes a workflow without settings to an empty form and offers the filter option", () => {
+    expect(normalize({ ...newWorkflow(), config: undefined }).config).toEqual([]);
+    expect(kindOf("script_filter").fields.map((f) => f.key)).toContain("filter_results");
   });
 });
