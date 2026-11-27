@@ -286,6 +286,24 @@ describe("toSave", () => {
     expect(toSave(w).connection).toEqual([{ from: "a", port: OUT, to: "b" }]);
   });
 
+  it("writes notes and disabled flags only when they are used", () => {
+    const w = chain();
+    w.node[0].note = "  ";
+    w.node[0].disabled = false;
+    w.node[1].note = "why";
+    w.node[1].disabled = true;
+    w.connection = [
+      { from: "a", to: "b", disabled: false },
+      { from: "b", to: "a", disabled: true },
+    ];
+    const saved = toSave(w);
+    expect("note" in saved.node[0] || "disabled" in saved.node[0]).toBe(false);
+    expect(saved.node[1].note).toBe("why");
+    expect(saved.node[1].disabled).toBe(true);
+    expect(saved.connection[0]).toEqual({ from: "a", port: OUT, to: "b" });
+    expect(saved.connection[1].disabled).toBe(true);
+  });
+
   it("does not modify the workflow it is given", () => {
     const w = chain();
     w.node[1].x = 10.5;
